@@ -241,7 +241,7 @@ const en: Translations = {
     badge: "Welcome back",
     title: "Welcome back!",
     desc: "See what's new while you were away — and resubscribe in one click.",
-    dataKept: "Face profiles and gallery history are kept permanently after cancel.",
+    dataKept: "Results are kept per plan grace period after cancel. Pro keeps them permanently.",
     resubscribe: "1-click resubscribe",
     manageProfiles: "Manage face profiles",
   },
@@ -355,6 +355,10 @@ const en: Translations = {
     worksDownload: "Download",
     worksShare: "Share",
     worksReedit: "Re-edit",
+    retentionActiveBanner:
+      "♾️ Active subscription: all results are safely stored with unlimited retention.",
+    expiryBadge:
+      "⚠️ Deletes in D-{days} (download or resubscribe recommended)",
     items: {
       g1: { title: "Golden Hour Editorial", style: "Lifestyle / Travel" },
       g2: { title: "Neon Dreams", style: "City / Urban" },
@@ -385,6 +389,7 @@ const en: Translations = {
           "20 AI pictorials & thumbnails / month (20 credits)",
           "1 registerable person/object photo",
           "FHD (1080p) quality",
+          "Result storage (unlimited while subscribed / 60-day grace after cancel)",
           "Full watermark removal",
         ],
       },
@@ -396,6 +401,7 @@ const en: Translations = {
           "5 registerable person/object photos",
           "4K ultra quality",
           "No-wait fast generation",
+          "Result storage (unlimited while subscribed / 180-day grace after cancel)",
           "Full watermark removal",
         ],
       },
@@ -407,6 +413,7 @@ const en: Translations = {
           "10 registerable person/object photos",
           "4K ultra quality",
           "Commercial use allowed",
+          "Unlimited permanent result storage",
           "Dedicated fast generation lane",
           "Full watermark removal",
         ],

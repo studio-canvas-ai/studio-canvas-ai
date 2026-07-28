@@ -38,7 +38,9 @@ import {
   BACKGROUND_MODE_IDS,
   type BackgroundModeId,
 } from "@/lib/data";
-import { pushGalleryHistory, listFaceProfiles, type FaceProfile } from "@/lib/faceProfiles";
+import { pushGalleryHistory, listFaceProfiles, getAccountMeta, type FaceProfile } from "@/lib/faceProfiles";
+import { uploadGalleryAsset } from "@/lib/galleryUpload";
+import { retentionContextFromAccount } from "@/lib/retentionPolicy";
 import { processUploadFiles } from "@/lib/processUpload";
 import { downloadImageFile, type AspectRatioKey, type ExportPreset } from "@/lib/downloadImage";
 
@@ -79,6 +81,7 @@ function PersonaCreatorInner() {
     registerPortrait,
     requestRetouch,
     getPortraitRetouch,
+    planId,
   } = useCredits();
   const stepContentRef = useRef<HTMLDivElement>(null);
   const [currentStep, setCurrentStep] = useState(1);
@@ -316,29 +319,43 @@ function PersonaCreatorInner() {
     setRetouchPrompt("");
     const base = `portrait-${Date.now()}`;
     setTimeout(() => {
-      const state0 = registerPortrait(`${base}-0`);
-      registerPortrait(`${base}-1`);
-      setPortraitId(base);
-      setDrafts([HERO_AFTER_IMAGE, HERO_BEFORE_IMAGE]);
-      setFocusedDraft(0);
-      setFreeRetouchesLeft(state0.freeRemaining);
-      const styleId = selectedStyles[0];
-      const now = Date.now();
-      pushGalleryHistory({
-        id: `${base}-0`,
-        imageUrl: HERO_AFTER_IMAGE,
-        createdAt: now,
-        styleId,
-      });
-      pushGalleryHistory({
-        id: `${base}-1`,
-        imageUrl: HERO_BEFORE_IMAGE,
-        createdAt: now + 1,
-        styleId,
-      });
-      setIsGenerating(false);
-      setResultReady(true);
-      setGallerySavedMsg(true);
+      void (async () => {
+        const state0 = registerPortrait(`${base}-0`);
+        registerPortrait(`${base}-1`);
+        setPortraitId(base);
+        setDrafts([HERO_AFTER_IMAGE, HERO_BEFORE_IMAGE]);
+        setFocusedDraft(0);
+        setFreeRetouchesLeft(state0.freeRemaining);
+        const styleId = selectedStyles[0];
+        const now = Date.now();
+        const meta = getAccountMeta();
+        const retentionCtx = retentionContextFromAccount(planId, meta);
+
+        const draftsToSave: { id: string; url: string }[] = [
+          { id: `${base}-0`, url: HERO_AFTER_IMAGE },
+          { id: `${base}-1`, url: HERO_BEFORE_IMAGE },
+        ];
+
+        for (const draft of draftsToSave) {
+          const uploaded = await uploadGalleryAsset(draft.url, draft.id, planId);
+          pushGalleryHistory(
+            {
+              id: draft.id,
+              imageUrl: uploaded?.thumbnailUrl ?? draft.url,
+              thumbnailUrl: uploaded?.thumbnailUrl,
+              originalKey: uploaded?.originalKey,
+              storageId: uploaded?.storageId ?? draft.id,
+              createdAt: draft.id.endsWith("-0") ? now : now + 1,
+              styleId,
+            },
+            retentionCtx
+          );
+        }
+
+        setIsGenerating(false);
+        setResultReady(true);
+        setGallerySavedMsg(true);
+      })();
     }, 1800);
   };
 

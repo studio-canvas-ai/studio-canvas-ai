@@ -333,6 +333,8 @@ export interface Translations {
     worksDownload: string;
     worksShare: string;
     worksReedit: string;
+    retentionActiveBanner: string;
+    expiryBadge: string;
     items: {
       g1: { title: string; style: string };
       g2: { title: string; style: string };

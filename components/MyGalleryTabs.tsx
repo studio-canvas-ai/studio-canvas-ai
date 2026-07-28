@@ -1,37 +1,68 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Download, ImageIcon, Share2, Wand2 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
+import { useCredits } from "@/components/CreditsProvider";
 import FaceProfilePanel from "@/components/FaceProfilePanel";
-import { listGalleryHistory, type GalleryHistoryItem } from "@/lib/faceProfiles";
+import {
+  getAccountMeta,
+  listGalleryHistory,
+  type GalleryHistoryItem,
+} from "@/lib/faceProfiles";
+import { fetchOriginalAsset } from "@/lib/galleryUpload";
 import { downloadImageFile } from "@/lib/downloadImage";
+import {
+  daysUntilExpiry,
+  retentionContextFromAccount,
+  shouldShowActiveRetentionBanner,
+  shouldShowExpiryBadge,
+} from "@/lib/retentionPolicy";
 
 type TabId = "works" | "models";
 
 export default function MyGalleryTabs() {
   const { t } = useI18n();
+  const { planId } = useCredits();
   const [tab, setTab] = useState<TabId>("works");
   const [works, setWorks] = useState<GalleryHistoryItem[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
 
+  const retentionCtx = useMemo(
+    () => retentionContextFromAccount(planId, getAccountMeta()),
+    [planId]
+  );
+
+  const showActiveBanner = shouldShowActiveRetentionBanner(planId);
+
   useEffect(() => {
     setWorks(listGalleryHistory());
-  }, [tab]);
+  }, [tab, planId]);
+
+  const resolveDownloadUrl = async (item: GalleryHistoryItem): Promise<string> => {
+    const storageId = item.storageId ?? item.id;
+    if (item.originalKey || item.storageId) {
+      const blob = await fetchOriginalAsset(storageId);
+      if (blob) return URL.createObjectURL(blob);
+    }
+    return item.thumbnailUrl ?? item.imageUrl;
+  };
 
   const handleDownload = async (item: GalleryHistoryItem) => {
     setBusyId(item.id);
     try {
+      const imageUrl = await resolveDownloadUrl(item);
       await downloadImageFile({
-        imageUrl: item.imageUrl,
+        imageUrl,
         filename: `studio-canvas-${item.id}.png`,
         aspectRatio: "9:16",
         exportPreset: "original",
         printPaper: "a4",
       });
+      if (imageUrl.startsWith("blob:")) URL.revokeObjectURL(imageUrl);
     } catch {
-      window.open(item.imageUrl, "_blank", "noopener,noreferrer");
+      window.open(item.thumbnailUrl ?? item.imageUrl, "_blank", "noopener,noreferrer");
     } finally {
       setBusyId(null);
     }
@@ -40,8 +71,10 @@ export default function MyGalleryTabs() {
   const handleShare = async (item: GalleryHistoryItem) => {
     setBusyId(item.id);
     try {
-      const res = await fetch(item.imageUrl);
+      const imageUrl = await resolveDownloadUrl(item);
+      const res = await fetch(imageUrl);
       const blob = await res.blob();
+      if (imageUrl.startsWith("blob:")) URL.revokeObjectURL(imageUrl);
       const file = new File([blob], `studio-canvas-${item.id}.png`, { type: blob.type });
       if (navigator.share && navigator.canShare?.({ files: [file] })) {
         await navigator.share({
@@ -87,6 +120,12 @@ export default function MyGalleryTabs() {
 
       {tab === "works" && (
         <div className="space-y-4">
+          {showActiveBanner && (
+            <div className="rounded-xl border border-glow-emerald/30 bg-glow-emerald/10 px-4 py-3 text-sm text-emerald-100/90">
+              {t.gallery.retentionActiveBanner}
+            </div>
+          )}
+
           {works.length === 0 ? (
             <div className="glass-card flex flex-col items-center justify-center gap-3 p-10 text-center">
               <ImageIcon className="h-10 w-10 text-white/25" />
@@ -97,47 +136,56 @@ export default function MyGalleryTabs() {
             </div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {works.map((item) => (
-                <div
-                  key={item.id}
-                  className="glass-card overflow-hidden rounded-2xl border border-white/10"
-                >
-                  <div className="aspect-[9/16] overflow-hidden bg-white/5">
-                    <img
-                      src={item.imageUrl}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
+              {works.map((item) => {
+                const daysLeft = daysUntilExpiry(item.expiresAt);
+                const showExpiry = shouldShowExpiryBadge(retentionCtx, item.expiresAt);
+                return (
+                  <div
+                    key={item.id}
+                    className="glass-card overflow-hidden rounded-2xl border border-white/10"
+                  >
+                    <div className="relative aspect-[9/16] overflow-hidden bg-white/5">
+                      <img
+                        src={item.thumbnailUrl ?? item.imageUrl}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                      {showExpiry && daysLeft != null && (
+                        <div className="absolute top-2 left-2 right-2 rounded-lg border border-amber-400/40 bg-amber-500/90 px-2.5 py-1.5 text-[11px] font-medium leading-snug text-black">
+                          {t.gallery.expiryBadge.replace("{days}", String(daysLeft))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2 p-3">
+                      <button
+                        type="button"
+                        disabled={busyId === item.id}
+                        onClick={() => void handleDownload(item)}
+                        className="btn-secondary inline-flex flex-1 items-center justify-center gap-1.5 py-2 text-xs disabled:opacity-50"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        {t.gallery.worksDownload}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busyId === item.id}
+                        onClick={() => void handleShare(item)}
+                        className="btn-secondary inline-flex flex-1 items-center justify-center gap-1.5 py-2 text-xs disabled:opacity-50"
+                      >
+                        <Share2 className="h-3.5 w-3.5" />
+                        {t.gallery.worksShare}
+                      </button>
+                      <Link
+                        href="/generate"
+                        className="btn-primary inline-flex w-full items-center justify-center gap-1.5 py-2 text-xs"
+                      >
+                        <Wand2 className="h-3.5 w-3.5" />
+                        {t.gallery.worksReedit}
+                      </Link>
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-2 p-3">
-                    <button
-                      type="button"
-                      disabled={busyId === item.id}
-                      onClick={() => void handleDownload(item)}
-                      className="btn-secondary inline-flex flex-1 items-center justify-center gap-1.5 py-2 text-xs disabled:opacity-50"
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                      {t.gallery.worksDownload}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busyId === item.id}
-                      onClick={() => void handleShare(item)}
-                      className="btn-secondary inline-flex flex-1 items-center justify-center gap-1.5 py-2 text-xs disabled:opacity-50"
-                    >
-                      <Share2 className="h-3.5 w-3.5" />
-                      {t.gallery.worksShare}
-                    </button>
-                    <Link
-                      href="/generate"
-                      className="btn-primary inline-flex w-full items-center justify-center gap-1.5 py-2 text-xs"
-                    >
-                      <Wand2 className="h-3.5 w-3.5" />
-                      {t.gallery.worksReedit}
-                    </Link>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

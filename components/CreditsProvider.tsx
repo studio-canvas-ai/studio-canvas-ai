@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useEffect,
   type ReactNode,
 } from "react";
 import {
@@ -20,9 +21,15 @@ import {
   type PortraitRetouchState,
   type RetouchAttemptResult,
 } from "@/lib/retouchPolicy";
-import { patchAccountMeta } from "@/lib/faceProfiles";
+import {
+  getAccountMeta,
+  patchAccountMeta,
+  recalculateGalleryRetentionOnCancel,
+  type PlanId,
+} from "@/lib/faceProfiles";
+import { retentionContextFromAccount } from "@/lib/retentionPolicy";
 
-export type PlanId = "free" | (typeof pricingPlanIds)[number];
+export type { PlanId } from "@/lib/faceProfiles";
 
 export const PLAN_CREDITS: Record<(typeof pricingPlanIds)[number], number> = {
   starter: 20,
@@ -90,6 +97,20 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
 
   const isFreePlan = planId === "free";
 
+  useEffect(() => {
+    const meta = getAccountMeta();
+    if (meta.hadPaidPlan || meta.lastLoginAt) setIsAuthenticated(true);
+    if (meta.planId && meta.planId !== "free") {
+      setPlanId(meta.planId);
+      const creditCount = PLAN_CREDITS[meta.planId];
+      setCredits(creditCount);
+      setMaxCredits(creditCount);
+      setIsAuthenticated(true);
+    } else if (meta.planId === "free") {
+      setPlanId("free");
+    }
+  }, []);
+
   const ensureDailyCounter = useCallback(() => {
     const key = todayKey();
     if (key !== dailyKey) {
@@ -134,7 +155,7 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
     setMaxCredits(FREE_CREDITS);
     setPlanId("free");
     setShowAuthModal(false);
-    patchAccountMeta({ lastLoginAt: Date.now() });
+    patchAccountMeta({ lastLoginAt: Date.now(), planId: "free" });
   }, []);
 
   const requestSubscribe = useCallback(
@@ -161,14 +182,32 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
     patchAccountMeta({
       hadPaidPlan: true,
       cancelledAt: undefined,
+      planId: pendingPlanId,
+      lastPaidPlan: pendingPlanId,
       lastLoginAt: Date.now(),
     });
+    recalculateGalleryRetentionOnCancel(
+      retentionContextFromAccount(pendingPlanId, getAccountMeta())
+    );
   }, [pendingPlanId]);
 
   const cancelSubscription = useCallback(() => {
+    const meta = getAccountMeta();
+    const lastPaid = planId !== "free" ? planId : meta.lastPaidPlan;
+    const cancelledAt = Date.now();
     setPlanId("free");
-    patchAccountMeta({ cancelledAt: Date.now(), hadPaidPlan: true });
-  }, []);
+    patchAccountMeta({
+      cancelledAt,
+      hadPaidPlan: true,
+      planId: "free",
+      lastPaidPlan: lastPaid,
+    });
+    recalculateGalleryRetentionOnCancel({
+      planId: "free",
+      cancelledAt,
+      lastPaidPlan: lastPaid,
+    });
+  }, [planId]);
 
   const registerPortrait = useCallback((portraitId: string, createdAt = Date.now()) => {
     const state: PortraitRetouchState = {
