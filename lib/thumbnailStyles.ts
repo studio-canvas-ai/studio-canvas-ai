@@ -151,5 +151,184 @@ export function fontForChar(preset: FontPreset, ch: string): string {
   return fontForText(preset, ch);
 }
 
-export const STICKER_TEMPLATES = ["🔥 HOT", "NEW", "LIVE", "⚡ TIP", "🚨"] as const;
+export const STICKER_BADGE_IDS = ["HOT", "NEW", "LIVE", "TIP"] as const;
+export type StickerBadgeId = (typeof STICKER_BADGE_IDS)[number];
+
+export type StickerBadgeDef = {
+  id: StickerBadgeId;
+  label: string;
+  emoji?: string;
+  fill: string;
+  stroke: string;
+  glow: string;
+  textColor: string;
+};
+
+export const STICKER_BADGES: Record<StickerBadgeId, StickerBadgeDef> = {
+  HOT: {
+    id: "HOT",
+    label: "HOT",
+    emoji: "🔥",
+    fill: "#FF3D00",
+    stroke: "#FFD600",
+    glow: "rgba(255,61,0,0.85)",
+    textColor: "#FFFFFF",
+  },
+  NEW: {
+    id: "NEW",
+    label: "NEW",
+    fill: "#22C55E",
+    stroke: "#A3E635",
+    glow: "rgba(34,197,94,0.85)",
+    textColor: "#0B1A0F",
+  },
+  LIVE: {
+    id: "LIVE",
+    label: "LIVE",
+    fill: "#EF4444",
+    stroke: "#FCA5A5",
+    glow: "rgba(239,68,68,0.9)",
+    textColor: "#FFFFFF",
+  },
+  TIP: {
+    id: "TIP",
+    label: "TIP",
+    emoji: "⚡",
+    fill: "#7C3AED",
+    stroke: "#E879F9",
+    glow: "rgba(124,58,237,0.85)",
+    textColor: "#FFFFFF",
+  },
+};
+
+/** @deprecated Use STICKER_BADGES + stickerToken() */
+export const STICKER_TEMPLATES = STICKER_BADGE_IDS.map((id) => {
+  const b = STICKER_BADGES[id];
+  return b.emoji ? `${b.emoji} ${b.label}` : b.label;
+}) as readonly string[];
+
+const STICKER_TOKEN_RE = /\[\[(HOT|NEW|LIVE|TIP)\]\]/g;
+
+export function stickerToken(id: StickerBadgeId): string {
+  return ` [[${id}]] `;
+}
+
+export function isStickerToken(segment: string): segment is StickerBadgeId {
+  return STICKER_BADGE_IDS.includes(segment as StickerBadgeId);
+}
+
+export type TextSegment =
+  | { kind: "text"; value: string }
+  | { kind: "sticker"; id: StickerBadgeId };
+
+export function segmentText(text: string): TextSegment[] {
+  const segments: TextSegment[] = [];
+  let last = 0;
+  for (const match of text.matchAll(STICKER_TOKEN_RE)) {
+    const idx = match.index ?? 0;
+    if (idx > last) {
+      segments.push({ kind: "text", value: text.slice(last, idx) });
+    }
+    segments.push({ kind: "sticker", id: match[1] as StickerBadgeId });
+    last = idx + match[0].length;
+  }
+  if (last < text.length) {
+    segments.push({ kind: "text", value: text.slice(last) });
+  }
+  return segments.length ? segments : [{ kind: "text", value: text }];
+}
+
+const EMOJI_FONT =
+  '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Segoe UI Symbol", sans-serif';
+
+/** Draw a single emoji char via offscreen canvas (color emoji fallback). */
+export function drawEmojiChar(
+  ctx: CanvasRenderingContext2D,
+  ch: string,
+  x: number,
+  y: number,
+  fontSize: number
+): number {
+  const pad = Math.ceil(fontSize * 0.15);
+  const size = Math.ceil(fontSize * 1.25);
+  const off = document.createElement("canvas");
+  off.width = size + pad * 2;
+  off.height = size + pad * 2;
+  const octx = off.getContext("2d");
+  if (!octx) {
+    ctx.font = `700 ${fontSize}px ${EMOJI_FONT}`;
+    ctx.fillText(ch, x, y);
+    return ctx.measureText(ch).width || fontSize;
+  }
+  octx.font = `${fontSize}px ${EMOJI_FONT}`;
+  octx.textAlign = "center";
+  octx.textBaseline = "middle";
+  octx.fillText(ch, off.width / 2, off.height / 2);
+  const w = size;
+  ctx.drawImage(off, x, y - fontSize * 0.55, w, w);
+  return w;
+}
+
+export function measureStickerBadge(
+  ctx: CanvasRenderingContext2D,
+  id: StickerBadgeId,
+  scale = 1
+): number {
+  const badge = STICKER_BADGES[id];
+  const fontSize = Math.round(22 * scale);
+  const padX = Math.round(14 * scale);
+  ctx.font = `800 ${fontSize}px "Orbitron", "Noto Sans KR", sans-serif`;
+  const labelW = ctx.measureText(badge.label).width;
+  const emojiW = badge.emoji ? fontSize * 1.1 : 0;
+  const gap = badge.emoji ? 4 * scale : 0;
+  return labelW + emojiW + gap + padX * 2;
+}
+
+export function drawStickerBadge(
+  ctx: CanvasRenderingContext2D,
+  id: StickerBadgeId,
+  x: number,
+  y: number,
+  scale = 1
+): number {
+  const badge = STICKER_BADGES[id];
+  const fontSize = Math.round(22 * scale);
+  const padX = Math.round(14 * scale);
+  const padY = Math.round(8 * scale);
+  const label = badge.label;
+  ctx.save();
+  ctx.font = `800 ${fontSize}px "Orbitron", "Noto Sans KR", sans-serif`;
+  const labelW = ctx.measureText(label).width;
+  const emojiW = badge.emoji ? fontSize * 1.1 : 0;
+  const gap = badge.emoji ? 4 * scale : 0;
+  const w = labelW + emojiW + gap + padX * 2;
+  const h = fontSize + padY * 2;
+  const rx = h / 2;
+  const top = y - h / 2;
+
+  ctx.shadowColor = badge.glow;
+  ctx.shadowBlur = 14 * scale;
+  ctx.beginPath();
+  ctx.roundRect(x, top, w, h, rx);
+  ctx.fillStyle = badge.fill;
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.lineWidth = 2.5 * scale;
+  ctx.strokeStyle = badge.stroke;
+  ctx.stroke();
+
+  let cx = x + padX;
+  const cy = y;
+  if (badge.emoji) {
+    drawEmojiChar(ctx, badge.emoji, cx, cy, fontSize * 0.95);
+    cx += emojiW + gap;
+  }
+  ctx.fillStyle = badge.textColor;
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+  ctx.font = `800 ${fontSize}px "Orbitron", "Noto Sans KR", sans-serif`;
+  ctx.fillText(label, cx, cy);
+  ctx.restore();
+  return w;
+}
 

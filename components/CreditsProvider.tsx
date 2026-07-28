@@ -25,9 +25,9 @@ import { patchAccountMeta } from "@/lib/faceProfiles";
 export type PlanId = "free" | (typeof pricingPlanIds)[number];
 
 export const PLAN_CREDITS: Record<(typeof pricingPlanIds)[number], number> = {
-  starter: 30,
-  standard: 80,
-  pro: 200,
+  starter: 20,
+  standard: 50,
+  pro: 120,
 };
 
 type CreditsContextValue = {

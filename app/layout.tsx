@@ -1,3 +1,4 @@
+import "./globals.css";
 import type { Metadata } from "next";
 import { Inter, Playfair_Display } from "next/font/google";
 import { I18nProvider } from "@/components/I18nProvider";
@@ -8,7 +9,6 @@ import PaymentModal from "@/components/PaymentModal";
 import CreditTopUpModal from "@/components/CreditTopUpModal";
 import ReturnUserModal from "@/components/ReturnUserModal";
 import GoogleFontsLoader from "@/components/GoogleFontsLoader";
-import "./globals.css";
 
 const inter = Inter({
   subsets: ["latin"],

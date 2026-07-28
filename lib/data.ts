@@ -143,7 +143,7 @@ export const PLAN_PROFILE_SLOTS: Record<(typeof pricingPlanIds)[number], number>
 export const CREDIT_PACKS = [
   { id: "pack10", credits: 10, price: 1.9 },
   { id: "pack30", credits: 30, price: 4.9 },
-  { id: "pack100", credits: 100, price: 14.9 },
+  { id: "pack100", credits: 100, price: 12.9 },
 ] as const;
 
 export const BACKGROUND_MODE_IDS = ["auto", "tags", "custom"] as const;

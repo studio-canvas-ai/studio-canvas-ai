@@ -23,13 +23,19 @@ import {
   COLOR_PRESET_ORDER,
   COLOR_PRESETS,
   EMOJI_QUICK,
-  STICKER_TEMPLATES,
+  STICKER_BADGE_IDS,
+  STICKER_BADGES,
   applyColorRange,
   colorAtIndex,
   createLayer,
+  drawEmojiChar,
+  measureStickerBadge,
+  drawStickerBadge,
   fontForChar,
   fontForText,
   isEmojiChar,
+  segmentText,
+  stickerToken,
   type ColorPreset,
   type DepthMode,
   type FontPreset,
@@ -134,14 +140,24 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
       if (!text) return;
       ctx.textBaseline = "middle";
       ctx.textAlign = "left";
-      const fontFamily = fontForText(fontPreset, text);
-      ctx.font = `700 ${fontSize}px ${fontFamily}`;
 
+      const segments = segmentText(text);
+      const scale = fontSize / 48;
       let totalWidth = 0;
-      for (let i = 0; i < text.length; i++) {
-        const ch = text[i]!;
-        ctx.font = `700 ${fontSize}px ${fontForChar(fontPreset, ch)}`;
-        totalWidth += ctx.measureText(ch).width;
+      for (const seg of segments) {
+        if (seg.kind === "sticker") {
+          totalWidth += measureStickerBadge(ctx, seg.id, scale);
+        } else {
+          for (let i = 0; i < seg.value.length; i++) {
+            const ch = seg.value[i]!;
+            if (isEmojiChar(ch)) {
+              totalWidth += fontSize * 1.1;
+            } else {
+              ctx.font = `700 ${fontSize}px ${fontForChar(fontPreset, ch)}`;
+              totalWidth += ctx.measureText(ch).width;
+            }
+          }
+        }
       }
 
       let x =
@@ -154,23 +170,35 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
       x += layer.offsetX * width;
       const drawY = y + layer.offsetY * canvasSize.height;
 
-      for (let i = 0; i < text.length; i++) {
-        const ch = text[i]!;
-        const presetKey = colorAtIndex(layer, i);
-        const preset = COLOR_PRESETS[presetKey];
-        ctx.font = `700 ${fontSize}px ${fontForChar(fontPreset, ch)}`;
-        const w = ctx.measureText(ch).width;
-        ctx.shadowColor = preset.shadow;
-        ctx.shadowBlur =
-          presetKey === "white" || presetKey === "purplePink" ? 12 : 6;
-        ctx.lineWidth = Math.max(3, fontSize * 0.08);
-        if (preset.stroke !== "transparent") {
-          ctx.strokeStyle = preset.stroke;
-          ctx.strokeText(ch, x, drawY);
+      for (const seg of segments) {
+        if (seg.kind === "sticker") {
+          const w = drawStickerBadge(ctx, seg.id, x, drawY, scale);
+          x += w + fontSize * 0.15;
+          continue;
         }
-        ctx.fillStyle = preset.fill;
-        ctx.fillText(ch, x, drawY);
-        x += w;
+        for (let i = 0; i < seg.value.length; i++) {
+          const ch = seg.value[i]!;
+          if (isEmojiChar(ch)) {
+            const w = drawEmojiChar(ctx, ch, x, drawY, fontSize);
+            x += w;
+            continue;
+          }
+          const presetKey = colorAtIndex(layer, i);
+          const preset = COLOR_PRESETS[presetKey];
+          ctx.font = `700 ${fontSize}px ${fontForChar(fontPreset, ch)}`;
+          const w = ctx.measureText(ch).width;
+          ctx.shadowColor = preset.shadow;
+          ctx.shadowBlur =
+            presetKey === "white" || presetKey === "purplePink" ? 12 : 6;
+          ctx.lineWidth = Math.max(3, fontSize * 0.08);
+          if (preset.stroke !== "transparent") {
+            ctx.strokeStyle = preset.stroke;
+            ctx.strokeText(ch, x, drawY);
+          }
+          ctx.fillStyle = preset.fill;
+          ctx.fillText(ch, x, drawY);
+          x += w;
+        }
       }
       ctx.shadowBlur = 0;
     },
@@ -461,6 +489,10 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
       const caret = start + symbol.length;
       el.setSelectionRange(caret, caret);
     });
+  };
+
+  const insertSticker = (id: (typeof STICKER_BADGE_IDS)[number]) => {
+    insertSymbol(stickerToken(id));
   };
 
   const addLayer = () => {
@@ -800,16 +832,25 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
       <div>
         <p className="mb-2 text-xs text-white/50">{t.thumbnail.stickers}</p>
         <div className="flex flex-wrap gap-1.5">
-          {STICKER_TEMPLATES.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => insertSymbol(s.includes(" ") ? ` ${s} ` : s)}
-              className="rounded-lg border border-amber-400/25 bg-amber-400/5 px-2.5 py-1.5 text-xs text-amber-100 hover:border-amber-400/40"
-            >
-              {s}
-            </button>
-          ))}
+          {STICKER_BADGE_IDS.map((id) => {
+            const badge = STICKER_BADGES[id];
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => insertSticker(id)}
+                className="rounded-full border px-3 py-1.5 text-[11px] font-extrabold tracking-wide shadow-[0_0_12px_rgba(255,61,0,0.35)]"
+                style={{
+                  borderColor: badge.stroke,
+                  backgroundColor: badge.fill,
+                  color: badge.textColor,
+                }}
+              >
+                {badge.emoji ? `${badge.emoji} ` : ""}
+                {badge.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 

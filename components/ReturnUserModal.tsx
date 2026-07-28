@@ -81,7 +81,7 @@ export default function ReturnUserModal() {
           >
             {t.returnUser.resubscribe}
           </button>
-          <Link href="/profile" onClick={close} className="btn-secondary flex-1 py-2.5 text-center text-sm">
+          <Link href="/gallery/my" onClick={close} className="btn-secondary flex-1 py-2.5 text-center text-sm">
             {t.returnUser.manageProfiles}
           </Link>
         </div>

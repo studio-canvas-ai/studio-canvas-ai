@@ -15,6 +15,9 @@ import {
   Sparkles,
   Wand2,
   RefreshCw,
+  Download,
+  Share2,
+  ChevronDown,
 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { useCredits } from "@/components/CreditsProvider";
@@ -35,7 +38,7 @@ import {
   BACKGROUND_MODE_IDS,
   type BackgroundModeId,
 } from "@/lib/data";
-import { pushGalleryHistory } from "@/lib/faceProfiles";
+import { pushGalleryHistory, listFaceProfiles, type FaceProfile } from "@/lib/faceProfiles";
 import { processUploadFiles } from "@/lib/processUpload";
 import { downloadImageFile, type AspectRatioKey, type ExportPreset } from "@/lib/downloadImage";
 
@@ -106,6 +109,9 @@ function PersonaCreatorInner() {
   const [isRetouching, setIsRetouching] = useState(false);
   const [retouchMessage, setRetouchMessage] = useState<string | null>(null);
   const [freeRetouchesLeft, setFreeRetouchesLeft] = useState(RETOUCH_FREE_PER_CYCLE);
+  const [savedProfiles, setSavedProfiles] = useState<FaceProfile[]>([]);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [gallerySavedMsg, setGallerySavedMsg] = useState(false);
 
   const isPerson = subject === "male" || subject === "female";
   const focusedImageUrl = drafts[focusedDraft] ?? HERO_AFTER_IMAGE;
@@ -118,6 +124,12 @@ function PersonaCreatorInner() {
     setSelectedStyles((prev) => (prev.includes(style) ? prev : [...prev, style]));
     setCurrentStep((step) => (step < 3 ? 3 : step));
   }, [searchParams]);
+
+  useEffect(() => {
+    if (currentStep === 2) {
+      setSavedProfiles(listFaceProfiles());
+    }
+  }, [currentStep]);
 
   const steps = [
     { id: 1, title: t.creator.step1Title, icon: User, description: t.creator.step1Desc },
@@ -326,6 +338,7 @@ function PersonaCreatorInner() {
       });
       setIsGenerating(false);
       setResultReady(true);
+      setGallerySavedMsg(true);
     }, 1800);
   };
 
@@ -407,6 +420,37 @@ function PersonaCreatorInner() {
       setIsDownloading(false);
     }
   };
+
+  const handleShare = async () => {
+    const imageUrl = focusedImageUrl;
+    try {
+      const res = await fetch(imageUrl);
+      const blob = await res.blob();
+      const file = new File([blob], `studio-canvas-${Date.now()}.png`, { type: blob.type });
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: "Studio Canvas AI",
+          text: t.thumbnail.shareText,
+        });
+        return;
+      }
+      const kakaoUrl = `https://sharer.kakao.com/talk/friends/picker/link?url=${encodeURIComponent(window.location.href)}`;
+      window.open(kakaoUrl, "_blank", "noopener,noreferrer");
+    } catch {
+      const kakaoUrl = `https://sharer.kakao.com/talk/friends/picker/link?url=${encodeURIComponent(window.location.href)}`;
+      window.open(kakaoUrl, "_blank", "noopener,noreferrer");
+    }
+  };
+
+  const loadSavedProfile = (profile: FaceProfile) => {
+    setSelectedProfileId(profile.id);
+    setUploadedFiles(profile.photoUrls.slice(0, 10));
+    setValidationError(null);
+    setProfileMenuOpen(false);
+  };
+
+  const step2UploadTitle = isPerson ? t.creator.uploadTitlePerson : t.creator.uploadTitleObject;
 
   return (
     <section id="creator" className="section-padding relative">
@@ -550,13 +594,59 @@ function PersonaCreatorInner() {
 
           {!isTraining && currentStep === 2 && (
             <div className="animate-fade-in space-y-6">
+              <h3 className="text-base font-semibold text-white/90 sm:text-lg">
+                {step2UploadTitle}
+              </h3>
+
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setProfileMenuOpen((o) => !o)}
+                  className="btn-secondary flex w-full items-center justify-between gap-2 py-2.5 text-sm"
+                >
+                  <span>{t.creator.loadSavedPhotos}</span>
+                  <ChevronDown
+                    className={`h-4 w-4 shrink-0 transition-transform ${profileMenuOpen ? "rotate-180" : ""}`}
+                  />
+                </button>
+                {profileMenuOpen && (
+                  <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl border border-white/10 bg-navy/95 shadow-xl backdrop-blur-xl">
+                    {savedProfiles.length === 0 ? (
+                      <p className="px-4 py-3 text-xs text-white/45">
+                        {t.creator.loadSavedPhotosEmpty}
+                      </p>
+                    ) : (
+                      savedProfiles.map((profile) => (
+                        <button
+                          key={profile.id}
+                          type="button"
+                          onClick={() => loadSavedProfile(profile)}
+                          className={`flex w-full items-center gap-3 border-b border-white/5 px-4 py-3 text-left text-sm transition-colors last:border-0 hover:bg-white/5 ${
+                            selectedProfileId === profile.id ? "bg-glow-purple/10 text-white" : "text-white/70"
+                          }`}
+                        >
+                          {profile.photoUrls[0] ? (
+                            <img
+                              src={profile.photoUrls[0]}
+                              alt=""
+                              className="h-10 w-10 shrink-0 rounded-lg object-cover"
+                            />
+                          ) : (
+                            <div className="h-10 w-10 shrink-0 rounded-lg bg-white/10" />
+                          )}
+                          <span className="truncate">{profile.name}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+
               <FaceProfilePanel
                 compact
                 selectedId={selectedProfileId}
                 onSelect={(profile) => {
-                  setSelectedProfileId(profile.id);
-                  setUploadedFiles(profile.photoUrls.slice(0, 10));
-                  setValidationError(null);
+                  loadSavedProfile(profile);
                 }}
               />
 
@@ -574,7 +664,7 @@ function PersonaCreatorInner() {
                 onDrop={handleFileDrop}
               >
                 <ImagePlus className="mx-auto mb-4 h-10 w-10 text-white/30" />
-                <p className="mb-1 text-sm font-medium text-white/70">{t.creator.uploadTitle}</p>
+                <p className="mb-1 text-sm font-medium text-white/70">{step2UploadTitle}</p>
                 <p className="text-xs leading-relaxed text-white/40">{t.creator.uploadHint}</p>
                 {isUploading && (
                   <p className="mt-3 text-xs text-glow-purple">{t.creator.uploadProcessing}</p>
@@ -815,15 +905,37 @@ function PersonaCreatorInner() {
                       );
                     })}
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleRegenerate}
-                    disabled={regenerateBusy || !portraitId}
-                    className="btn-secondary flex w-full items-center justify-center gap-2 py-2.5 text-sm disabled:opacity-50"
-                  >
-                    <RefreshCw className={`h-4 w-4 shrink-0 ${regenerateBusy ? "animate-spin" : ""}`} />
-                    <span>{regenerateBusy ? "..." : t.creator.regenerate}</span>
-                  </button>
+                  {gallerySavedMsg && (
+                    <p className="text-center text-xs text-glow-emerald">{t.creator.savedToGallery}</p>
+                  )}
+                  <div className="grid grid-cols-1 gap-2 rounded-xl border border-white/10 bg-white/[0.03] p-3 sm:grid-cols-3">
+                    <button
+                      type="button"
+                      onClick={() => void handleDownload()}
+                      disabled={isDownloading}
+                      className="btn-secondary flex items-center justify-center gap-2 py-2.5 text-xs sm:text-sm disabled:opacity-50"
+                    >
+                      <Download className="h-4 w-4 shrink-0" />
+                      <span>{isDownloading ? "..." : t.creator.resultDownloadHiRes}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleShare()}
+                      className="btn-secondary flex items-center justify-center gap-2 py-2.5 text-xs sm:text-sm"
+                    >
+                      <Share2 className="h-4 w-4 shrink-0" />
+                      <span>{t.creator.resultShare}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleRegenerate}
+                      disabled={regenerateBusy || !portraitId}
+                      className="btn-secondary flex items-center justify-center gap-2 py-2.5 text-xs sm:text-sm disabled:opacity-50"
+                    >
+                      <RefreshCw className={`h-4 w-4 shrink-0 ${regenerateBusy ? "animate-spin" : ""}`} />
+                      <span>{regenerateBusy ? "..." : t.creator.resultRegenerateCredit}</span>
+                    </button>
+                  </div>
                 </div>
               )}
 

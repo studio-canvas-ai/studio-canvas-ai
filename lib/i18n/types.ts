@@ -32,7 +32,7 @@ export interface Translations {
     gallery: string;
     pricing: string;
     support: string;
-    profile: string;
+    myGallery: string;
     login: string;
     trial: string;
     menu: string;
@@ -138,6 +138,14 @@ export interface Translations {
     bgCustomPlaceholder: string;
     poseHintLabel: string;
     loadProfile: string;
+    uploadTitlePerson: string;
+    uploadTitleObject: string;
+    loadSavedPhotos: string;
+    loadSavedPhotosEmpty: string;
+    resultDownloadHiRes: string;
+    resultShare: string;
+    resultRegenerateCredit: string;
+    savedToGallery: string;
     validationMissingFields: string;
     validationUploadMin: string;
     validationStyleMin: string;
@@ -317,6 +325,14 @@ export interface Translations {
     idleHint2: string;
     ready4k: string;
     downloadPortrait: string;
+    myGalleryTitle: string;
+    myGallerySubtitle: string;
+    tabWorks: string;
+    tabModels: string;
+    worksEmpty: string;
+    worksDownload: string;
+    worksShare: string;
+    worksReedit: string;
     items: {
       g1: { title: string; style: string };
       g2: { title: string; style: string };

@@ -22,7 +22,7 @@ export default function Navbar() {
     { href: "/gallery", label: t.nav.gallery },
     { href: "/pricing", label: t.nav.pricing },
     { href: "/support", label: t.nav.support },
-    { href: "/profile", label: t.nav.profile },
+    { href: "/gallery/my", label: t.nav.myGallery },
   ];
 
   useEffect(() => {
@@ -53,12 +53,12 @@ export default function Navbar() {
           : "bg-transparent"
       }`}
     >
-      <nav className="relative z-50 mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+      <nav className="relative z-50 mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8">
         <Link href="/" className="group relative z-50 flex shrink-0 items-center gap-2.5">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-glow-purple to-glow-emerald shadow-glow-sm">
             <Sparkles className="h-4 w-4 text-white" />
           </div>
-          <div className="flex flex-col">
+          <div className="hidden flex-col min-[400px]:flex">
             <span className="font-display text-lg leading-tight font-semibold tracking-tight">
               Studio Canvas
             </span>
@@ -66,12 +66,12 @@ export default function Navbar() {
           </div>
         </Link>
 
-        <div className="relative z-50 hidden items-center gap-5 lg:flex xl:gap-6">
+        <div className="relative z-50 hidden min-w-0 flex-1 items-center justify-center gap-3 xl:flex xl:gap-5">
           {navLinks.map((link) => (
             <Link
               key={link.href}
               href={link.href}
-              className={`relative z-50 whitespace-nowrap text-sm transition-colors duration-300 ${
+              className={`relative z-50 shrink-0 whitespace-nowrap text-sm transition-colors duration-300 ${
                 isActive(link.href)
                   ? "font-medium text-white"
                   : "text-white/60 hover:text-white"
@@ -83,6 +83,21 @@ export default function Navbar() {
         </div>
 
         <div className="relative z-50 flex shrink-0 items-center gap-2 md:gap-3">
+          <div className="hidden lg:block xl:hidden">
+            <div className="flex items-center gap-3">
+              {navLinks.slice(0, 4).map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={`whitespace-nowrap text-sm ${
+                    isActive(link.href) ? "font-medium text-white" : "text-white/60 hover:text-white"
+                  }`}
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </div>
+          </div>
           <LanguageSelector />
 
           <div className="hidden items-center gap-1.5 sm:flex">
@@ -104,7 +119,7 @@ export default function Navbar() {
             onClick={openTrial}
             className="btn-secondary hidden whitespace-nowrap px-4 py-2.5 text-sm md:inline-flex"
           >
-            {isAuthenticated ? t.nav.profile : t.nav.login}
+            {isAuthenticated ? t.nav.myGallery : t.nav.login}
           </button>
           <button
             type="button"
