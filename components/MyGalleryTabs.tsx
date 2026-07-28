@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Download, ImageIcon, Share2, Wand2 } from "lucide-react";
+import { Download, ImageIcon, Share2, Trash2, Wand2 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { useCredits } from "@/components/CreditsProvider";
 import FaceProfilePanel from "@/components/FaceProfilePanel";
 import {
   getAccountMeta,
   listGalleryHistory,
+  deleteGalleryHistory,
   type GalleryHistoryItem,
 } from "@/lib/faceProfiles";
 import { fetchOriginalAsset } from "@/lib/galleryUpload";
@@ -94,6 +95,11 @@ export default function MyGalleryTabs() {
     }
   };
 
+  const handleDelete = (item: GalleryHistoryItem) => {
+    if (!window.confirm(t.gallery.worksDeleteConfirm)) return;
+    setWorks(deleteGalleryHistory(item.id));
+  };
+
   const tabs: { id: TabId; label: string }[] = [
     { id: "works", label: t.gallery.tabWorks },
     { id: "models", label: t.gallery.tabModels },
@@ -177,11 +183,19 @@ export default function MyGalleryTabs() {
                       </button>
                       <Link
                         href="/generate"
-                        className="btn-primary inline-flex w-full items-center justify-center gap-1.5 py-2 text-xs"
+                        className="btn-primary inline-flex flex-1 items-center justify-center gap-1.5 py-2 text-xs"
                       >
                         <Wand2 className="h-3.5 w-3.5" />
                         {t.gallery.worksReedit}
                       </Link>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(item)}
+                        className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-red-400/30 bg-red-500/10 py-2 text-xs text-red-200 hover:bg-red-500/20"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        {t.gallery.worksDelete}
+                      </button>
                     </div>
                   </div>
                 );

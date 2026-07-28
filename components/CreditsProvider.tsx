@@ -140,14 +140,19 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
     setShowTopUpModal(false);
   }, []);
 
-  const purchaseCreditPack = useCallback((packId: (typeof CREDIT_PACKS)[number]["id"]) => {
-    const pack = CREDIT_PACKS.find((p) => p.id === packId);
-    if (!pack) return;
-    setCredits((c) => c + pack.credits);
-    setMaxCredits((m) => Math.max(m, pack.credits));
-    setShowCreditModal(false);
-    setShowTopUpModal(false);
-  }, []);
+  const purchaseCreditPack = useCallback(
+    (packId: (typeof CREDIT_PACKS)[number]["id"]) => {
+      const pack = CREDIT_PACKS.find((p) => p.id === packId);
+      if (!pack) return;
+      const amount =
+        planId !== "free" ? pack.subscriberCredits : pack.freeCredits;
+      setCredits((c) => c + amount);
+      setMaxCredits((m) => Math.max(m, amount));
+      setShowCreditModal(false);
+      setShowTopUpModal(false);
+    },
+    [planId]
+  );
 
   const grantFreeCredits = useCallback(() => {
     setIsAuthenticated(true);

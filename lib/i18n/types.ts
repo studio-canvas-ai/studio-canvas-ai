@@ -105,10 +105,15 @@ export interface Translations {
     startTraining: string;
     trainingProgress: string;
     promptLabel: string;
+    promptPreviewLabel: string;
     promptPlaceholder: string;
     creditBadge: string;
     generatePortrait: string;
     downloadPortrait: string;
+    deletePortrait: string;
+    deletePortraitConfirm: string;
+    deleteConfirmYes: string;
+    deleteConfirmNo: string;
     resultReady: string;
     aspectRatioLabel: string;
     aspect916: string;
@@ -136,6 +141,14 @@ export interface Translations {
     bgTags: string;
     bgCustom: string;
     bgCustomPlaceholder: string;
+    bgTagsLabels: {
+      studio: string;
+      city: string;
+      nature: string;
+      luxury: string;
+      neon: string;
+      hanok: string;
+    };
     poseHintLabel: string;
     loadProfile: string;
     uploadTitlePerson: string;
@@ -215,6 +228,8 @@ export interface Translations {
     abGenerate: string;
     stickers: string;
     kakaoShare: string;
+    deletePortrait: string;
+    deletePortraitConfirm: string;
   };
   support: {
     title: string;
@@ -273,6 +288,7 @@ export interface Translations {
     topupTitle: string;
     topupDesc: string;
     packLabel: string;
+    subscriberBadge: string;
     topupNote: string;
     charge: string;
   };
@@ -298,7 +314,8 @@ export interface Translations {
       lifestyle: string;
       cinematic: string;
       business: string;
-      culture: string;
+      cultureEast: string;
+      cultureWest: string;
       urban: string;
       studio: string;
     };
@@ -307,6 +324,7 @@ export interface Translations {
       "cinematic-poster": { name: string; description: string; tags: string[] };
       "business-executive": { name: string; description: string; tags: string[] };
       "cultural-elegance": { name: string; description: string; tags: string[] };
+      "classic-western": { name: string; description: string; tags: string[] };
       "neon-urban": { name: string; description: string; tags: string[] };
       "soft-studio": { name: string; description: string; tags: string[] };
     };
@@ -333,6 +351,8 @@ export interface Translations {
     worksDownload: string;
     worksShare: string;
     worksReedit: string;
+    worksDelete: string;
+    worksDeleteConfirm: string;
     retentionActiveBanner: string;
     expiryBadge: string;
     items: {

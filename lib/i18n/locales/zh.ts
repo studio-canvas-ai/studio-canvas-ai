@@ -83,6 +83,8 @@ const zh: Translations = {
     abGenerate: "生成 A/B 缩略图草案",
     stickers: "强调贴纸",
     kakaoShare: "分享到 KakaoTalk",
+    deletePortrait: en.thumbnail.deletePortrait,
+    deletePortraitConfirm: en.thumbnail.deletePortraitConfirm,
   },
   support: en.support,
   profiles: en.profiles,

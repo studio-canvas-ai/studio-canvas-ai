@@ -23,7 +23,6 @@ import { useI18n } from "@/components/I18nProvider";
 import { useCredits } from "@/components/CreditsProvider";
 import BrandWatermark from "@/components/BrandWatermark";
 import ThumbnailEditor from "@/components/ThumbnailEditor";
-import FaceProfilePanel from "@/components/FaceProfilePanel";
 import {
   subjectTypeOptions,
   ageOptions,
@@ -33,7 +32,6 @@ import {
   HERO_BEFORE_IMAGE,
   MIN_SELFIE_UPLOADS,
   RETOUCH_FREE_PER_CYCLE,
-  CONCEPT_POSE_HINTS,
   BACKGROUND_TAG_IDS,
   BACKGROUND_MODE_IDS,
   type BackgroundModeId,
@@ -118,8 +116,6 @@ function PersonaCreatorInner() {
 
   const isPerson = subject === "male" || subject === "female";
   const focusedImageUrl = drafts[focusedDraft] ?? HERO_AFTER_IMAGE;
-  const poseHint =
-    selectedStyles.length > 0 ? CONCEPT_POSE_HINTS[selectedStyles[0]] : undefined;
 
   useEffect(() => {
     const style = searchParams.get("style");
@@ -659,14 +655,6 @@ function PersonaCreatorInner() {
                 )}
               </div>
 
-              <FaceProfilePanel
-                compact
-                selectedId={selectedProfileId}
-                onSelect={(profile) => {
-                  loadSavedProfile(profile);
-                }}
-              />
-
               <div
                 className={`relative rounded-xl border-2 border-dashed p-6 text-center transition-all duration-300 sm:p-8 ${
                   isDragOver
@@ -782,15 +770,6 @@ function PersonaCreatorInner() {
                 ))}
               </div>
 
-              {poseHint && (
-                <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
-                  <p className="mb-1 text-xs font-medium tracking-wider text-white/50 uppercase">
-                    {t.creator.poseHintLabel}
-                  </p>
-                  <p className="text-sm text-white/70">{poseHint}</p>
-                </div>
-              )}
-
               <div>
                 <p className="mb-3 text-sm font-medium tracking-wider text-white/60 uppercase">
                   {t.creator.bgModeLabel}
@@ -823,13 +802,13 @@ function PersonaCreatorInner() {
                         key={tag}
                         type="button"
                         onClick={() => toggleBackgroundTag(tag)}
-                        className={`rounded-full border px-3 py-1.5 text-xs capitalize transition-colors ${
+                        className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
                           backgroundTags.includes(tag)
                             ? "border-glow-emerald/50 bg-glow-emerald/10 text-white"
                             : "border-white/10 text-white/45 hover:border-white/20"
                         }`}
                       >
-                        {tag}
+                        {t.creator.bgTagsLabels[tag]}
                       </button>
                     ))}
                   </div>
@@ -850,22 +829,12 @@ function PersonaCreatorInner() {
 
           {!isTraining && currentStep === 4 && (
             <div className="animate-fade-in space-y-6">
-              <FaceProfilePanel
-                compact
-                selectedId={selectedProfileId}
-                onSelect={(profile) => {
-                  setSelectedProfileId(profile.id);
-                  setUploadedFiles(profile.photoUrls.slice(0, 10));
-                  setValidationError(null);
-                }}
-              />
-
               {!resultReady && !isGenerating && (
                 <div
                   className={`relative mx-auto flex w-full max-w-sm flex-col items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02] p-6 text-center ${ASPECT_CLASS[aspectRatio]}`}
                 >
                   <Wand2 className="mb-3 h-8 w-8 text-white/30" />
-                  <p className="text-sm text-white/40">{t.creator.promptLabel}</p>
+                  <p className="text-sm text-white/40">{t.creator.promptPreviewLabel}</p>
                 </div>
               )}
 
@@ -1077,6 +1046,21 @@ function PersonaCreatorInner() {
                     className="btn-secondary flex w-full items-center justify-center gap-2 py-3 text-sm disabled:opacity-50"
                   >
                     <span>{isDownloading ? "..." : t.creator.downloadPortrait}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!window.confirm(t.creator.deletePortraitConfirm)) return;
+                      setResultReady(false);
+                      setDrafts([]);
+                      setPortraitId(null);
+                      setGallerySavedMsg(false);
+                      setRetouchMessage(null);
+                      setRetouchPrompt("");
+                    }}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-400/30 bg-red-500/10 py-3 text-sm text-red-200 transition hover:bg-red-500/20"
+                  >
+                    <span>{t.creator.deletePortrait}</span>
                   </button>
 
                   <ThumbnailEditor imageUrl={focusedImageUrl} aspectRatio={aspectRatio} />

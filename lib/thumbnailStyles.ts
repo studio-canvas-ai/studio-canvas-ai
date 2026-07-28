@@ -28,6 +28,8 @@ export type TextLayer = {
   fontSize: number;
   align: TextAlign;
   ranges: ColorRange[];
+  /** Per-line vertical slot: top / center / bottom (#91) */
+  pos: TextPos;
   /** Normalized offsets from snap anchor (-0.4 ~ 0.4) */
   offsetX: number;
   offsetY: number;
@@ -62,15 +64,15 @@ export const EMOJI_QUICK = ["#", "@", "[", "]", "🔥", "🚨", "👉", "✨", "
 
 const FONT_STACK: Record<FontPreset, string> = {
   variety:
-    '"Black Han Sans", "Noto Sans KR", "Noto Sans JP", "Noto Sans SC", "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", system-ui, sans-serif',
+    '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Black Han Sans", "Noto Sans KR", "Noto Sans JP", "Noto Sans SC", system-ui, sans-serif',
   clean:
-    '"Noto Sans KR", "Noto Sans JP", "Noto Sans SC", "Noto Sans", "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", system-ui, sans-serif',
+    '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Noto Sans KR", "Noto Sans JP", "Noto Sans SC", "Noto Sans", system-ui, sans-serif',
   vlog:
-    '"Nanum Pen Script", "Noto Sans KR", "Noto Sans JP", "Noto Color Emoji", cursive',
+    '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Nanum Pen Script", "Noto Sans KR", "Noto Sans JP", cursive',
   neon:
-    '"Orbitron", "Noto Sans KR", "Noto Sans JP", "Noto Color Emoji", sans-serif',
+    '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Orbitron", "Noto Sans KR", "Noto Sans JP", sans-serif',
   impact:
-    '"Do Hyeon", "Noto Sans KR", "Noto Sans JP", "Noto Sans SC", "Noto Color Emoji", sans-serif',
+    '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Do Hyeon", "Noto Sans KR", "Noto Sans JP", "Noto Sans SC", sans-serif',
 };
 
 export function detectScript(text: string): "ko" | "ja" | "zh" | "en" {
@@ -84,17 +86,17 @@ export function detectScript(text: string): "ko" | "ja" | "zh" | "en" {
 export function fontForText(preset: FontPreset, text: string): string {
   const script = detectScript(text);
   const emoji =
-    '"Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"';
+    '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Segoe UI Symbol"';
   if (script === "ja") {
-    return `"Noto Sans JP", ${FONT_STACK[preset]}, ${emoji}`;
+    return `${emoji}, "Noto Sans JP", ${FONT_STACK[preset]}`;
   }
   if (script === "zh") {
-    return `"Noto Sans SC", ${FONT_STACK[preset]}, ${emoji}`;
+    return `${emoji}, "Noto Sans SC", ${FONT_STACK[preset]}`;
   }
   if (script === "en" && preset === "neon") {
-    return `"Orbitron", "Noto Sans", ${emoji}, sans-serif`;
+    return `${emoji}, "Orbitron", "Noto Sans", sans-serif`;
   }
-  return `${FONT_STACK[preset]}, ${emoji}`;
+  return `${emoji}, ${FONT_STACK[preset]}`;
 }
 
 export function createLayer(partial?: Partial<TextLayer>): TextLayer {
@@ -106,6 +108,7 @@ export function createLayer(partial?: Partial<TextLayer>): TextLayer {
     fontSize: 48,
     align: "center",
     ranges: [],
+    pos: "bottom",
     offsetX: 0,
     offsetY: 0,
     ...partial,
@@ -146,12 +149,22 @@ export function isEmojiChar(ch: string): boolean {
 
 export function fontForChar(preset: FontPreset, ch: string): string {
   if (isEmojiChar(ch)) {
-    return '"Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif';
+    return '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Segoe UI Symbol", sans-serif';
   }
   return fontForText(preset, ch);
 }
 
-export const STICKER_BADGE_IDS = ["HOT", "NEW", "LIVE", "TIP"] as const;
+export const STICKER_BADGE_IDS = [
+  "HOT",
+  "NEW",
+  "LIVE",
+  "TIP",
+  "인기",
+  "신규",
+  "라이브",
+  "꿀팁",
+  "추천",
+] as const;
 export type StickerBadgeId = (typeof STICKER_BADGE_IDS)[number];
 
 export type StickerBadgeDef = {
@@ -199,6 +212,49 @@ export const STICKER_BADGES: Record<StickerBadgeId, StickerBadgeDef> = {
     glow: "rgba(124,58,237,0.85)",
     textColor: "#FFFFFF",
   },
+  인기: {
+    id: "인기",
+    label: "인기",
+    emoji: "🔥",
+    fill: "#FF3D00",
+    stroke: "#FFD600",
+    glow: "rgba(255,61,0,0.85)",
+    textColor: "#FFFFFF",
+  },
+  신규: {
+    id: "신규",
+    label: "신규",
+    fill: "#22C55E",
+    stroke: "#A3E635",
+    glow: "rgba(34,197,94,0.85)",
+    textColor: "#0B1A0F",
+  },
+  라이브: {
+    id: "라이브",
+    label: "라이브",
+    fill: "#EF4444",
+    stroke: "#FCA5A5",
+    glow: "rgba(239,68,68,0.9)",
+    textColor: "#FFFFFF",
+  },
+  꿀팁: {
+    id: "꿀팁",
+    label: "꿀팁",
+    emoji: "⚡",
+    fill: "#7C3AED",
+    stroke: "#E879F9",
+    glow: "rgba(124,58,237,0.85)",
+    textColor: "#FFFFFF",
+  },
+  추천: {
+    id: "추천",
+    label: "추천",
+    emoji: "✨",
+    fill: "#0EA5E9",
+    stroke: "#7DD3FC",
+    glow: "rgba(14,165,233,0.85)",
+    textColor: "#FFFFFF",
+  },
 };
 
 /** @deprecated Use STICKER_BADGES + stickerToken() */
@@ -207,14 +263,14 @@ export const STICKER_TEMPLATES = STICKER_BADGE_IDS.map((id) => {
   return b.emoji ? `${b.emoji} ${b.label}` : b.label;
 }) as readonly string[];
 
-const STICKER_TOKEN_RE = /\[\[(HOT|NEW|LIVE|TIP)\]\]/g;
+const STICKER_TOKEN_RE = /\[\[(HOT|NEW|LIVE|TIP|인기|신규|라이브|꿀팁|추천)\]\]/g;
 
 export function stickerToken(id: StickerBadgeId): string {
   return ` [[${id}]] `;
 }
 
 export function isStickerToken(segment: string): segment is StickerBadgeId {
-  return STICKER_BADGE_IDS.includes(segment as StickerBadgeId);
+  return (STICKER_BADGE_IDS as readonly string[]).includes(segment);
 }
 
 export type TextSegment =

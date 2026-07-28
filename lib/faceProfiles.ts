@@ -82,6 +82,12 @@ export function pushGalleryHistory(
   return full;
 }
 
+export function deleteGalleryHistory(id: string) {
+  const next = listGalleryHistory().filter((item) => item.id !== id);
+  saveJson(STORAGE_KEYS.galleryHistory, next);
+  return next;
+}
+
 /** Recompute expiry for all items after subscription cancel (#76). */
 export function recalculateGalleryRetentionOnCancel(ctx: RetentionContext) {
   const list = loadJson<GalleryHistoryItem[]>(STORAGE_KEYS.galleryHistory, []);

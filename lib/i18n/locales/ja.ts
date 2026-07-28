@@ -84,6 +84,8 @@ const ja: Translations = {
     abGenerate: "A/Bサムネ草案を生成",
     stickers: "強調ステッカー",
     kakaoShare: "カカオトーク共有",
+    deletePortrait: en.thumbnail.deletePortrait,
+    deletePortraitConfirm: en.thumbnail.deletePortraitConfirm,
   },
   support: en.support,
   profiles: en.profiles,

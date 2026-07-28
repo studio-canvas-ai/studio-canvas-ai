@@ -84,10 +84,9 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
   const layerAnchorsRef = useRef<LayerAnchor[]>([]);
   const dragRef = useRef<DragState | null>(null);
   const [layers, setLayers] = useState<TextLayer[]>([
-    createLayer({ text: "", color: "yellow" }),
+    createLayer({ text: "", color: "yellow", pos: "bottom" }),
   ]);
   const [activeLayerId, setActiveLayerId] = useState<string>("");
-  const [pos, setPos] = useState<TextPos>("bottom");
   const [depth, setDepth] = useState<DepthMode>("front");
   const [showSafeZone, setShowSafeZone] = useState(false);
   const [youtubePreview, setYoutubePreview] = useState(false);
@@ -237,18 +236,15 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
       const anchors: LayerAnchor[] = [];
 
       const drawLayers = () => {
-        const lineHeights = layers.map((l) => l.fontSize * 1.25);
-        const blockHeight = lineHeights.reduce((a, b) => a + b, 0) || 48;
-        let y =
-          pos === "top"
-            ? (layers[0]?.fontSize ?? 48) * 1.2
-            : pos === "center"
-              ? height / 2 - blockHeight / 2 + (lineHeights[0] ?? 48) / 2
-              : height - blockHeight + (lineHeights[0] ?? 48) / 2;
-
-        layers.forEach((layer, idx) => {
+        layers.forEach((layer) => {
+          const layerPos = layer.pos ?? "bottom";
+          const baseY =
+            layerPos === "top"
+              ? layer.fontSize * 1.2
+              : layerPos === "center"
+                ? height / 2
+                : height - layer.fontSize * 1.1;
           const baseX = width / 2;
-          const baseY = y;
           anchors.push({
             id: layer.id,
             baseX,
@@ -256,12 +252,8 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
             x: baseX + layer.offsetX * width,
             y: baseY + layer.offsetY * height,
           });
-          if (!layer.text.trim()) {
-            y += lineHeights[idx] ?? layer.fontSize * 1.25;
-            return;
-          }
+          if (!layer.text.trim()) return;
           drawStyledText(ctx, layer, baseX, baseY, width);
-          y += lineHeights[idx] ?? layer.fontSize * 1.25;
         });
       };
 
@@ -347,7 +339,6 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
     aspect,
     canvasSize,
     layers,
-    pos,
     depth,
     showSafeZone,
     youtubePreview,
@@ -501,6 +492,7 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
       color: activeLayer?.color ?? "yellow",
       fontPreset: activeLayer?.fontPreset ?? "variety",
       fontSize: activeLayer?.fontSize ?? 48,
+      pos: activeLayer?.pos ?? "bottom",
     });
     setLayers((prev) => [...prev, layer]);
     setActiveLayerId(layer.id);
@@ -532,6 +524,7 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
       fontPreset: base.fontPreset === "impact" ? "neon" : "impact",
       fontSize: Math.min(120, Math.max(28, Math.round(base.fontSize * 0.88))),
       align: base.align,
+      pos: base.pos === "top" ? "center" : "top",
       offsetX: 0,
       offsetY: base.offsetY !== 0 ? -base.offsetY : -0.08,
     });
@@ -745,8 +738,12 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
             <button
               key={key}
               type="button"
-              onClick={() => setPos(key)}
-              className={`rounded-full border px-3 py-1.5 text-xs ${chip(pos === key)}`}
+              onClick={() =>
+                updateActive({ pos: key as TextPos, offsetY: 0 })
+              }
+              className={`rounded-full border px-3 py-1.5 text-xs ${chip(
+                (activeLayer?.pos ?? "bottom") === key
+              )}`}
             >
               {label}
             </button>
@@ -808,6 +805,29 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
               placeholder={t.thumbnail.textPlaceholder}
               className="w-full resize-y rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none placeholder:text-white/30 focus:border-glow-purple/40"
             />
+            {segmentText(layer.text).some((s) => s.kind === "sticker") && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {segmentText(layer.text)
+                  .filter((s): s is { kind: "sticker"; id: (typeof STICKER_BADGE_IDS)[number] } => s.kind === "sticker")
+                  .map((s, i) => {
+                    const badge = STICKER_BADGES[s.id];
+                    return (
+                      <span
+                        key={`${s.id}-${i}`}
+                        className="rounded-full border px-2.5 py-0.5 text-[10px] font-extrabold"
+                        style={{
+                          borderColor: badge.stroke,
+                          backgroundColor: badge.fill,
+                          color: badge.textColor,
+                        }}
+                      >
+                        {badge.emoji ? `${badge.emoji} ` : ""}
+                        {badge.label}
+                      </span>
+                    );
+                  })}
+              </div>
+            )}
             <p className="mt-1 text-[10px] text-white/30">{t.thumbnail.selectionHint}</p>
           </div>
         ))}
@@ -1027,7 +1047,9 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
           {t.thumbnail.printPdf}
         </button>
       </div>
-      <p className="text-[11px] text-white/35">{t.thumbnail.creditNote}</p>
+      {t.thumbnail.creditNote ? (
+        <p className="text-[11px] text-white/35">{t.thumbnail.creditNote}</p>
+      ) : null}
     </div>
   );
 }

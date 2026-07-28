@@ -11,7 +11,8 @@ const categoryKeys = [
   "lifestyle",
   "cinematic",
   "business",
-  "culture",
+  "cultureEast",
+  "cultureWest",
   "urban",
   "studio",
 ] as const;

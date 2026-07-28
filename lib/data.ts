@@ -1,7 +1,14 @@
 export interface StylePackMeta {
   id: string;
   category: string;
-  categoryKey: "lifestyle" | "cinematic" | "business" | "culture" | "urban" | "studio";
+  categoryKey:
+    | "lifestyle"
+    | "cinematic"
+    | "business"
+    | "cultureEast"
+    | "cultureWest"
+    | "urban"
+    | "studio";
   gradient: string;
   imageUrl: string;
 }
@@ -35,15 +42,23 @@ export const stylePacksMeta: StylePackMeta[] = [
     categoryKey: "business",
     gradient: "from-slate-400/25 via-blue-500/20 to-cyan-400/25",
     imageUrl:
-      "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=600&h=800&fit=crop&q=80",
+      "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=600&h=800&fit=crop&q=80",
   },
   {
     id: "cultural-elegance",
-    category: "Culture",
-    categoryKey: "culture",
+    category: "Culture East",
+    categoryKey: "cultureEast",
     gradient: "from-emerald-600/30 via-teal-500/20 to-amber-600/25",
     imageUrl:
       "https://images.unsplash.com/photo-1506480932912-dbbe35e3e516?w=600&h=800&fit=crop&q=80",
+  },
+  {
+    id: "classic-western",
+    category: "Culture West",
+    categoryKey: "cultureWest",
+    gradient: "from-stone-400/25 via-amber-700/20 to-rose-900/25",
+    imageUrl:
+      "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=600&h=800&fit=crop&q=80",
   },
   {
     id: "neon-urban",
@@ -51,7 +66,7 @@ export const stylePacksMeta: StylePackMeta[] = [
     categoryKey: "urban",
     gradient: "from-fuchsia-500/30 via-violet-600/25 to-cyan-400/30",
     imageUrl:
-      "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=600&h=800&fit=crop&q=80",
+      "https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=600&h=800&fit=crop&q=80",
   },
   {
     id: "soft-studio",
@@ -112,7 +127,7 @@ export const pricingPrices: Record<(typeof pricingPlanIds)[number], number> = {
   pro: 19.9,
 };
 
-export const FREE_CREDITS = 3;
+export const FREE_CREDITS = 2;
 export const PROMPT_MAX_LENGTH = 100;
 export const MIN_SELFIE_UPLOADS = 1;
 export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
@@ -139,12 +154,19 @@ export const PLAN_PROFILE_SLOTS: Record<(typeof pricingPlanIds)[number], number>
   pro: 10,
 };
 
-/** #61 credit add-on packs */
+/** #79–#80 credit add-on packs (price shared; credits branch by subscription) */
 export const CREDIT_PACKS = [
-  { id: "pack10", credits: 10, price: 1.9 },
-  { id: "pack30", credits: 30, price: 4.9 },
-  { id: "pack100", credits: 100, price: 12.9 },
+  { id: "pack-s", price: 4.9, freeCredits: 15, subscriberCredits: 20 },
+  { id: "pack-m", price: 9.9, freeCredits: 35, subscriberCredits: 50 },
+  { id: "pack-l", price: 19.9, freeCredits: 80, subscriberCredits: 120 },
 ] as const;
+
+export function creditPackAmount(
+  pack: (typeof CREDIT_PACKS)[number],
+  isSubscriber: boolean
+) {
+  return isSubscriber ? pack.subscriberCredits : pack.freeCredits;
+}
 
 export const BACKGROUND_MODE_IDS = ["auto", "tags", "custom"] as const;
 export type BackgroundModeId = (typeof BACKGROUND_MODE_IDS)[number];
@@ -169,6 +191,7 @@ export const CONCEPT_POSE_HINTS: Record<string, string> = {
   "cinematic-poster": "poster hero stance, determined look, high-contrast lighting",
   "business-executive": "executive seated pose, composed face, clean softbox light",
   "cultural-elegance": "graceful traditional stance, serene expression, soft daylight",
+  "classic-western": "classic western portrait pose, soft smile, Rembrandt key light",
   "neon-urban": "street fashion lean, cool expression, neon rim lights",
   "soft-studio": "minimal studio pose, soft smile, diffused beauty light",
 };
