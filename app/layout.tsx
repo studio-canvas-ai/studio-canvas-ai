@@ -1,3 +1,8 @@
+/**
+ * Root layout — CSS MUST be the first import so App Router injects Tailwind
+ * before any client components. Do not add <head>/<link> stylesheet tags here;
+ * they can block Next.js CSS chunks and cause unstyled layouts.
+ */
 import "./globals.css";
 import type { Metadata } from "next";
 import { Inter, Playfair_Display } from "next/font/google";
@@ -49,6 +54,7 @@ export default function RootLayout({
       lang="en"
       className={`${inter.variable} ${playfair.variable} h-full`}
       style={{ backgroundColor: "#0D0E12" }}
+      suppressHydrationWarning
     >
       <body
         className="min-h-full bg-navy font-sans text-white antialiased"

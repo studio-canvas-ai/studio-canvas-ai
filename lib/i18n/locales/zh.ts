@@ -64,7 +64,7 @@ const zh: Translations = {
       "今日最佳大片✨",
       "短视频封面王者💯",
     ],
-    saveAlbum: "保存到相册",
+    saveAlbum: "📥 下载缩略图",
     share: "分享",
     shareText: "用 Studio Canvas AI 制作的缩略图",
     printPng: "300 DPI PNG 印刷",

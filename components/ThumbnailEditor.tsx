@@ -32,16 +32,15 @@ import {
   measureStickerBadge,
   drawStickerBadge,
   fontForChar,
-  fontForText,
   isEmojiChar,
-  segmentText,
-  stickerToken,
+  stripStickerTokens,
   type ColorPreset,
   type DepthMode,
   type FontPreset,
   type TextAlign,
   type TextLayer,
   type TextPos,
+  type StickerBadgeId,
 } from "@/lib/thumbnailStyles";
 
 type Props = {
@@ -135,27 +134,19 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
       y: number,
       width: number
     ) => {
-      const { text, fontSize, fontPreset, align } = layer;
-      if (!text) return;
+      const { text, fontSize, fontPreset, align, stickerId } = layer;
+      const pureText = stripStickerTokens(text);
       ctx.textBaseline = "middle";
       ctx.textAlign = "left";
 
-      const segments = segmentText(text);
-      const scale = fontSize / 48;
       let totalWidth = 0;
-      for (const seg of segments) {
-        if (seg.kind === "sticker") {
-          totalWidth += measureStickerBadge(ctx, seg.id, scale);
+      for (let i = 0; i < pureText.length; i++) {
+        const ch = pureText[i]!;
+        if (isEmojiChar(ch)) {
+          totalWidth += fontSize * 1.1;
         } else {
-          for (let i = 0; i < seg.value.length; i++) {
-            const ch = seg.value[i]!;
-            if (isEmojiChar(ch)) {
-              totalWidth += fontSize * 1.1;
-            } else {
-              ctx.font = `700 ${fontSize}px ${fontForChar(fontPreset, ch)}`;
-              totalWidth += ctx.measureText(ch).width;
-            }
-          }
+          ctx.font = `700 ${fontSize}px ${fontForChar(fontPreset, ch)}`;
+          totalWidth += ctx.measureText(ch).width;
         }
       }
 
@@ -169,37 +160,43 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
       x += layer.offsetX * width;
       const drawY = y + layer.offsetY * canvasSize.height;
 
-      for (const seg of segments) {
-        if (seg.kind === "sticker") {
-          const w = drawStickerBadge(ctx, seg.id, x, drawY, scale);
-          x += w + fontSize * 0.15;
+      for (let i = 0; i < pureText.length; i++) {
+        const ch = pureText[i]!;
+        if (isEmojiChar(ch)) {
+          const w = drawEmojiChar(ctx, ch, x, drawY, fontSize);
+          x += w;
           continue;
         }
-        for (let i = 0; i < seg.value.length; i++) {
-          const ch = seg.value[i]!;
-          if (isEmojiChar(ch)) {
-            const w = drawEmojiChar(ctx, ch, x, drawY, fontSize);
-            x += w;
-            continue;
-          }
-          const presetKey = colorAtIndex(layer, i);
-          const preset = COLOR_PRESETS[presetKey];
-          ctx.font = `700 ${fontSize}px ${fontForChar(fontPreset, ch)}`;
-          const w = ctx.measureText(ch).width;
-          ctx.shadowColor = preset.shadow;
-          ctx.shadowBlur =
-            presetKey === "white" || presetKey === "purplePink" ? 12 : 6;
-          ctx.lineWidth = Math.max(3, fontSize * 0.08);
-          if (preset.stroke !== "transparent") {
-            ctx.strokeStyle = preset.stroke;
-            ctx.strokeText(ch, x, drawY);
-          }
-          ctx.fillStyle = preset.fill;
-          ctx.fillText(ch, x, drawY);
-          x += w;
+        const presetKey = colorAtIndex(layer, i);
+        const preset = COLOR_PRESETS[presetKey];
+        ctx.font = `700 ${fontSize}px ${fontForChar(fontPreset, ch)}`;
+        const w = ctx.measureText(ch).width;
+        ctx.shadowColor = preset.shadow;
+        ctx.shadowBlur =
+          presetKey === "white" || presetKey === "purplePink" ? 12 : 6;
+        ctx.lineWidth = Math.max(3, fontSize * 0.08);
+        if (preset.stroke !== "transparent") {
+          ctx.strokeStyle = preset.stroke;
+          ctx.strokeText(ch, x, drawY);
         }
+        ctx.fillStyle = preset.fill;
+        ctx.fillText(ch, x, drawY);
+        x += w;
       }
       ctx.shadowBlur = 0;
+
+      // Independent overlay badge — max 1 per line (#97–#98)
+      if (stickerId) {
+        const scale = Math.max(0.7, fontSize / 48);
+        const badgeY = drawY - fontSize * 0.95;
+        let badgeX =
+          align === "left"
+            ? width * 0.08 + layer.offsetX * width
+            : align === "right"
+              ? width * 0.92 + layer.offsetX * width - measureStickerBadge(ctx, stickerId, scale)
+              : xAnchor + layer.offsetX * width - measureStickerBadge(ctx, stickerId, scale) / 2;
+        drawStickerBadge(ctx, stickerId, badgeX, badgeY, scale);
+      }
     },
     [canvasSize.height]
   );
@@ -252,7 +249,7 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
             x: baseX + layer.offsetX * width,
             y: baseY + layer.offsetY * height,
           });
-          if (!layer.text.trim()) return;
+          if (!layer.text.trim() && !layer.stickerId) return;
           drawStyledText(ctx, layer, baseX, baseY, width);
         });
       };
@@ -482,8 +479,10 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
     });
   };
 
-  const insertSticker = (id: (typeof STICKER_BADGE_IDS)[number]) => {
-    insertSymbol(stickerToken(id));
+  const insertSticker = (id: StickerBadgeId) => {
+    if (!activeLayer) return;
+    // Max 1 sticker per line — replace on click (#97)
+    updateActive({ stickerId: activeLayer.stickerId === id ? null : id });
   };
 
   const addLayer = () => {
@@ -504,7 +503,7 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
     const phrase = list[suggestIdx % list.length]!;
     setSuggestIdx((i) => i + 1);
     if (!activeLayer) return;
-    updateActive({ text: phrase, ranges: [] });
+    updateActive({ text: stripStickerTokens(phrase), ranges: [], stickerId: activeLayer.stickerId });
   };
 
   const generateAbVariant = () => {
@@ -793,10 +792,11 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
               onFocus={() => setActiveLayerId(layer.id)}
               onChange={(e) => {
                 setActiveLayerId(layer.id);
+                const pure = stripStickerTokens(e.target.value);
                 setLayers((prev) =>
                   prev.map((l) =>
                     l.id === layer.id
-                      ? { ...l, text: e.target.value, ranges: [] }
+                      ? { ...l, text: pure, ranges: [] }
                       : l
                   )
                 );
@@ -805,27 +805,34 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
               placeholder={t.thumbnail.textPlaceholder}
               className="w-full resize-y rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none placeholder:text-white/30 focus:border-glow-purple/40"
             />
-            {segmentText(layer.text).some((s) => s.kind === "sticker") && (
+            {layer.stickerId && (
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {segmentText(layer.text)
-                  .filter((s): s is { kind: "sticker"; id: (typeof STICKER_BADGE_IDS)[number] } => s.kind === "sticker")
-                  .map((s, i) => {
-                    const badge = STICKER_BADGES[s.id];
-                    return (
-                      <span
-                        key={`${s.id}-${i}`}
-                        className="rounded-full border px-2.5 py-0.5 text-[10px] font-extrabold"
-                        style={{
-                          borderColor: badge.stroke,
-                          backgroundColor: badge.fill,
-                          color: badge.textColor,
-                        }}
-                      >
-                        {badge.emoji ? `${badge.emoji} ` : ""}
-                        {badge.label}
-                      </span>
-                    );
-                  })}
+                {(() => {
+                  const badge = STICKER_BADGES[layer.stickerId!];
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveLayerId(layer.id);
+                        setLayers((prev) =>
+                          prev.map((l) =>
+                            l.id === layer.id ? { ...l, stickerId: null } : l
+                          )
+                        );
+                      }}
+                      className="rounded-full border px-2.5 py-0.5 text-[10px] font-extrabold"
+                      style={{
+                        borderColor: badge.stroke,
+                        backgroundColor: badge.fill,
+                        color: badge.textColor,
+                      }}
+                      title="Remove sticker"
+                    >
+                      {badge.emoji ? `${badge.emoji} ` : ""}
+                      {badge.label} ×
+                    </button>
+                  );
+                })()}
               </div>
             )}
             <p className="mt-1 text-[10px] text-white/30">{t.thumbnail.selectionHint}</p>
@@ -854,16 +861,20 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
         <div className="flex flex-wrap gap-1.5">
           {STICKER_BADGE_IDS.map((id) => {
             const badge = STICKER_BADGES[id];
+            const selected = activeLayer?.stickerId === id;
             return (
               <button
                 key={id}
                 type="button"
                 onClick={() => insertSticker(id)}
-                className="rounded-full border px-3 py-1.5 text-[11px] font-extrabold tracking-wide shadow-[0_0_12px_rgba(255,61,0,0.35)]"
+                className={`rounded-full border px-3 py-1.5 text-[11px] font-extrabold tracking-wide ${
+                  selected ? "ring-2 ring-white/70" : ""
+                }`}
                 style={{
                   borderColor: badge.stroke,
                   backgroundColor: badge.fill,
                   color: badge.textColor,
+                  boxShadow: selected ? `0 0 14px ${badge.glow}` : "0 0 10px rgba(0,0,0,0.25)",
                 }}
               >
                 {badge.emoji ? `${badge.emoji} ` : ""}
@@ -1003,7 +1014,7 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
           type="button"
           onClick={handleDownload}
           disabled={busy}
-          className="btn-secondary w-full py-2.5 text-sm disabled:opacity-50"
+          className="btn-primary w-full py-2.5 text-sm disabled:opacity-50"
         >
           <Download className="h-4 w-4 shrink-0" />
           {t.thumbnail.saveAlbum}
@@ -1012,7 +1023,7 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
           type="button"
           onClick={handleShare}
           disabled={busy}
-          className="btn-primary w-full py-2.5 text-sm disabled:opacity-50"
+          className="btn-secondary w-full py-2.5 text-sm disabled:opacity-50"
         >
           <Share2 className="h-4 w-4 shrink-0" />
           {t.thumbnail.share}

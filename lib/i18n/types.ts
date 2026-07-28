@@ -158,6 +158,9 @@ export interface Translations {
     resultDownloadHiRes: string;
     resultShare: string;
     resultRegenerateCredit: string;
+    regenerateWithCredit: string;
+    regenerateNeedCredit: string;
+    draftSelected: string;
     savedToGallery: string;
     validationMissingFields: string;
     validationUploadMin: string;

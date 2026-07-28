@@ -167,7 +167,7 @@ export default function MyGalleryTabs() {
                         type="button"
                         disabled={busyId === item.id}
                         onClick={() => void handleDownload(item)}
-                        className="btn-secondary inline-flex flex-1 items-center justify-center gap-1.5 py-2 text-xs disabled:opacity-50"
+                        className="btn-primary inline-flex flex-1 items-center justify-center gap-1.5 py-2 text-xs disabled:opacity-50"
                       >
                         <Download className="h-3.5 w-3.5" />
                         {t.gallery.worksDownload}
@@ -183,7 +183,7 @@ export default function MyGalleryTabs() {
                       </button>
                       <Link
                         href="/generate"
-                        className="btn-primary inline-flex flex-1 items-center justify-center gap-1.5 py-2 text-xs"
+                        className="btn-secondary inline-flex flex-1 items-center justify-center gap-1.5 py-2 text-xs"
                       >
                         <Wand2 className="h-3.5 w-3.5" />
                         {t.gallery.worksReedit}

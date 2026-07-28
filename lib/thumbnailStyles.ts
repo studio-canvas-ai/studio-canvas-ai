@@ -14,6 +14,19 @@ export type TextAlign = "left" | "center" | "right";
 export type TextPos = "top" | "center" | "bottom";
 export type DepthMode = "front" | "behind";
 
+export const STICKER_BADGE_IDS = [
+  "HOT",
+  "NEW",
+  "LIVE",
+  "TIP",
+  "인기",
+  "신규",
+  "라이브",
+  "꿀팁",
+  "추천",
+] as const;
+export type StickerBadgeId = (typeof STICKER_BADGE_IDS)[number];
+
 export type ColorRange = {
   start: number;
   end: number;
@@ -30,6 +43,8 @@ export type TextLayer = {
   ranges: ColorRange[];
   /** Per-line vertical slot: top / center / bottom (#91) */
   pos: TextPos;
+  /** Max 1 accent sticker per line — overlay only, never in textarea (#97–#98) */
+  stickerId: StickerBadgeId | null;
   /** Normalized offsets from snap anchor (-0.4 ~ 0.4) */
   offsetX: number;
   offsetY: number;
@@ -109,6 +124,7 @@ export function createLayer(partial?: Partial<TextLayer>): TextLayer {
     align: "center",
     ranges: [],
     pos: "bottom",
+    stickerId: null,
     offsetX: 0,
     offsetY: 0,
     ...partial,
@@ -153,19 +169,6 @@ export function fontForChar(preset: FontPreset, ch: string): string {
   }
   return fontForText(preset, ch);
 }
-
-export const STICKER_BADGE_IDS = [
-  "HOT",
-  "NEW",
-  "LIVE",
-  "TIP",
-  "인기",
-  "신규",
-  "라이브",
-  "꿀팁",
-  "추천",
-] as const;
-export type StickerBadgeId = (typeof STICKER_BADGE_IDS)[number];
 
 export type StickerBadgeDef = {
   id: StickerBadgeId;
@@ -264,6 +267,11 @@ export const STICKER_TEMPLATES = STICKER_BADGE_IDS.map((id) => {
 }) as readonly string[];
 
 const STICKER_TOKEN_RE = /\[\[(HOT|NEW|LIVE|TIP|인기|신규|라이브|꿀팁|추천)\]\]/g;
+
+/** Strip developer sticker tokens so textarea stays pure user text (#98). */
+export function stripStickerTokens(text: string): string {
+  return text.replace(STICKER_TOKEN_RE, "").replace(/\s{2,}/g, " ").trimStart();
+}
 
 export function stickerToken(id: StickerBadgeId): string {
   return ` [[${id}]] `;

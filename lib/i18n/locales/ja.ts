@@ -65,7 +65,7 @@ const ja: Translations = {
       "今日のベストショット✨",
       "ショート最強サムネ💯",
     ],
-    saveAlbum: "アルバムに保存",
+    saveAlbum: "📥 サムネイルをダウンロード",
     share: "共有",
     shareText: "Studio Canvas AIで作ったサムネイル",
     printPng: "300 DPI PNG印刷用",

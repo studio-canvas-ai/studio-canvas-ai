@@ -14,7 +14,6 @@ import {
   AlertCircle,
   Sparkles,
   Wand2,
-  RefreshCw,
   Download,
   Share2,
   ChevronDown,
@@ -865,9 +864,9 @@ function PersonaCreatorInner() {
                           type="button"
                           onClick={() => focusDraft(draftIdx)}
                           title={t.creator.focusDraft}
-                          className={`relative overflow-hidden rounded-2xl border transition-all duration-300 ${ASPECT_CLASS[aspectRatio]} ${
+                          className={`relative overflow-hidden rounded-2xl border-2 transition-all duration-300 ${ASPECT_CLASS[aspectRatio]} ${
                             isFocused
-                              ? "border-glow-emerald/50 shadow-glow-sm"
+                              ? "border-glow-purple shadow-[0_0_24px_rgba(139,92,246,0.35)]"
                               : "border-white/10 hover:border-white/25"
                           }`}
                         >
@@ -881,8 +880,8 @@ function PersonaCreatorInner() {
                           </div>
                           {isFocused && (
                             <>
-                              <div className="absolute top-2 right-2 rounded-md bg-glow-emerald/20 px-2 py-1 text-[10px] font-medium text-glow-emerald">
-                                {t.creator.resultReady}
+                              <div className="absolute top-2 right-2 rounded-md bg-glow-purple/90 px-2 py-1 text-[10px] font-semibold text-white">
+                                [{t.creator.draftSelected}]
                               </div>
                               <BrandWatermark visible={isFreePlan} />
                             </>
@@ -894,12 +893,12 @@ function PersonaCreatorInner() {
                   {gallerySavedMsg && (
                     <p className="text-center text-xs text-glow-emerald">{t.creator.savedToGallery}</p>
                   )}
-                  <div className="grid grid-cols-1 gap-2 rounded-xl border border-white/10 bg-white/[0.03] p-3 sm:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-2 rounded-xl border border-white/10 bg-white/[0.03] p-3 sm:grid-cols-2">
                     <button
                       type="button"
                       onClick={() => void handleDownload()}
                       disabled={isDownloading}
-                      className="btn-secondary flex items-center justify-center gap-2 py-2.5 text-xs sm:text-sm disabled:opacity-50"
+                      className="btn-primary flex items-center justify-center gap-2 py-2.5 text-xs sm:text-sm disabled:opacity-50"
                     >
                       <Download className="h-4 w-4 shrink-0" />
                       <span>{isDownloading ? "..." : t.creator.resultDownloadHiRes}</span>
@@ -911,15 +910,6 @@ function PersonaCreatorInner() {
                     >
                       <Share2 className="h-4 w-4 shrink-0" />
                       <span>{t.creator.resultShare}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleRegenerate}
-                      disabled={regenerateBusy || !portraitId}
-                      className="btn-secondary flex items-center justify-center gap-2 py-2.5 text-xs sm:text-sm disabled:opacity-50"
-                    >
-                      <RefreshCw className={`h-4 w-4 shrink-0 ${regenerateBusy ? "animate-spin" : ""}`} />
-                      <span>{regenerateBusy ? "..." : t.creator.resultRegenerateCredit}</span>
                     </button>
                   </div>
                 </div>
@@ -976,12 +966,24 @@ function PersonaCreatorInner() {
 
               <button
                 type="button"
-                onClick={handleGenerate}
-                disabled={isGenerating}
+                onClick={() => {
+                  if (resultReady) {
+                    handleRegenerate();
+                    return;
+                  }
+                  handleGenerate();
+                }}
+                disabled={isGenerating || regenerateBusy}
                 className="btn-primary w-full py-3 text-sm disabled:opacity-50"
               >
-                <Wand2 className="h-4 w-4 shrink-0" />
-                <span>{t.creator.generatePortrait}</span>
+                <Wand2 className={`h-4 w-4 shrink-0 ${regenerateBusy || isGenerating ? "animate-pulse" : ""}`} />
+                <span>
+                  {resultReady
+                    ? credits > 0
+                      ? t.creator.regenerateWithCredit
+                      : t.creator.regenerateNeedCredit
+                    : t.creator.generatePortrait}
+                </span>
               </button>
 
               {resultReady && (
@@ -1028,10 +1030,40 @@ function PersonaCreatorInner() {
                       <button
                         key={key}
                         type="button"
-                        onClick={() => setExportPreset(key)}
-                        className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                        disabled={isDownloading}
+                        onClick={() => {
+                          setExportPreset(key);
+                          void (async () => {
+                            if (isDownloading) return;
+                            setIsDownloading(true);
+                            const imageUrl = focusedImageUrl;
+                            try {
+                              await downloadImageFile({
+                                imageUrl,
+                                filename:
+                                  key === "id-photo"
+                                    ? `studio-canvas-id-photo-${Date.now()}.png`
+                                    : key === "print-png"
+                                      ? `studio-canvas-print-a4-300dpi-${Date.now()}.png`
+                                      : key === "print-pdf"
+                                        ? `studio-canvas-print-a4-300dpi-${Date.now()}.pdf`
+                                        : `studio-canvas-hd-${Date.now()}.png`,
+                                bakeWatermark:
+                                  isFreePlan && key !== "print-png" && key !== "print-pdf",
+                                aspectRatio,
+                                exportPreset: key,
+                                printPaper: "a4",
+                              });
+                            } catch {
+                              window.open(imageUrl, "_blank", "noopener,noreferrer");
+                            } finally {
+                              setIsDownloading(false);
+                            }
+                          })();
+                        }}
+                        className={`rounded-full border px-3 py-1.5 text-xs transition-colors disabled:opacity-50 ${
                           exportPreset === key
-                            ? "border-glow-emerald/50 bg-glow-emerald/10 text-white"
+                            ? "border-glow-purple/50 bg-glow-purple/15 text-white"
                             : "border-white/10 text-white/45 hover:border-white/20"
                         }`}
                       >
@@ -1039,14 +1071,6 @@ function PersonaCreatorInner() {
                       </button>
                     ))}
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleDownload}
-                    disabled={isDownloading}
-                    className="btn-secondary flex w-full items-center justify-center gap-2 py-3 text-sm disabled:opacity-50"
-                  >
-                    <span>{isDownloading ? "..." : t.creator.downloadPortrait}</span>
-                  </button>
                   <button
                     type="button"
                     onClick={() => {
