@@ -74,13 +74,8 @@ export default function HeroSection() {
               <span className="truncate">{t.hero.badge}</span>
             </div>
 
-            <h1 className="font-display text-[clamp(2rem,5vw,3.75rem)] leading-[1.12] font-bold tracking-tight">
-              <span className="block">{t.hero.titleLine1}</span>
-              <span className="gradient-text mt-1 block">
-                {t.hero.titleLine2}
-                <br className="hidden sm:block" />
-                <span className="sm:ml-0"> {t.hero.titleLine3}</span>
-              </span>
+            <h1 className="font-display text-[clamp(1.75rem,4.5vw,3.25rem)] leading-[1.2] font-bold tracking-tight">
+              <span className="gradient-text block">{t.hero.title}</span>
             </h1>
 
             <p className="max-w-lg text-base leading-relaxed text-white/50 sm:text-lg">

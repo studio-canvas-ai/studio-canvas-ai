@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   User,
   Upload,
@@ -13,39 +14,84 @@ import {
   AlertCircle,
   Sparkles,
   Wand2,
+  RefreshCw,
 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { useCredits } from "@/components/CreditsProvider";
 import BrandWatermark from "@/components/BrandWatermark";
+import ThumbnailEditor from "@/components/ThumbnailEditor";
+import FaceProfilePanel from "@/components/FaceProfilePanel";
 import {
-  personaSpecIds,
+  subjectTypeOptions,
+  ageOptions,
   wizardStylePackIds,
   PROMPT_MAX_LENGTH,
   HERO_AFTER_IMAGE,
+  HERO_BEFORE_IMAGE,
+  MIN_SELFIE_UPLOADS,
+  RETOUCH_FREE_PER_CYCLE,
+  CONCEPT_POSE_HINTS,
+  BACKGROUND_TAG_IDS,
+  BACKGROUND_MODE_IDS,
+  type BackgroundModeId,
 } from "@/lib/data";
+import { pushGalleryHistory } from "@/lib/faceProfiles";
+import { processUploadFiles } from "@/lib/processUpload";
 import { downloadImageFile, type AspectRatioKey, type ExportPreset } from "@/lib/downloadImage";
 
+type SubjectId = (typeof subjectTypeOptions)[number]["id"];
+
 const PERSONA_DEFAULTS = {
-  gender: "female",
+  subject: "male" as SubjectId,
   age: "30s",
-  vibe: "natural",
-} as const;
+};
 
 const ASPECT_CLASS: Record<AspectRatioKey, string> = {
   "9:16": "aspect-[9/16]",
   "16:9": "aspect-video",
   "1:1": "aspect-square",
+  a4: "aspect-[1/1.41]",
 };
 
+const ACCEPT_ATTR =
+  ".jpg,.jpeg,.png,.webp,.heic,.heif,image/jpeg,image/png,image/webp,image/heic,image/heif";
+
 export default function PersonaCreator() {
+  return (
+    <Suspense fallback={<section id="creator" className="section-padding relative" />}>
+      <PersonaCreatorInner />
+    </Suspense>
+  );
+}
+
+function PersonaCreatorInner() {
   const { t } = useI18n();
-  const { credits, maxCredits, isFreePlan, consumeCredit, setShowCreditModal } = useCredits();
+  const searchParams = useSearchParams();
+  const {
+    credits,
+    maxCredits,
+    isFreePlan,
+    consumeCredit,
+    setShowCreditModal,
+    registerPortrait,
+    requestRetouch,
+    getPortraitRetouch,
+  } = useCredits();
   const stepContentRef = useRef<HTMLDivElement>(null);
   const [currentStep, setCurrentStep] = useState(1);
-  const [selections, setSelections] = useState<Record<string, string>>({ ...PERSONA_DEFAULTS });
+  const [subject, setSubject] = useState<SubjectId>(PERSONA_DEFAULTS.subject);
+  const [age, setAge] = useState(PERSONA_DEFAULTS.age);
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
   const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
+  const [backgroundMode, setBackgroundMode] = useState<BackgroundModeId>("auto");
+  const [backgroundTags, setBackgroundTags] = useState<string[]>([]);
+  const [backgroundCustom, setBackgroundCustom] = useState("");
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
+  const [focusedDraft, setFocusedDraft] = useState<0 | 1>(0);
+  const [drafts, setDrafts] = useState<string[]>([]);
+  const [regenerateBusy, setRegenerateBusy] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isTraining, setIsTraining] = useState(false);
   const [trainingProgress, setTrainingProgress] = useState(0);
@@ -55,6 +101,23 @@ export default function PersonaCreator() {
   const [isDownloading, setIsDownloading] = useState(false);
   const [aspectRatio, setAspectRatio] = useState<AspectRatioKey>("9:16");
   const [exportPreset, setExportPreset] = useState<ExportPreset>("original");
+  const [portraitId, setPortraitId] = useState<string | null>(null);
+  const [retouchPrompt, setRetouchPrompt] = useState("");
+  const [isRetouching, setIsRetouching] = useState(false);
+  const [retouchMessage, setRetouchMessage] = useState<string | null>(null);
+  const [freeRetouchesLeft, setFreeRetouchesLeft] = useState(RETOUCH_FREE_PER_CYCLE);
+
+  const isPerson = subject === "male" || subject === "female";
+  const focusedImageUrl = drafts[focusedDraft] ?? HERO_AFTER_IMAGE;
+  const poseHint =
+    selectedStyles.length > 0 ? CONCEPT_POSE_HINTS[selectedStyles[0]] : undefined;
+
+  useEffect(() => {
+    const style = searchParams.get("style");
+    if (!style) return;
+    setSelectedStyles((prev) => (prev.includes(style) ? prev : [...prev, style]));
+    setCurrentStep((step) => (step < 3 ? 3 : step));
+  }, [searchParams]);
 
   const steps = [
     { id: 1, title: t.creator.step1Title, icon: User, description: t.creator.step1Desc },
@@ -63,32 +126,22 @@ export default function PersonaCreator() {
     { id: 4, title: t.creator.step4Title, icon: Wand2, description: t.creator.step4Desc },
   ];
 
-  const categoryLabels: Record<string, string> = {
-    gender: t.creator.gender,
-    age: t.creator.age,
-    vibe: t.creator.vibe,
+  const subjectLabels: Record<SubjectId, string> = {
+    male: t.creator.subjectMale,
+    female: t.creator.subjectFemale,
+    object: t.creator.subjectObject,
   };
 
-  const optionLabels: Record<string, Record<string, string>> = {
-    gender: {
-      female: t.creator.genderFemale,
-      male: t.creator.genderMale,
-      neutral: t.creator.genderNeutral,
-    },
-    age: {
-      "20s": t.creator.age20s,
-      "30s": t.creator.age30s,
-      "40s": t.creator.age40s,
-    },
-    vibe: {
-      elegant: t.creator.vibeElegant,
-      bold: t.creator.vibeBold,
-      natural: t.creator.vibeNatural,
-      mysterious: t.creator.vibeMysterious,
-    },
+  const ageLabels: Record<string, string> = {
+    "10s": t.creator.age10s,
+    "20s": t.creator.age20s,
+    "30s": t.creator.age30s,
+    "40s": t.creator.age40s,
+    "50s": t.creator.age50s,
+    "60s": t.creator.age60s,
+    "70s": t.creator.age70s,
+    "80s": t.creator.age80s,
   };
-
-  const resolvedSelections = { ...PERSONA_DEFAULTS, ...selections };
 
   const goToStep = useCallback((step: number) => {
     setCurrentStep(step);
@@ -98,49 +151,88 @@ export default function PersonaCreator() {
     });
   }, []);
 
-  const toggleSelection = (category: string, id: string) => {
-    setSelections((prev) => ({ ...PERSONA_DEFAULTS, ...prev, [category]: id }));
-    setValidationError(null);
-  };
+  const mapUploadErrors = useCallback(
+    (errors: string[]) => {
+      return errors
+        .map((err) => {
+          const [code, name = ""] = err.split(":");
+          if (code === "unsupported") {
+            return t.creator.uploadErrorUnsupported.replace("{name}", name);
+          }
+          if (code === "tooLarge") {
+            return t.creator.uploadErrorTooLarge.replace("{name}", name);
+          }
+          if (code === "convertFail") {
+            return t.creator.uploadErrorConvert.replace("{name}", name);
+          }
+          return err;
+        })
+        .join("\n");
+    },
+    [t]
+  );
 
-  const toggleStyle = (id: string) => {
-    setSelectedStyles((prev) =>
-      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
-    );
-    setValidationError(null);
-  };
+  const ingestFiles = useCallback(
+    async (fileList: File[]) => {
+      if (!fileList.length) return;
+      setIsUploading(true);
+      setValidationError(null);
+      try {
+        const { ok, errors } = await processUploadFiles(
+          fileList,
+          10 - uploadedFiles.length
+        );
+        if (ok.length) {
+          setUploadedFiles((prev) => [...prev, ...ok.map((f) => f.url)].slice(0, 10));
+        }
+        if (errors.length) {
+          setValidationError(mapUploadErrors(errors));
+        }
+      } finally {
+        setIsUploading(false);
+      }
+    },
+    [uploadedFiles.length, mapUploadErrors]
+  );
 
   const handleFileDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
       setIsDragOver(false);
-      const files = Array.from(e.dataTransfer.files).slice(0, 10 - uploadedFiles.length);
-      const urls = files.map((f) => URL.createObjectURL(f));
-      setUploadedFiles((prev) => [...prev, ...urls].slice(0, 10));
-      setValidationError(null);
+      void ingestFiles(Array.from(e.dataTransfer.files));
     },
-    [uploadedFiles.length]
+    [ingestFiles]
   );
+
+  const selectSubject = (id: SubjectId) => {
+    setSubject(id);
+    setValidationError(null);
+    if (id === "object") {
+      // Skip age UI and move straight to upload
+      requestAnimationFrame(() => goToStep(2));
+    }
+  };
 
   const handleNext = () => {
     if (currentStep === 1) {
-      const missing: string[] = [];
-      if (!resolvedSelections.gender) missing.push(t.creator.gender);
-      if (!resolvedSelections.age) missing.push(t.creator.age);
-      if (!resolvedSelections.vibe) missing.push(t.creator.vibe);
-      if (missing.length) {
+      if (!subject) {
         setValidationError(
-          t.creator.validationMissingFields.replace("{fields}", missing.join(", "))
+          t.creator.validationMissingFields.replace("{fields}", t.creator.subject)
         );
         return;
       }
-      setSelections((prev) => ({ ...PERSONA_DEFAULTS, ...prev }));
+      if (isPerson && !age) {
+        setValidationError(
+          t.creator.validationMissingFields.replace("{fields}", t.creator.age)
+        );
+        return;
+      }
       goToStep(2);
       return;
     }
 
     if (currentStep === 2) {
-      if (uploadedFiles.length < 3) {
+      if (uploadedFiles.length < MIN_SELFIE_UPLOADS) {
         setValidationError(t.creator.validationUploadMin);
         return;
       }
@@ -171,6 +263,13 @@ export default function PersonaCreator() {
     };
   }, [isTraining, goToStep]);
 
+  const toggleStyle = (id: string) => {
+    setSelectedStyles((prev) =>
+      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
+    );
+    setValidationError(null);
+  };
+
   const handleStartTraining = () => {
     if (selectedStyles.length < 1) {
       setValidationError(t.creator.validationStyleMin);
@@ -180,36 +279,130 @@ export default function PersonaCreator() {
     setIsTraining(true);
   };
 
+  const focusDraft = (idx: 0 | 1) => {
+    setFocusedDraft(idx);
+    if (!portraitId) return;
+    const state = getPortraitRetouch(`${portraitId}-${idx}`);
+    if (state) setFreeRetouchesLeft(state.freeRemaining);
+  };
+
+  const toggleBackgroundTag = (tag: string) => {
+    setBackgroundTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    );
+  };
+
   const handleGenerate = () => {
     if (credits <= 0) {
       setShowCreditModal(true);
       return;
     }
-    if (!consumeCredit()) return;
+    if (!consumeCredit(1)) return;
     setIsGenerating(true);
     setResultReady(false);
+    setRetouchMessage(null);
+    setRetouchPrompt("");
+    const base = `portrait-${Date.now()}`;
     setTimeout(() => {
+      const state0 = registerPortrait(`${base}-0`);
+      registerPortrait(`${base}-1`);
+      setPortraitId(base);
+      setDrafts([HERO_AFTER_IMAGE, HERO_BEFORE_IMAGE]);
+      setFocusedDraft(0);
+      setFreeRetouchesLeft(state0.freeRemaining);
+      const styleId = selectedStyles[0];
+      const now = Date.now();
+      pushGalleryHistory({
+        id: `${base}-0`,
+        imageUrl: HERO_AFTER_IMAGE,
+        createdAt: now,
+        styleId,
+      });
+      pushGalleryHistory({
+        id: `${base}-1`,
+        imageUrl: HERO_BEFORE_IMAGE,
+        createdAt: now + 1,
+        styleId,
+      });
       setIsGenerating(false);
       setResultReady(true);
     }, 1800);
   };
 
+  const handleRegenerate = () => {
+    if (!portraitId || regenerateBusy) return;
+    setRegenerateBusy(true);
+    setRetouchMessage(null);
+    const id = `${portraitId}-${focusedDraft}`;
+    const result = requestRetouch(id, "regenerate");
+    if (!result.ok) {
+      setRegenerateBusy(false);
+      if (result.reason === "throttle") setRetouchMessage(t.creator.retouchThrottle);
+      else if (result.reason === "daily_limit") setRetouchMessage(t.creator.retouchDailyLimit);
+      else if (result.reason === "insufficient_credits") setShowCreditModal(true);
+      return;
+    }
+
+    setTimeout(() => {
+      setFreeRetouchesLeft(result.freeRemaining);
+      setDrafts((prev) => {
+        const next = [...prev];
+        const alt = focusedDraft === 0 ? HERO_BEFORE_IMAGE : HERO_AFTER_IMAGE;
+        const primary = focusedDraft === 0 ? HERO_AFTER_IMAGE : HERO_BEFORE_IMAGE;
+        const current = (next[focusedDraft] ?? primary).split("?")[0];
+        next[focusedDraft] =
+          current === primary ? `${alt}?t=${Date.now()}` : `${primary}?t=${Date.now()}`;
+        return next;
+      });
+      setRegenerateBusy(false);
+    }, 900);
+  };
+
+  const handleRetouch = () => {
+    if (!portraitId || !retouchPrompt.trim() || isRetouching) return;
+    setIsRetouching(true);
+    setRetouchMessage(null);
+
+    const id = `${portraitId}-${focusedDraft}`;
+    const result = requestRetouch(id, "retouch");
+    if (!result.ok) {
+      setIsRetouching(false);
+      if (result.reason === "throttle") setRetouchMessage(t.creator.retouchThrottle);
+      else if (result.reason === "daily_limit") setRetouchMessage(t.creator.retouchDailyLimit);
+      else if (result.reason === "insufficient_credits") setShowCreditModal(true);
+      return;
+    }
+
+    setTimeout(() => {
+      setFreeRetouchesLeft(result.freeRemaining);
+      setRetouchMessage(t.creator.retouchSuccess);
+      setRetouchPrompt("");
+      setIsRetouching(false);
+    }, 900);
+  };
+
   const handleDownload = async () => {
     if (isDownloading) return;
     setIsDownloading(true);
+    const imageUrl = focusedImageUrl;
     try {
       await downloadImageFile({
-        imageUrl: HERO_AFTER_IMAGE,
+        imageUrl,
         filename:
           exportPreset === "id-photo"
             ? `studio-canvas-id-photo-${Date.now()}.png`
-            : `studio-canvas-hd-${Date.now()}.png`,
-        bakeWatermark: isFreePlan,
+            : exportPreset === "print-png"
+              ? `studio-canvas-print-a4-300dpi-${Date.now()}.png`
+              : exportPreset === "print-pdf"
+                ? `studio-canvas-print-a4-300dpi-${Date.now()}.pdf`
+                : `studio-canvas-hd-${Date.now()}.png`,
+        bakeWatermark: isFreePlan && exportPreset !== "print-png" && exportPreset !== "print-pdf",
         aspectRatio,
         exportPreset,
+        printPaper: "a4",
       });
     } catch {
-      window.open(HERO_AFTER_IMAGE, "_blank", "noopener,noreferrer");
+      window.open(imageUrl, "_blank", "noopener,noreferrer");
     } finally {
       setIsDownloading(false);
     }
@@ -295,41 +488,78 @@ export default function PersonaCreator() {
 
           {!isTraining && currentStep === 1 && (
             <div className="animate-fade-in space-y-8">
-              {Object.entries(personaSpecIds).map(([category, options]) => (
-                <div key={category}>
-                  <h3 className="mb-4 text-sm font-medium tracking-wider text-white/60 uppercase">
-                    {categoryLabels[category]}
+              <div>
+                <h3 className="mb-4 text-sm font-medium tracking-wider text-white/60 uppercase">
+                  {t.creator.subject}
+                </h3>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  {subjectTypeOptions.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => selectSubject(option.id)}
+                      className={`rounded-xl border p-4 text-center transition-all duration-300 ${
+                        subject === option.id
+                          ? "border-glow-purple/50 bg-glow-purple/10 shadow-glow-sm"
+                          : "border-white/10 bg-white/[0.02] hover:border-white/20 hover:bg-white/5"
+                      }`}
+                    >
+                      <div className="mb-2 text-2xl">{option.icon}</div>
+                      <div className="text-xs font-medium leading-snug sm:text-sm">
+                        {subjectLabels[option.id]}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {isPerson && (
+                <div className="animate-fade-in">
+                  <h3 className="mb-3 text-sm font-medium tracking-wider text-white/60 uppercase">
+                    {t.creator.age}
                   </h3>
-                  <div
-                    className={`grid gap-3 ${
-                      category === "vibe" ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"
-                    }`}
-                  >
-                    {options.map((option) => (
+                  <p className="mb-3 text-xs leading-relaxed text-white/45 sm:text-sm">
+                    {t.creator.ageHint}
+                  </p>
+                  <div className="grid grid-cols-4 gap-3">
+                    {ageOptions.map((option) => (
                       <button
                         key={option.id}
                         type="button"
-                        onClick={() => toggleSelection(category, option.id)}
+                        onClick={() => {
+                          setAge(option.id);
+                          setValidationError(null);
+                        }}
                         className={`rounded-xl border p-3 text-center transition-all duration-300 sm:p-4 ${
-                          resolvedSelections[category as keyof typeof PERSONA_DEFAULTS] === option.id
+                          age === option.id
                             ? "border-glow-purple/50 bg-glow-purple/10 shadow-glow-sm"
                             : "border-white/10 bg-white/[0.02] hover:border-white/20 hover:bg-white/5"
                         }`}
                       >
                         <div className="mb-1 text-xl sm:mb-2 sm:text-2xl">{option.icon}</div>
                         <div className="text-xs font-medium leading-tight sm:text-sm">
-                          {optionLabels[category][option.id]}
+                          {ageLabels[option.id]}
                         </div>
                       </button>
                     ))}
                   </div>
                 </div>
-              ))}
+              )}
             </div>
           )}
 
           {!isTraining && currentStep === 2 && (
             <div className="animate-fade-in space-y-6">
+              <FaceProfilePanel
+                compact
+                selectedId={selectedProfileId}
+                onSelect={(profile) => {
+                  setSelectedProfileId(profile.id);
+                  setUploadedFiles(profile.photoUrls.slice(0, 10));
+                  setValidationError(null);
+                }}
+              />
+
               <div
                 className={`relative rounded-xl border-2 border-dashed p-6 text-center transition-all duration-300 sm:p-8 ${
                   isDragOver
@@ -345,24 +575,32 @@ export default function PersonaCreator() {
               >
                 <ImagePlus className="mx-auto mb-4 h-10 w-10 text-white/30" />
                 <p className="mb-1 text-sm font-medium text-white/70">{t.creator.uploadTitle}</p>
-                <p className="text-xs text-white/40">{t.creator.uploadHint}</p>
+                <p className="text-xs leading-relaxed text-white/40">{t.creator.uploadHint}</p>
+                {isUploading && (
+                  <p className="mt-3 text-xs text-glow-purple">{t.creator.uploadProcessing}</p>
+                )}
                 <input
                   type="file"
                   multiple
-                  accept="image/*"
-                  className="absolute inset-0 cursor-pointer opacity-0"
+                  accept={ACCEPT_ATTR}
+                  disabled={isUploading}
+                  className="absolute inset-0 cursor-pointer opacity-0 disabled:cursor-wait"
                   onChange={(e) => {
-                    const files = Array.from(e.target.files || []).slice(
-                      0,
-                      10 - uploadedFiles.length
-                    );
-                    const urls = files.map((f) => URL.createObjectURL(f));
-                    setUploadedFiles((prev) => [...prev, ...urls].slice(0, 10));
-                    setValidationError(null);
+                    void ingestFiles(Array.from(e.target.files || []));
                     e.target.value = "";
                   }}
                 />
               </div>
+
+              <p className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs leading-relaxed text-white/55 sm:text-sm">
+                {t.creator.uploadFormatHint}
+              </p>
+
+              {isPerson && (
+                <p className="rounded-xl border border-glow-emerald/20 bg-glow-emerald/10 px-4 py-3 text-xs leading-relaxed text-emerald-100/90 sm:text-sm">
+                  {t.creator.uploadIdentityHint}
+                </p>
+              )}
 
               <div className="flex items-center gap-3">
                 <span className="shrink-0 text-xs text-white/50 sm:text-sm">
@@ -412,8 +650,8 @@ export default function PersonaCreator() {
           )}
 
           {!isTraining && currentStep === 3 && (
-            <div className="animate-fade-in">
-              <p className="mb-6 text-sm text-white/50">{t.creator.styleSelectHint}</p>
+            <div className="animate-fade-in space-y-6">
+              <p className="text-sm text-white/50">{t.creator.styleSelectHint}</p>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 {wizardStylePackIds.map((pack) => (
                   <button
@@ -436,43 +674,158 @@ export default function PersonaCreator() {
                   </button>
                 ))}
               </div>
+
+              {poseHint && (
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                  <p className="mb-1 text-xs font-medium tracking-wider text-white/50 uppercase">
+                    {t.creator.poseHintLabel}
+                  </p>
+                  <p className="text-sm text-white/70">{poseHint}</p>
+                </div>
+              )}
+
+              <div>
+                <p className="mb-3 text-sm font-medium tracking-wider text-white/60 uppercase">
+                  {t.creator.bgModeLabel}
+                </p>
+                <div className="mb-3 flex flex-wrap gap-2">
+                  {BACKGROUND_MODE_IDS.map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setBackgroundMode(mode)}
+                      className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                        backgroundMode === mode
+                          ? "border-glow-purple/50 bg-glow-purple/15 text-white"
+                          : "border-white/10 text-white/45 hover:border-white/20 hover:text-white/70"
+                      }`}
+                    >
+                      {mode === "auto"
+                        ? t.creator.bgAuto
+                        : mode === "tags"
+                          ? t.creator.bgTags
+                          : t.creator.bgCustom}
+                    </button>
+                  ))}
+                </div>
+
+                {backgroundMode === "tags" && (
+                  <div className="flex flex-wrap gap-2">
+                    {BACKGROUND_TAG_IDS.map((tag) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => toggleBackgroundTag(tag)}
+                        className={`rounded-full border px-3 py-1.5 text-xs capitalize transition-colors ${
+                          backgroundTags.includes(tag)
+                            ? "border-glow-emerald/50 bg-glow-emerald/10 text-white"
+                            : "border-white/10 text-white/45 hover:border-white/20"
+                        }`}
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {backgroundMode === "custom" && (
+                  <input
+                    type="text"
+                    value={backgroundCustom}
+                    onChange={(e) => setBackgroundCustom(e.target.value)}
+                    placeholder={t.creator.bgCustomPlaceholder}
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-white/30 focus:border-glow-purple/40"
+                  />
+                )}
+              </div>
             </div>
           )}
 
           {!isTraining && currentStep === 4 && (
             <div className="animate-fade-in space-y-6">
-              <div
-                className={`relative mx-auto w-full max-w-sm overflow-hidden rounded-2xl border border-white/10 ${ASPECT_CLASS[aspectRatio]}`}
-              >
-                {(resultReady || isGenerating) && (
+              <FaceProfilePanel
+                compact
+                selectedId={selectedProfileId}
+                onSelect={(profile) => {
+                  setSelectedProfileId(profile.id);
+                  setUploadedFiles(profile.photoUrls.slice(0, 10));
+                  setValidationError(null);
+                }}
+              />
+
+              {!resultReady && !isGenerating && (
+                <div
+                  className={`relative mx-auto flex w-full max-w-sm flex-col items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02] p-6 text-center ${ASPECT_CLASS[aspectRatio]}`}
+                >
+                  <Wand2 className="mb-3 h-8 w-8 text-white/30" />
+                  <p className="text-sm text-white/40">{t.creator.promptLabel}</p>
+                </div>
+              )}
+
+              {isGenerating && (
+                <div
+                  className={`relative mx-auto flex w-full max-w-sm items-center justify-center overflow-hidden rounded-2xl border border-white/10 ${ASPECT_CLASS[aspectRatio]}`}
+                >
                   <img
                     src={HERO_AFTER_IMAGE}
                     alt=""
-                    className={`h-full w-full object-cover object-[30%_35%] transition-opacity duration-500 ${
-                      isGenerating ? "opacity-40 blur-sm" : "opacity-100"
-                    }`}
+                    className="h-full w-full object-cover object-[30%_35%] opacity-40 blur-sm"
                   />
-                )}
-                {!resultReady && !isGenerating && (
-                  <div className="flex h-full flex-col items-center justify-center bg-white/[0.02] p-6 text-center">
-                    <Wand2 className="mb-3 h-8 w-8 text-white/30" />
-                    <p className="text-sm text-white/40">{t.creator.promptLabel}</p>
-                  </div>
-                )}
-                {isGenerating && (
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="h-12 w-12 animate-spin rounded-full border-2 border-glow-purple/30 border-t-glow-purple" />
                   </div>
-                )}
-                {resultReady && (
-                  <>
-                    <div className="absolute top-3 left-3 rounded-md bg-glow-emerald/20 px-2 py-1 text-[10px] font-medium text-glow-emerald">
-                      {t.creator.resultReady}
-                    </div>
-                    <BrandWatermark visible={isFreePlan} />
-                  </>
-                )}
-              </div>
+                </div>
+              )}
+
+              {resultReady && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    {drafts.map((url, idx) => {
+                      const draftIdx = idx as 0 | 1;
+                      const isFocused = focusedDraft === draftIdx;
+                      return (
+                        <button
+                          key={`${url}-${idx}`}
+                          type="button"
+                          onClick={() => focusDraft(draftIdx)}
+                          title={t.creator.focusDraft}
+                          className={`relative overflow-hidden rounded-2xl border transition-all duration-300 ${ASPECT_CLASS[aspectRatio]} ${
+                            isFocused
+                              ? "border-glow-emerald/50 shadow-glow-sm"
+                              : "border-white/10 hover:border-white/25"
+                          }`}
+                        >
+                          <img
+                            src={url}
+                            alt=""
+                            className="h-full w-full object-cover object-[30%_35%]"
+                          />
+                          <div className="absolute top-2 left-2 rounded-md bg-black/55 px-2 py-1 text-[10px] font-medium text-white">
+                            {draftIdx === 0 ? t.creator.draftA : t.creator.draftB}
+                          </div>
+                          {isFocused && (
+                            <>
+                              <div className="absolute top-2 right-2 rounded-md bg-glow-emerald/20 px-2 py-1 text-[10px] font-medium text-glow-emerald">
+                                {t.creator.resultReady}
+                              </div>
+                              <BrandWatermark visible={isFreePlan} />
+                            </>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRegenerate}
+                    disabled={regenerateBusy || !portraitId}
+                    className="btn-secondary flex w-full items-center justify-center gap-2 py-2.5 text-sm disabled:opacity-50"
+                  >
+                    <RefreshCw className={`h-4 w-4 shrink-0 ${regenerateBusy ? "animate-spin" : ""}`} />
+                    <span>{regenerateBusy ? "..." : t.creator.regenerate}</span>
+                  </button>
+                </div>
+              )}
 
               <div>
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -504,6 +857,7 @@ export default function PersonaCreator() {
                       ["9:16", t.creator.aspect916],
                       ["16:9", t.creator.aspect169],
                       ["1:1", t.creator.aspect11],
+                      ["a4", t.creator.aspectA4],
                     ] as const
                   ).map(([key, label]) => (
                     <button
@@ -533,30 +887,59 @@ export default function PersonaCreator() {
               </button>
 
               {resultReady && (
-                <div className="space-y-3 border-t border-white/[0.06] pt-4">
+                <div className="space-y-4 border-t border-white/[0.06] pt-4">
+                  <div>
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <label className="text-sm font-medium text-white/70">
+                        {t.creator.retouchLabel}
+                      </label>
+                      <span className="text-[11px] text-white/45">
+                        {t.creator.retouchFreeLeft.replace("{count}", String(freeRetouchesLeft))}
+                      </span>
+                    </div>
+                    <textarea
+                      value={retouchPrompt}
+                      onChange={(e) => setRetouchPrompt(e.target.value)}
+                      placeholder={t.creator.retouchPlaceholder}
+                      rows={2}
+                      className="w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-white/30 focus:border-glow-purple/40"
+                    />
+                    <p className="mt-1.5 text-[11px] text-white/35">{t.creator.retouchCostHint}</p>
+                    <button
+                      type="button"
+                      onClick={handleRetouch}
+                      disabled={isRetouching || !retouchPrompt.trim()}
+                      className="btn-secondary mt-3 w-full py-2.5 text-sm disabled:opacity-50"
+                    >
+                      {isRetouching ? "..." : t.creator.retouchApply}
+                    </button>
+                    {retouchMessage && (
+                      <p className="mt-2 text-xs text-glow-emerald">{retouchMessage}</p>
+                    )}
+                  </div>
+
                   <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setExportPreset("original")}
-                      className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                        exportPreset === "original"
-                          ? "border-glow-emerald/50 bg-glow-emerald/10 text-white"
-                          : "border-white/10 text-white/45 hover:border-white/20"
-                      }`}
-                    >
-                      {t.creator.exportOriginal}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setExportPreset("id-photo")}
-                      className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                        exportPreset === "id-photo"
-                          ? "border-glow-emerald/50 bg-glow-emerald/10 text-white"
-                          : "border-white/10 text-white/45 hover:border-white/20"
-                      }`}
-                    >
-                      {t.creator.exportIdPhoto}
-                    </button>
+                    {(
+                      [
+                        ["original", t.creator.exportOriginal],
+                        ["id-photo", t.creator.exportIdPhoto],
+                        ["print-png", t.creator.exportPrintPng],
+                        ["print-pdf", t.creator.exportPrintPdf],
+                      ] as const
+                    ).map(([key, label]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setExportPreset(key)}
+                        className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                          exportPreset === key
+                            ? "border-glow-emerald/50 bg-glow-emerald/10 text-white"
+                            : "border-white/10 text-white/45 hover:border-white/20"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
                   </div>
                   <button
                     type="button"
@@ -566,6 +949,8 @@ export default function PersonaCreator() {
                   >
                     <span>{isDownloading ? "..." : t.creator.downloadPortrait}</span>
                   </button>
+
+                  <ThumbnailEditor imageUrl={focusedImageUrl} aspectRatio={aspectRatio} />
                 </div>
               )}
             </div>
@@ -574,7 +959,7 @@ export default function PersonaCreator() {
           {validationError && !isTraining && (
             <div
               role="alert"
-              className="mt-6 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"
+              className="mt-6 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm whitespace-pre-line text-amber-200"
             >
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
               <span>{validationError}</span>

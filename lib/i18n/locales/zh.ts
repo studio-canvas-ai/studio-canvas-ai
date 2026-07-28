@@ -1,5 +1,147 @@
 import type { Translations } from "../types";
 import en from "./en";
 
-const zh: Translations = en;
+/** Simplified Chinese — overrides for new/changed surfaces */
+const zh: Translations = {
+  ...en,
+  meta: {
+    title: "Studio Canvas AI — 个人 AI 肖像工作室",
+    description: "将自拍转化为杂志级肖像。高端工作室美学与风格包。",
+  },
+  creator: {
+    ...en.creator,
+    aspect11: "1:1（方形 SNS·Kakao 头像）",
+    aspectA4: "A4/A5（传单·宣传册印刷 1:1.41）",
+    exportPrintPng: "印刷用 300 DPI PNG（A4）",
+    exportPrintPdf: "印刷用 300 DPI PDF（A4）",
+  },
+  thumbnail: {
+    title: "添加缩略图文字",
+    freeBadge: "0 积分 · 免费",
+    textLabel: "缩略图文字",
+    textPlaceholder: "例：真的假的？ / Must try!",
+    selectionHint: "拖选单词后点配色，仅该范围变色。",
+    positionLabel: "一键位置",
+    posTop: "上方",
+    posCenter: "居中",
+    posBottom: "下方",
+    colorLabel: "文字配色（应用于选区）",
+    colors: {
+      yellow: "黄字+黑边",
+      white: "白字+阴影",
+      red: "红字+白边",
+      neonLime: "霓虹青柠+黑边",
+      deepBlue: "深蓝+白边",
+      purplePink: "紫+粉",
+      blackGold: "黑底金字",
+      orange: "橙+白边",
+    },
+    fontLabel: "字体风格",
+    fonts: {
+      variety: "综艺字幕体",
+      clean: "干净标题体",
+      vlog: "感性 Vlog 体",
+      neon: "潮流霓虹体",
+      impact: "冲击警示体",
+    },
+    sizeLabel: "字号",
+    alignLabel: "对齐",
+    alignLeft: "左",
+    alignCenter: "中",
+    alignRight: "右",
+    layersLabel: "文字图层",
+    addLine: "+ 添加文字行",
+    lineN: "第 {n} 行",
+    symbolsLabel: "符号 · 表情",
+    safeZone: "安全区参考线",
+    depthFront: "文字在前",
+    depthBehind: "文字在后（Depth）",
+    aiSuggest: "AI 点击诱导文案",
+    aiSuggestions: [
+      "这是真的吗？🔥",
+      "不点就亏了🚨",
+      "一分钟逆袭👉",
+      "今日最佳大片✨",
+      "短视频封面王者💯",
+    ],
+    saveAlbum: "保存到相册",
+    share: "分享",
+    shareText: "用 Studio Canvas AI 制作的缩略图",
+    printPng: "300 DPI PNG 印刷",
+    printPdf: "300 DPI PDF 印刷",
+    creditNote: "浏览器 Canvas 处理 — 不扣积分，免费保存与分享。",
+    dragHint: "在画布上拖动图层调整位置（支持吸附）。",
+    youtubePreview: "YouTube UI 预览",
+    timestampSafe: "时间戳遮挡区",
+    ctrScore: "AI CTR 预估 {score} 分",
+    ctrTips: {
+      short: "文案建议控制在 8–28 字。",
+      emoji: "加至少 1 个表情可提高注意力。",
+      hook: "用疑问或紧迫感强化钩子。",
+      lines: "行数建议不超过 3 行。",
+    },
+    abGenerate: "生成 A/B 缩略图草案",
+    stickers: "强调贴纸",
+    kakaoShare: "分享到 KakaoTalk",
+  },
+  support: en.support,
+  profiles: en.profiles,
+  returnUser: en.returnUser,
+  admin: en.admin,
+  styles: {
+    ...en.styles,
+    packs: {
+      ...en.styles.packs,
+      "cultural-elegance": {
+        name: "优雅传统写真",
+        description: "传统服饰与历史空间交融的东方美学文化写真。",
+        tags: ["传统", "优雅", "文化"],
+      },
+      "neon-urban": {
+        name: "霓虹都市夜",
+        description: "霓虹灯与都市夜景交织的强烈城市氛围。",
+        tags: ["都市", "夜晚", "锐利"],
+      },
+    },
+  },
+  pricing: {
+    ...en.pricing,
+    plans: {
+      starter: {
+        name: "Starter",
+        description: "适合刚开始使用 AI 肖像的用户",
+        features: [
+          "每月 30 张 AI 写真与缩略图（30 积分）",
+          "可注册面部档案 1 个",
+          "FHD（1080p）画质",
+          "完整去除水印",
+        ],
+      },
+      standard: {
+        name: "Standard",
+        description: "需要更多生成量的创作者",
+        features: [
+          "每月 80 张 AI 写真与缩略图（80 积分）",
+          "可注册面部档案 5 个",
+          "4K 超高清",
+          "无等待快速生成",
+          "完整去除水印",
+        ],
+      },
+      pro: {
+        name: "Pro",
+        description: "商用与大批量生成的高级方案",
+        features: [
+          "每月 200 张 AI 写真与缩略图（200 积分）",
+          "可注册面部档案 10 个",
+          "4K 超高清",
+          "允许商业使用",
+          "专属快速生成通道",
+          "完整去除水印",
+        ],
+      },
+    },
+  },
+};
+
 export default zh;

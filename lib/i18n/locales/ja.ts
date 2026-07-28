@@ -1,5 +1,150 @@
 import type { Translations } from "../types";
 import en from "./en";
 
-const ja: Translations = en;
+/** Japanese — full overrides for new/changed surfaces; rest inherits EN */
+const ja: Translations = {
+  ...en,
+  meta: {
+    title: "Studio Canvas AI — パーソナルAIポートレートスタジオ",
+    description:
+      "セルフィーをエディトリアル品質のポートレートに変換。プレミアムスタジオ美学とスタイルパック。",
+  },
+  creator: {
+    ...en.creator,
+    aspect11: "1:1（正方形 SNS・カカオプロフィール）",
+    aspectA4: "A4/A5（チラシ・パンフ印刷用 1:1.41）",
+    exportPrintPng: "印刷用 300 DPI PNG（A4）",
+    exportPrintPdf: "印刷用 300 DPI PDF（A4）",
+  },
+  thumbnail: {
+    title: "サムネイル文言を追加",
+    freeBadge: "0クレジット · 無料",
+    textLabel: "サムネイル文言",
+    textPlaceholder: "例: これマジ？ / Must try!",
+    selectionHint: "単語をドラッグ選択してから配色を押すと、その範囲だけ色が変わります。",
+    positionLabel: "ワンタッチ位置",
+    posTop: "上",
+    posCenter: "中央",
+    posBottom: "下",
+    colorLabel: "テキスト配色（選択範囲に適用）",
+    colors: {
+      yellow: "イエロー＋黒縁",
+      white: "ホワイト＋影",
+      red: "レッド＋白縁",
+      neonLime: "ネオンライム＋黒縁",
+      deepBlue: "ディープブルー＋白",
+      purplePink: "パープル＋ピンク",
+      blackGold: "ブラック＋ゴールド",
+      orange: "オレンジ＋白",
+    },
+    fontLabel: "フォントスタイル",
+    fonts: {
+      variety: "バラエティ字幕体",
+      clean: "クリーンタイトル体",
+      vlog: "感成ブイログ体",
+      neon: "トレンディネオン体",
+      impact: "インパクト警告体",
+    },
+    sizeLabel: "文字サイズ",
+    alignLabel: "テキスト整列",
+    alignLeft: "左",
+    alignCenter: "中央",
+    alignRight: "右",
+    layersLabel: "テキストレイヤー",
+    addLine: "+ テキスト行を追加",
+    lineN: "{n}行目",
+    symbolsLabel: "記号 · 絵文字",
+    safeZone: "セーフゾーンガイド",
+    depthFront: "文字を前面",
+    depthBehind: "文字を背面（Depth）",
+    aiSuggest: "AIクリック誘発コピー",
+    aiSuggestions: [
+      "これマジ？🔥",
+      "スキップしたら損🚨",
+      "1分で激変👉",
+      "今日のベストショット✨",
+      "ショート最強サムネ💯",
+    ],
+    saveAlbum: "アルバムに保存",
+    share: "共有",
+    shareText: "Studio Canvas AIで作ったサムネイル",
+    printPng: "300 DPI PNG印刷用",
+    printPdf: "300 DPI PDF印刷用",
+    creditNote: "ブラウザCanvas処理 — クレジット消費なしで無料保存・共有。",
+    dragHint: "キャンバス上でレイヤーをドラッグして位置調整（スナップ対応）。",
+    youtubePreview: "YouTube UIプレビュー",
+    timestampSafe: "タイムスタンプ隠れ領域",
+    ctrScore: "AI CTR予想 {score}点",
+    ctrTips: {
+      short: "文言は8〜28文字が目安です。",
+      emoji: "絵文字を1つ以上入れると注目度が上がります。",
+      hook: "疑問・緊急表現でフックを強化しましょう。",
+      lines: "行数は3行以下が読みやすいです。",
+    },
+    abGenerate: "A/Bサムネ草案を生成",
+    stickers: "強調ステッカー",
+    kakaoShare: "カカオトーク共有",
+  },
+  support: en.support,
+  profiles: en.profiles,
+  returnUser: en.returnUser,
+  admin: en.admin,
+  styles: {
+    ...en.styles,
+    packs: {
+      ...en.styles.packs,
+      "cultural-elegance": {
+        name: "優雅な伝統ポートレート",
+        description: "伝統衣装と歴史ある空間が調和する東洋的美学の文化ポートレート。",
+        tags: ["伝統", "優雅", "文化"],
+      },
+      "neon-urban": {
+        name: "ネオンシティナイト",
+        description: "ネオンと都市夜景が際立つ大胆なシティムード。",
+        tags: ["シティ", "ナイト", "エッジ"],
+      },
+    },
+  },
+  pricing: {
+    ...en.pricing,
+    addonTitle: en.pricing.addonTitle,
+    addonSubtitle: en.pricing.addonSubtitle,
+    plans: {
+      starter: {
+        name: "Starter",
+        description: "AIポートレートを始める方向け",
+        features: [
+          "月30枚のAIポートレート＆サムネイル生成（30クレジット）",
+          "登録可能な顔プロフィール 1枠",
+          "FHD（1080p）画質",
+          "ウォーターマーク完全除去",
+        ],
+      },
+      standard: {
+        name: "Standard",
+        description: "より多くの生成が必要なクリエイター向け",
+        features: [
+          "月80枚のAIポートレート＆サムネイル生成（80クレジット）",
+          "登録可能な顔プロフィール 5枠",
+          "4K超高画質",
+          "待ち時間なしの高速生成",
+          "ウォーターマーク完全除去",
+        ],
+      },
+      pro: {
+        name: "Pro",
+        description: "商用利用と大量生成向け上位プラン",
+        features: [
+          "月200枚のAIポートレート＆サムネイル生成（200クレジット）",
+          "登録可能な顔プロフィール 10枠",
+          "4K超高画質",
+          "商用利用可能",
+          "専用高速生成レーン",
+          "ウォーターマーク完全除去",
+        ],
+      },
+    },
+  },
+};
+
 export default ja;

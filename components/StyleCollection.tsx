@@ -73,6 +73,14 @@ export default function StyleCollection({
             return (
               <article
                 key={pack.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => router.push(`/generate?style=${pack.id}`)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    router.push(`/generate?style=${pack.id}`);
+                  }
+                }}
                 className="glass-card-hover group relative cursor-pointer overflow-hidden"
                 style={{ animationDelay: `${idx * 0.1}s` }}
               >

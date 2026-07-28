@@ -7,7 +7,7 @@ import { pricingPlanIds, pricingPrices } from "@/lib/data";
 
 export default function PricingSection() {
   const { t } = useI18n();
-  const { requestSubscribe } = useCredits();
+  const { requestSubscribe, setShowTopUpModal } = useCredits();
 
   return (
     <section id="pricing" className="section-padding relative">
@@ -112,6 +112,19 @@ export default function PricingSection() {
           {t.pricing.commercialNotice}
         </p>
         <p className="mt-3 text-center text-xs text-white/30">{t.pricing.disclaimer}</p>
+
+        <div className="mt-14 rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-center sm:p-8">
+          <h3 className="text-lg font-semibold text-white">{t.pricing.addonTitle}</h3>
+          <p className="mx-auto mt-2 max-w-lg text-sm text-white/45">{t.pricing.addonSubtitle}</p>
+          <button
+            type="button"
+            onClick={() => setShowTopUpModal(true)}
+            className="btn-primary mt-5 px-6 py-2.5 text-sm"
+          >
+            <Zap className="h-4 w-4" />
+            {t.credits.charge}
+          </button>
+        </div>
       </div>
     </section>
   );

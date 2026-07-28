@@ -1,5 +1,5 @@
-export type AspectRatioKey = "9:16" | "16:9" | "1:1";
-export type ExportPreset = "original" | "id-photo";
+export type AspectRatioKey = "9:16" | "16:9" | "1:1" | "a4";
+export type ExportPreset = "original" | "id-photo" | "print-png" | "print-pdf";
 
 export type DownloadOptions = {
   imageUrl: string;
@@ -8,16 +8,24 @@ export type DownloadOptions = {
   bakeWatermark?: boolean;
   aspectRatio?: AspectRatioKey;
   exportPreset?: ExportPreset;
+  /** Print paper when using print-* presets */
+  printPaper?: "a4" | "a5";
 };
 
 const ASPECT_MAP: Record<AspectRatioKey, number> = {
   "9:16": 9 / 16,
   "16:9": 16 / 9,
   "1:1": 1,
+  a4: 1 / Math.SQRT2,
 };
 
 /** ID photo 3.5×4.5 cm → aspect 7:9 */
 const ID_PHOTO_RATIO = 3.5 / 4.5;
+
+const PRINT_300DPI = {
+  a4: { width: 2480, height: 3508 },
+  a5: { width: 1748, height: 2480 },
+} as const;
 
 function loadImage(imageUrl: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -86,7 +94,7 @@ function triggerBlobDownload(blob: Blob, filename: string) {
 
 /**
  * Download generated portrait with optional watermark baking,
- * aspect-ratio crop, and ID-photo export preset.
+ * aspect-ratio crop, ID-photo, and 300 DPI print exports.
  */
 export async function downloadImageFile(options: DownloadOptions | string): Promise<void> {
   const opts: DownloadOptions =
@@ -98,12 +106,22 @@ export async function downloadImageFile(options: DownloadOptions | string): Prom
     bakeWatermark = false,
     aspectRatio = "9:16",
     exportPreset = "original",
+    printPaper = "a4",
   } = opts;
+
+  if (exportPreset === "print-png" || exportPreset === "print-pdf") {
+    const { downloadPrintPng, downloadPrintPdf } = await import("@/lib/printExport");
+    if (exportPreset === "print-png") {
+      await downloadPrintPng(imageUrl, printPaper);
+    } else {
+      await downloadPrintPdf(imageUrl, printPaper);
+    }
+    return;
+  }
 
   const needsCanvas =
     bakeWatermark || exportPreset === "id-photo" || aspectRatio !== "9:16";
 
-  // Paid / simple path: raw bytes when no canvas processing needed
   if (!needsCanvas) {
     try {
       const response = await fetch(imageUrl, { mode: "cors", credentials: "omit" });
@@ -124,13 +142,14 @@ export async function downloadImageFile(options: DownloadOptions | string): Prom
     exportPreset === "id-photo" ? ID_PHOTO_RATIO : ASPECT_MAP[aspectRatio];
   const crop = coverCrop(srcW, srcH, targetRatio);
 
-  // Output size
   let outW: number;
   let outH: number;
   if (exportPreset === "id-photo") {
-    // ~300 DPI for 3.5×4.5 cm ≈ 413×531 px
     outW = 413;
     outH = 531;
+  } else if (aspectRatio === "a4") {
+    outW = PRINT_300DPI.a4.width;
+    outH = PRINT_300DPI.a4.height;
   } else {
     outW = Math.round(crop.sw);
     outH = Math.round(crop.sh);

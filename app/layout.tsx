@@ -5,6 +5,9 @@ import { CreditsProvider } from "@/components/CreditsProvider";
 import AuthModal from "@/components/AuthModal";
 import CreditDepletionModal from "@/components/CreditDepletionModal";
 import PaymentModal from "@/components/PaymentModal";
+import CreditTopUpModal from "@/components/CreditTopUpModal";
+import ReturnUserModal from "@/components/ReturnUserModal";
+import GoogleFontsLoader from "@/components/GoogleFontsLoader";
 import "./globals.css";
 
 const inter = Inter({
@@ -30,6 +33,8 @@ function AppShell({ children }: { children: React.ReactNode }) {
       <AuthModal />
       <CreditDepletionModal />
       <PaymentModal />
+      <CreditTopUpModal />
+      <ReturnUserModal />
     </CreditsProvider>
   );
 }
@@ -40,8 +45,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${playfair.variable} h-full`}>
-      <body className="min-h-full bg-navy font-sans text-white antialiased">
+    <html
+      lang="en"
+      className={`${inter.variable} ${playfair.variable} h-full`}
+      style={{ backgroundColor: "#0D0E12" }}
+    >
+      <body
+        className="min-h-full bg-navy font-sans text-white antialiased"
+        style={{ backgroundColor: "#0D0E12", color: "#ffffff" }}
+      >
+        <GoogleFontsLoader />
         <I18nProvider>
           <AppShell>{children}</AppShell>
         </I18nProvider>

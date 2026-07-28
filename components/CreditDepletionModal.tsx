@@ -1,12 +1,13 @@
 "use client";
 
 import { Zap, ArrowUpRight, X } from "lucide-react";
+import Link from "next/link";
 import { useI18n } from "@/components/I18nProvider";
 import { useCredits } from "@/components/CreditsProvider";
 
 export default function CreditDepletionModal() {
   const { t } = useI18n();
-  const { showCreditModal, setShowCreditModal, topUpCredits } = useCredits();
+  const { showCreditModal, setShowCreditModal, setShowTopUpModal } = useCredits();
 
   if (!showCreditModal) return null;
 
@@ -34,20 +35,23 @@ export default function CreditDepletionModal() {
         <div className="flex flex-col gap-3">
           <button
             type="button"
-            onClick={() => topUpCredits(50)}
+            onClick={() => {
+              setShowCreditModal(false);
+              setShowTopUpModal(true);
+            }}
             className="btn-primary w-full justify-center py-3 text-sm"
           >
             <Zap className="h-4 w-4 shrink-0" />
             <span>{t.credits.topup}</span>
           </button>
-          <a
-            href="#pricing"
+          <Link
+            href="/pricing"
             onClick={() => setShowCreditModal(false)}
             className="btn-secondary w-full justify-center py-3 text-sm"
           >
             <ArrowUpRight className="h-4 w-4 shrink-0" />
             <span>{t.credits.upgrade}</span>
-          </a>
+          </Link>
         </div>
       </div>
     </div>
