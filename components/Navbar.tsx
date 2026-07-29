@@ -11,7 +11,14 @@ import LanguageSelector from "@/components/LanguageSelector";
 export default function Navbar() {
   const { t } = useI18n();
   const pathname = usePathname();
-  const { setShowAuthModal, setShowTopUpModal, credits, isAuthenticated } = useCredits();
+  const {
+    setShowAuthModal,
+    setShowTopUpModal,
+    setShowPromoModal,
+    credits,
+    isAuthenticated,
+    promoWallet,
+  } = useCredits();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -54,16 +61,16 @@ export default function Navbar() {
       }`}
     >
       <nav className="relative z-50 mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8">
-        <Link href="/" className="group relative z-50 flex shrink-0 items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-glow-purple to-glow-emerald shadow-glow-sm">
-            <Sparkles className="h-4 w-4 text-white" />
+        <Link
+          href="/"
+          className="group relative z-50 flex shrink-0 items-center gap-2.5 sm:gap-3"
+        >
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-glow-purple to-glow-emerald shadow-glow-sm sm:h-9 sm:w-9">
+            <Sparkles className="h-3.5 w-3.5 text-white sm:h-4 sm:w-4" />
           </div>
-          <div className="hidden flex-col min-[400px]:flex">
-            <span className="font-display text-lg leading-tight font-semibold tracking-tight">
-              Studio Canvas
-            </span>
-            <span className="text-[10px] tracking-[0.2em] text-white/40 uppercase">AI Studio</span>
-          </div>
+          <span className="font-display text-[15px] font-semibold tracking-tight whitespace-nowrap text-white sm:text-lg">
+            Studio Canvas AI
+          </span>
         </Link>
 
         <div className="relative z-50 hidden min-w-0 flex-1 items-center justify-center gap-3 xl:flex xl:gap-5">
@@ -83,6 +90,13 @@ export default function Navbar() {
         </div>
 
         <div className="relative z-50 flex shrink-0 items-center gap-2 md:gap-3">
+          <button
+            type="button"
+            onClick={() => setShowPromoModal(true)}
+            className="whitespace-nowrap text-[10px] text-white/35 underline-offset-4 transition-colors hover:text-white/65 hover:underline sm:text-[11px]"
+          >
+            [코드 입력]
+          </button>
           <div className="hidden lg:block xl:hidden">
             <div className="flex items-center gap-3">
               {navLinks.slice(0, 4).map((link) => (
@@ -102,7 +116,7 @@ export default function Navbar() {
 
           <div className="hidden items-center gap-1.5 sm:flex">
             <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-[11px] text-amber-100">
-              ⚡ {credits}
+              {promoWallet ? "코드 잔액" : "⚡"} {credits}
             </span>
             <button
               type="button"
@@ -155,6 +169,16 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
+            <button
+              type="button"
+              onClick={() => {
+                setMobileOpen(false);
+                setShowPromoModal(true);
+              }}
+              className="rounded-lg px-4 py-3 text-left text-sm text-white/50"
+            >
+              [코드 입력]
+            </button>
             <button
               type="button"
               onClick={() => {

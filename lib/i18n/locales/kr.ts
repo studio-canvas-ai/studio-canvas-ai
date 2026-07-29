@@ -404,15 +404,16 @@ const kr: Translations = {
   },
   pricing: {
     eyebrow: "요금제",
-    title: "구독 요금제",
-    subtitle: "필요에 맞는 플랜을 선택하고 프리미엄 AI 스튜디오를 경험하세요",
+    title: "화보 프로필 & 썸네일 제작 무적! 🚀",
+    subtitle:
+      "유튜버, 크리에이터, 프로필이 필요한 모든 이를 위한 AI 비주얼 스튜디오. 고화질 AI 화보와 시선 강탈 썸네일을 3초 만에 완성해 보세요.",
     perMonth: "/월",
     mostPopular: "인기",
     getStarted: "지금 시작하기",
     selectPlan: "플랜 선택",
     disclaimer: "모든 플랜에 7일 무료 체험이 포함됩니다. 언제든지 취소 가능합니다.",
     commercialNotice:
-      "모든 유료 플랜(Starter, Standard, Pro)에서 생성된 AI 화보는 상업적 이용 및 마케팅 활용이 가능합니다.",
+      "상업적 이용 가능 여부는 선택한 플랜의 상세 혜택을 따릅니다.",
     addonTitle: "크레딧 단품 충전",
     addonSubtitle: "구독과 별도로 $4.9 / $9.9 / $19.9 크레딧 패키지를 구매할 수 있습니다.",
     plans: {
@@ -443,7 +444,7 @@ const kr: Translations = {
         name: "Pro",
         description: "상업적 이용과 대량 생성을 위한 상위 플랜",
         features: [
-          "월 120회 AI 화보 및 썸네일 생성 (120 크레딧 제공)",
+          "월 150회 AI 화보 및 썸네일 생성 (150 크레딧 제공)",
           "등록 가능한 얼굴, 사물 사진 10개",
           "4K 초고화질",
           "상업적 이용 가능",

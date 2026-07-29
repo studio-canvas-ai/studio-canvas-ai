@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import type { FaceConsistencyPayload } from "@/lib/faceConsistency";
 import { runFaceConsistentInference } from "@/lib/ai/inference";
 import { auth } from "@/lib/auth";
 import { debitCredits, getUserById } from "@/lib/db/credits";
 import { checkGenerateRateLimit } from "@/lib/rateLimit";
 import { FREE_CREDITS, REGENERATE_CREDIT_COST } from "@/lib/data";
+import {
+  debitPromotionWallet,
+  getPromotionByToken,
+  PROMO_COOKIE_NAME,
+} from "@/lib/promotions";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -59,6 +65,7 @@ export async function POST(req: Request) {
 
     let creditsAfter: number | null = null;
     let ledgerId: string | null = null;
+    let walletSource: "account" | "promotion" | "local_trial" = "local_trial";
 
     if (userId) {
       const debit = await debitCredits({
@@ -78,6 +85,33 @@ export async function POST(req: Request) {
       }
       creditsAfter = debit.user.credits;
       ledgerId = debit.entry.id;
+      walletSource = "account";
+    } else {
+      const cookieStore = await cookies();
+      const promoToken = cookieStore.get(PROMO_COOKIE_NAME)?.value;
+      const activePromo = getPromotionByToken(promoToken);
+      if (activePromo) {
+        const debit = await debitPromotionWallet({
+          token: promoToken,
+          amount: cost,
+          mode: body.mode === "initial" ? "generate" : "regenerate",
+        });
+        if (!debit.ok) {
+          return NextResponse.json(
+            {
+              error:
+                debit.reason === "insufficient"
+                  ? "insufficient_credits"
+                  : "promotion_expired",
+              credits: "credits" in debit ? debit.credits : 0,
+            },
+            { status: 402 }
+          );
+        }
+        creditsAfter = debit.promotion.remainingCredits;
+        ledgerId = debit.transactionId;
+        walletSource = "promotion";
+      }
     }
 
     const inference = await runFaceConsistentInference(body);
@@ -89,6 +123,7 @@ export async function POST(req: Request) {
       creditCost: cost,
       creditsAfter: creditsAfter ?? user?.credits ?? FREE_CREDITS,
       ledgerId,
+      walletSource,
       identityLock: body.identityLock,
       dualReference: body.dualReference,
       inference,

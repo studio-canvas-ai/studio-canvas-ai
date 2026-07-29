@@ -130,6 +130,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     async jwt({ token, account, user }) {
       if (account && user) {
+        token.authProvider = account.provider;
         if (account.provider === "credentials") {
           token.uid = user.id;
           const { getUserById } = await import("@/lib/db/credits");
@@ -166,6 +167,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         (session.user as { id?: string }).id = token.uid as string;
         (session as { credits?: number }).credits = token.credits as number;
         (session as { planId?: string }).planId = token.planId as string;
+        (session as { authProvider?: string }).authProvider =
+          token.authProvider as string;
       }
       return session;
     },

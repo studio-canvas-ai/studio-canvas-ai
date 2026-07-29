@@ -24,6 +24,9 @@ export async function GET() {
           credits: user.credits,
           maxCredits: user.maxCredits,
           planId: user.planId,
+          billingInterval: user.billingInterval ?? null,
+          currentPeriodStart: user.currentPeriodStart ?? null,
+          currentPeriodEnd: user.currentPeriodEnd ?? null,
           provider: user.provider,
         }
       : null,

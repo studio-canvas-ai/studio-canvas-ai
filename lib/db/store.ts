@@ -2,7 +2,15 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync, existsSync } from "
 import { join } from "path";
 import type { DbSnapshot } from "@/lib/db/types";
 
-const EMPTY: DbSnapshot = { users: {}, identities: {}, ledger: [], orders: {} };
+const EMPTY: DbSnapshot = {
+  users: {},
+  identities: {},
+  ledger: [],
+  orders: {},
+  promotionCodes: {},
+  promotionBatches: {},
+  promotionHistory: [],
+};
 
 let memory: DbSnapshot | null = null;
 let writeQueue: Promise<void> = Promise.resolve();
@@ -23,6 +31,9 @@ function loadFromDisk(): DbSnapshot {
       identities: parsed.identities ?? {},
       ledger: parsed.ledger ?? [],
       orders: parsed.orders ?? {},
+      promotionCodes: parsed.promotionCodes ?? {},
+      promotionBatches: parsed.promotionBatches ?? {},
+      promotionHistory: parsed.promotionHistory ?? [],
     };
   } catch {
     return structuredClone(EMPTY);

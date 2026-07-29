@@ -407,15 +407,16 @@ const en: Translations = {
   },
   pricing: {
     eyebrow: "Pricing",
-    title: "Subscription Plans",
-    subtitle: "Choose the plan that fits your creative ambitions",
+    title: "Unbeatable portraits & thumbnails! 🚀",
+    subtitle:
+      "The AI visual studio for YouTubers, creators, and anyone who needs a standout profile. Create high-resolution AI portraits and attention-grabbing thumbnails in seconds.",
     perMonth: "/mo",
     mostPopular: "Popular",
     getStarted: "Get Started",
     selectPlan: "Select Plan",
     disclaimer: "All plans include a 7-day free trial. Cancel anytime.",
     commercialNotice:
-      "AI portraits created on all paid plans (Starter, Standard, Pro) may be used for commercial and marketing purposes.",
+      "Commercial-use rights follow the benefits listed for each plan.",
     addonTitle: "Credit add-ons",
     addonSubtitle: "Buy $4.9 / $9.9 / $19.9 credit packs anytime, separate from your subscription.",
     plans: {
@@ -446,7 +447,7 @@ const en: Translations = {
         name: "Pro",
         description: "For commercial use and high-volume generation",
         features: [
-          "120 AI pictorials & thumbnails / month (120 credits)",
+          "150 AI pictorials & thumbnails / month (150 credits)",
           "10 registerable person/object photos",
           "4K ultra quality",
           "Commercial use allowed",

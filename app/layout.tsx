@@ -14,6 +14,7 @@ import CreditDepletionModal from "@/components/CreditDepletionModal";
 import PaymentModal from "@/components/PaymentModal";
 import CreditTopUpModal from "@/components/CreditTopUpModal";
 import ReturnUserModal from "@/components/ReturnUserModal";
+import PromotionCodeModal from "@/components/PromotionCodeModal";
 import GoogleFontsLoader from "@/components/GoogleFontsLoader";
 
 const inter = Inter({
@@ -42,6 +43,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
         <PaymentModal />
         <CreditTopUpModal />
         <ReturnUserModal />
+        <PromotionCodeModal />
       </CreditsProvider>
     </AuthSessionProvider>
   );

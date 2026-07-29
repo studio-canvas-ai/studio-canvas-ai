@@ -12,8 +12,9 @@ import {
 } from "react";
 import {
   CREDIT_PACKS,
+  type BillingInterval,
   FREE_CREDITS,
-  PLAN_CREDITS,
+  getPlanOffer,
   RETOUCH_FREE_PER_CYCLE,
   pricingPlanIds,
 } from "@/lib/data";
@@ -32,7 +33,13 @@ import { retentionContextFromAccount } from "@/lib/retentionPolicy";
 
 export type { PlanId } from "@/lib/faceProfiles";
 
-export { PLAN_CREDITS };
+export { PLAN_CREDITS } from "@/lib/data";
+
+type PromoWalletView = {
+  remainingCredits: number;
+  expiresAt: number;
+  codeSuffix: string;
+};
 
 type CreditsContextValue = {
   credits: number;
@@ -40,23 +47,31 @@ type CreditsContextValue = {
   isFreePlan: boolean;
   isAuthenticated: boolean;
   planId: PlanId;
+  billingInterval: BillingInterval;
   showAuthModal: boolean;
   showCreditModal: boolean;
   showPaymentModal: boolean;
   showTopUpModal: boolean;
   showReturnModal: boolean;
+  showPromoModal: boolean;
+  promoWallet: PromoWalletView | null;
   pendingPlanId: (typeof pricingPlanIds)[number] | null;
+  pendingBillingInterval: BillingInterval;
   setShowAuthModal: (open: boolean) => void;
   setShowCreditModal: (open: boolean) => void;
   setShowPaymentModal: (open: boolean) => void;
   setShowTopUpModal: (open: boolean) => void;
   setShowReturnModal: (open: boolean) => void;
+  setShowPromoModal: (open: boolean) => void;
   consumeCredit: (amount?: number) => boolean;
   topUpCredits: (amount?: number) => void;
   purchaseCreditPack: (packId: (typeof CREDIT_PACKS)[number]["id"]) => void;
   grantFreeCredits: () => void;
   refreshAccount: () => Promise<void>;
-  requestSubscribe: (plan: (typeof pricingPlanIds)[number]) => void;
+  requestSubscribe: (
+    plan: (typeof pricingPlanIds)[number],
+    interval?: BillingInterval
+  ) => void;
   completePayment: () => void;
   cancelSubscription: () => void;
   registerPortrait: (portraitId: string, createdAt?: number) => PortraitRetouchState;
@@ -79,15 +94,21 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
   const [credits, setCredits] = useState(FREE_CREDITS);
   const [maxCredits, setMaxCredits] = useState(FREE_CREDITS);
   const [planId, setPlanId] = useState<PlanId>("free");
+  const [billingInterval, setBillingInterval] =
+    useState<BillingInterval>("monthly");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showCreditModal, setShowCreditModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showTopUpModal, setShowTopUpModal] = useState(false);
   const [showReturnModal, setShowReturnModal] = useState(false);
+  const [showPromoModal, setShowPromoModal] = useState(false);
+  const [promoWallet, setPromoWallet] = useState<PromoWalletView | null>(null);
   const [pendingPlanId, setPendingPlanId] = useState<(typeof pricingPlanIds)[number] | null>(
     null
   );
+  const [pendingBillingInterval, setPendingBillingInterval] =
+    useState<BillingInterval>("annual");
   const [portraits, setPortraits] = useState<Record<string, PortraitRetouchState>>({});
   const [dailyRetouchCount, setDailyRetouchCount] = useState(0);
   const [dailyKey, setDailyKey] = useState(todayKey);
@@ -100,51 +121,35 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
     if (meta.hadPaidPlan || meta.lastLoginAt) setIsAuthenticated(true);
     if (meta.planId && meta.planId !== "free") {
       setPlanId(meta.planId);
-      const creditCount = PLAN_CREDITS[meta.planId];
+      if (meta.planId === "enterprise") setBillingInterval("annual");
+      const creditCount =
+        meta.planId === "enterprise"
+          ? getPlanOffer("enterprise", "annual").credits
+          : getPlanOffer(
+              meta.planId,
+              meta.planId === "standard" ? "monthly" : "monthly"
+            ).credits;
       setCredits(creditCount);
       setMaxCredits(creditCount);
       setIsAuthenticated(true);
     } else if (meta.planId === "free") {
       setPlanId("free");
     }
-    void (async () => {
-      try {
-        const res = await fetch("/api/account/me");
-        if (!res.ok) return;
-        const data = (await res.json()) as {
-          authenticated?: boolean;
-          user?: {
-            credits: number;
-            maxCredits: number;
-            planId: PlanId;
-          } | null;
-        };
-        if (data.authenticated && data.user) {
-          setIsAuthenticated(true);
-          setCredits(data.user.credits);
-          setMaxCredits(data.user.maxCredits);
-          setPlanId(data.user.planId);
-          patchAccountMeta({
-            lastLoginAt: Date.now(),
-            planId: data.user.planId,
-          });
-        }
-      } catch {
-        /* keep local mock */
-      }
-    })();
+    void refreshServerState();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const refreshAccount = useCallback(async () => {
+  const refreshServerState = useCallback(async () => {
     try {
       const res = await fetch("/api/account/me");
-      if (!res.ok) return;
+      if (!res.ok) throw new Error("account unavailable");
       const data = (await res.json()) as {
         authenticated?: boolean;
         user?: {
           credits: number;
           maxCredits: number;
           planId: PlanId;
+            billingInterval?: BillingInterval | null;
         } | null;
       };
       if (data.authenticated && data.user) {
@@ -152,15 +157,36 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
         setCredits(data.user.credits);
         setMaxCredits(data.user.maxCredits);
         setPlanId(data.user.planId);
+        setBillingInterval(data.user.billingInterval ?? "monthly");
         patchAccountMeta({
           lastLoginAt: Date.now(),
           planId: data.user.planId,
         });
+        setPromoWallet(null);
+        return;
       }
     } catch {
-      /* ignore */
+      /* try anonymous promo wallet */
+    }
+
+    try {
+      const response = await fetch("/api/promotions/me", { cache: "no-store" });
+      if (!response.ok) return;
+      const data = (await response.json()) as {
+        active: boolean;
+        wallet: PromoWalletView | null;
+      };
+      setPromoWallet(data.active ? data.wallet : null);
+      if (data.active && data.wallet) {
+        setCredits(data.wallet.remainingCredits);
+        setMaxCredits(data.wallet.remainingCredits);
+      }
+    } catch {
+      /* retain local free balance */
     }
   }, []);
+
+  const refreshAccount = refreshServerState;
 
   const ensureDailyCounter = useCallback(() => {
     const key = todayKey();
@@ -215,8 +241,12 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const requestSubscribe = useCallback(
-    (plan: (typeof pricingPlanIds)[number]) => {
+    (
+      plan: (typeof pricingPlanIds)[number],
+      interval: BillingInterval = "annual"
+    ) => {
       setPendingPlanId(plan);
+      setPendingBillingInterval(interval);
       if (!isAuthenticated) {
         setShowAuthModal(true);
         return;
@@ -228,10 +258,11 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
 
   const completePayment = useCallback(() => {
     if (!pendingPlanId) return;
-    const creditCount = PLAN_CREDITS[pendingPlanId];
+    const creditCount = getPlanOffer(pendingPlanId, pendingBillingInterval).credits;
     setPlanId(pendingPlanId);
-    setCredits(creditCount);
-    setMaxCredits(creditCount);
+    setBillingInterval(pendingBillingInterval);
+    setCredits((current) => current + creditCount);
+    setMaxCredits((current) => Math.max(current, current + creditCount));
     setIsAuthenticated(true);
     setShowPaymentModal(false);
     setPendingPlanId(null);
@@ -245,7 +276,7 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
     recalculateGalleryRetentionOnCancel(
       retentionContextFromAccount(pendingPlanId, getAccountMeta())
     );
-  }, [pendingPlanId]);
+  }, [pendingBillingInterval, pendingPlanId]);
 
   const cancelSubscription = useCallback(() => {
     const meta = getAccountMeta();
@@ -328,17 +359,22 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
       isFreePlan,
       isAuthenticated,
       planId,
+      billingInterval,
       showAuthModal,
       showCreditModal,
       showPaymentModal,
       showTopUpModal,
       showReturnModal,
+      showPromoModal,
+      promoWallet,
       pendingPlanId,
+      pendingBillingInterval,
       setShowAuthModal,
       setShowCreditModal,
       setShowPaymentModal,
       setShowTopUpModal,
       setShowReturnModal,
+      setShowPromoModal,
       consumeCredit,
       topUpCredits,
       purchaseCreditPack,
@@ -358,12 +394,16 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
       isFreePlan,
       isAuthenticated,
       planId,
+      billingInterval,
       showAuthModal,
       showCreditModal,
       showPaymentModal,
       showTopUpModal,
       showReturnModal,
+      showPromoModal,
+      promoWallet,
       pendingPlanId,
+      pendingBillingInterval,
       consumeCredit,
       topUpCredits,
       purchaseCreditPack,

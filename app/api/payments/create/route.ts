@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createPaymentOrder, getPaymentProvider } from "@/lib/payments";
-import { CREDIT_PACKS, pricingPlanIds } from "@/lib/data";
+import {
+  type BillingInterval,
+  CREDIT_PACKS,
+  pricingPlanIds,
+} from "@/lib/data";
 import { getUserById } from "@/lib/db/credits";
 
 export const runtime = "nodejs";
@@ -20,6 +24,7 @@ export async function POST(req: Request) {
   const body = (await req.json()) as {
     kind: "subscription" | "credit_pack";
     planId?: (typeof pricingPlanIds)[number];
+    billingInterval?: BillingInterval;
     packId?: (typeof CREDIT_PACKS)[number]["id"];
   };
 
@@ -28,6 +33,7 @@ export async function POST(req: Request) {
       userId,
       kind: body.kind,
       planId: body.planId,
+      billingInterval: body.billingInterval,
       packId: body.packId,
       isSubscriber: user.planId !== "free",
     });

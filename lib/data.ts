@@ -119,28 +119,154 @@ export const personaSpecIds = {
   ],
 };
 
-export const pricingPlanIds = ["starter", "standard", "pro"] as const;
+export const pricingPlanIds = ["starter", "standard", "pro", "enterprise"] as const;
+export type PricingPlanId = (typeof pricingPlanIds)[number];
+export type BillingInterval = "monthly" | "annual";
 
-export const pricingPrices: Record<(typeof pricingPlanIds)[number], number> = {
+export type PlanOffer = {
+  planId: PricingPlanId;
+  interval: BillingInterval;
+  monthlyUsd: number;
+  totalUsd: number;
+  totalKrw: number;
+  credits: number;
+  profileSlots: number;
+  resolution: "FHD" | "4K";
+  fastGeneration: boolean;
+  commercialUse: boolean;
+  permanentStorage: boolean;
+  dedicatedLane: boolean;
+  highlighted: boolean;
+};
+
+/** #107 final plan catalog. Annual is the default presentation. */
+export const PLAN_OFFERS: Record<BillingInterval, readonly PlanOffer[]> = {
+  annual: [
+    {
+      planId: "starter",
+      interval: "annual",
+      monthlyUsd: 4.08,
+      totalUsd: 49,
+      totalKrw: 49_000,
+      credits: 200,
+      profileSlots: 3,
+      resolution: "4K",
+      fastGeneration: false,
+      commercialUse: false,
+      permanentStorage: false,
+      dedicatedLane: false,
+      highlighted: false,
+    },
+    {
+      planId: "pro",
+      interval: "annual",
+      monthlyUsd: 8.25,
+      totalUsd: 99,
+      totalKrw: 99_000,
+      credits: 1_500,
+      profileSlots: 10,
+      resolution: "4K",
+      fastGeneration: true,
+      commercialUse: false,
+      permanentStorage: false,
+      dedicatedLane: false,
+      highlighted: true,
+    },
+    {
+      planId: "enterprise",
+      interval: "annual",
+      monthlyUsd: 16.58,
+      totalUsd: 199,
+      totalKrw: 199_000,
+      credits: 1_200,
+      profileSlots: 30,
+      resolution: "4K",
+      fastGeneration: true,
+      commercialUse: true,
+      permanentStorage: true,
+      dedicatedLane: true,
+      highlighted: false,
+    },
+  ],
+  monthly: [
+    {
+      planId: "starter",
+      interval: "monthly",
+      monthlyUsd: 4.9,
+      totalUsd: 4.9,
+      totalKrw: 4_900,
+      credits: 20,
+      profileSlots: 1,
+      resolution: "FHD",
+      fastGeneration: false,
+      commercialUse: false,
+      permanentStorage: false,
+      dedicatedLane: false,
+      highlighted: false,
+    },
+    {
+      planId: "standard",
+      interval: "monthly",
+      monthlyUsd: 9.9,
+      totalUsd: 9.9,
+      totalKrw: 9_900,
+      credits: 50,
+      profileSlots: 5,
+      resolution: "4K",
+      fastGeneration: false,
+      commercialUse: false,
+      permanentStorage: false,
+      dedicatedLane: false,
+      highlighted: false,
+    },
+    {
+      planId: "pro",
+      interval: "monthly",
+      monthlyUsd: 19.9,
+      totalUsd: 19.9,
+      totalKrw: 19_900,
+      credits: 150,
+      profileSlots: 10,
+      resolution: "4K",
+      fastGeneration: false,
+      commercialUse: true,
+      permanentStorage: true,
+      dedicatedLane: false,
+      highlighted: true,
+    },
+  ],
+};
+
+export function getPlanOffer(planId: PricingPlanId, interval: BillingInterval): PlanOffer {
+  const offer = PLAN_OFFERS[interval].find((item) => item.planId === planId);
+  if (!offer) throw new Error(`Plan ${planId} is not available for ${interval} billing`);
+  return offer;
+}
+
+/** Legacy monthly maps retained for existing consumers. */
+export const pricingPrices: Record<PricingPlanId, number> = {
   starter: 4.9,
   standard: 9.9,
   pro: 19.9,
+  enterprise: 199,
 };
 
 export const FREE_CREDITS = 2;
 
 /** Monthly plan credit allotment (server + client) */
-export const PLAN_CREDITS: Record<(typeof pricingPlanIds)[number], number> = {
+export const PLAN_CREDITS: Record<PricingPlanId, number> = {
   starter: 20,
   standard: 50,
-  pro: 120,
+  pro: 150,
+  enterprise: 1_200,
 };
 
 /** KRW amounts for Toss / PortOne checkout */
-export const pricingPricesKrw: Record<(typeof pricingPlanIds)[number], number> = {
+export const pricingPricesKrw: Record<PricingPlanId, number> = {
   starter: 4900,
   standard: 9900,
   pro: 19900,
+  enterprise: 199000,
 };
 export const PROMPT_MAX_LENGTH = 100;
 export const MIN_SELFIE_UPLOADS = 1;
@@ -163,10 +289,11 @@ export const RETOUCH_DAILY_MAX = 50;
 export const GENERATE_DRAFT_COUNT = 2;
 
 /** #54 face profile slots by plan */
-export const PLAN_PROFILE_SLOTS: Record<(typeof pricingPlanIds)[number], number> = {
+export const PLAN_PROFILE_SLOTS: Record<PricingPlanId, number> = {
   starter: 1,
   standard: 5,
   pro: 10,
+  enterprise: 30,
 };
 
 /** #79–#80 credit add-on packs (price shared; credits branch by subscription) */

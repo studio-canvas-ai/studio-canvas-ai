@@ -5,10 +5,12 @@ import StyleCollection from "@/components/StyleCollection";
 import LivePreviewCanvas from "@/components/LivePreviewCanvas";
 import PricingSection from "@/components/PricingSection";
 import Footer from "@/components/Footer";
+import HashScroll from "@/components/HashScroll";
 
 export default function Home() {
   return (
     <main className="relative overflow-hidden">
+      <HashScroll />
       <Navbar />
       <HeroSection />
       <PersonaCreator />

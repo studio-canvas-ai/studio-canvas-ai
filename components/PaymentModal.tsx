@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { CreditCard, Sparkles, X } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
-import { useCredits, PLAN_CREDITS } from "@/components/CreditsProvider";
-import { pricingPrices, pricingPricesKrw } from "@/lib/data";
+import { useCredits } from "@/components/CreditsProvider";
+import { getPlanOffer } from "@/lib/data";
 
 export default function PaymentModal() {
   const { t } = useI18n();
@@ -12,6 +12,7 @@ export default function PaymentModal() {
     showPaymentModal,
     setShowPaymentModal,
     pendingPlanId,
+    pendingBillingInterval,
     completePayment,
     refreshAccount,
   } = useCredits();
@@ -20,10 +21,15 @@ export default function PaymentModal() {
 
   if (!showPaymentModal || !pendingPlanId) return null;
 
-  const plan = t.pricing.plans[pendingPlanId];
-  const price = pricingPrices[pendingPlanId];
-  const priceKrw = pricingPricesKrw[pendingPlanId];
-  const credits = PLAN_CREDITS[pendingPlanId];
+  const offer = getPlanOffer(pendingPlanId, pendingBillingInterval);
+  const planName =
+    pendingPlanId === "enterprise"
+      ? "Enterprise"
+      : pendingPlanId === "standard"
+        ? "Standard"
+        : pendingPlanId === "pro"
+          ? "Pro"
+          : "Starter";
 
   const handlePay = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,7 +39,11 @@ export default function PaymentModal() {
       const createRes = await fetch("/api/payments/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: "subscription", planId: pendingPlanId }),
+        body: JSON.stringify({
+          kind: "subscription",
+          planId: pendingPlanId,
+          billingInterval: pendingBillingInterval,
+        }),
       });
 
       if (createRes.status === 401) {
@@ -61,6 +71,8 @@ export default function PaymentModal() {
       });
       if (confirmRes.ok) {
         await refreshAccount();
+        setShowPaymentModal(false);
+        return;
       }
       completePayment();
     } catch (err) {
@@ -103,18 +115,24 @@ export default function PaymentModal() {
             <div>
               <div className="flex items-center gap-2">
                 <Sparkles className="h-3.5 w-3.5 text-glow-purple" />
-                <span className="font-medium text-white">{plan.name}</span>
+                <span className="font-medium text-white">{planName}</span>
               </div>
               <p className="mt-1 text-xs text-white/40">
-                {t.payment.creditsIncluded.replace("{count}", String(credits))}
+                {t.payment.creditsIncluded.replace(
+                  "{count}",
+                  String(offer.credits)
+                )}
               </p>
             </div>
             <div className="text-right">
               <div className="text-2xl font-bold text-white">
-                {t.payment.amountKrw.replace("{amount}", priceKrw.toLocaleString())}
+                {t.payment.amountKrw.replace(
+                  "{amount}",
+                  offer.totalKrw.toLocaleString()
+                )}
               </div>
               <div className="text-xs text-white/40">
-                ${price}
+                ${offer.monthlyUsd}
                 {t.pricing.perMonth}
               </div>
             </div>

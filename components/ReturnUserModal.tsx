@@ -76,7 +76,7 @@ export default function ReturnUserModal() {
             className="btn-primary flex-1 py-2.5 text-sm"
             onClick={() => {
               close();
-              requestSubscribe("standard");
+              requestSubscribe("pro", "annual");
             }}
           >
             {t.returnUser.resubscribe}

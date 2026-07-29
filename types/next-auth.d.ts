@@ -5,6 +5,7 @@ declare module "next-auth" {
   interface Session {
     credits?: number;
     planId?: string;
+    authProvider?: string;
     user: {
       id?: string;
       name?: string | null;
@@ -19,5 +20,6 @@ declare module "next-auth/jwt" {
     uid?: string;
     credits?: number;
     planId?: string;
+    authProvider?: string;
   }
 }

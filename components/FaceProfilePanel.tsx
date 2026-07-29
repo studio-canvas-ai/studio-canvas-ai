@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, UserRound } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { useCredits } from "@/components/CreditsProvider";
-import { PLAN_PROFILE_SLOTS } from "@/lib/data";
+import { getPlanOffer } from "@/lib/data";
 import {
   deleteFaceProfile,
   listFaceProfiles,
@@ -21,7 +21,7 @@ type Props = {
 
 export default function FaceProfilePanel({ compact, onSelect, selectedId }: Props) {
   const { t } = useI18n();
-  const { planId } = useCredits();
+  const { planId, billingInterval } = useCredits();
   const [profiles, setProfiles] = useState<FaceProfile[]>([]);
   const [name, setName] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
@@ -30,8 +30,8 @@ export default function FaceProfilePanel({ compact, onSelect, selectedId }: Prop
 
   const maxSlots = useMemo(() => {
     if (planId === "free") return 1;
-    return PLAN_PROFILE_SLOTS[planId] ?? 1;
-  }, [planId]);
+    return getPlanOffer(planId, billingInterval).profileSlots;
+  }, [billingInterval, planId]);
 
   useEffect(() => {
     setProfiles(listFaceProfiles());
