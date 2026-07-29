@@ -9,6 +9,8 @@ import {
   type BillingInterval,
   type PlanOffer,
 } from "@/lib/data";
+import { formatUsdWithKrw } from "@/lib/currency";
+import { shouldShowKrw } from "@/lib/paymentRouting";
 import type { Translations } from "@/lib/i18n/types";
 
 function planName(offer: PlanOffer) {
@@ -53,6 +55,7 @@ export default function PricingSection() {
   const { requestSubscribe, setShowTopUpModal } = useCredits();
   const [interval, setInterval] = useState<BillingInterval>("annual");
   const ko = locale === "kr";
+  const showKrw = shouldShowKrw(locale);
   const offers = PLAN_OFFERS[interval];
 
   return (
@@ -71,14 +74,14 @@ export default function PricingSection() {
             {t.pricing.subtitle}
           </p>
 
-          <div className="mx-auto mt-7 inline-flex rounded-full border border-white/10 bg-white/[0.04] p-1">
+          <div className="mx-auto mt-7 inline-flex rounded-full border border-white/20 bg-white/[0.04] p-1">
             <button
               type="button"
               onClick={() => setInterval("annual")}
               className={`rounded-full px-4 py-2 text-xs font-medium transition ${
                 interval === "annual"
                   ? "bg-gradient-to-r from-glow-purple to-glow-emerald text-white shadow-glow-sm"
-                  : "text-white/45 hover:text-white/70"
+                  : "text-white/80 font-medium hover:text-white"
               }`}
             >
               {t.pricing.annualBilling}
@@ -89,7 +92,7 @@ export default function PricingSection() {
               className={`rounded-full px-4 py-2 text-xs font-medium transition ${
                 interval === "monthly"
                   ? "bg-white/10 text-white"
-                  : "text-white/45 hover:text-white/70"
+                  : "text-white/80 font-medium hover:text-white"
               }`}
             >
               {t.pricing.monthlyBilling}
@@ -101,6 +104,7 @@ export default function PricingSection() {
           {offers.map((offer) => {
             const highlighted = offer.highlighted;
             const proCard = offer.interval === "monthly" && offer.planId === "pro";
+            const price = formatUsdWithKrw(offer.monthlyUsd, showKrw);
             return (
               <div
                 key={`${offer.interval}-${offer.planId}`}
@@ -142,14 +146,23 @@ export default function PricingSection() {
 
                   <div className="mb-7">
                     <div className="flex items-baseline gap-1">
-                      <span className="text-4xl font-bold">${offer.monthlyUsd}</span>
+                      <span className="text-4xl font-bold">
+                        {showKrw && price.krwLabel
+                          ? fill(t.payment.amountUsdWithKrw, {
+                              usd: price.usdLabel.replace("$", ""),
+                              krw: price.krwLabel.replace("₩", "").replace(/,/g, ""),
+                            })
+                          : price.usdLabel}
+                      </span>
                       <span className="text-sm text-white/45">{t.pricing.perMonth}</span>
                     </div>
                     {offer.interval === "annual" && (
                       <p className="mt-2 text-xs text-white/40">
                         {fill(t.pricing.annualPrepaid, { total: offer.totalUsd })}
+                        {showKrw && ` · ₩${offer.totalKrw.toLocaleString("en-US")}`}
                       </p>
                     )}
+                    <p className="mt-1 text-[11px] text-white/35">{t.pricing.vatNotice}</p>
                   </div>
 
                   <ul className="mb-8 flex-1 space-y-3">

@@ -1,4 +1,6 @@
 import type { BillingInterval, pricingPlanIds } from "@/lib/data";
+import type { SubscriptionLifecycle } from "@/lib/subscriptionState";
+import type { Locale } from "@/lib/i18n/types";
 
 export type PlanId = "free" | (typeof pricingPlanIds)[number];
 
@@ -8,6 +10,8 @@ export type AuthProviderId =
   | "naver"
   | "credentials"
   | "google-mock";
+
+export type PaymentProviderId = "toss" | "portone" | "stripe" | "demo";
 
 export type UserRecord = {
   id: string;
@@ -23,11 +27,15 @@ export type UserRecord = {
   currentPeriodStart?: number;
   currentPeriodEnd?: number;
   lastPlanAmountKrw?: number;
+  lastPlanAmountUsd?: number;
   subscriptionStatus?: "active" | "past_due" | "cancelled";
-  paymentRetryCount?: number;
-  nextPaymentRetryAt?: number;
-  paymentGraceEndsAt?: number;
-  lastPaymentFailureAt?: number;
+  subscriptionLifecycle?: SubscriptionLifecycle;
+  cancelAtPeriodEnd?: boolean;
+  cancelReason?: string;
+  scheduledCancelAt?: number;
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
+  defaultPaymentMethodLabel?: string;
   billingKey?: string;
   providerCustomerKey?: string;
   cancelledAt?: number;
@@ -60,31 +68,36 @@ export type CreditLedgerEntry = {
 export type PaymentOrder = {
   id: string;
   userId: string;
-  provider: "toss" | "portone" | "demo";
+  provider: PaymentProviderId;
   kind: "subscription" | "credit_pack";
   planId?: (typeof pricingPlanIds)[number];
   billingInterval?: BillingInterval;
   packId?: string;
+  locale?: Locale;
+  currency: "KRW" | "USD";
+  amountUsd: number;
   baseAmountKrw?: number;
   prorationCreditKrw?: number;
   amountKrw: number;
   credits: number;
   status: "pending" | "paid" | "failed" | "cancelled";
   externalPaymentKey?: string;
+  stripeCheckoutSessionId?: string;
+  stripePaymentIntentId?: string;
+  receiptUrl?: string;
+  vatIncluded?: boolean;
   createdAt: number;
   paidAt?: number;
   failedAt?: number;
   failureReason?: string;
 };
 
-export type PaymentNotice = {
+export type ProcessedWebhookEvent = {
   id: string;
-  userId: string;
-  orderId: string;
-  type: "card_check" | "retry_failed" | "payment_recovered" | "subscription_cancelled";
-  attempt: 1 | 2 | 3;
-  createdAt: number;
-  deliveredAt?: number;
+  source: "stripe" | "toss" | "portone";
+  eventId: string;
+  orderId?: string;
+  processedAt: number;
 };
 
 export type PromotionCreditOption = 10 | 20 | 50 | 100;
@@ -128,7 +141,7 @@ export type DbSnapshot = {
   identities: Record<string, string>;
   ledger: CreditLedgerEntry[];
   orders: Record<string, PaymentOrder>;
-  paymentNotices: PaymentNotice[];
+  processedWebhookEvents: Record<string, ProcessedWebhookEvent>;
   promotionCodes: Record<string, PromotionCode>;
   promotionBatches: Record<string, PromotionBatch>;
   promotionHistory: PromotionHistoryEntry[];

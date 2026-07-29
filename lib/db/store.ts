@@ -7,7 +7,7 @@ const EMPTY: DbSnapshot = {
   identities: {},
   ledger: [],
   orders: {},
-  paymentNotices: [],
+  processedWebhookEvents: {},
   promotionCodes: {},
   promotionBatches: {},
   promotionHistory: [],
@@ -31,8 +31,18 @@ function loadFromDisk(): DbSnapshot {
       users: parsed.users ?? {},
       identities: parsed.identities ?? {},
       ledger: parsed.ledger ?? [],
-      orders: parsed.orders ?? {},
-      paymentNotices: parsed.paymentNotices ?? [],
+      orders: Object.fromEntries(
+        Object.entries(parsed.orders ?? {}).map(([id, order]) => [
+          id,
+          {
+            ...order,
+            currency: order.currency ?? "KRW",
+            amountUsd: order.amountUsd ?? 0,
+            vatIncluded: order.vatIncluded ?? true,
+          },
+        ])
+      ),
+      processedWebhookEvents: parsed.processedWebhookEvents ?? {},
       promotionCodes: parsed.promotionCodes ?? {},
       promotionBatches: parsed.promotionBatches ?? {},
       promotionHistory: parsed.promotionHistory ?? [],

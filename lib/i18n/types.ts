@@ -33,6 +33,7 @@ export interface Translations {
     pricing: string;
     support: string;
     myGallery: string;
+    myPage: string;
     login: string;
     trial: string;
     menu: string;
@@ -324,8 +325,48 @@ export interface Translations {
     processing: string;
     simulated: string;
     payWithToss: string;
+    payWithStripe: string;
+    payDomestic: string;
     amountKrw: string;
+    amountUsd: string;
+    amountUsdWithKrw: string;
     secureCheckout: string;
+    vatIncluded: string;
+    autoRenewNotice: string;
+    termsLabel: string;
+    termsRequired: string;
+    refundNotice: string;
+    agreeTerms: string;
+    checkoutBlocked: string;
+    redirecting: string;
+  };
+  mypage: {
+    title: string;
+    subtitle: string;
+    currentPlan: string;
+    billingInterval: string;
+    monthly: string;
+    annual: string;
+    nextBilling: string;
+    paymentMethod: string;
+    changePayment: string;
+    cancelSubscription: string;
+    resumeSubscription: string;
+    cancelPending: string;
+    cancelReasonTitle: string;
+    cancelReasonPlaceholder: string;
+    confirmCancel: string;
+    lifecycleActive: string;
+    lifecycleCanceledPending: string;
+    lifecycleExpired: string;
+    paymentHistory: string;
+    noPayments: string;
+    viewReceipt: string;
+    creditsRemaining: string;
+    freePlan: string;
+    loginRequired: string;
+    cancelSuccess: string;
+    resumeSuccess: string;
   };
   styles: {
     eyebrow: string;
@@ -415,6 +456,7 @@ export interface Translations {
     watermarkBenefit: string;
     annualPrepaid: string;
     upgradeNotice: string;
+    vatNotice: string;
     plans: {
       starter: { name: string; description: string; features: string[] };
       standard: { name: string; description: string; features: string[] };

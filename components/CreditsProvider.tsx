@@ -29,7 +29,6 @@ import {
   recalculateGalleryRetentionOnCancel,
   type PlanId,
 } from "@/lib/faceProfiles";
-import { retentionContextFromAccount } from "@/lib/retentionPolicy";
 
 export type { PlanId } from "@/lib/faceProfiles";
 
@@ -65,7 +64,7 @@ type CreditsContextValue = {
   setShowPromoModal: (open: boolean) => void;
   consumeCredit: (amount?: number) => boolean;
   topUpCredits: (amount?: number) => void;
-  purchaseCreditPack: (packId: (typeof CREDIT_PACKS)[number]["id"]) => void;
+  purchaseCreditPack: (packId: (typeof CREDIT_PACKS)[number]["id"]) => Promise<void>;
   grantFreeCredits: () => void;
   refreshAccount: () => Promise<void>;
   requestSubscribe: (
@@ -218,17 +217,12 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const purchaseCreditPack = useCallback(
-    (packId: (typeof CREDIT_PACKS)[number]["id"]) => {
-      const pack = CREDIT_PACKS.find((p) => p.id === packId);
-      if (!pack) return;
-      const amount =
-        planId !== "free" ? pack.subscriberCredits : pack.freeCredits;
-      setCredits((c) => c + amount);
-      setMaxCredits((m) => Math.max(m, amount));
+    async (packId: (typeof CREDIT_PACKS)[number]["id"]) => {
+      await refreshServerState();
       setShowCreditModal(false);
       setShowTopUpModal(false);
     },
-    [planId]
+    [refreshServerState]
   );
 
   const grantFreeCredits = useCallback(() => {
@@ -256,29 +250,19 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
     [isAuthenticated]
   );
 
-  const completePayment = useCallback(() => {
-    if (!pendingPlanId) return;
-    const creditCount = getPlanOffer(pendingPlanId, pendingBillingInterval).credits;
-    setPlanId(pendingPlanId);
-    setBillingInterval(pendingBillingInterval);
-    setCredits((current) => current + creditCount);
-    setMaxCredits((current) => Math.max(current, current + creditCount));
-    setIsAuthenticated(true);
+  const completePayment = useCallback(async () => {
     setShowPaymentModal(false);
     setPendingPlanId(null);
-    patchAccountMeta({
-      hadPaidPlan: true,
-      cancelledAt: undefined,
-      planId: pendingPlanId,
-      lastPaidPlan: pendingPlanId,
-      lastLoginAt: Date.now(),
-    });
-    recalculateGalleryRetentionOnCancel(
-      retentionContextFromAccount(pendingPlanId, getAccountMeta())
-    );
-  }, [pendingBillingInterval, pendingPlanId]);
+    await refreshServerState();
+  }, [refreshServerState]);
 
-  const cancelSubscription = useCallback(() => {
+  const cancelSubscription = useCallback(async () => {
+    try {
+      await fetch("/api/payments/subscription/cancel", { method: "POST" });
+      await refreshServerState();
+    } catch {
+      /* best effort */
+    }
     const meta = getAccountMeta();
     const lastPaid = planId !== "free" ? planId : meta.lastPaidPlan;
     const cancelledAt = Date.now();
@@ -294,7 +278,7 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
       cancelledAt,
       lastPaidPlan: lastPaid,
     });
-  }, [planId]);
+  }, [planId, refreshServerState]);
 
   const registerPortrait = useCallback((portraitId: string, createdAt = Date.now()) => {
     const state: PortraitRetouchState = {

@@ -5,14 +5,63 @@ import { X, Zap, Crown } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { useCredits } from "@/components/CreditsProvider";
 import { CREDIT_PACKS, creditPackAmount } from "@/lib/data";
+import { formatUsdWithKrw } from "@/lib/currency";
+import { shouldShowKrw } from "@/lib/paymentRouting";
 
 export default function CreditTopUpModal() {
-  const { t } = useI18n();
-  const { showTopUpModal, setShowTopUpModal, purchaseCreditPack, planId } = useCredits();
+  const { t, locale } = useI18n();
+  const { showTopUpModal, setShowTopUpModal, planId, refreshAccount } = useCredits();
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const isSubscriber = planId !== "free";
+  const showKrw = shouldShowKrw(locale);
 
   if (!showTopUpModal) return null;
+
+  const purchase = async (packId: (typeof CREDIT_PACKS)[number]["id"]) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const createRes = await fetch("/api/payments/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "credit_pack", packId, locale }),
+      });
+      if (createRes.status === 401) {
+        setShowTopUpModal(false);
+        return;
+      }
+      const created = (await createRes.json()) as {
+        order?: { id: string };
+        checkoutUrl?: string | null;
+        demoAllowed?: boolean;
+        error?: string;
+      };
+      if (!createRes.ok || !created.order) {
+        throw new Error(created.error || "order failed");
+      }
+      if (created.checkoutUrl) {
+        window.location.href = created.checkoutUrl;
+        return;
+      }
+      if (created.demoAllowed) {
+        const confirmRes = await fetch("/api/payments/confirm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderId: created.order.id, demo: true }),
+        });
+        if (!confirmRes.ok) throw new Error("confirm failed");
+        await refreshAccount();
+        setShowTopUpModal(false);
+        return;
+      }
+      throw new Error("checkout unavailable");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "payment failed");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -42,50 +91,30 @@ export default function CreditTopUpModal() {
         <div className="flex flex-col gap-2">
           {CREDIT_PACKS.map((pack) => {
             const credits = creditPackAmount(pack, isSubscriber);
+            const price = formatUsdWithKrw(pack.price, showKrw);
+            const label = showKrw && price.krwLabel
+              ? `${credits} credits · ${price.usdLabel} (${price.krwLabel})`
+              : t.credits.packLabel
+                  .replace("{credits}", String(credits))
+                  .replace("{price}", String(pack.price));
             return (
               <button
                 key={pack.id}
                 type="button"
                 disabled={busy}
-                onClick={() => {
-                  setBusy(true);
-                  void (async () => {
-                    try {
-                      const createRes = await fetch("/api/payments/create", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ kind: "credit_pack", packId: pack.id }),
-                      });
-                      if (createRes.ok) {
-                        const created = (await createRes.json()) as { order?: { id: string } };
-                        if (created.order?.id) {
-                          await fetch("/api/payments/confirm", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ orderId: created.order.id, demo: true }),
-                          });
-                        }
-                      }
-                    } catch {
-                      /* local fallback */
-                    }
-                    purchaseCreditPack(pack.id);
-                    setBusy(false);
-                  })();
-                }}
+                onClick={() => void purchase(pack.id)}
                 className="btn-secondary flex w-full items-center justify-between py-3 text-sm disabled:opacity-50"
               >
                 <span className="inline-flex items-center gap-2">
                   <Zap className="h-4 w-4 text-amber-300" />
-                  {t.credits.packLabel
-                    .replace("{credits}", String(credits))
-                    .replace("{price}", String(pack.price))}
+                  {label}
                 </span>
               </button>
             );
           })}
         </div>
-        <p className="mt-4 text-[11px] text-white/35">{t.credits.topupNote}</p>
+        {error && <p className="mt-3 text-xs text-amber-200">{error}</p>}
+        <p className="mt-4 text-[11px] text-white/35">{t.payment.vatIncluded}</p>
       </div>
     </div>
   );

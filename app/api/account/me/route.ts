@@ -4,6 +4,7 @@ import { getUserById } from "@/lib/db/credits";
 import { getPaymentProvider } from "@/lib/payments";
 import { resolveInferenceProvider } from "@/lib/ai/inference";
 import { getBusinessInfo, isBusinessInfoComplete } from "@/lib/business";
+import { normalizeSubscriptionLifecycle } from "@/lib/subscriptionState";
 
 export const runtime = "nodejs";
 
@@ -27,6 +28,10 @@ export async function GET() {
           billingInterval: user.billingInterval ?? null,
           currentPeriodStart: user.currentPeriodStart ?? null,
           currentPeriodEnd: user.currentPeriodEnd ?? null,
+          subscriptionLifecycle: normalizeSubscriptionLifecycle(user),
+          cancelAtPeriodEnd: user.cancelAtPeriodEnd ?? false,
+          defaultPaymentMethodLabel: user.defaultPaymentMethodLabel ?? null,
+          stripeCustomerId: user.stripeCustomerId ?? null,
           provider: user.provider,
         }
       : null,
@@ -38,5 +43,6 @@ export async function GET() {
     businessComplete: isBusinessInfoComplete(),
     tossClientKey: process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY || null,
     portoneStoreId: process.env.NEXT_PUBLIC_PORTONE_STORE_ID || null,
+    stripePublishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || null,
   });
 }

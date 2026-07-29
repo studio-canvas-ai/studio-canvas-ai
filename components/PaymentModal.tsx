@@ -5,19 +5,21 @@ import { CreditCard, Sparkles, X } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { useCredits } from "@/components/CreditsProvider";
 import { getPlanOffer } from "@/lib/data";
+import { formatUsdWithKrw } from "@/lib/currency";
+import { resolveCheckoutRegion, shouldShowKrw } from "@/lib/paymentRouting";
 
 export default function PaymentModal() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const {
     showPaymentModal,
     setShowPaymentModal,
     pendingPlanId,
     pendingBillingInterval,
-    completePayment,
     refreshAccount,
   } = useCredits();
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [termsAgreed, setTermsAgreed] = useState(false);
 
   if (!showPaymentModal || !pendingPlanId) return null;
 
@@ -31,8 +33,15 @@ export default function PaymentModal() {
           ? "Pro"
           : "Starter";
 
-  const handlePay = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const showKrw = shouldShowKrw(locale);
+  const region = resolveCheckoutRegion(locale);
+  const price = formatUsdWithKrw(offer.totalUsd, showKrw);
+
+  const startCheckout = async (mode: "domestic" | "stripe" | "demo") => {
+    if (!termsAgreed) {
+      setError(t.payment.termsRequired);
+      return;
+    }
     setPaying(true);
     setError(null);
     try {
@@ -43,17 +52,19 @@ export default function PaymentModal() {
           kind: "subscription",
           planId: pendingPlanId,
           billingInterval: pendingBillingInterval,
+          locale: mode === "domestic" ? "kr" : locale,
         }),
       });
 
       if (createRes.status === 401) {
-        completePayment();
+        setShowPaymentModal(false);
         return;
       }
 
       const created = (await createRes.json()) as {
-        order?: { id: string; amountKrw: number };
-        provider?: string;
+        order?: { id: string };
+        checkoutUrl?: string | null;
+        demoAllowed?: boolean;
         error?: string;
       };
 
@@ -61,23 +72,26 @@ export default function PaymentModal() {
         throw new Error(created.error || "order failed");
       }
 
-      // Toss / PortOne: when PAYMENT_PROVIDER=toss and client SDK is embedded,
-      // redirect/widget confirmation hits /api/payments/confirm with paymentKey.
-      // Until then, demo confirm credits the ledger when authenticated.
-      const confirmRes = await fetch("/api/payments/confirm", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId: created.order.id, demo: true }),
-      });
-      if (confirmRes.ok) {
+      if (created.checkoutUrl) {
+        window.location.href = created.checkoutUrl;
+        return;
+      }
+
+      if (created.demoAllowed && mode !== "stripe") {
+        const confirmRes = await fetch("/api/payments/confirm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderId: created.order.id, demo: true }),
+        });
+        if (!confirmRes.ok) throw new Error("demo confirm failed");
         await refreshAccount();
         setShowPaymentModal(false);
         return;
       }
-      completePayment();
+
+      throw new Error("checkout unavailable");
     } catch (err) {
       setError(err instanceof Error ? err.message : "payment failed");
-      completePayment();
     } finally {
       setPaying(false);
     }
@@ -118,39 +132,68 @@ export default function PaymentModal() {
                 <span className="font-medium text-white">{planName}</span>
               </div>
               <p className="mt-1 text-xs text-white/40">
-                {t.payment.creditsIncluded.replace(
-                  "{count}",
-                  String(offer.credits)
-                )}
+                {t.payment.creditsIncluded.replace("{count}", String(offer.credits))}
               </p>
             </div>
             <div className="text-right">
               <div className="text-2xl font-bold text-white">
-                {t.payment.amountKrw.replace(
-                  "{amount}",
-                  offer.totalKrw.toLocaleString()
-                )}
+                {showKrw && price.krwLabel
+                  ? t.payment.amountUsdWithKrw
+                      .replace("{usd}", price.usdLabel.replace("$", ""))
+                      .replace("{krw}", price.krwLabel.replace("₩", ""))
+                  : price.usdLabel}
               </div>
-              <div className="text-xs text-white/40">
-                ${offer.monthlyUsd}
-                {t.pricing.perMonth}
-              </div>
+              <div className="text-xs text-white/40">{t.payment.vatIncluded}</div>
             </div>
           </div>
         </div>
 
-        <form onSubmit={(e) => void handlePay(e)} className="space-y-3">
+        <div className="space-y-3">
+          <p className="text-[11px] text-white/45">{t.payment.autoRenewNotice}</p>
+          <p className="text-[11px] text-white/35">{t.payment.refundNotice}</p>
+          <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+            <input
+              type="checkbox"
+              checked={termsAgreed}
+              onChange={(e) => setTermsAgreed(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span className="text-xs text-white/70">{t.payment.termsLabel}</span>
+          </label>
           <p className="text-[11px] text-white/45">{t.payment.secureCheckout}</p>
-          <p className="text-[11px] text-white/35">{t.payment.simulated}</p>
           {error && <p className="text-xs text-amber-200">{error}</p>}
-          <button
-            type="submit"
-            disabled={paying}
-            className="btn-primary w-full py-3 text-sm disabled:opacity-50"
-          >
-            {paying ? t.payment.processing : t.payment.payWithToss}
-          </button>
-        </form>
+
+          {region === "domestic" ? (
+            <button
+              type="button"
+              disabled={paying || !termsAgreed}
+              onClick={() => void startCheckout("domestic")}
+              className="btn-primary w-full py-3 text-sm disabled:opacity-50"
+            >
+              {paying ? t.payment.processing : t.payment.payWithToss}
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={paying || !termsAgreed}
+              onClick={() => void startCheckout("stripe")}
+              className="btn-primary w-full py-3 text-sm disabled:opacity-50"
+            >
+              {paying ? t.payment.redirecting : t.payment.payWithStripe}
+            </button>
+          )}
+
+          {region === "domestic" && (
+            <button
+              type="button"
+              disabled={paying || !termsAgreed}
+              onClick={() => void startCheckout("stripe")}
+              className="btn-secondary w-full py-2.5 text-sm disabled:opacity-50"
+            >
+              {t.payment.payWithStripe}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

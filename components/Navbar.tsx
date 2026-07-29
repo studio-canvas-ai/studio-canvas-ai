@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Menu, X, Sparkles, Plus } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { useCredits } from "@/components/CreditsProvider";
@@ -11,6 +11,7 @@ import LanguageSelector from "@/components/LanguageSelector";
 export default function Navbar() {
   const { t } = useI18n();
   const pathname = usePathname();
+  const router = useRouter();
   const {
     setShowAuthModal,
     setShowTopUpModal,
@@ -45,6 +46,12 @@ export default function Navbar() {
   const openTrial = () => {
     setMobileOpen(false);
     setShowAuthModal(true);
+  };
+
+  const openAccount = () => {
+    setMobileOpen(false);
+    if (isAuthenticated) router.push("/profile");
+    else setShowAuthModal(true);
   };
 
   const isActive = (href: string) => {
@@ -130,10 +137,10 @@ export default function Navbar() {
 
           <button
             type="button"
-            onClick={openTrial}
+            onClick={openAccount}
             className="btn-secondary hidden whitespace-nowrap px-4 py-2.5 text-sm md:inline-flex"
           >
-            {isAuthenticated ? t.nav.myGallery : t.nav.login}
+            {isAuthenticated ? t.nav.myPage : t.nav.login}
           </button>
           <button
             type="button"

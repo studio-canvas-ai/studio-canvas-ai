@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import {
   confirmTossPayment,
   getPaymentProvider,
+  isDemoCheckoutAllowed,
   markOrderPaid,
 } from "@/lib/payments";
 import { getDb } from "@/lib/db/store";
@@ -12,6 +13,7 @@ export const runtime = "nodejs";
 
 /**
  * Confirm payment after Toss widget / PortOne callback / demo checkout.
+ * Stripe confirmations are webhook-driven only.
  * Body: { orderId, paymentKey?, demo?: true }
  */
 export async function POST(req: Request) {
@@ -36,11 +38,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, order, user });
   }
 
-  const provider = getPaymentProvider();
+  if (order.provider === "stripe") {
+    return NextResponse.json(
+      { error: "awaiting_stripe_webhook", provider: "stripe" },
+      { status: 202 }
+    );
+  }
+
+  const provider = getPaymentProvider(order.locale);
 
   try {
     if (provider === "toss" && body.paymentKey) {
-      await confirmTossPayment({
+      const tossResult = await confirmTossPayment({
         paymentKey: body.paymentKey,
         orderId: order.id,
         amount: order.amountKrw,
@@ -48,12 +57,13 @@ export async function POST(req: Request) {
       const paid = await markOrderPaid({
         orderId: order.id,
         externalPaymentKey: body.paymentKey,
+        receiptUrl: tossResult.receipt?.url,
       });
       const user = await getUserById(userId);
       return NextResponse.json({ ok: true, order: paid, user });
     }
 
-    if (provider === "demo" || body.demo) {
+    if ((provider === "demo" || body.demo) && isDemoCheckoutAllowed()) {
       const paid = await markOrderPaid({
         orderId: order.id,
         externalPaymentKey: `demo_${Date.now()}`,
@@ -62,7 +72,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, order: paid, user, demo: true });
     }
 
-    // PortOne: client completes via webhook; allow mark if secret verifies later
     return NextResponse.json(
       { error: "awaiting_provider_confirmation", provider },
       { status: 202 }

@@ -1,3 +1,5 @@
+import { usdToKrw } from "@/lib/currency";
+
 export interface StylePackMeta {
   id: string;
   category: string;
@@ -178,7 +180,7 @@ export const PLAN_OFFERS: Record<BillingInterval, readonly PlanOffer[]> = {
       monthlyUsd: 16.58,
       totalUsd: 199,
       totalKrw: 199_000,
-      credits: 1_200,
+      credits: 1_500,
       profileSlots: 10,
       resolution: "4K",
       fastGeneration: true,
@@ -225,10 +227,10 @@ export const PLAN_OFFERS: Record<BillingInterval, readonly PlanOffer[]> = {
       monthlyUsd: 19.9,
       totalUsd: 19.9,
       totalKrw: 19_900,
-      credits: 120,
+      credits: 150,
       profileSlots: 10,
       resolution: "4K",
-      fastGeneration: false,
+      fastGeneration: true,
       commercialUse: true,
       permanentStorage: true,
       dedicatedLane: false,
@@ -257,16 +259,16 @@ export const FREE_CREDITS = 2;
 export const PLAN_CREDITS: Record<PricingPlanId, number> = {
   starter: 20,
   standard: 50,
-  pro: 120,
-  enterprise: 1_200,
+  pro: 150,
+  enterprise: 1_500,
 };
 
-/** KRW amounts for Toss / PortOne checkout */
+/** KRW amounts for Toss / PortOne checkout (USD × rate, floored) */
 export const pricingPricesKrw: Record<PricingPlanId, number> = {
-  starter: 4900,
-  standard: 9900,
-  pro: 19900,
-  enterprise: 199000,
+  starter: usdToKrw(pricingPrices.starter),
+  standard: usdToKrw(pricingPrices.standard),
+  pro: usdToKrw(pricingPrices.pro),
+  enterprise: usdToKrw(pricingPrices.enterprise),
 };
 export const PROMPT_MAX_LENGTH = 100;
 export const MIN_SELFIE_UPLOADS = 1;
@@ -303,10 +305,23 @@ export const CREDIT_PACKS = [
   { id: "pack-l", price: 19.9, freeCredits: 80, subscriberCredits: 120 },
 ] as const;
 
+export function planTotalKrw(totalUsd: number) {
+  return usdToKrw(totalUsd);
+}
+
+export function syncPlanOfferKrw() {
+  for (const interval of Object.keys(PLAN_OFFERS) as BillingInterval[]) {
+    for (const offer of PLAN_OFFERS[interval]) {
+      (offer as { totalKrw: number }).totalKrw = planTotalKrw(offer.totalUsd);
+    }
+  }
+}
+syncPlanOfferKrw();
+
 export const creditPackPricesKrw: Record<(typeof CREDIT_PACKS)[number]["id"], number> = {
-  "pack-s": 4900,
-  "pack-m": 9900,
-  "pack-l": 19900,
+  "pack-s": planTotalKrw(4.9),
+  "pack-m": planTotalKrw(9.9),
+  "pack-l": planTotalKrw(19.9),
 };
 
 export function creditPackAmount(

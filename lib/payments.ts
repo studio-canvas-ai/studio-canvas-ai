@@ -6,18 +6,38 @@ import {
   getPlanOffer,
   pricingPlanIds,
 } from "@/lib/data";
+import { usdToKrw } from "@/lib/currency";
+import type { Locale } from "@/lib/i18n/types";
+import { resolveCheckoutRegion } from "@/lib/paymentRouting";
 import { getDb, newId, withDbLock } from "@/lib/db/store";
-import type { PaymentOrder } from "@/lib/db/types";
+import type { PaymentOrder, PaymentProviderId, UserRecord } from "@/lib/db/types";
+import { activateSubscription } from "@/lib/subscriptionLifecycle";
+import {
+  createStripeCheckoutSession,
+  stripeConfigured,
+} from "@/lib/payments/stripe";
 
 export type CheckoutKind = "subscription" | "credit_pack";
 
-export function getPaymentProvider(): "toss" | "portone" | "demo" {
-  const forced = process.env.PAYMENT_PROVIDER as "toss" | "portone" | "demo" | undefined;
-  if (forced) return forced;
+export function getDomesticProvider(): "toss" | "portone" | "demo" {
+  const forced = process.env.PAYMENT_PROVIDER as PaymentProviderId | undefined;
+  if (forced && forced !== "stripe") return forced;
   if (process.env.TOSS_SECRET_KEY && process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY) return "toss";
   if (process.env.PORTONE_API_SECRET && process.env.NEXT_PUBLIC_PORTONE_STORE_ID)
     return "portone";
   return "demo";
+}
+
+export function getPaymentProvider(locale?: Locale): PaymentProviderId {
+  if (locale && resolveCheckoutRegion(locale) === "global") {
+    return stripeConfigured() ? "stripe" : "demo";
+  }
+  return getDomesticProvider();
+}
+
+export function isDemoCheckoutAllowed(): boolean {
+  const host = process.env.NEXTAUTH_URL ?? "";
+  return host.includes("localhost") || host.includes("127.0.0.1");
 }
 
 export async function createPaymentOrder(input: {
@@ -27,16 +47,25 @@ export async function createPaymentOrder(input: {
   billingInterval?: BillingInterval;
   packId?: (typeof CREDIT_PACKS)[number]["id"];
   isSubscriber: boolean;
+  locale?: Locale;
 }): Promise<PaymentOrder> {
   return withDbLock((db) => {
+    const locale = input.locale ?? "en";
+    const region = resolveCheckoutRegion(locale);
+    const provider = getPaymentProvider(locale);
+    const currency: "KRW" | "USD" = region === "domestic" ? "KRW" : "USD";
+
+    let amountUsd = 0;
     let amountKrw = 0;
     let baseAmountKrw = 0;
     let prorationCreditKrw = 0;
     let credits = 0;
+
     if (input.kind === "subscription") {
       if (!input.planId) throw new Error("planId required");
       const interval = input.billingInterval ?? "annual";
       const offer = getPlanOffer(input.planId, interval);
+      amountUsd = offer.totalUsd;
       baseAmountKrw = offer.totalKrw;
       amountKrw = baseAmountKrw;
       credits = offer.credits;
@@ -53,22 +82,22 @@ export async function createPaymentOrder(input: {
         user.currentPeriodEnd > now &&
         user.lastPlanAmountKrw
       ) {
-        const periodLength = Math.max(
-          1,
-          user.currentPeriodEnd - user.currentPeriodStart
-        );
+        const periodLength = Math.max(1, user.currentPeriodEnd - user.currentPeriodStart);
         const remainingFraction = Math.min(
           1,
           Math.max(0, (user.currentPeriodEnd - now) / periodLength)
         );
-        prorationCreditKrw = Math.round(
-          user.lastPlanAmountKrw * remainingFraction
-        );
+        prorationCreditKrw = Math.round(user.lastPlanAmountKrw * remainingFraction);
         amountKrw = Math.max(0, baseAmountKrw - prorationCreditKrw);
+        if (currency === "USD" && user.lastPlanAmountUsd) {
+          const prorationUsd = user.lastPlanAmountUsd * remainingFraction;
+          amountUsd = Math.max(0, Math.round((amountUsd - prorationUsd) * 100) / 100);
+        }
       }
     } else {
       const pack = CREDIT_PACKS.find((p) => p.id === input.packId);
       if (!pack) throw new Error("invalid pack");
+      amountUsd = pack.price;
       amountKrw = creditPackPricesKrw[pack.id];
       credits = creditPackAmount(pack, input.isSubscriber);
     }
@@ -76,16 +105,20 @@ export async function createPaymentOrder(input: {
     const order: PaymentOrder = {
       id: newId("ord"),
       userId: input.userId,
-      provider: getPaymentProvider(),
+      provider,
       kind: input.kind,
       planId: input.planId,
       billingInterval: input.billingInterval,
       packId: input.packId,
+      locale,
+      currency,
+      amountUsd,
       baseAmountKrw,
       prorationCreditKrw,
       amountKrw,
       credits,
       status: "pending",
+      vatIncluded: true,
       createdAt: Date.now(),
     };
     db.orders[order.id] = order;
@@ -93,9 +126,35 @@ export async function createPaymentOrder(input: {
   });
 }
 
+export async function createCheckoutForOrder(input: {
+  order: PaymentOrder;
+  user: UserRecord;
+  successUrl: string;
+  cancelUrl: string;
+}): Promise<{ checkoutUrl?: string; sessionId?: string }> {
+  if (input.order.provider === "stripe") {
+    const session = await createStripeCheckoutSession({
+      order: input.order,
+      user: input.user,
+      successUrl: input.successUrl,
+      cancelUrl: input.cancelUrl,
+    });
+    await withDbLock((db) => {
+      const order = db.orders[input.order.id];
+      if (order) order.stripeCheckoutSessionId = session.sessionId;
+    });
+    return { checkoutUrl: session.url, sessionId: session.sessionId };
+  }
+  return {};
+}
+
 export async function markOrderPaid(params: {
   orderId: string;
   externalPaymentKey?: string;
+  receiptUrl?: string;
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
+  paymentMethodLabel?: string;
 }): Promise<PaymentOrder | null> {
   const order = await withDbLock((db) => {
     const o = db.orders[params.orderId];
@@ -109,29 +168,30 @@ export async function markOrderPaid(params: {
     o.status = "paid";
     o.paidAt = now;
     o.externalPaymentKey = params.externalPaymentKey;
+    if (params.receiptUrl) o.receiptUrl = params.receiptUrl;
 
     user.credits = Math.round((user.credits + o.credits) * 10) / 10;
     user.maxCredits = Math.max(user.maxCredits, user.credits);
     user.updatedAt = now;
-    user.subscriptionStatus = "active";
-    user.paymentRetryCount = 0;
-    delete user.nextPaymentRetryAt;
-    delete user.paymentGraceEndsAt;
-    delete user.lastPaymentFailureAt;
+    activateSubscription(user);
+
+    if (params.stripeCustomerId) user.stripeCustomerId = params.stripeCustomerId;
+    if (params.stripeSubscriptionId) user.stripeSubscriptionId = params.stripeSubscriptionId;
+    if (params.paymentMethodLabel) user.defaultPaymentMethodLabel = params.paymentMethodLabel;
 
     if (o.kind === "subscription" && o.planId) {
       const interval = o.billingInterval ?? "annual";
       const isUpgrade =
         previousPlanId !== "free" &&
         (previousPlanId !== o.planId || previousInterval !== interval);
-      const isRenewal =
-        previousPlanId === o.planId && previousInterval === interval;
+      const isRenewal = previousPlanId === o.planId && previousInterval === interval;
       user.planId = o.planId;
       user.billingInterval = interval;
       user.currentPeriodStart = now;
       user.currentPeriodEnd =
         now + (interval === "annual" ? 365 : 30) * 24 * 60 * 60 * 1000;
       user.lastPlanAmountKrw = o.baseAmountKrw ?? o.amountKrw;
+      user.lastPlanAmountUsd = o.amountUsd;
       db.ledger.push({
         id: newId("ldg"),
         userId: user.id,
@@ -146,6 +206,7 @@ export async function markOrderPaid(params: {
           orderId: o.id,
           planId: o.planId,
           billingInterval: interval,
+          amountUsd: o.amountUsd,
           baseAmountKrw: o.baseAmountKrw ?? o.amountKrw,
           prorationCreditKrw: o.prorationCreditKrw ?? 0,
           periodStart: user.currentPeriodStart,
@@ -160,13 +221,35 @@ export async function markOrderPaid(params: {
         delta: o.credits,
         balanceAfter: user.credits,
         reason: "credit_pack",
-        meta: { orderId: o.id, packId: o.packId ?? null },
+        meta: { orderId: o.id, packId: o.packId ?? null, amountUsd: o.amountUsd },
         createdAt: now,
       });
     }
     return o;
   });
   return order ? getDb().orders[order.id] ?? order : null;
+}
+
+export async function saveBillingCredentials(input: {
+  userId: string;
+  billingKey: string;
+  customerKey?: string;
+}) {
+  return withDbLock((db) => {
+    const user = db.users[input.userId];
+    if (!user) return null;
+    user.billingKey = input.billingKey;
+    user.providerCustomerKey = input.customerKey ?? user.providerCustomerKey;
+    user.updatedAt = Date.now();
+    return user;
+  });
+}
+
+export async function getUserPaymentHistory(userId: string) {
+  const db = getDb();
+  return Object.values(db.orders)
+    .filter((o) => o.userId === userId && o.status === "paid")
+    .sort((a, b) => (b.paidAt ?? b.createdAt) - (a.paidAt ?? a.createdAt));
 }
 
 /** Toss Payments confirm API */
@@ -194,5 +277,18 @@ export async function confirmTossPayment(params: {
   if (!res.ok) {
     throw new Error((data as { message?: string }).message || "Toss confirm failed");
   }
-  return data;
+  return data as { receipt?: { url?: string } };
+}
+
+export function orderAmountForProvider(order: PaymentOrder): number {
+  return order.currency === "USD" ? order.amountUsd : order.amountKrw;
+}
+
+export function formatOrderDisplayAmount(order: PaymentOrder, showKrw: boolean): string {
+  if (order.currency === "USD") {
+    const usd = `$${order.amountUsd % 1 === 0 ? order.amountUsd.toFixed(0) : order.amountUsd.toFixed(2)}`;
+    if (showKrw) return `${usd} (₩${usdToKrw(order.amountUsd).toLocaleString("en-US")})`;
+    return usd;
+  }
+  return `₩${order.amountKrw.toLocaleString("en-US")}`;
 }

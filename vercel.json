@@ -9,7 +9,7 @@
       "schedule": "15 3 * * *"
     },
     {
-      "path": "/api/cron/payment-retries",
+      "path": "/api/cron/subscription-expiry",
       "schedule": "30 3 * * *"
     }
   ]
