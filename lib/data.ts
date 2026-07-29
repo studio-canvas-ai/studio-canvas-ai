@@ -140,10 +140,11 @@ export const ACCEPTED_IMAGE_MIME = [
   "image/heif",
 ] as const;
 
-/** #60: 1 free edit on focused draft, then 1 credit per edit/regenerate */
-export const RETOUCH_FREE_PER_CYCLE = 1;
-export const RETOUCH_EXTRA_COST = 1;
-export const RETOUCH_NEXT_DAY_ENTRY_COST = 1;
+/** #60 / #104: regenerate costs 0.5 credit; free retouch path removed from UI */
+export const RETOUCH_FREE_PER_CYCLE = 0;
+export const RETOUCH_EXTRA_COST = 0.5;
+export const REGENERATE_CREDIT_COST = 0.5;
+export const RETOUCH_NEXT_DAY_ENTRY_COST = 0.5;
 export const RETOUCH_DAILY_MAX = 50;
 export const GENERATE_DRAFT_COUNT = 2;
 

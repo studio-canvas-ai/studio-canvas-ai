@@ -1,5 +1,6 @@
 import {
   RETOUCH_DAILY_MAX,
+  REGENERATE_CREDIT_COST,
   RETOUCH_EXTRA_COST,
   RETOUCH_FREE_PER_CYCLE,
 } from "@/lib/data";
@@ -7,7 +8,7 @@ import {
 export type PortraitRetouchState = {
   portraitId: string;
   createdAt: number;
-  /** Free edits remaining for the focused draft (#60: 1) */
+  /** Free edits remaining (UI retouch removed — kept for policy compat) */
   freeRemaining: number;
   nextDayEntryCharged: boolean;
 };
@@ -38,9 +39,9 @@ export type RetouchAttemptResult =
     };
 
 /**
- * #60 policy:
- * - 1 free edit on selected draft
- * - further edits / regenerates: 1 credit each
+ * #104 policy:
+ * - Partial retouch UI removed — edits go through prompt + regenerate
+ * - Selected-draft regenerate always costs 0.5 credit
  */
 export function evaluateRetouchRequest(params: {
   state: PortraitRetouchState | null;
@@ -50,7 +51,6 @@ export function evaluateRetouchRequest(params: {
   credits: number;
   dailyRetouchCount: number;
   recentTimestamps: number[];
-  /** regenerate always costs 1 credit (no free) */
   mode?: "retouch" | "regenerate";
 }): RetouchAttemptResult {
   const now = params.now ?? Date.now();
@@ -83,14 +83,14 @@ export function evaluateRetouchRequest(params: {
 
   let cost = 0;
   if (mode === "regenerate") {
-    cost = RETOUCH_EXTRA_COST;
+    cost = REGENERATE_CREDIT_COST;
   } else if (state.freeRemaining > 0) {
     state = { ...state, freeRemaining: state.freeRemaining - 1 };
   } else {
     cost = RETOUCH_EXTRA_COST;
   }
 
-  if (params.credits < cost) {
+  if (params.credits + 1e-9 < cost) {
     return { ok: false, reason: "insufficient_credits", cost, nextTimestamps: recent };
   }
 

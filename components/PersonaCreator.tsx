@@ -30,7 +30,7 @@ import {
   HERO_AFTER_IMAGE,
   HERO_BEFORE_IMAGE,
   MIN_SELFIE_UPLOADS,
-  RETOUCH_FREE_PER_CYCLE,
+  REGENERATE_CREDIT_COST,
   BACKGROUND_TAG_IDS,
   BACKGROUND_MODE_IDS,
   type BackgroundModeId,
@@ -38,6 +38,7 @@ import {
 import { pushGalleryHistory, listFaceProfiles, getAccountMeta, type FaceProfile } from "@/lib/faceProfiles";
 import { uploadGalleryAsset } from "@/lib/galleryUpload";
 import { retentionContextFromAccount } from "@/lib/retentionPolicy";
+import { buildFaceConsistencyPayload } from "@/lib/faceConsistency";
 import { processUploadFiles } from "@/lib/processUpload";
 import { downloadImageFile, type AspectRatioKey, type ExportPreset } from "@/lib/downloadImage";
 
@@ -77,7 +78,6 @@ function PersonaCreatorInner() {
     setShowCreditModal,
     registerPortrait,
     requestRetouch,
-    getPortraitRetouch,
     planId,
   } = useCredits();
   const stepContentRef = useRef<HTMLDivElement>(null);
@@ -105,10 +105,7 @@ function PersonaCreatorInner() {
   const [aspectRatio, setAspectRatio] = useState<AspectRatioKey>("9:16");
   const [exportPreset, setExportPreset] = useState<ExportPreset>("original");
   const [portraitId, setPortraitId] = useState<string | null>(null);
-  const [retouchPrompt, setRetouchPrompt] = useState("");
-  const [isRetouching, setIsRetouching] = useState(false);
-  const [retouchMessage, setRetouchMessage] = useState<string | null>(null);
-  const [freeRetouchesLeft, setFreeRetouchesLeft] = useState(RETOUCH_FREE_PER_CYCLE);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [savedProfiles, setSavedProfiles] = useState<FaceProfile[]>([]);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [gallerySavedMsg, setGallerySavedMsg] = useState(false);
@@ -291,9 +288,6 @@ function PersonaCreatorInner() {
 
   const focusDraft = (idx: 0 | 1) => {
     setFocusedDraft(idx);
-    if (!portraitId) return;
-    const state = getPortraitRetouch(`${portraitId}-${idx}`);
-    if (state) setFreeRetouchesLeft(state.freeRemaining);
   };
 
   const toggleBackgroundTag = (tag: string) => {
@@ -310,17 +304,31 @@ function PersonaCreatorInner() {
     if (!consumeCredit(1)) return;
     setIsGenerating(true);
     setResultReady(false);
-    setRetouchMessage(null);
-    setRetouchPrompt("");
+    setActionMessage(null);
     const base = `portrait-${Date.now()}`;
+
+    const facePayload = buildFaceConsistencyPayload({
+      mode: "initial",
+      selfieUrls: uploadedFiles,
+      prompt,
+      aspectRatio,
+      styleIds: selectedStyles,
+    });
+    void fetch("/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(facePayload),
+    }).catch(() => {
+      /* mock UI continues even if API stub is offline */
+    });
+
     setTimeout(() => {
       void (async () => {
-        const state0 = registerPortrait(`${base}-0`);
+        registerPortrait(`${base}-0`);
         registerPortrait(`${base}-1`);
         setPortraitId(base);
         setDrafts([HERO_AFTER_IMAGE, HERO_BEFORE_IMAGE]);
         setFocusedDraft(0);
-        setFreeRetouchesLeft(state0.freeRemaining);
         const styleId = selectedStyles[0];
         const now = Date.now();
         const meta = getAccountMeta();
@@ -356,20 +364,39 @@ function PersonaCreatorInner() {
 
   const handleRegenerate = () => {
     if (!portraitId || regenerateBusy) return;
+    if (credits < REGENERATE_CREDIT_COST) {
+      setShowCreditModal(true);
+      return;
+    }
     setRegenerateBusy(true);
-    setRetouchMessage(null);
+    setActionMessage(null);
     const id = `${portraitId}-${focusedDraft}`;
     const result = requestRetouch(id, "regenerate");
     if (!result.ok) {
       setRegenerateBusy(false);
-      if (result.reason === "throttle") setRetouchMessage(t.creator.retouchThrottle);
-      else if (result.reason === "daily_limit") setRetouchMessage(t.creator.retouchDailyLimit);
+      if (result.reason === "throttle") setActionMessage(t.creator.retouchThrottle);
+      else if (result.reason === "daily_limit") setActionMessage(t.creator.retouchDailyLimit);
       else if (result.reason === "insufficient_credits") setShowCreditModal(true);
       return;
     }
 
+    const facePayload = buildFaceConsistencyPayload({
+      mode: "regenerate",
+      selfieUrls: uploadedFiles,
+      draftUrl: drafts[focusedDraft],
+      prompt,
+      aspectRatio,
+      styleIds: selectedStyles,
+    });
+    void fetch("/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(facePayload),
+    }).catch(() => {
+      /* mock UI continues */
+    });
+
     setTimeout(() => {
-      setFreeRetouchesLeft(result.freeRemaining);
       setDrafts((prev) => {
         const next = [...prev];
         const alt = focusedDraft === 0 ? HERO_BEFORE_IMAGE : HERO_AFTER_IMAGE;
@@ -380,29 +407,6 @@ function PersonaCreatorInner() {
         return next;
       });
       setRegenerateBusy(false);
-    }, 900);
-  };
-
-  const handleRetouch = () => {
-    if (!portraitId || !retouchPrompt.trim() || isRetouching) return;
-    setIsRetouching(true);
-    setRetouchMessage(null);
-
-    const id = `${portraitId}-${focusedDraft}`;
-    const result = requestRetouch(id, "retouch");
-    if (!result.ok) {
-      setIsRetouching(false);
-      if (result.reason === "throttle") setRetouchMessage(t.creator.retouchThrottle);
-      else if (result.reason === "daily_limit") setRetouchMessage(t.creator.retouchDailyLimit);
-      else if (result.reason === "insufficient_credits") setShowCreditModal(true);
-      return;
-    }
-
-    setTimeout(() => {
-      setFreeRetouchesLeft(result.freeRemaining);
-      setRetouchMessage(t.creator.retouchSuccess);
-      setRetouchPrompt("");
-      setIsRetouching(false);
     }, 900);
   };
 
@@ -979,45 +983,19 @@ function PersonaCreatorInner() {
                 <Wand2 className={`h-4 w-4 shrink-0 ${regenerateBusy || isGenerating ? "animate-pulse" : ""}`} />
                 <span>
                   {resultReady
-                    ? credits > 0
+                    ? credits >= REGENERATE_CREDIT_COST
                       ? t.creator.regenerateWithCredit
                       : t.creator.regenerateNeedCredit
                     : t.creator.generatePortrait}
                 </span>
               </button>
 
+              {actionMessage && (
+                <p className="text-center text-xs text-glow-emerald">{actionMessage}</p>
+              )}
+
               {resultReady && (
                 <div className="space-y-4 border-t border-white/[0.06] pt-4">
-                  <div>
-                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                      <label className="text-sm font-medium text-white/70">
-                        {t.creator.retouchLabel}
-                      </label>
-                      <span className="text-[11px] text-white/45">
-                        {t.creator.retouchFreeLeft.replace("{count}", String(freeRetouchesLeft))}
-                      </span>
-                    </div>
-                    <textarea
-                      value={retouchPrompt}
-                      onChange={(e) => setRetouchPrompt(e.target.value)}
-                      placeholder={t.creator.retouchPlaceholder}
-                      rows={2}
-                      className="w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-white/30 focus:border-glow-purple/40"
-                    />
-                    <p className="mt-1.5 text-[11px] text-white/35">{t.creator.retouchCostHint}</p>
-                    <button
-                      type="button"
-                      onClick={handleRetouch}
-                      disabled={isRetouching || !retouchPrompt.trim()}
-                      className="btn-secondary mt-3 w-full py-2.5 text-sm disabled:opacity-50"
-                    >
-                      {isRetouching ? "..." : t.creator.retouchApply}
-                    </button>
-                    {retouchMessage && (
-                      <p className="mt-2 text-xs text-glow-emerald">{retouchMessage}</p>
-                    )}
-                  </div>
-
                   <div className="flex flex-wrap gap-2">
                     {(
                       [
@@ -1079,8 +1057,7 @@ function PersonaCreatorInner() {
                       setDrafts([]);
                       setPortraitId(null);
                       setGallerySavedMsg(false);
-                      setRetouchMessage(null);
-                      setRetouchPrompt("");
+                      setActionMessage(null);
                     }}
                     className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-400/30 bg-red-500/10 py-3 text-sm text-red-200 transition hover:bg-red-500/20"
                   >
