@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Sparkles, X } from "lucide-react";
+import { Globe2, Sparkles, X } from "lucide-react";
 import { signIn } from "next-auth/react";
 import { useI18n } from "@/components/I18nProvider";
 import { useCredits } from "@/components/CreditsProvider";
@@ -24,6 +24,7 @@ export default function AuthModal() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [providers, setProviders] = useState<ProviderId[]>([]);
+  const [showEmail, setShowEmail] = useState(false);
 
   useEffect(() => {
     if (!showAuthModal) return;
@@ -34,6 +35,9 @@ export default function AuthModal() {
   }, [showAuthModal]);
 
   if (!showAuthModal) return null;
+  const localGoogleMock =
+    typeof window !== "undefined" &&
+    ["localhost", "127.0.0.1"].includes(window.location.hostname);
 
   const afterAuth = async () => {
     await refreshAccount?.();
@@ -48,6 +52,22 @@ export default function AuthModal() {
   const handleSocial = async (provider: ProviderId) => {
     setBusy(true);
     setError(null);
+    const isLocalGoogle = provider === "google" && localGoogleMock;
+    if (isLocalGoogle) {
+      try {
+        const result = await signIn("google-mock", {
+          email: "test@gmail.com",
+          redirect: false,
+        });
+        if (result?.error) throw new Error(result.error);
+        await afterAuth();
+      } catch {
+        setError(t.auth.mockLoginHint);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     await signIn(provider, { callbackUrl: pendingPlanId ? "/pricing" : "/generate" });
   };
 
@@ -109,9 +129,25 @@ export default function AuthModal() {
           </div>
         </div>
 
-        {providers.length > 0 && (
-          <div className="mb-4 space-y-2">
-            {providers.map((p) => (
+        <p className="mb-4 rounded-xl border border-glow-emerald/20 bg-glow-emerald/10 px-3 py-2 text-center text-xs text-emerald-200">
+          {t.auth.freeCredits}
+        </p>
+
+        {(localGoogleMock || providers.includes("google")) && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void handleSocial("google")}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100 disabled:opacity-50"
+          >
+            <Globe2 className="h-4 w-4 text-blue-600" />
+            {t.auth.googlePrimary}
+          </button>
+        )}
+
+        {providers.filter((provider) => provider !== "google").length > 0 && (
+          <div className="mt-3 space-y-2">
+            {providers.filter((provider) => provider !== "google").map((p) => (
               <button
                 key={p}
                 type="button"
@@ -122,11 +158,20 @@ export default function AuthModal() {
                 {socialLabel[p]}
               </button>
             ))}
-            <p className="pt-1 text-center text-[11px] text-white/35">{t.auth.orEmail}</p>
           </div>
         )}
 
-        <div className="mb-5 flex gap-2 rounded-xl bg-white/5 p-1">
+        <button
+          type="button"
+          onClick={() => setShowEmail((open) => !open)}
+          className="mt-4 w-full text-center text-xs text-white/40 hover:text-white/70"
+        >
+          {t.auth.orEmail}
+        </button>
+        {error && <p className="mt-3 text-center text-xs text-red-300">{error}</p>}
+
+        {showEmail && <>
+        <div className="mb-5 mt-3 flex gap-2 rounded-xl bg-white/5 p-1">
           <button
             type="button"
             onClick={() => setMode("signup")}
@@ -169,14 +214,12 @@ export default function AuthModal() {
               className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white outline-none focus:border-glow-purple/40"
             />
           </div>
-          <p className="rounded-xl border border-glow-emerald/20 bg-glow-emerald/10 px-3 py-2 text-xs text-emerald-200">
-            {t.auth.freeCredits}
-          </p>
           <p className="text-[11px] text-white/35">{t.auth.socialHint}</p>
-          {error && <p className="text-xs text-red-300">{error}</p>}
           <button type="submit" disabled={busy} className="btn-primary w-full py-3 text-sm disabled:opacity-50">
             {mode === "signup" ? t.auth.signup : t.auth.login}
           </button>
+        </form>
+        </>}
           {!pendingPlanId && (
             <button
               type="button"
@@ -184,12 +227,11 @@ export default function AuthModal() {
                 setShowAuthModal(false);
                 window.location.href = "/generate";
               }}
-              className="w-full text-center text-xs text-white/40 hover:text-white/70"
+              className="mt-4 w-full text-center text-xs text-white/40 hover:text-white/70"
             >
               {t.auth.skipToGenerate}
             </button>
           )}
-        </form>
       </div>
     </div>
   );

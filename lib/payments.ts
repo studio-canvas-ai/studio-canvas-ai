@@ -113,12 +113,19 @@ export async function markOrderPaid(params: {
     user.credits = Math.round((user.credits + o.credits) * 10) / 10;
     user.maxCredits = Math.max(user.maxCredits, user.credits);
     user.updatedAt = now;
+    user.subscriptionStatus = "active";
+    user.paymentRetryCount = 0;
+    delete user.nextPaymentRetryAt;
+    delete user.paymentGraceEndsAt;
+    delete user.lastPaymentFailureAt;
 
     if (o.kind === "subscription" && o.planId) {
       const interval = o.billingInterval ?? "annual";
       const isUpgrade =
         previousPlanId !== "free" &&
         (previousPlanId !== o.planId || previousInterval !== interval);
+      const isRenewal =
+        previousPlanId === o.planId && previousInterval === interval;
       user.planId = o.planId;
       user.billingInterval = interval;
       user.currentPeriodStart = now;
@@ -130,7 +137,11 @@ export async function markOrderPaid(params: {
         userId: user.id,
         delta: o.credits,
         balanceAfter: user.credits,
-        reason: isUpgrade ? "subscription_upgrade" : "subscription",
+        reason: isUpgrade
+          ? "subscription_upgrade"
+          : isRenewal
+            ? "subscription_renewal"
+            : "subscription",
         meta: {
           orderId: o.id,
           planId: o.planId,

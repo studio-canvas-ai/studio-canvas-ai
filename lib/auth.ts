@@ -66,6 +66,33 @@ function buildProviders() {
     list.push(NaverProvider());
   }
 
+  if (process.env.NODE_ENV !== "production") {
+    list.push(
+      Credentials({
+        id: "google-mock",
+        name: "Google Mock",
+        credentials: {
+          email: { label: "Email", type: "email" },
+        },
+        async authorize() {
+          const email = "test@gmail.com";
+          const { user } = await findOrCreateOAuthUser({
+            provider: "google-mock",
+            providerAccountId: email,
+            email,
+            name: "Google Test User",
+          });
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            image: user.image,
+          };
+        },
+      })
+    );
+  }
+
   // Always available for local / demo email signup → grants FREE_CREDITS via findOrCreate
   list.push(
     Credentials({
@@ -117,7 +144,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     async signIn({ user, account }) {
       if (!account) return false;
-      if (account.provider === "credentials") return true;
+      if (account.provider === "credentials" || account.provider === "google-mock") return true;
       const provider = account.provider as AuthProviderId;
       await findOrCreateOAuthUser({
         provider,
@@ -131,7 +158,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async jwt({ token, account, user }) {
       if (account && user) {
         token.authProvider = account.provider;
-        if (account.provider === "credentials") {
+        if (account.provider === "credentials" || account.provider === "google-mock") {
           token.uid = user.id;
           const { getUserById } = await import("@/lib/db/credits");
           const dbUser = await getUserById(user.id!);

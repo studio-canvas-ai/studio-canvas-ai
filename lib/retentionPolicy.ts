@@ -25,9 +25,15 @@ export function computeExpiresAt(
   createdAt: number,
   ctx: RetentionContext
 ): number | null {
-  if (isActivePaidPlan(ctx.planId)) return null;
+  if (ctx.planId === "starter") {
+    return createdAt + RETENTION_GRACE_STARTER_DAYS * MS_PER_DAY;
+  }
+  if (ctx.planId === "standard") {
+    return createdAt + RETENTION_GRACE_STANDARD_DAYS * MS_PER_DAY;
+  }
+  if (ctx.planId === "pro" || ctx.planId === "enterprise") return null;
 
-  if (ctx.lastPaidPlan === "pro") return null;
+  if (ctx.lastPaidPlan === "pro" || ctx.lastPaidPlan === "enterprise") return null;
 
   if (ctx.cancelledAt && ctx.lastPaidPlan) {
     const graceDays =

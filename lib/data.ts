@@ -139,7 +139,7 @@ export type PlanOffer = {
   highlighted: boolean;
 };
 
-/** #107 final plan catalog. Annual is the default presentation. */
+/** #108 final plan catalog. Annual is the default presentation. */
 export const PLAN_OFFERS: Record<BillingInterval, readonly PlanOffer[]> = {
   annual: [
     {
@@ -150,7 +150,7 @@ export const PLAN_OFFERS: Record<BillingInterval, readonly PlanOffer[]> = {
       totalKrw: 49_000,
       credits: 200,
       profileSlots: 3,
-      resolution: "4K",
+      resolution: "FHD",
       fastGeneration: false,
       commercialUse: false,
       permanentStorage: false,
@@ -158,13 +158,13 @@ export const PLAN_OFFERS: Record<BillingInterval, readonly PlanOffer[]> = {
       highlighted: false,
     },
     {
-      planId: "pro",
+      planId: "standard",
       interval: "annual",
       monthlyUsd: 8.25,
       totalUsd: 99,
       totalKrw: 99_000,
-      credits: 1_500,
-      profileSlots: 10,
+      credits: 500,
+      profileSlots: 5,
       resolution: "4K",
       fastGeneration: true,
       commercialUse: false,
@@ -179,7 +179,7 @@ export const PLAN_OFFERS: Record<BillingInterval, readonly PlanOffer[]> = {
       totalUsd: 199,
       totalKrw: 199_000,
       credits: 1_200,
-      profileSlots: 30,
+      profileSlots: 10,
       resolution: "4K",
       fastGeneration: true,
       commercialUse: true,
@@ -213,11 +213,11 @@ export const PLAN_OFFERS: Record<BillingInterval, readonly PlanOffer[]> = {
       credits: 50,
       profileSlots: 5,
       resolution: "4K",
-      fastGeneration: false,
+      fastGeneration: true,
       commercialUse: false,
       permanentStorage: false,
       dedicatedLane: false,
-      highlighted: false,
+      highlighted: true,
     },
     {
       planId: "pro",
@@ -225,14 +225,14 @@ export const PLAN_OFFERS: Record<BillingInterval, readonly PlanOffer[]> = {
       monthlyUsd: 19.9,
       totalUsd: 19.9,
       totalKrw: 19_900,
-      credits: 150,
+      credits: 120,
       profileSlots: 10,
       resolution: "4K",
       fastGeneration: false,
       commercialUse: true,
       permanentStorage: true,
       dedicatedLane: false,
-      highlighted: true,
+      highlighted: false,
     },
   ],
 };
@@ -257,7 +257,7 @@ export const FREE_CREDITS = 2;
 export const PLAN_CREDITS: Record<PricingPlanId, number> = {
   starter: 20,
   standard: 50,
-  pro: 150,
+  pro: 120,
   enterprise: 1_200,
 };
 

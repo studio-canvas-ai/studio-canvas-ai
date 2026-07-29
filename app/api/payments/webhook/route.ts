@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { markOrderPaid } from "@/lib/payments";
 import { getDb } from "@/lib/db/store";
+import {
+  recordSubscriptionPaymentFailure,
+  saveBillingCredentials,
+} from "@/lib/dunning";
 
 export const runtime = "nodejs";
 
@@ -21,7 +25,13 @@ export async function POST(req: Request) {
     orderId?: string;
     paymentKey?: string;
     status?: string;
-    data?: { orderId?: string; paymentId?: string };
+    data?: {
+      orderId?: string;
+      paymentId?: string;
+      billingKey?: string;
+      customerKey?: string;
+    };
+    message?: string;
   };
 
   const orderId = body.orderId || body.data?.orderId;
@@ -34,8 +44,28 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
 
-  if (body.status && !["DONE", "PAID", "paid", "done"].includes(body.status)) {
+  const normalizedStatus = body.status?.toUpperCase();
+  if (
+    normalizedStatus &&
+    ["FAILED", "FAIL", "DECLINED", "CANCELED", "CANCELLED"].includes(normalizedStatus)
+  ) {
+    const failure = await recordSubscriptionPaymentFailure({
+      orderId,
+      reason: body.message || normalizedStatus,
+    });
+    return NextResponse.json({ ok: true, dunningScheduled: Boolean(failure) });
+  }
+
+  if (normalizedStatus && !["DONE", "PAID"].includes(normalizedStatus)) {
     return NextResponse.json({ ok: true, ignored: true });
+  }
+
+  if (body.data?.billingKey) {
+    await saveBillingCredentials({
+      userId: existing.userId,
+      billingKey: body.data.billingKey,
+      customerKey: body.data.customerKey,
+    });
   }
 
   const paid = await markOrderPaid({

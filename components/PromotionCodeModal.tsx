@@ -6,7 +6,7 @@ import { useCredits } from "@/components/CreditsProvider";
 import { useI18n } from "@/components/I18nProvider";
 
 export default function PromotionCodeModal() {
-  const { locale } = useI18n();
+  const { t } = useI18n();
   const {
     showPromoModal,
     setShowPromoModal,
@@ -18,8 +18,6 @@ export default function PromotionCodeModal() {
   const [error, setError] = useState<string | null>(null);
 
   if (!showPromoModal) return null;
-  const ko = locale === "kr";
-
   const activate = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
@@ -34,18 +32,14 @@ export default function PromotionCodeModal() {
       if (!response.ok) {
         throw new Error(
           result.error === "code_expired"
-            ? ko
-              ? "만료되었거나 잔액이 소진된 코드입니다."
-              : "This code has expired or has no remaining balance."
-            : ko
-              ? "유효하지 않은 코드입니다."
-              : "Invalid promotion code."
+            ? t.promotion.expired
+            : t.promotion.invalid
         );
       }
       await refreshAccount();
       setCode("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Activation failed");
+      setError(err instanceof Error ? err.message : t.promotion.activationFailed);
     } finally {
       setBusy(false);
     }
@@ -67,17 +61,15 @@ export default function PromotionCodeModal() {
         >
           <X className="h-4 w-4" />
         </button>
-        <h2 className="text-lg font-semibold">{ko ? "코드 입력" : "Enter code"}</h2>
+        <h2 className="text-lg font-semibold">{t.promotion.title}</h2>
         <p className="mt-1 text-xs text-white/45">
-          {ko
-            ? "프로모션 코드를 입력하면 남은 잔액을 바로 불러옵니다."
-            : "Enter a promotion code to load its current balance."}
+          {t.promotion.description}
         </p>
 
         {promoWallet && (
           <div className="mt-4 rounded-xl border border-emerald-400/20 bg-emerald-400/5 px-4 py-3">
             <p className="text-xs text-emerald-200/70">
-              {ko ? "현재 코드 잔액" : "Current code balance"}
+              {t.promotion.currentCredits}
             </p>
             <p className="mt-1 text-xl font-semibold text-emerald-100">
               {promoWallet.remainingCredits}C
@@ -99,7 +91,7 @@ export default function PromotionCodeModal() {
             disabled={busy || !code.trim()}
             className="btn-secondary w-full py-2.5 text-sm disabled:opacity-50"
           >
-            {busy ? (ko ? "확인 중…" : "Checking…") : ko ? "잔액 불러오기" : "Load balance"}
+            {busy ? t.promotion.checking : t.promotion.loadCredits}
           </button>
         </form>
       </div>

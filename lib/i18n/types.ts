@@ -287,6 +287,18 @@ export interface Translations {
     continueWithNaver: string;
     orEmail: string;
     socialHint: string;
+    googlePrimary: string;
+    mockLoginHint: string;
+  };
+  promotion: {
+    title: string;
+    description: string;
+    currentCredits: string;
+    loadCredits: string;
+    checking: string;
+    invalid: string;
+    expired: string;
+    activationFailed: string;
   };
   credits: {
     emptyTitle: string;
@@ -387,6 +399,22 @@ export interface Translations {
     commercialNotice: string;
     addonTitle: string;
     addonSubtitle: string;
+    annualBilling: string;
+    monthlyBilling: string;
+    annualSubscription: string;
+    monthlySubscription: string;
+    annualRecommended: string;
+    monthlyPopular: string;
+    generationBenefit: string;
+    photoBenefit: string;
+    fhdBenefit: string;
+    fourKBenefit: string;
+    fastBenefit: string;
+    commercialBenefit: string;
+    permanentBenefit: string;
+    watermarkBenefit: string;
+    annualPrepaid: string;
+    upgradeNotice: string;
     plans: {
       starter: { name: string; description: string; features: string[] };
       standard: { name: string; description: string; features: string[] };

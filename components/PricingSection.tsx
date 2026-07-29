@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Flame, Sparkles, Zap } from "lucide-react";
+import { Check, Zap } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { useCredits } from "@/components/CreditsProvider";
 import {
@@ -9,6 +9,7 @@ import {
   type BillingInterval,
   type PlanOffer,
 } from "@/lib/data";
+import type { Translations } from "@/lib/i18n/types";
 
 function planName(offer: PlanOffer) {
   if (offer.planId === "enterprise") return "Enterprise";
@@ -17,30 +18,33 @@ function planName(offer: PlanOffer) {
   return "Starter";
 }
 
-function features(offer: PlanOffer, ko: boolean) {
+function fill(template: string, values: Record<string, string | number>) {
+  return Object.entries(values).reduce(
+    (text, [key, value]) => text.replaceAll(`{${key}}`, String(value)),
+    template
+  );
+}
+
+function features(offer: PlanOffer, copy: Translations["pricing"], ko: boolean) {
+  const period = offer.interval === "annual" ? (ko ? "연" : "Yearly") : ko ? "월" : "Monthly";
   const list = [
-    ko
-      ? `${offer.credits.toLocaleString()} 크레딧${offer.highlighted ? " 🚀" : ""}`
-      : `${offer.credits.toLocaleString()} credits${offer.highlighted ? " 🚀" : ""}`,
-    ko
-      ? `사진 슬롯 ${offer.profileSlots}개`
-      : `${offer.profileSlots} photo slot${offer.profileSlots > 1 ? "s" : ""}`,
+    `${fill(copy.generationBenefit, {
+      period,
+      credits: offer.credits.toLocaleString(),
+    })}${offer.interval === "annual" && offer.highlighted ? " 🚀" : ""}`,
+    fill(copy.photoBenefit, { count: offer.profileSlots }),
     offer.resolution === "4K"
-      ? ko
-        ? "4K 초고화질"
-        : "4K ultra quality"
-      : "FHD (1080p)",
+      ? copy.fourKBenefit
+      : copy.fhdBenefit,
   ];
   if (offer.fastGeneration)
-    list.push(ko ? "대기 없는 빠른 생성" : "No-wait fast generation");
+    list.push(copy.fastBenefit);
   if (offer.commercialUse)
-    list.push(ko ? "상업적 이용 가능" : "Commercial use allowed");
+    list.push(copy.commercialBenefit);
   if (offer.permanentStorage)
-    list.push(ko ? "무제한 영구 보관" : "Unlimited permanent storage");
-  if (offer.dedicatedLane)
-    list.push(ko ? "전용 생성 라인" : "Dedicated generation lane");
+    list.push(copy.permanentBenefit);
   if (offer.interval === "annual" || offer.planId !== "starter")
-    list.push(ko ? "워터마크 완벽 제거" : "Full watermark removal");
+    list.push(copy.watermarkBenefit);
   return list;
 }
 
@@ -61,12 +65,10 @@ export default function PricingSection() {
             {t.pricing.eyebrow}
           </span>
           <h2 className="font-display mt-3 text-3xl font-bold sm:text-4xl">
-            {ko ? "화보 프로필 & 썸네일 제작 무적! 🚀" : "Unbeatable portraits & thumbnails! 🚀"}
+            {t.pricing.title}
           </h2>
           <p className="mx-auto mt-4 max-w-3xl text-white/50 [word-break:keep-all]">
-            {ko
-              ? "유튜버, 크리에이터, 프로필이 필요한 모든 이를 위한 AI 비주얼 스튜디오. 고화질 AI 화보와 시선 강탈 썸네일을 3초 만에 완성해 보세요."
-              : "The AI visual studio for YouTubers, creators, and anyone who needs a standout profile. Create high-resolution AI portraits and attention-grabbing thumbnails in seconds."}
+            {t.pricing.subtitle}
           </p>
 
           <div className="mx-auto mt-7 inline-flex rounded-full border border-white/10 bg-white/[0.04] p-1">
@@ -79,10 +81,7 @@ export default function PricingSection() {
                   : "text-white/45 hover:text-white/70"
               }`}
             >
-              <span className="inline-flex items-center gap-1.5">
-                <Flame className="h-3.5 w-3.5" />
-                {ko ? "연간 결제 (🔥 최대 30% 할인 적용 중)" : "Annual billing (up to 30% off)"}
-              </span>
+              {t.pricing.annualBilling}
             </button>
             <button
               type="button"
@@ -93,7 +92,7 @@ export default function PricingSection() {
                   : "text-white/45 hover:text-white/70"
               }`}
             >
-              {ko ? "월간 결제" : "Monthly billing"}
+              {t.pricing.monthlyBilling}
             </button>
           </div>
         </div>
@@ -101,27 +100,33 @@ export default function PricingSection() {
         <div className="grid gap-6 lg:grid-cols-3">
           {offers.map((offer) => {
             const highlighted = offer.highlighted;
+            const proCard = offer.interval === "monthly" && offer.planId === "pro";
             return (
               <div
                 key={`${offer.interval}-${offer.planId}`}
                 className={`relative rounded-2xl p-[1px] transition-all duration-500 ${
                   highlighted
                     ? "bg-gradient-to-b from-glow-purple/70 via-glow-emerald/35 to-glow-purple/20 shadow-glow"
-                    : "bg-white/[0.08]"
+                    : proCard
+                      ? "bg-gradient-to-b from-indigo-400/35 via-violet-500/25 to-purple-500/15"
+                      : "bg-white/[0.08]"
                 }`}
               >
                 <div
                   className={`flex h-full flex-col rounded-2xl p-5 sm:p-8 ${
                     highlighted
                       ? "bg-navy-light"
-                      : "glass-card !rounded-2xl !border-0 !shadow-none"
+                      : proCard
+                        ? "bg-gradient-to-br from-indigo-950/95 via-violet-950/80 to-purple-950/75"
+                        : "glass-card !rounded-2xl !border-0 !shadow-none"
                   }`}
                 >
                   {highlighted && (
                     <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                       <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-gradient-to-r from-glow-purple to-glow-emerald px-4 py-1 text-xs font-semibold text-white shadow-glow-sm">
-                        <Sparkles className="h-3 w-3" />
-                        {ko ? "초강력 추천" : "Highly recommended"}
+                        {offer.interval === "annual"
+                          ? t.pricing.annualRecommended
+                          : t.pricing.monthlyPopular}
                       </span>
                     </div>
                   )}
@@ -130,12 +135,8 @@ export default function PricingSection() {
                     <h3 className="text-xl font-semibold text-white">{planName(offer)}</h3>
                     <p className="mt-1 text-sm text-white/40">
                       {offer.interval === "annual"
-                        ? ko
-                          ? "연간 구독"
-                          : "Annual subscription"
-                        : ko
-                          ? "월간 구독"
-                          : "Monthly subscription"}
+                        ? t.pricing.annualSubscription
+                        : t.pricing.monthlySubscription}
                     </p>
                   </div>
 
@@ -146,15 +147,13 @@ export default function PricingSection() {
                     </div>
                     {offer.interval === "annual" && (
                       <p className="mt-2 text-xs text-white/40">
-                        {ko
-                          ? `연 $${offer.totalUsd} 일시불`
-                          : `$${offer.totalUsd} billed once per year`}
+                        {fill(t.pricing.annualPrepaid, { total: offer.totalUsd })}
                       </p>
                     )}
                   </div>
 
                   <ul className="mb-8 flex-1 space-y-3">
-                    {features(offer, ko).map((feature) => (
+                    {features(offer, t.pricing, ko).map((feature) => (
                       <li key={feature} className="flex items-start gap-3">
                         <div
                           className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
@@ -191,9 +190,7 @@ export default function PricingSection() {
         </div>
 
         <p className="mt-8 text-center text-xs text-white/35">
-          {ko
-            ? "플랜 업그레이드 시 남은 기간의 가치를 차감한 차액만 결제되며, 기존 잔여 크레딧은 100% 이월됩니다."
-            : "Upgrades charge only the prorated difference, and all remaining credits roll over."}
+          {t.pricing.upgradeNotice}
         </p>
 
         <div className="mt-14 rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-center sm:p-8">

@@ -2,7 +2,12 @@ import type { BillingInterval, pricingPlanIds } from "@/lib/data";
 
 export type PlanId = "free" | (typeof pricingPlanIds)[number];
 
-export type AuthProviderId = "kakao" | "google" | "naver" | "credentials";
+export type AuthProviderId =
+  | "kakao"
+  | "google"
+  | "naver"
+  | "credentials"
+  | "google-mock";
 
 export type UserRecord = {
   id: string;
@@ -18,6 +23,15 @@ export type UserRecord = {
   currentPeriodStart?: number;
   currentPeriodEnd?: number;
   lastPlanAmountKrw?: number;
+  subscriptionStatus?: "active" | "past_due" | "cancelled";
+  paymentRetryCount?: number;
+  nextPaymentRetryAt?: number;
+  paymentGraceEndsAt?: number;
+  lastPaymentFailureAt?: number;
+  billingKey?: string;
+  providerCustomerKey?: string;
+  cancelledAt?: number;
+  lastPaidPlan?: (typeof pricingPlanIds)[number];
   createdAt: number;
   updatedAt: number;
   /** True after first signup bonus was granted */
@@ -59,6 +73,18 @@ export type PaymentOrder = {
   externalPaymentKey?: string;
   createdAt: number;
   paidAt?: number;
+  failedAt?: number;
+  failureReason?: string;
+};
+
+export type PaymentNotice = {
+  id: string;
+  userId: string;
+  orderId: string;
+  type: "card_check" | "retry_failed" | "payment_recovered" | "subscription_cancelled";
+  attempt: 1 | 2 | 3;
+  createdAt: number;
+  deliveredAt?: number;
 };
 
 export type PromotionCreditOption = 10 | 20 | 50 | 100;
@@ -102,6 +128,7 @@ export type DbSnapshot = {
   identities: Record<string, string>;
   ledger: CreditLedgerEntry[];
   orders: Record<string, PaymentOrder>;
+  paymentNotices: PaymentNotice[];
   promotionCodes: Record<string, PromotionCode>;
   promotionBatches: Record<string, PromotionBatch>;
   promotionHistory: PromotionHistoryEntry[];

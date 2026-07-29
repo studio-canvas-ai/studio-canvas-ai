@@ -90,6 +90,23 @@ const zh: Translations = {
   profiles: en.profiles,
   returnUser: en.returnUser,
   admin: en.admin,
+  auth: {
+    ...en.auth,
+    googlePrimary: "🌐 使用 Google 账号 1 秒开始",
+    mockLoginHint: "本地模式不打开 Google，直接使用 test@gmail.com 登录。",
+    orEmail: "或使用邮箱开始",
+  },
+  promotion: {
+    ...en.promotion,
+    title: "输入代码",
+    description: "输入促销代码即可载入剩余积分。",
+    currentCredits: "当前代码积分",
+    loadCredits: "载入积分",
+    checking: "正在检查…",
+    invalid: "无效的促销代码。",
+    expired: "该代码已过期或积分已用完。",
+    activationFailed: "代码激活失败。",
+  },
   styles: {
     ...en.styles,
     packs: {
@@ -108,6 +125,24 @@ const zh: Translations = {
   },
   pricing: {
     ...en.pricing,
+    title: "订阅方案",
+    subtitle: "选择适合需求的方案，体验高级 AI 工作室",
+    annualBilling: "🔥 年付（最高立省 30%）",
+    monthlyBilling: "💳 月付",
+    annualSubscription: "年度订阅",
+    monthlySubscription: "月度订阅",
+    annualRecommended: "🔥 强力推荐",
+    monthlyPopular: "✨ 热门",
+    generationBenefit: "{period} {credits} 次 AI 写真与缩略图生成（{credits} 积分）",
+    photoBenefit: "可注册 {count} 张人脸或物体照片",
+    fhdBenefit: "FHD（1080p）画质",
+    fourKBenefit: "4K 超高清",
+    fastBenefit: "快速生成",
+    commercialBenefit: "允许商业使用",
+    permanentBenefit: "无限永久保存",
+    watermarkBenefit: "完整去除水印",
+    annualPrepaid: "每年一次性支付 ${total}",
+    upgradeNotice: "升级时仅支付按比例计算的差额，全部剩余积分结转，并从付款日开始新的周期。",
     plans: {
       starter: {
         name: "Starter",
