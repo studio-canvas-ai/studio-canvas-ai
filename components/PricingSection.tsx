@@ -9,8 +9,7 @@ import {
   type BillingInterval,
   type PlanOffer,
 } from "@/lib/data";
-import { formatUsdWithKrw } from "@/lib/currency";
-import { shouldShowKrw } from "@/lib/paymentRouting";
+import { formatUsd } from "@/lib/currency";
 import type { Translations } from "@/lib/i18n/types";
 
 function planName(offer: PlanOffer) {
@@ -45,8 +44,7 @@ function features(offer: PlanOffer, copy: Translations["pricing"], ko: boolean) 
     list.push(copy.commercialBenefit);
   if (offer.permanentStorage)
     list.push(copy.permanentBenefit);
-  if (offer.interval === "annual" || offer.planId !== "starter")
-    list.push(copy.watermarkBenefit);
+  list.push(copy.watermarkBenefit);
   return list;
 }
 
@@ -55,7 +53,6 @@ export default function PricingSection() {
   const { requestSubscribe, setShowTopUpModal } = useCredits();
   const [interval, setInterval] = useState<BillingInterval>("annual");
   const ko = locale === "kr";
-  const showKrw = shouldShowKrw(locale);
   const offers = PLAN_OFFERS[interval];
 
   return (
@@ -74,14 +71,14 @@ export default function PricingSection() {
             {t.pricing.subtitle}
           </p>
 
-          <div className="mx-auto mt-7 inline-flex rounded-full border border-white/20 bg-white/[0.04] p-1">
+          <div className="mx-auto mt-7 inline-flex gap-1.5 rounded-full border border-slate-700 bg-slate-900/90 p-1.5">
             <button
               type="button"
               onClick={() => setInterval("annual")}
-              className={`rounded-full px-4 py-2 text-xs font-medium transition ${
+              className={`rounded-full px-4 py-2 text-xs transition ${
                 interval === "annual"
-                  ? "bg-gradient-to-r from-glow-purple to-glow-emerald text-white shadow-glow-sm"
-                  : "text-white/80 font-medium hover:text-white"
+                  ? "bg-gradient-to-r from-violet-600 to-indigo-600 font-bold text-white shadow-lg"
+                  : "bg-slate-800 font-semibold text-slate-200 hover:bg-slate-700"
               }`}
             >
               {t.pricing.annualBilling}
@@ -89,10 +86,10 @@ export default function PricingSection() {
             <button
               type="button"
               onClick={() => setInterval("monthly")}
-              className={`rounded-full px-4 py-2 text-xs font-medium transition ${
+              className={`rounded-full px-4 py-2 text-xs transition ${
                 interval === "monthly"
-                  ? "bg-white/10 text-white"
-                  : "text-white/80 font-medium hover:text-white"
+                  ? "bg-gradient-to-r from-violet-600 to-indigo-600 font-bold text-white shadow-lg"
+                  : "bg-slate-800 font-semibold text-slate-200 hover:bg-slate-700"
               }`}
             >
               {t.pricing.monthlyBilling}
@@ -104,7 +101,7 @@ export default function PricingSection() {
           {offers.map((offer) => {
             const highlighted = offer.highlighted;
             const proCard = offer.interval === "monthly" && offer.planId === "pro";
-            const price = formatUsdWithKrw(offer.monthlyUsd, showKrw);
+            const price = formatUsd(offer.monthlyUsd);
             return (
               <div
                 key={`${offer.interval}-${offer.planId}`}
@@ -146,20 +143,14 @@ export default function PricingSection() {
 
                   <div className="mb-7">
                     <div className="flex items-baseline gap-1">
-                      <span className="text-4xl font-bold">
-                        {showKrw && price.krwLabel
-                          ? fill(t.payment.amountUsdWithKrw, {
-                              usd: price.usdLabel.replace("$", ""),
-                              krw: price.krwLabel.replace("₩", "").replace(/,/g, ""),
-                            })
-                          : price.usdLabel}
+                      <span className="text-4xl font-bold">{price}</span>
+                      <span className="whitespace-nowrap text-sm text-white/45">
+                        {t.pricing.perMonth}
                       </span>
-                      <span className="text-sm text-white/45">{t.pricing.perMonth}</span>
                     </div>
                     {offer.interval === "annual" && (
                       <p className="mt-2 text-xs text-white/40">
                         {fill(t.pricing.annualPrepaid, { total: offer.totalUsd })}
-                        {showKrw && ` · ₩${offer.totalKrw.toLocaleString("en-US")}`}
                       </p>
                     )}
                     <p className="mt-1 text-[11px] text-white/35">{t.pricing.vatNotice}</p>
