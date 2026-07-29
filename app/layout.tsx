@@ -8,6 +8,7 @@ import type { Metadata } from "next";
 import { Inter, Playfair_Display } from "next/font/google";
 import { I18nProvider } from "@/components/I18nProvider";
 import { CreditsProvider } from "@/components/CreditsProvider";
+import AuthSessionProvider from "@/components/AuthSessionProvider";
 import AuthModal from "@/components/AuthModal";
 import CreditDepletionModal from "@/components/CreditDepletionModal";
 import PaymentModal from "@/components/PaymentModal";
@@ -33,14 +34,16 @@ export const metadata: Metadata = {
 
 function AppShell({ children }: { children: React.ReactNode }) {
   return (
-    <CreditsProvider>
-      {children}
-      <AuthModal />
-      <CreditDepletionModal />
-      <PaymentModal />
-      <CreditTopUpModal />
-      <ReturnUserModal />
-    </CreditsProvider>
+    <AuthSessionProvider>
+      <CreditsProvider>
+        {children}
+        <AuthModal />
+        <CreditDepletionModal />
+        <PaymentModal />
+        <CreditTopUpModal />
+        <ReturnUserModal />
+      </CreditsProvider>
+    </AuthSessionProvider>
   );
 }
 

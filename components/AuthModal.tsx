@@ -1,9 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Sparkles, X } from "lucide-react";
+import { signIn } from "next-auth/react";
 import { useI18n } from "@/components/I18nProvider";
 import { useCredits } from "@/components/CreditsProvider";
+
+type ProviderId = "kakao" | "google" | "naver";
 
 export default function AuthModal() {
   const { t } = useI18n();
@@ -13,21 +16,70 @@ export default function AuthModal() {
     grantFreeCredits,
     pendingPlanId,
     setShowPaymentModal,
+    refreshAccount,
   } = useCredits();
   const [mode, setMode] = useState<"signup" | "login">("signup");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [providers, setProviders] = useState<ProviderId[]>([]);
+
+  useEffect(() => {
+    if (!showAuthModal) return;
+    void fetch("/api/account/me")
+      .then((r) => r.json())
+      .then((d: { providers?: ProviderId[] }) => setProviders(d.providers ?? []))
+      .catch(() => setProviders([]));
+  }, [showAuthModal]);
 
   if (!showAuthModal) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    grantFreeCredits();
+  const afterAuth = async () => {
+    await refreshAccount?.();
+    setShowAuthModal(false);
     if (pendingPlanId) {
       setShowPaymentModal(true);
       return;
     }
     window.location.href = "/generate";
+  };
+
+  const handleSocial = async (provider: ProviderId) => {
+    setBusy(true);
+    setError(null);
+    await signIn(provider, { callbackUrl: pendingPlanId ? "/pricing" : "/generate" });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
+      if (res?.error) {
+        // Fallback demo path when Auth secret/session fails
+        grantFreeCredits();
+        await afterAuth();
+        return;
+      }
+      await afterAuth();
+    } catch {
+      grantFreeCredits();
+      await afterAuth();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const socialLabel: Record<ProviderId, string> = {
+    kakao: t.auth.continueWithKakao,
+    google: t.auth.continueWithGoogle,
+    naver: t.auth.continueWithNaver,
   };
 
   return (
@@ -57,6 +109,23 @@ export default function AuthModal() {
           </div>
         </div>
 
+        {providers.length > 0 && (
+          <div className="mb-4 space-y-2">
+            {providers.map((p) => (
+              <button
+                key={p}
+                type="button"
+                disabled={busy}
+                onClick={() => void handleSocial(p)}
+                className="btn-secondary w-full py-2.5 text-sm disabled:opacity-50"
+              >
+                {socialLabel[p]}
+              </button>
+            ))}
+            <p className="pt-1 text-center text-[11px] text-white/35">{t.auth.orEmail}</p>
+          </div>
+        )}
+
         <div className="mb-5 flex gap-2 rounded-xl bg-white/5 p-1">
           <button
             type="button"
@@ -78,7 +147,7 @@ export default function AuthModal() {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
           <div>
             <label className="mb-1.5 block text-xs text-white/50">{t.auth.email}</label>
             <input
@@ -103,7 +172,9 @@ export default function AuthModal() {
           <p className="rounded-xl border border-glow-emerald/20 bg-glow-emerald/10 px-3 py-2 text-xs text-emerald-200">
             {t.auth.freeCredits}
           </p>
-          <button type="submit" className="btn-primary w-full py-3 text-sm">
+          <p className="text-[11px] text-white/35">{t.auth.socialHint}</p>
+          {error && <p className="text-xs text-red-300">{error}</p>}
+          <button type="submit" disabled={busy} className="btn-primary w-full py-3 text-sm disabled:opacity-50">
             {mode === "signup" ? t.auth.signup : t.auth.login}
           </button>
           {!pendingPlanId && (

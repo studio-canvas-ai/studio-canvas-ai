@@ -282,6 +282,11 @@ export interface Translations {
     login: string;
     freeCredits: string;
     skipToGenerate: string;
+    continueWithKakao: string;
+    continueWithGoogle: string;
+    continueWithNaver: string;
+    orEmail: string;
+    socialHint: string;
   };
   credits: {
     emptyTitle: string;
@@ -306,6 +311,9 @@ export interface Translations {
     payNow: string;
     processing: string;
     simulated: string;
+    payWithToss: string;
+    amountKrw: string;
+    secureCheckout: string;
   };
   styles: {
     eyebrow: string;
@@ -393,6 +401,13 @@ export interface Translations {
     product: string;
     company: string;
     legal: string;
+    businessHeading: string;
+    ceo: string;
+    businessNumber: string;
+    mailOrder: string;
+    address: string;
+    contact: string;
+    hosting: string;
     links: {
       features: string;
       stylePacks: string;

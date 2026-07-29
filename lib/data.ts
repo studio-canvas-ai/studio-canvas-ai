@@ -128,6 +128,20 @@ export const pricingPrices: Record<(typeof pricingPlanIds)[number], number> = {
 };
 
 export const FREE_CREDITS = 2;
+
+/** Monthly plan credit allotment (server + client) */
+export const PLAN_CREDITS: Record<(typeof pricingPlanIds)[number], number> = {
+  starter: 20,
+  standard: 50,
+  pro: 120,
+};
+
+/** KRW amounts for Toss / PortOne checkout */
+export const pricingPricesKrw: Record<(typeof pricingPlanIds)[number], number> = {
+  starter: 4900,
+  standard: 9900,
+  pro: 19900,
+};
 export const PROMPT_MAX_LENGTH = 100;
 export const MIN_SELFIE_UPLOADS = 1;
 export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
@@ -161,6 +175,12 @@ export const CREDIT_PACKS = [
   { id: "pack-m", price: 9.9, freeCredits: 35, subscriberCredits: 50 },
   { id: "pack-l", price: 19.9, freeCredits: 80, subscriberCredits: 120 },
 ] as const;
+
+export const creditPackPricesKrw: Record<(typeof CREDIT_PACKS)[number]["id"], number> = {
+  "pack-s": 4900,
+  "pack-m": 9900,
+  "pack-l": 19900,
+};
 
 export function creditPackAmount(
   pack: (typeof CREDIT_PACKS)[number],

@@ -49,8 +49,29 @@ export default function CreditTopUpModal() {
                 disabled={busy}
                 onClick={() => {
                   setBusy(true);
-                  purchaseCreditPack(pack.id);
-                  setBusy(false);
+                  void (async () => {
+                    try {
+                      const createRes = await fetch("/api/payments/create", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ kind: "credit_pack", packId: pack.id }),
+                      });
+                      if (createRes.ok) {
+                        const created = (await createRes.json()) as { order?: { id: string } };
+                        if (created.order?.id) {
+                          await fetch("/api/payments/confirm", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ orderId: created.order.id, demo: true }),
+                          });
+                        }
+                      }
+                    } catch {
+                      /* local fallback */
+                    }
+                    purchaseCreditPack(pack.id);
+                    setBusy(false);
+                  })();
                 }}
                 className="btn-secondary flex w-full items-center justify-between py-3 text-sm disabled:opacity-50"
               >

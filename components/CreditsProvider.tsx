@@ -13,6 +13,7 @@ import {
 import {
   CREDIT_PACKS,
   FREE_CREDITS,
+  PLAN_CREDITS,
   RETOUCH_FREE_PER_CYCLE,
   pricingPlanIds,
 } from "@/lib/data";
@@ -31,11 +32,7 @@ import { retentionContextFromAccount } from "@/lib/retentionPolicy";
 
 export type { PlanId } from "@/lib/faceProfiles";
 
-export const PLAN_CREDITS: Record<(typeof pricingPlanIds)[number], number> = {
-  starter: 20,
-  standard: 50,
-  pro: 120,
-};
+export { PLAN_CREDITS };
 
 type CreditsContextValue = {
   credits: number;
@@ -58,6 +55,7 @@ type CreditsContextValue = {
   topUpCredits: (amount?: number) => void;
   purchaseCreditPack: (packId: (typeof CREDIT_PACKS)[number]["id"]) => void;
   grantFreeCredits: () => void;
+  refreshAccount: () => Promise<void>;
   requestSubscribe: (plan: (typeof pricingPlanIds)[number]) => void;
   completePayment: () => void;
   cancelSubscription: () => void;
@@ -108,6 +106,59 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
       setIsAuthenticated(true);
     } else if (meta.planId === "free") {
       setPlanId("free");
+    }
+    void (async () => {
+      try {
+        const res = await fetch("/api/account/me");
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          authenticated?: boolean;
+          user?: {
+            credits: number;
+            maxCredits: number;
+            planId: PlanId;
+          } | null;
+        };
+        if (data.authenticated && data.user) {
+          setIsAuthenticated(true);
+          setCredits(data.user.credits);
+          setMaxCredits(data.user.maxCredits);
+          setPlanId(data.user.planId);
+          patchAccountMeta({
+            lastLoginAt: Date.now(),
+            planId: data.user.planId,
+          });
+        }
+      } catch {
+        /* keep local mock */
+      }
+    })();
+  }, []);
+
+  const refreshAccount = useCallback(async () => {
+    try {
+      const res = await fetch("/api/account/me");
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        authenticated?: boolean;
+        user?: {
+          credits: number;
+          maxCredits: number;
+          planId: PlanId;
+        } | null;
+      };
+      if (data.authenticated && data.user) {
+        setIsAuthenticated(true);
+        setCredits(data.user.credits);
+        setMaxCredits(data.user.maxCredits);
+        setPlanId(data.user.planId);
+        patchAccountMeta({
+          lastLoginAt: Date.now(),
+          planId: data.user.planId,
+        });
+      }
+    } catch {
+      /* ignore */
     }
   }, []);
 
@@ -292,6 +343,7 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
       topUpCredits,
       purchaseCreditPack,
       grantFreeCredits,
+      refreshAccount,
       requestSubscribe,
       completePayment,
       cancelSubscription,
@@ -316,6 +368,7 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
       topUpCredits,
       purchaseCreditPack,
       grantFreeCredits,
+      refreshAccount,
       requestSubscribe,
       completePayment,
       cancelSubscription,

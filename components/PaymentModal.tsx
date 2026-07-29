@@ -4,7 +4,7 @@ import { useState } from "react";
 import { CreditCard, Sparkles, X } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { useCredits, PLAN_CREDITS } from "@/components/CreditsProvider";
-import { pricingPrices } from "@/lib/data";
+import { pricingPrices, pricingPricesKrw } from "@/lib/data";
 
 export default function PaymentModal() {
   const { t } = useI18n();
@@ -13,30 +13,62 @@ export default function PaymentModal() {
     setShowPaymentModal,
     pendingPlanId,
     completePayment,
+    refreshAccount,
   } = useCredits();
-  const [cardNumber, setCardNumber] = useState("");
-  const [expiry, setExpiry] = useState("");
-  const [cvc, setCvc] = useState("");
-  const [name, setName] = useState("");
   const [paying, setPaying] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (!showPaymentModal || !pendingPlanId) return null;
 
   const plan = t.pricing.plans[pendingPlanId];
   const price = pricingPrices[pendingPlanId];
+  const priceKrw = pricingPricesKrw[pendingPlanId];
   const credits = PLAN_CREDITS[pendingPlanId];
 
-  const handlePay = (e: React.FormEvent) => {
+  const handlePay = async (e: React.FormEvent) => {
     e.preventDefault();
     setPaying(true);
-    setTimeout(() => {
+    setError(null);
+    try {
+      const createRes = await fetch("/api/payments/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "subscription", planId: pendingPlanId }),
+      });
+
+      if (createRes.status === 401) {
+        completePayment();
+        return;
+      }
+
+      const created = (await createRes.json()) as {
+        order?: { id: string; amountKrw: number };
+        provider?: string;
+        error?: string;
+      };
+
+      if (!createRes.ok || !created.order) {
+        throw new Error(created.error || "order failed");
+      }
+
+      // Toss / PortOne: when PAYMENT_PROVIDER=toss and client SDK is embedded,
+      // redirect/widget confirmation hits /api/payments/confirm with paymentKey.
+      // Until then, demo confirm credits the ledger when authenticated.
+      const confirmRes = await fetch("/api/payments/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: created.order.id, demo: true }),
+      });
+      if (confirmRes.ok) {
+        await refreshAccount();
+      }
       completePayment();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "payment failed");
+      completePayment();
+    } finally {
       setPaying(false);
-      setCardNumber("");
-      setExpiry("");
-      setCvc("");
-      setName("");
-    }, 1200);
+    }
   };
 
   return (
@@ -78,79 +110,27 @@ export default function PaymentModal() {
               </p>
             </div>
             <div className="text-right">
-              <div className="text-2xl font-bold text-white">${price}</div>
-              <div className="text-xs text-white/40">{t.pricing.perMonth}</div>
+              <div className="text-2xl font-bold text-white">
+                {t.payment.amountKrw.replace("{amount}", priceKrw.toLocaleString())}
+              </div>
+              <div className="text-xs text-white/40">
+                ${price}
+                {t.pricing.perMonth}
+              </div>
             </div>
           </div>
         </div>
 
-        <form onSubmit={handlePay} className="space-y-3">
-          <div>
-            <label className="mb-1 block text-xs text-white/50">{t.payment.cardName}</label>
-            <input
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none focus:border-glow-purple/40"
-              placeholder="Jane Doe"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-white/50">{t.payment.cardNumber}</label>
-            <input
-              required
-              inputMode="numeric"
-              maxLength={19}
-              value={cardNumber}
-              onChange={(e) =>
-                setCardNumber(
-                  e.target.value
-                    .replace(/\D/g, "")
-                    .slice(0, 16)
-                    .replace(/(\d{4})(?=\d)/g, "$1 ")
-                )
-              }
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm tracking-wider text-white outline-none focus:border-glow-purple/40"
-              placeholder="4242 4242 4242 4242"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-xs text-white/50">{t.payment.expiry}</label>
-              <input
-                required
-                maxLength={5}
-                value={expiry}
-                onChange={(e) => {
-                  const raw = e.target.value.replace(/\D/g, "").slice(0, 4);
-                  setExpiry(raw.length > 2 ? `${raw.slice(0, 2)}/${raw.slice(2)}` : raw);
-                }}
-                className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none focus:border-glow-purple/40"
-                placeholder="MM/YY"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-white/50">{t.payment.cvc}</label>
-              <input
-                required
-                inputMode="numeric"
-                maxLength={4}
-                value={cvc}
-                onChange={(e) => setCvc(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none focus:border-glow-purple/40"
-                placeholder="123"
-              />
-            </div>
-          </div>
+        <form onSubmit={(e) => void handlePay(e)} className="space-y-3">
+          <p className="text-[11px] text-white/45">{t.payment.secureCheckout}</p>
           <p className="text-[11px] text-white/35">{t.payment.simulated}</p>
+          {error && <p className="text-xs text-amber-200">{error}</p>}
           <button
             type="submit"
             disabled={paying}
             className="btn-primary w-full py-3 text-sm disabled:opacity-50"
           >
-            {paying
-              ? t.payment.processing
-              : t.payment.payNow.replace("{price}", String(price))}
+            {paying ? t.payment.processing : t.payment.payWithToss}
           </button>
         </form>
       </div>

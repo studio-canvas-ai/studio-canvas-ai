@@ -1,10 +1,20 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Sparkles, Github, Twitter, Instagram, Mail } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
+import type { BusinessInfo } from "@/lib/business";
 
 export default function Footer() {
   const { t } = useI18n();
+  const [biz, setBiz] = useState<BusinessInfo | null>(null);
+
+  useEffect(() => {
+    void fetch("/api/business")
+      .then((r) => r.json())
+      .then((d: BusinessInfo) => setBiz(d))
+      .catch(() => setBiz(null));
+  }, []);
 
   const footerSections = [
     {
@@ -87,6 +97,32 @@ export default function Footer() {
             </div>
           ))}
         </div>
+
+        {biz && (
+          <div className="mt-10 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 text-[11px] leading-relaxed text-white/40 sm:p-5">
+            <p className="mb-2 text-xs font-medium text-white/55">{t.footer.businessHeading}</p>
+            <div className="grid gap-1 sm:grid-cols-2">
+              <p>
+                {biz.companyName} · {t.footer.ceo} {biz.ceoName}
+              </p>
+              <p>
+                {t.footer.businessNumber} {biz.businessNumber}
+              </p>
+              <p>
+                {t.footer.mailOrder} {biz.mailOrderNumber}
+              </p>
+              <p>
+                {t.footer.address} {biz.address}
+              </p>
+              <p>
+                {t.footer.contact} {biz.email} / {biz.phone}
+              </p>
+              <p>
+                {t.footer.hosting} {biz.hostingProvider}
+              </p>
+            </div>
+          </div>
+        )}
 
         <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-white/[0.06] pt-8 sm:flex-row">
           <p className="text-xs text-white/30">{t.footer.copyright}</p>

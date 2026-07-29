@@ -32,6 +32,9 @@ yarn-error.log*
 .env*.local
 .env
 
+# local JSON user/ledger store
+.data/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

@@ -79,6 +79,7 @@ function PersonaCreatorInner() {
     registerPortrait,
     requestRetouch,
     planId,
+    refreshAccount,
   } = useCredits();
   const stepContentRef = useRef<HTMLDivElement>(null);
   const [currentStep, setCurrentStep] = useState(1);
@@ -301,7 +302,6 @@ function PersonaCreatorInner() {
       setShowCreditModal(true);
       return;
     }
-    if (!consumeCredit(1)) return;
     setIsGenerating(true);
     setResultReady(false);
     setActionMessage(null);
@@ -314,52 +314,76 @@ function PersonaCreatorInner() {
       aspectRatio,
       styleIds: selectedStyles,
     });
-    void fetch("/api/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(facePayload),
-    }).catch(() => {
-      /* mock UI continues even if API stub is offline */
-    });
 
-    setTimeout(() => {
-      void (async () => {
-        registerPortrait(`${base}-0`);
-        registerPortrait(`${base}-1`);
-        setPortraitId(base);
-        setDrafts([HERO_AFTER_IMAGE, HERO_BEFORE_IMAGE]);
-        setFocusedDraft(0);
-        const styleId = selectedStyles[0];
-        const now = Date.now();
-        const meta = getAccountMeta();
-        const retentionCtx = retentionContextFromAccount(planId, meta);
-
-        const draftsToSave: { id: string; url: string }[] = [
-          { id: `${base}-0`, url: HERO_AFTER_IMAGE },
-          { id: `${base}-1`, url: HERO_BEFORE_IMAGE },
-        ];
-
-        for (const draft of draftsToSave) {
-          const uploaded = await uploadGalleryAsset(draft.url, draft.id, planId);
-          pushGalleryHistory(
-            {
-              id: draft.id,
-              imageUrl: uploaded?.thumbnailUrl ?? draft.url,
-              thumbnailUrl: uploaded?.thumbnailUrl,
-              originalKey: uploaded?.originalKey,
-              storageId: uploaded?.storageId ?? draft.id,
-              createdAt: draft.id.endsWith("-0") ? now : now + 1,
-              styleId,
-            },
-            retentionCtx
-          );
+    void (async () => {
+      let urls: string[] = [];
+      let serverDebited = false;
+      try {
+        const res = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(facePayload),
+        });
+        const data = (await res.json()) as {
+          imageUrls?: string[];
+          error?: string;
+          ledgerId?: string | null;
+        };
+        if (res.status === 402) {
+          setShowCreditModal(true);
+          setIsGenerating(false);
+          return;
         }
+        urls = data.imageUrls ?? [];
+        serverDebited = Boolean(data.ledgerId);
+        if (serverDebited) await refreshAccount();
+      } catch {
+        /* mock fallback */
+      }
 
+      if (!serverDebited && !consumeCredit(1)) {
+        setShowCreditModal(true);
         setIsGenerating(false);
-        setResultReady(true);
-        setGallerySavedMsg(true);
-      })();
-    }, 1800);
+        return;
+      }
+
+      registerPortrait(`${base}-0`);
+      registerPortrait(`${base}-1`);
+      setPortraitId(base);
+      const draftA = urls[0] || HERO_AFTER_IMAGE;
+      const draftB = urls[1] || urls[0] || HERO_BEFORE_IMAGE;
+      setDrafts([draftA, draftB]);
+      setFocusedDraft(0);
+      const styleId = selectedStyles[0];
+      const now = Date.now();
+      const meta = getAccountMeta();
+      const retentionCtx = retentionContextFromAccount(planId, meta);
+
+      const draftsToSave: { id: string; url: string }[] = [
+        { id: `${base}-0`, url: draftA },
+        { id: `${base}-1`, url: draftB },
+      ];
+
+      for (const draft of draftsToSave) {
+        const uploaded = await uploadGalleryAsset(draft.url, draft.id, planId);
+        pushGalleryHistory(
+          {
+            id: draft.id,
+            imageUrl: uploaded?.thumbnailUrl ?? draft.url,
+            thumbnailUrl: uploaded?.thumbnailUrl,
+            originalKey: uploaded?.originalKey,
+            storageId: uploaded?.storageId ?? draft.id,
+            createdAt: draft.id.endsWith("-0") ? now : now + 1,
+            styleId,
+          },
+          retentionCtx
+        );
+      }
+
+      setIsGenerating(false);
+      setResultReady(true);
+      setGallerySavedMsg(true);
+    })();
   };
 
   const handleRegenerate = () => {
@@ -371,14 +395,6 @@ function PersonaCreatorInner() {
     setRegenerateBusy(true);
     setActionMessage(null);
     const id = `${portraitId}-${focusedDraft}`;
-    const result = requestRetouch(id, "regenerate");
-    if (!result.ok) {
-      setRegenerateBusy(false);
-      if (result.reason === "throttle") setActionMessage(t.creator.retouchThrottle);
-      else if (result.reason === "daily_limit") setActionMessage(t.creator.retouchDailyLimit);
-      else if (result.reason === "insufficient_credits") setShowCreditModal(true);
-      return;
-    }
 
     const facePayload = buildFaceConsistencyPayload({
       mode: "regenerate",
@@ -388,17 +404,55 @@ function PersonaCreatorInner() {
       aspectRatio,
       styleIds: selectedStyles,
     });
-    void fetch("/api/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(facePayload),
-    }).catch(() => {
-      /* mock UI continues */
-    });
 
-    setTimeout(() => {
+    void (async () => {
+      let nextUrl: string | null = null;
+      let serverDebited = false;
+      try {
+        const res = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(facePayload),
+        });
+        const data = (await res.json()) as {
+          imageUrls?: string[];
+          error?: string;
+          ledgerId?: string | null;
+        };
+        if (res.status === 402) {
+          setShowCreditModal(true);
+          setRegenerateBusy(false);
+          return;
+        }
+        if (res.status === 429) {
+          setActionMessage(t.creator.retouchThrottle);
+          setRegenerateBusy(false);
+          return;
+        }
+        nextUrl = data.imageUrls?.[0] ?? null;
+        serverDebited = Boolean(data.ledgerId);
+        if (serverDebited) await refreshAccount();
+      } catch {
+        /* mock */
+      }
+
+      if (!serverDebited) {
+        const result = requestRetouch(id, "regenerate");
+        if (!result.ok) {
+          setRegenerateBusy(false);
+          if (result.reason === "throttle") setActionMessage(t.creator.retouchThrottle);
+          else if (result.reason === "daily_limit") setActionMessage(t.creator.retouchDailyLimit);
+          else if (result.reason === "insufficient_credits") setShowCreditModal(true);
+          return;
+        }
+      }
+
       setDrafts((prev) => {
         const next = [...prev];
+        if (nextUrl) {
+          next[focusedDraft] = nextUrl;
+          return next;
+        }
         const alt = focusedDraft === 0 ? HERO_BEFORE_IMAGE : HERO_AFTER_IMAGE;
         const primary = focusedDraft === 0 ? HERO_AFTER_IMAGE : HERO_BEFORE_IMAGE;
         const current = (next[focusedDraft] ?? primary).split("?")[0];
@@ -407,7 +461,7 @@ function PersonaCreatorInner() {
         return next;
       });
       setRegenerateBusy(false);
-    }, 900);
+    })();
   };
 
   const handleDownload = async () => {

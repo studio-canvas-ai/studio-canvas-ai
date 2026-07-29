@@ -1,16 +1,41 @@
 import { NextResponse } from "next/server";
 import { loadStorageManifest } from "@/lib/storageManifest";
-import { createR2Client, getR2Config, getR2Object } from "@/lib/r2";
+import { getR2Config } from "@/lib/r2";
+import { resolveDownloadUrl } from "@/lib/downloadUrl";
+import { checkDownloadRateLimit } from "@/lib/rateLimit";
+import { auth } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
 type Params = { params: Promise<{ id: string }> };
 
-/** On-demand HD original fetch (#75) — only when user clicks High-Res Download. */
-export async function GET(_req: Request, { params }: Params) {
+/**
+ * HD original download (#75 + abuse protection).
+ * - Rate limit by IP / account
+ * - Redirect to CDN public URL or short-lived signed R2 URL (direct download, cacheable at edge)
+ * - ?proxy=1 streams through this API (legacy)
+ */
+export async function GET(req: Request, { params }: Params) {
   const { id } = await params;
   if (!id) {
     return NextResponse.json({ error: "id required" }, { status: 400 });
+  }
+
+  const session = await auth();
+  const userId = (session?.user as { id?: string } | undefined)?.id ?? null;
+  const rl = checkDownloadRateLimit(req, userId);
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: "rate_limited", resetAt: rl.resetAt },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(Math.ceil((rl.resetAt - Date.now()) / 1000)),
+          "X-RateLimit-Limit": String(rl.limit),
+          "X-RateLimit-Remaining": "0",
+        },
+      }
+    );
   }
 
   const config = getR2Config();
@@ -31,6 +56,31 @@ export async function GET(_req: Request, { params }: Params) {
     return NextResponse.json({ error: "retention period expired" }, { status: 410 });
   }
 
+  const url = new URL(req.url);
+  const forceProxy = url.searchParams.get("proxy") === "1";
+
+  if (!forceProxy) {
+    try {
+      const resolved = await resolveDownloadUrl({
+        key: manifest.originalKey,
+        expiresInSec: Number(process.env.DOWNLOAD_URL_TTL_SEC || 300),
+      });
+      return NextResponse.redirect(resolved.url, {
+        headers: {
+          "Cache-Control":
+            resolved.mode === "cdn"
+              ? "public, max-age=60, s-maxage=300"
+              : "private, max-age=60",
+          "X-Download-Mode": resolved.mode,
+          "X-RateLimit-Remaining": String(rl.remaining),
+        },
+      });
+    } catch {
+      /* fall through to proxy */
+    }
+  }
+
+  const { createR2Client, getR2Object } = await import("@/lib/r2");
   const client = createR2Client(config);
   const buffer = await getR2Object(client, config.bucketName, manifest.originalKey);
   if (!buffer) {
@@ -45,6 +95,8 @@ export async function GET(_req: Request, { params }: Params) {
       "Content-Type": contentType,
       "Content-Disposition": `attachment; filename="studio-canvas-${id}.${ext}"`,
       "Cache-Control": "private, no-store",
+      "X-Download-Mode": "proxy",
+      "X-RateLimit-Remaining": String(rl.remaining),
     },
   });
 }
