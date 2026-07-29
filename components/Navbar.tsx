@@ -197,12 +197,14 @@ export default function Navbar() {
               ⚡ {credits} · {t.nav.topup}
             </button>
             <div className="mt-3 flex flex-col gap-2 border-t border-white/[0.06] pt-4">
-              <button type="button" onClick={openTrial} className="btn-secondary w-full text-sm">
-                {t.nav.login}
+              <button type="button" onClick={openAccount} className="btn-secondary w-full text-sm">
+                {isAuthenticated ? t.nav.myPage : t.nav.login}
               </button>
-              <button type="button" onClick={openTrial} className="btn-primary w-full text-sm">
-                {t.nav.trial}
-              </button>
+              {!isAuthenticated && (
+                <button type="button" onClick={openTrial} className="btn-primary w-full text-sm">
+                  {t.nav.trial}
+                </button>
+              )}
             </div>
           </div>
         </div>

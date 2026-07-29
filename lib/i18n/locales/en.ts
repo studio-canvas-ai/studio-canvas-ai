@@ -338,6 +338,8 @@ const en: Translations = {
     agreeTerms: "Terms agreement",
     checkoutBlocked: "Complete the required agreements to pay.",
     redirecting: "Redirecting to secure checkout...",
+    returnSuccess: "Payment received — your account will update shortly.",
+    returnFail: "Payment was not completed. You can try again below.",
   },
   mypage: {
     title: "My Account",

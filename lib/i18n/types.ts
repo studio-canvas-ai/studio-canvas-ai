@@ -339,6 +339,8 @@ export interface Translations {
     agreeTerms: string;
     checkoutBlocked: string;
     redirecting: string;
+    returnSuccess: string;
+    returnFail: string;
   };
   mypage: {
     title: string;

@@ -337,6 +337,8 @@ const kr: Translations = {
     agreeTerms: "약관 동의",
     checkoutBlocked: "필수 약관에 동의해 주세요.",
     redirecting: "안전한 결제 페이지로 이동 중...",
+    returnSuccess: "결제가 접수되었습니다. 계정이 곧 반영됩니다.",
+    returnFail: "결제가 완료되지 않았습니다. 아래에서 다시 시도해 주세요.",
   },
   mypage: {
     title: "마이페이지",
