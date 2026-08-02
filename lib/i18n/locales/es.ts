@@ -3,6 +3,76 @@ import en from "./en";
 
 const es: Translations = {
   ...en,
+  common: {
+    cancel: "Cancelar",
+    confirm: "Confirmar",
+    close: "Cerrar",
+  },
+  creator: {
+    ...en.creator,
+    generateFailed: "Error al generar el retrato con IA.",
+    generateFailedRefunded:
+      "Error al generar el retrato. Se reembolsaron los créditos usados.",
+    generateNetworkError: "No se pudo conectar con el servidor. Comprueba tu red.",
+    generateRetryHint: "Inténtalo de nuevo más tarde o con otra foto.",
+    generateRetry: "Reintentar",
+    deletePortraitConfirm:
+      "¿Eliminar este retrato generado? Esta acción no se puede deshacer.",
+    deletePortraitConfirmTitle: "Eliminar retrato",
+    deletePortraitDone: "El retrato generado se eliminó.",
+    deleteConfirmYes: "Eliminar",
+    deleteConfirmNo: "Cancelar",
+    summaryTitle: "Tu selección",
+    summaryStyleLabel: "Estilo conceptual",
+    summarySubjectLabel: "Sujeto · Edad",
+    summaryBackgroundLabel: "Fondo",
+    summaryPhotosLabel: "Fotos subidas",
+    summaryPhotosValue: "{count} fotos",
+    compareButton: "Comparar A/B",
+    compareTitle: "Comparación dividida A/B",
+    compareSubtitle:
+      "Desliza el separador para comparar la expresión, los detalles y la iluminación.",
+    compareSliderLabel: "Ajustar el separador entre el borrador A y el borrador B",
+    compareClose: "Cerrar comparación",
+  },
+  gallery: {
+    ...en.gallery,
+    worksDeleteConfirm: "¿Eliminar esta obra? Esta acción no se puede deshacer.",
+    worksDeleteConfirmTitle: "Eliminar obra",
+    worksDeleteDone: "La obra se eliminó.",
+    worksDeleteYes: "Eliminar",
+    worksDeleteNo: "Cancelar",
+  },
+  payment: {
+    ...en.payment,
+    creditsIncludedAnnual:
+      "{count} créditos para retratos incluidos durante los 12 meses de acceso",
+    autoRenewNotice: "El plan mensual se renueva cada mes hasta que lo canceles.",
+    annualOneTimeNotice:
+      "El pase anual se paga una sola vez por adelantado para 12 meses y no se renueva automáticamente.",
+    annualExpiryNotice:
+      "Al vencer, enviaremos un aviso de finalización y la información para volver a comprar al precio normal.",
+  },
+  mypage: {
+    ...en.mypage,
+    expiryDate: "Fecha de vencimiento del acceso",
+    annualNoRenewNotice:
+      "El pase anual vence en la fecha indicada y no se renueva automáticamente.",
+  },
+  thumbnail: {
+    ...en.thumbnail,
+    dragHint:
+      "Arrastra la capa en el lienzo para ajustar la posición (guía de marco y ajuste magnético).",
+    ctrTips: {
+      short: "Lo ideal es un texto de 8 a 28 caracteres.",
+      emoji: "Incluye al menos un emoji para atraer la atención.",
+      hook: "Refuerza el gancho con duda o urgencia.",
+      lines: "Tres líneas o menos se leen mejor.",
+    },
+    deletePortrait: "🗑️ Eliminar retrato generado",
+    deletePortraitConfirm:
+      "¿Eliminar este retrato generado? Esta acción no se puede deshacer.",
+  },
   auth: {
     ...en.auth,
     googlePrimary: "🌐 Empieza en 1 segundo con tu cuenta de Google",
@@ -24,9 +94,9 @@ const es: Translations = {
     ...en.pricing,
     title: "Planes de suscripción",
     subtitle: "Elige el plan que necesitas y disfruta de un estudio de IA premium",
-    annualBilling: "🔥 Pago anual (hasta un 30 % de descuento)",
+    annualBilling: "Pase anual prepago (pago único)",
     monthlyBilling: "💳 Pago mensual",
-    annualSubscription: "Suscripción anual",
+    annualSubscription: "Pase anual prepago",
     monthlySubscription: "Suscripción mensual",
     annualRecommended: "🔥 Muy recomendado",
     monthlyPopular: "✨ Popular",
@@ -38,8 +108,9 @@ const es: Translations = {
     commercialBenefit: "Uso comercial permitido",
     permanentBenefit: "Almacenamiento permanente ilimitado",
     watermarkBenefit: "Sin marca de agua",
-    annualPrepaid: "${total} en un único pago anual",
-    upgradeNotice: "Al actualizar solo pagas la diferencia prorrateada, conservas todos los créditos y el ciclo se reinicia desde el pago.",
+    annualPrepaid: "${total} por adelantado · sin renovación automática",
+    upgradeNotice:
+      "Al actualizar solo pagas la diferencia prorrateada, conservas todos los créditos y el ciclo se reinicia desde el pago.",
   },
 };
 export default es;

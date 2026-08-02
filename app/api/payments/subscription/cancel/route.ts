@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getUserById } from "@/lib/db/credits";
+import { isPrepaidPass } from "@/lib/data";
 import { scheduleSubscriptionCancel } from "@/lib/subscriptionLifecycle";
 import { cancelStripeSubscriptionAtPeriodEnd } from "@/lib/payments/stripe";
 
@@ -17,6 +18,15 @@ export async function POST(req: Request) {
   const user = await getUserById(userId);
   if (!user || user.planId === "free") {
     return NextResponse.json({ error: "no_active_subscription" }, { status: 400 });
+  }
+  if (user.billingInterval && isPrepaidPass(user.billingInterval)) {
+    return NextResponse.json(
+      {
+        error: "prepaid_pass_has_no_auto_renewal",
+        currentPeriodEnd: user.currentPeriodEnd,
+      },
+      { status: 400 }
+    );
   }
 
   if (user.stripeSubscriptionId) {

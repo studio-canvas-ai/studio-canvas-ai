@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth, listSocialProviders, authConfigured } from "@/lib/auth";
+import { isSupabaseConfigured, getSupabaseConfigError } from "@/lib/supabase/config";
 import { getUserById } from "@/lib/db/credits";
 import { getPaymentProvider } from "@/lib/payments";
 import { resolveInferenceProvider } from "@/lib/ai/inference";
@@ -36,6 +37,8 @@ export async function GET() {
         }
       : null,
     providers: listSocialProviders(),
+    supabaseConfigured: isSupabaseConfigured(),
+    supabaseConfigError: getSupabaseConfigError(),
     authConfigured: authConfigured(),
     paymentProvider: getPaymentProvider(),
     aiProvider: resolveInferenceProvider(),

@@ -1,23 +1,45 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Play, Pause, RefreshCw, Download, Maximize2 } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Play, Pause, RefreshCw, Download, Maximize2, Images, Sparkles } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { useCredits } from "@/components/CreditsProvider";
 import BrandWatermark from "@/components/BrandWatermark";
-import { galleryItemsMeta, CANVAS_RESULT_IMAGE } from "@/lib/data";
+import { CANVAS_RESULT_IMAGE } from "@/lib/data";
 import { downloadImageFile } from "@/lib/downloadImage";
+import {
+  listGalleryHistory,
+  pushGalleryHistory,
+  getAccountMeta,
+  type GalleryHistoryItem,
+} from "@/lib/faceProfiles";
+import { retentionContextFromAccount } from "@/lib/retentionPolicy";
 
 type RenderPhase = "idle" | "analyzing" | "generating" | "refining" | "complete";
 
 export default function LivePreviewCanvas() {
   const { t } = useI18n();
-  const { isFreePlan, consumeCredit, setShowCreditModal, credits } = useCredits();
+  const router = useRouter();
+  const { isFreePlan, consumeCredit, setShowCreditModal, credits, planId } = useCredits();
   const [isRendering, setIsRendering] = useState(false);
   const [phase, setPhase] = useState<RenderPhase>("idle");
   const [progress, setProgress] = useState(0);
-  const [activeGallery, setActiveGallery] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [myResults, setMyResults] = useState<GalleryHistoryItem[]>([]);
+  const [activeResultId, setActiveResultId] = useState<string | null>(null);
+  const [savedMsg, setSavedMsg] = useState(false);
+
+  useEffect(() => {
+    setMyResults(listGalleryHistory());
+  }, []);
+
+  const activeResult =
+    myResults.find((item) => item.id === activeResultId) ?? myResults[0] ?? null;
+  const hasResults = myResults.length > 0;
+  const previewImage = activeResult?.imageUrl ?? CANVAS_RESULT_IMAGE;
+  const showActions = hasResults || phase === "complete";
 
   const phases = useMemo(
     () => [
@@ -89,17 +111,31 @@ export default function LivePreviewCanvas() {
     setIsDownloading(true);
     try {
       await downloadImageFile({
-        imageUrl: CANVAS_RESULT_IMAGE,
+        imageUrl: previewImage,
         filename: `studio-canvas-hd-${Date.now()}.png`,
         bakeWatermark: isFreePlan,
         aspectRatio: "9:16",
         exportPreset: "original",
       });
     } catch {
-      window.open(CANVAS_RESULT_IMAGE, "_blank", "noopener,noreferrer");
+      window.open(previewImage, "_blank", "noopener,noreferrer");
     } finally {
       setIsDownloading(false);
     }
+  };
+
+  const handleSaveToGallery = () => {
+    const alreadySaved = myResults.some((item) => item.imageUrl === previewImage);
+    if (!alreadySaved) {
+      const id = `canvas-${Date.now()}`;
+      pushGalleryHistory(
+        { id, imageUrl: previewImage, storageId: id, createdAt: Date.now() },
+        retentionContextFromAccount(planId, getAccountMeta())
+      );
+      setMyResults(listGalleryHistory());
+      setActiveResultId(id);
+    }
+    setSavedMsg(true);
   };
 
   return (
@@ -141,10 +177,10 @@ export default function LivePreviewCanvas() {
                 />
               </div>
 
-              {phase === "complete" ? (
+              {hasResults || phase === "complete" ? (
                 <>
                   <img
-                    src={CANVAS_RESULT_IMAGE}
+                    src={previewImage}
                     alt="Generated portrait"
                     className="absolute inset-0 h-full w-full object-cover animate-fade-in"
                     loading="lazy"
@@ -219,7 +255,7 @@ export default function LivePreviewCanvas() {
               )}
 
               <div className="absolute right-4 bottom-4 left-4 flex items-center justify-between">
-                <div className="flex gap-2">
+                <div className={`flex gap-2 ${hasResults ? "hidden" : ""}`}>
                   {!isRendering ? (
                     <button
                       onClick={startRender}
@@ -243,7 +279,7 @@ export default function LivePreviewCanvas() {
                     </button>
                   )}
                 </div>
-                {phase === "complete" && (
+                {(hasResults || phase === "complete") && (
                   <span className="whitespace-nowrap rounded-lg bg-glow-emerald/20 px-2.5 py-1 text-[10px] font-medium text-glow-emerald backdrop-blur-sm sm:px-3 sm:text-xs">
                     {t.gallery.ready4k}
                   </span>
@@ -251,60 +287,91 @@ export default function LivePreviewCanvas() {
               </div>
             </div>
 
-            {phase === "complete" && (
-              <button
-                type="button"
-                onClick={handleDownload}
-                disabled={isDownloading}
-                className="btn-secondary mt-3 flex w-full items-center justify-center gap-2 py-3 text-sm disabled:opacity-50"
-              >
-                <Download className="h-4 w-4 shrink-0" />
-                <span>{isDownloading ? "..." : t.gallery.downloadPortrait}</span>
-              </button>
+            {showActions && (
+              <div className="mt-3 space-y-2">
+                <button
+                  type="button"
+                  onClick={handleDownload}
+                  disabled={isDownloading}
+                  className="btn-primary flex w-full items-center justify-center gap-2 py-3 text-sm font-bold disabled:opacity-50"
+                >
+                  <Download className="h-4 w-4 shrink-0" />
+                  <span>{isDownloading ? "..." : t.creator.actionDownloadHd}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveToGallery}
+                  className="btn-secondary flex w-full items-center justify-center gap-2 py-3 text-sm"
+                >
+                  <Images className="h-4 w-4 shrink-0" />
+                  <span>{t.creator.actionSaveGallery}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push("/generate")}
+                  className="btn-secondary flex w-full items-center justify-center gap-2 py-3 text-sm"
+                >
+                  <RefreshCw className="h-4 w-4 shrink-0" />
+                  <span>{t.creator.actionRetryStyle}</span>
+                </button>
+                {savedMsg && (
+                  <p className="flex flex-wrap items-center justify-center gap-2 text-xs text-glow-emerald">
+                    {t.creator.savedToGalleryDone}
+                    <Link href="/gallery/my" className="underline underline-offset-2">
+                      {t.creator.viewMyGallery}
+                    </Link>
+                  </p>
+                )}
+              </div>
             )}
           </div>
 
           <div className="lg:col-span-3">
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-sm font-medium text-white/60">{t.gallery.portfolio}</h3>
-              <span className="text-xs text-white/30">
-                {galleryItemsMeta.length} {t.gallery.works}
-              </span>
+              <h3 className="text-sm font-semibold text-white">{t.gallery.myResultsTitle}</h3>
+              {hasResults && (
+                <span className="text-xs text-white/70">
+                  {myResults.length} {t.gallery.works}
+                </span>
+              )}
             </div>
 
-            <div className="columns-2 gap-3 sm:columns-3">
-              {galleryItemsMeta.map((item, idx) => {
-                const itemT = t.gallery.items[item.id as keyof typeof t.gallery.items];
-                return (
-                  <div
+            {hasResults ? (
+              <div className="columns-2 gap-3 sm:columns-3">
+                {myResults.map((item) => (
+                  <button
+                    type="button"
                     key={item.id}
-                    className={`group mb-3 cursor-pointer break-inside-avoid overflow-hidden rounded-xl border transition-all duration-500 ${
-                      activeGallery === idx
+                    onClick={() => setActiveResultId(item.id)}
+                    className={`group mb-3 block w-full cursor-pointer break-inside-avoid overflow-hidden rounded-xl border transition-all duration-500 ${
+                      activeResult?.id === item.id
                         ? "border-glow-purple/40 shadow-glow-sm"
                         : "border-white/[0.06] hover:border-white/15"
                     }`}
-                    onClick={() => {
-                      setActiveGallery(idx);
-                      if (!isRendering) startRender();
-                    }}
                   >
                     <div className="relative overflow-hidden">
                       <img
-                        src={item.imageUrl}
-                        alt={itemT.title}
+                        src={item.thumbnailUrl ?? item.imageUrl}
+                        alt={t.gallery.myResultsTitle}
                         className="w-full object-cover transition-transform duration-700 group-hover:scale-105"
                         loading="lazy"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-navy/80 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-                      <div className="absolute right-2 bottom-2 left-2 translate-y-2 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
-                        <p className="truncate text-xs font-medium">{itemT.title}</p>
-                        <p className="truncate text-[10px] text-white/50">{itemT.style}</p>
-                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="glass-card flex flex-col items-center justify-center gap-4 px-6 py-16 text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/15 bg-white/10">
+                  <Sparkles className="h-6 w-6 text-glow-purple" />
+                </div>
+                <p className="max-w-sm text-sm text-zinc-200">{t.gallery.myResultsEmpty}</p>
+                <Link href="/generate" className="btn-primary px-6 py-2.5 text-sm font-bold">
+                  {t.gallery.myResultsCta}
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       </div>

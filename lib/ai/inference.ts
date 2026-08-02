@@ -1,4 +1,5 @@
 import type { FaceConsistencyPayload } from "@/lib/faceConsistency";
+import { HERO_AFTER_IMAGE, HERO_BEFORE_IMAGE } from "@/lib/data";
 
 export type InferenceResult = {
   provider: "replicate" | "runpod" | "comfyui" | "mock";
@@ -8,6 +9,21 @@ export type InferenceResult = {
   message?: string;
   raw?: unknown;
 };
+
+/** Demo sample portraits used when no GPU provider is configured. */
+export const MOCK_DEMO_IMAGE_URLS = [HERO_AFTER_IMAGE, HERO_BEFORE_IMAGE] as const;
+
+export function createMockInferenceResult(
+  message =
+    "No GPU provider configured (set REPLICATE_API_TOKEN, RUNPOD_*, or COMFYUI_API_URL). Returning demo sample portraits."
+): InferenceResult {
+  return {
+    provider: "mock",
+    status: "succeeded",
+    imageUrls: [...MOCK_DEMO_IMAGE_URLS],
+    message,
+  };
+}
 
 function buildPrompt(payload: FaceConsistencyPayload) {
   const styles = payload.styleIds.join(", ");
@@ -220,11 +236,5 @@ export async function runFaceConsistentInference(
     };
   }
 
-  return {
-    provider: "mock",
-    status: "succeeded",
-    imageUrls: [],
-    message:
-      "No GPU provider configured (set REPLICATE_API_TOKEN, RUNPOD_*, or COMFYUI_API_URL). Client may use mock preview.",
-  };
+  return createMockInferenceResult();
 }

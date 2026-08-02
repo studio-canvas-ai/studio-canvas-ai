@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 
 const FONT_HREF =
-  "https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Do+Hyeon&family=Nanum+Pen+Script&family=Noto+Color+Emoji&family=Noto+Sans:wght@400;700&family=Noto+Sans+JP:wght@400;700&family=Noto+Sans+KR:wght@400;700&family=Noto+Sans+SC:wght@400;700&family=Orbitron:wght@600;700&display=swap";
+  "https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Do+Hyeon&family=Nanum+Pen+Script&family=Noto+Sans:wght@400;700&family=Noto+Sans+JP:wght@400;700&family=Noto+Sans+KR:wght@400;700&family=Noto+Sans+SC:wght@400;700&family=Orbitron:wght@600;700&display=swap";
 
 /**
  * Load Google Fonts after mount so App Router stylesheet injection

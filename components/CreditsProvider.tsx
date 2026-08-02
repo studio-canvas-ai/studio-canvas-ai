@@ -29,10 +29,23 @@ import {
   recalculateGalleryRetentionOnCancel,
   type PlanId,
 } from "@/lib/faceProfiles";
+import {
+  clearPendingCheckout,
+  readPendingCheckout,
+  savePendingCheckout,
+} from "@/lib/pendingCheckout";
 
 export type { PlanId } from "@/lib/faceProfiles";
 
 export { PLAN_CREDITS } from "@/lib/data";
+
+export type SocialProviderId =
+  | "google"
+  | "microsoft"
+  | "facebook"
+  | "instagram"
+  | "kakao"
+  | "naver";
 
 type PromoWalletView = {
   remainingCredits: number;
@@ -56,12 +69,15 @@ type CreditsContextValue = {
   promoWallet: PromoWalletView | null;
   pendingPlanId: (typeof pricingPlanIds)[number] | null;
   pendingBillingInterval: BillingInterval;
+  socialProviders: SocialProviderId[];
+  socialProvidersLoaded: boolean;
   setShowAuthModal: (open: boolean) => void;
   setShowCreditModal: (open: boolean) => void;
   setShowPaymentModal: (open: boolean) => void;
   setShowTopUpModal: (open: boolean) => void;
   setShowReturnModal: (open: boolean) => void;
   setShowPromoModal: (open: boolean) => void;
+  openAuthModal: (opts?: { clearPending?: boolean }) => void;
   consumeCredit: (amount?: number) => boolean;
   topUpCredits: (amount?: number) => void;
   purchaseCreditPack: (packId: (typeof CREDIT_PACKS)[number]["id"]) => Promise<void>;
@@ -85,8 +101,25 @@ type CreditsContextValue = {
 const CreditsContext = createContext<CreditsContextValue | null>(null);
 
 function todayKey() {
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Seoul",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date());
+    const year = parts.find((p) => p.type === "year")?.value;
+    const month = parts.find((p) => p.type === "month")?.value;
+    const day = parts.find((p) => p.type === "day")?.value;
+    if (year && month && day) return `${year}-${month}-${day}`;
+  } catch {
+    // fall through to local date
+  }
   const d = new Date();
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 export function CreditsProvider({ children }: { children: ReactNode }) {
@@ -108,10 +141,13 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
   );
   const [pendingBillingInterval, setPendingBillingInterval] =
     useState<BillingInterval>("annual");
+  const [socialProviders, setSocialProviders] = useState<SocialProviderId[]>([]);
+  const [socialProvidersLoaded, setSocialProvidersLoaded] = useState(false);
   const [portraits, setPortraits] = useState<Record<string, PortraitRetouchState>>({});
   const [dailyRetouchCount, setDailyRetouchCount] = useState(0);
   const [dailyKey, setDailyKey] = useState(todayKey);
   const recentRetouchTs = useRef<number[]>([]);
+  const pendingResumeDone = useRef(false);
 
   const isFreePlan = planId === "free";
 
@@ -134,8 +170,34 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
     } else if (meta.planId === "free") {
       setPlanId("free");
     }
+    const stored = readPendingCheckout();
+    if (stored) {
+      setPendingPlanId(stored.planId);
+      setPendingBillingInterval(stored.interval);
+    }
     void refreshServerState();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Warm client FX cache from server (non-blocking; never breaks UI).
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/fx");
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { rate?: number };
+        if (typeof data.rate === "number" && data.rate > 0) {
+          const { setCachedUsdKrwRate } = await import("@/lib/currency");
+          setCachedUsdKrwRate(data.rate);
+        }
+      } catch {
+        // keep env/default fallback
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const refreshServerState = useCallback(async () => {
@@ -144,13 +206,18 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
       if (!res.ok) throw new Error("account unavailable");
       const data = (await res.json()) as {
         authenticated?: boolean;
+        providers?: SocialProviderId[];
         user?: {
           credits: number;
           maxCredits: number;
           planId: PlanId;
-            billingInterval?: BillingInterval | null;
+          billingInterval?: BillingInterval | null;
         } | null;
       };
+      if (Array.isArray(data.providers)) {
+        setSocialProviders(data.providers);
+        setSocialProvidersLoaded(true);
+      }
       if (data.authenticated && data.user) {
         setIsAuthenticated(true);
         setCredits(data.user.credits);
@@ -162,9 +229,20 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
           planId: data.user.planId,
         });
         setPromoWallet(null);
+        if (!pendingResumeDone.current) {
+          const stored = readPendingCheckout();
+          if (stored) {
+            pendingResumeDone.current = true;
+            setPendingPlanId(stored.planId);
+            setPendingBillingInterval(stored.interval);
+            setShowAuthModal(false);
+            setShowPaymentModal(true);
+          }
+        }
         return;
       }
     } catch {
+      setSocialProvidersLoaded(true);
       /* try anonymous promo wallet */
     }
 
@@ -234,6 +312,14 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
     patchAccountMeta({ lastLoginAt: Date.now(), planId: "free" });
   }, []);
 
+  const openAuthModal = useCallback((opts?: { clearPending?: boolean }) => {
+    if (opts?.clearPending !== false) {
+      setPendingPlanId(null);
+      clearPendingCheckout();
+    }
+    setShowAuthModal(true);
+  }, []);
+
   const requestSubscribe = useCallback(
     (
       plan: (typeof pricingPlanIds)[number],
@@ -241,6 +327,7 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
     ) => {
       setPendingPlanId(plan);
       setPendingBillingInterval(interval);
+      savePendingCheckout({ planId: plan, interval });
       if (!isAuthenticated) {
         setShowAuthModal(true);
         return;
@@ -253,6 +340,7 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
   const completePayment = useCallback(async () => {
     setShowPaymentModal(false);
     setPendingPlanId(null);
+    clearPendingCheckout();
     await refreshServerState();
   }, [refreshServerState]);
 
@@ -353,12 +441,15 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
       promoWallet,
       pendingPlanId,
       pendingBillingInterval,
+      socialProviders,
+      socialProvidersLoaded,
       setShowAuthModal,
       setShowCreditModal,
       setShowPaymentModal,
       setShowTopUpModal,
       setShowReturnModal,
       setShowPromoModal,
+      openAuthModal,
       consumeCredit,
       topUpCredits,
       purchaseCreditPack,
@@ -388,6 +479,9 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
       promoWallet,
       pendingPlanId,
       pendingBillingInterval,
+      socialProviders,
+      socialProvidersLoaded,
+      openAuthModal,
       consumeCredit,
       topUpCredits,
       purchaseCreditPack,

@@ -125,17 +125,32 @@
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-6 py-3 font-medium text-white/80 backdrop-blur-sm transition-all duration-300;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-white/40 bg-white/10 px-6 py-3 font-medium text-white backdrop-blur-sm transition-all duration-300;
     word-break: keep-all;
     overflow-wrap: anywhere;
   }
 
   .btn-secondary:hover {
-    @apply border-white/20 bg-white/10 text-white;
+    @apply border-white/60 bg-white/20 text-white;
+  }
+
+  /* Prefer OS color emoji fonts — Inter / Noto web fonts often render 🔥 as `?` */
+  .font-emoji {
+    font-family: "Segoe UI Emoji", "Apple Color Emoji", "Android Emoji", "Noto Color Emoji",
+      "Segoe UI Symbol", sans-serif;
+    font-style: normal;
+    font-weight: 400;
+    font-variant-emoji: emoji;
   }
 
   .section-padding {
     @apply px-4 py-20 sm:px-6 lg:px-8 lg:py-28;
+  }
+
+  /* Dark-theme baseline so hints stay legible when a field sets no placeholder color. */
+  input::placeholder,
+  textarea::placeholder {
+    @apply text-zinc-300;
   }
 
   .ambient-glow {

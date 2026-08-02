@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getUserById } from "@/lib/db/credits";
 import { createStripePortalSession } from "@/lib/payments/stripe";
+import { getSiteUrl } from "@/lib/site";
 
 export const runtime = "nodejs";
 
@@ -17,8 +18,7 @@ export async function POST(req: Request) {
   }
 
   const body = (await req.json().catch(() => ({}))) as { returnUrl?: string };
-  const base = process.env.NEXTAUTH_URL || "http://localhost:3000";
-  const returnUrl = body.returnUrl || `${base}/profile`;
+  const returnUrl = body.returnUrl || `${getSiteUrl()}/profile`;
 
   try {
     const url = await createStripePortalSession({

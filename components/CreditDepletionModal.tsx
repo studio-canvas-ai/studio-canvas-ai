@@ -1,13 +1,21 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Zap, ArrowUpRight, X } from "lucide-react";
 import Link from "next/link";
 import { useI18n } from "@/components/I18nProvider";
 import { useCredits } from "@/components/CreditsProvider";
+import { isDomesticMarket, readGeoCountryFromDocument } from "@/lib/market";
 
 export default function CreditDepletionModal() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { showCreditModal, setShowCreditModal, setShowTopUpModal } = useCredits();
+  const [geoCountry, setGeoCountry] = useState<string | null>(null);
+
+  useEffect(() => {
+    setGeoCountry(readGeoCountryFromDocument());
+  }, []);
+  const showCreditTopUp = !isDomesticMarket(locale, geoCountry);
 
   if (!showCreditModal) return null;
 
@@ -33,21 +41,23 @@ export default function CreditDepletionModal() {
         <p className="mb-6 text-sm text-white/50">{t.credits.emptyDesc}</p>
 
         <div className="flex flex-col gap-3">
-          <button
-            type="button"
-            onClick={() => {
-              setShowCreditModal(false);
-              setShowTopUpModal(true);
-            }}
-            className="btn-primary w-full justify-center py-3 text-sm"
-          >
-            <Zap className="h-4 w-4 shrink-0" />
-            <span>{t.credits.topup}</span>
-          </button>
+          {showCreditTopUp && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowCreditModal(false);
+                setShowTopUpModal(true);
+              }}
+              className="btn-primary w-full justify-center py-3 text-sm"
+            >
+              <Zap className="h-4 w-4 shrink-0" />
+              <span>{t.credits.topup}</span>
+            </button>
+          )}
           <Link
             href="/pricing"
             onClick={() => setShowCreditModal(false)}
-            className="btn-secondary w-full justify-center py-3 text-sm"
+            className={`${showCreditTopUp ? "btn-secondary" : "btn-primary"} w-full justify-center py-3 text-sm`}
           >
             <ArrowUpRight className="h-4 w-4 shrink-0" />
             <span>{t.credits.upgrade}</span>

@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { CreditCard, Sparkles, X } from "lucide-react";
+import { CalendarClock, CreditCard, Sparkles, X } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { useCredits } from "@/components/CreditsProvider";
-import { getPlanOffer } from "@/lib/data";
-import { formatUsdWithKrw } from "@/lib/currency";
-import { resolveCheckoutRegion, shouldShowKrw } from "@/lib/paymentRouting";
+import { getPlanOffer, isPrepaidPass } from "@/lib/data";
+import { formatUsd } from "@/lib/currency";
+import { resolveCheckoutRegion } from "@/lib/paymentRouting";
 
 export default function PaymentModal() {
   const { t, locale } = useI18n();
@@ -33,9 +33,9 @@ export default function PaymentModal() {
           ? "Pro"
           : "Starter";
 
-  const showKrw = shouldShowKrw(locale);
   const region = resolveCheckoutRegion(locale);
-  const price = formatUsdWithKrw(offer.totalUsd, showKrw);
+  const priceLabel = formatUsd(offer.totalUsd);
+  const isPrepaid = isPrepaidPass(pendingBillingInterval);
 
   const startCheckout = async (mode: "domestic" | "stripe" | "demo") => {
     if (!termsAgreed) {
@@ -132,24 +132,44 @@ export default function PaymentModal() {
                 <span className="font-medium text-white">{planName}</span>
               </div>
               <p className="mt-1 text-xs text-white/40">
-                {t.payment.creditsIncluded.replace("{count}", String(offer.credits))}
+                {(isPrepaid
+                  ? t.payment.creditsIncludedAnnual
+                  : t.payment.creditsIncluded
+                ).replace("{count}", String(offer.credits))}
               </p>
             </div>
             <div className="text-right">
-              <div className="text-2xl font-bold text-white">
-                {showKrw && price.krwLabel
-                  ? t.payment.amountUsdWithKrw
-                      .replace("{usd}", price.usdLabel.replace("$", ""))
-                      .replace("{krw}", price.krwLabel.replace("₩", ""))
-                  : price.usdLabel}
-              </div>
+              <div className="text-2xl font-bold text-white">{priceLabel}</div>
               <div className="text-xs text-white/40">{t.payment.vatIncluded}</div>
             </div>
           </div>
         </div>
 
         <div className="space-y-3">
-          <p className="text-[11px] text-white/45">{t.payment.autoRenewNotice}</p>
+          {isPrepaid ? (
+            <div className="rounded-xl border border-amber-300/30 bg-amber-400/[0.08] p-3">
+              <div className="flex items-start gap-2.5">
+                <CalendarClock
+                  className="mt-0.5 h-4 w-4 shrink-0 text-amber-200"
+                  aria-hidden
+                />
+                <div className="space-y-1.5">
+                  <p className="text-xs font-semibold leading-relaxed text-amber-100">
+                    {pendingBillingInterval === "quarterly"
+                      ? t.payment.quarterlyOneTimeNotice
+                      : t.payment.annualOneTimeNotice}
+                  </p>
+                  <p className="text-[11px] leading-relaxed text-zinc-200">
+                    {pendingBillingInterval === "quarterly"
+                      ? t.payment.quarterlyExpiryNotice
+                      : t.payment.annualExpiryNotice}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="text-[11px] text-zinc-300">{t.payment.autoRenewNotice}</p>
+          )}
           <p className="text-[11px] text-white/35">{t.payment.refundNotice}</p>
           <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-white/10 bg-white/[0.03] p-3">
             <input

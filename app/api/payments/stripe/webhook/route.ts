@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { getDb } from "@/lib/db/store";
 import { markOrderPaid } from "@/lib/payments";
-import { verifyStripeWebhook } from "@/lib/payments/stripe";
+import { isPrepaidPass } from "@/lib/data";
+import {
+  cancelStripeSubscriptionImmediately,
+  verifyStripeWebhook,
+} from "@/lib/payments/stripe";
 import {
   isWebhookEventProcessed,
   recordWebhookEvent,
@@ -23,25 +27,41 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     return getDb().orders[orderId] ?? null;
   }
 
-  const recorded = await recordWebhookEvent({
-    source: "stripe",
-    eventId: session.id,
-    orderId,
-  });
-  if (!recorded) return getDb().orders[orderId] ?? null;
+  const order = getDb().orders[orderId];
+  if (!order) return null;
+
+  // Switching from a recurring monthly plan to a prepaid pass must
+  // terminate the old Stripe subscription so no monthly renewal can survive.
+  if (
+    order.kind === "subscription" &&
+    order.billingInterval &&
+    isPrepaidPass(order.billingInterval)
+  ) {
+    const user = getDb().users[order.userId];
+    if (user?.stripeSubscriptionId) {
+      await cancelStripeSubscriptionImmediately(user.stripeSubscriptionId);
+    }
+  }
 
   const receiptUrl =
     typeof session.invoice === "object" && session.invoice && "hosted_invoice_url" in session.invoice
       ? (session.invoice.hosted_invoice_url as string | null)
       : undefined;
 
-  return markOrderPaid({
+  const paidOrder = await markOrderPaid({
     orderId,
     externalPaymentKey: session.payment_intent?.toString() ?? session.id,
     receiptUrl: receiptUrl ?? undefined,
     stripeCustomerId: session.customer?.toString(),
     stripeSubscriptionId: session.subscription?.toString(),
   });
+
+  await recordWebhookEvent({
+    source: "stripe",
+    eventId: session.id,
+    orderId,
+  });
+  return paidOrder;
 }
 
 export async function POST(req: Request) {

@@ -1,19 +1,20 @@
 "use client";
 
+import { useI18n } from "@/components/I18nProvider";
+import { useCredits } from "@/components/CreditsProvider";
+import LanguageSelector from "@/components/LanguageSelector";
+import { isDomesticMarket, readGeoCountryFromDocument } from "@/lib/market";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Menu, X, Sparkles, Plus } from "lucide-react";
-import { useI18n } from "@/components/I18nProvider";
-import { useCredits } from "@/components/CreditsProvider";
-import LanguageSelector from "@/components/LanguageSelector";
 
 export default function Navbar() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const pathname = usePathname();
   const router = useRouter();
   const {
-    setShowAuthModal,
+    openAuthModal,
     setShowTopUpModal,
     setShowPromoModal,
     credits,
@@ -22,15 +23,20 @@ export default function Navbar() {
   } = useCredits();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [geoCountry, setGeoCountry] = useState<string | null>(null);
 
+  useEffect(() => {
+    setGeoCountry(readGeoCountryFromDocument());
+  }, []);
+  const showCreditTopUp = !isDomesticMarket(locale, geoCountry);
+
+  // "Styles" leads into wizard STEP 1 (concept gallery); there is no separate "Create" entry.
   const navLinks = [
     { href: "/", label: t.nav.home },
-    { href: "/generate", label: t.nav.creator },
-    { href: "/styles", label: t.nav.styles },
-    { href: "/gallery", label: t.nav.gallery },
+    { href: "/generate", label: t.nav.styles },
+    { href: "/gallery/my", label: t.nav.myGallery },
     { href: "/pricing", label: t.nav.pricing },
     { href: "/support", label: t.nav.support },
-    { href: "/gallery/my", label: t.nav.myGallery },
   ];
 
   useEffect(() => {
@@ -45,13 +51,13 @@ export default function Navbar() {
 
   const openTrial = () => {
     setMobileOpen(false);
-    setShowAuthModal(true);
+    openAuthModal({ clearPending: true });
   };
 
   const openAccount = () => {
     setMobileOpen(false);
     if (isAuthenticated) router.push("/profile");
-    else setShowAuthModal(true);
+    else openAuthModal({ clearPending: true });
   };
 
   const isActive = (href: string) => {
@@ -87,8 +93,8 @@ export default function Navbar() {
               href={link.href}
               className={`relative z-50 shrink-0 whitespace-nowrap text-sm transition-colors duration-300 ${
                 isActive(link.href)
-                  ? "font-medium text-white"
-                  : "text-white/60 hover:text-white"
+                  ? "font-semibold text-white"
+                  : "text-zinc-300 hover:text-white"
               }`}
             >
               {link.label}
@@ -100,18 +106,20 @@ export default function Navbar() {
           <button
             type="button"
             onClick={() => setShowPromoModal(true)}
-            className="whitespace-nowrap text-[10px] text-white/35 underline-offset-4 transition-colors hover:text-white/65 hover:underline sm:text-[11px]"
+            className="whitespace-nowrap text-[10px] text-zinc-300 underline-offset-4 transition-colors hover:text-white hover:underline sm:text-[11px]"
           >
-            [코드 입력]
+            {t.nav.promoCode}
           </button>
           <div className="hidden lg:block xl:hidden">
             <div className="flex items-center gap-3">
-              {navLinks.slice(0, 4).map((link) => (
+              {navLinks.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
                   className={`whitespace-nowrap text-sm ${
-                    isActive(link.href) ? "font-medium text-white" : "text-white/60 hover:text-white"
+                    isActive(link.href)
+                      ? "font-semibold text-white"
+                      : "text-zinc-300 hover:text-white"
                   }`}
                 >
                   {link.label}
@@ -123,16 +131,18 @@ export default function Navbar() {
 
           <div className="hidden items-center gap-1.5 sm:flex">
             <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-[11px] text-amber-100">
-              {promoWallet ? "코드 잔액" : "⚡"} {credits}
+              {promoWallet ? t.nav.promoBalance : "⚡"} {credits}
             </span>
-            <button
-              type="button"
-              onClick={() => setShowTopUpModal(true)}
-              className="inline-flex items-center gap-0.5 rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/70 hover:border-white/30 hover:text-white"
-            >
-              <Plus className="h-3 w-3" />
-              {t.nav.topup}
-            </button>
+            {showCreditTopUp && (
+              <button
+                type="button"
+                onClick={() => setShowTopUpModal(true)}
+                className="inline-flex items-center gap-0.5 rounded-full border border-white/35 px-2.5 py-1 text-[11px] text-zinc-200 hover:border-white/60 hover:text-white"
+              >
+                <Plus className="h-3 w-3" />
+                {t.nav.topup}
+              </button>
+            )}
           </div>
 
           <button
@@ -169,7 +179,7 @@ export default function Navbar() {
                 key={link.href}
                 href={link.href}
                 className={`rounded-lg px-4 py-3 text-sm transition-colors hover:bg-white/5 hover:text-white ${
-                  isActive(link.href) ? "bg-white/5 text-white" : "text-white/70"
+                  isActive(link.href) ? "bg-white/5 font-semibold text-white" : "text-zinc-300"
                 }`}
                 onClick={() => setMobileOpen(false)}
               >
@@ -182,20 +192,22 @@ export default function Navbar() {
                 setMobileOpen(false);
                 setShowPromoModal(true);
               }}
-              className="rounded-lg px-4 py-3 text-left text-sm text-white/50"
+              className="rounded-lg px-4 py-3 text-left text-sm text-zinc-300"
             >
-              [코드 입력]
+              {t.nav.promoCode}
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setMobileOpen(false);
-                setShowTopUpModal(true);
-              }}
-              className="rounded-lg px-4 py-3 text-left text-sm text-amber-200"
-            >
-              ⚡ {credits} · {t.nav.topup}
-            </button>
+            {showCreditTopUp && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileOpen(false);
+                  setShowTopUpModal(true);
+                }}
+                className="rounded-lg px-4 py-3 text-left text-sm text-amber-200"
+              >
+                ⚡ {credits} · {t.nav.topup}
+              </button>
+            )}
             <div className="mt-3 flex flex-col gap-2 border-t border-white/[0.06] pt-4">
               <button type="button" onClick={openAccount} className="btn-secondary w-full text-sm">
                 {isAuthenticated ? t.nav.myPage : t.nav.login}

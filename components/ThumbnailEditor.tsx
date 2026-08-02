@@ -29,6 +29,7 @@ import {
   colorAtIndex,
   createLayer,
   drawEmojiChar,
+  forEachCodePoint,
   measureStickerBadge,
   drawStickerBadge,
   fontForChar,
@@ -79,6 +80,8 @@ function snapOffset(v: number): { value: number; snapped: boolean } {
 export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
   const { t } = useI18n();
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  /** Selection guide lives on its own layer so exports stay free of editor chrome. */
+  const guideCanvasRef = useRef<HTMLCanvasElement>(null);
   const textareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
   const layerAnchorsRef = useRef<LayerAnchor[]>([]);
   const dragRef = useRef<DragState | null>(null);
@@ -140,15 +143,14 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
       ctx.textAlign = "left";
 
       let totalWidth = 0;
-      for (let i = 0; i < pureText.length; i++) {
-        const ch = pureText[i]!;
+      forEachCodePoint(pureText, (ch) => {
         if (isEmojiChar(ch)) {
           totalWidth += fontSize * 1.1;
         } else {
           ctx.font = `700 ${fontSize}px ${fontForChar(fontPreset, ch)}`;
           totalWidth += ctx.measureText(ch).width;
         }
-      }
+      });
 
       let x =
         align === "left"
@@ -160,14 +162,13 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
       x += layer.offsetX * width;
       const drawY = y + layer.offsetY * canvasSize.height;
 
-      for (let i = 0; i < pureText.length; i++) {
-        const ch = pureText[i]!;
+      forEachCodePoint(pureText, (ch, utf16Index) => {
         if (isEmojiChar(ch)) {
           const w = drawEmojiChar(ctx, ch, x, drawY, fontSize);
           x += w;
-          continue;
+          return;
         }
-        const presetKey = colorAtIndex(layer, i);
+        const presetKey = colorAtIndex(layer, utf16Index);
         const preset = COLOR_PRESETS[presetKey];
         ctx.font = `700 ${fontSize}px ${fontForChar(fontPreset, ch)}`;
         const w = ctx.measureText(ch).width;
@@ -182,7 +183,7 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
         ctx.fillStyle = preset.fill;
         ctx.fillText(ch, x, drawY);
         x += w;
-      }
+      });
       ctx.shadowBlur = 0;
 
       // Independent overlay badge — max 1 per line (#97–#98)
@@ -197,6 +198,51 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
               : xAnchor + layer.offsetX * width - measureStickerBadge(ctx, stickerId, scale) / 2;
         drawStickerBadge(ctx, stickerId, badgeX, badgeY, scale);
       }
+    },
+    [canvasSize.height]
+  );
+
+  /** Mirrors drawStyledText's layout math to place the selection guide. */
+  const measureLayerBox = useCallback(
+    (
+      ctx: CanvasRenderingContext2D,
+      layer: TextLayer,
+      xAnchor: number,
+      y: number,
+      width: number
+    ) => {
+      const { fontSize, fontPreset, align } = layer;
+      const pureText = stripStickerTokens(layer.text);
+
+      let totalWidth = 0;
+      forEachCodePoint(pureText, (ch) => {
+        if (isEmojiChar(ch)) {
+          totalWidth += fontSize * 1.1;
+        } else {
+          ctx.font = `700 ${fontSize}px ${fontForChar(fontPreset, ch)}`;
+          totalWidth += ctx.measureText(ch).width;
+        }
+      });
+
+      // Keep an interactive footprint even when the layer has no text yet.
+      const boxWidth = Math.max(totalWidth, fontSize * 2.2);
+      let x =
+        align === "left"
+          ? width * 0.08
+          : align === "right"
+            ? width * 0.92 - boxWidth
+            : xAnchor - boxWidth / 2;
+      x += layer.offsetX * width;
+
+      const drawY = y + layer.offsetY * canvasSize.height;
+      const topPad = layer.stickerId ? fontSize * 1.7 : fontSize * 0.75;
+
+      return {
+        x,
+        y: drawY - topPad,
+        width: boxWidth,
+        height: topPad + fontSize * 0.75,
+      };
     },
     [canvasSize.height]
   );
@@ -309,26 +355,6 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
         ctx.restore();
       }
 
-      if (dragging && (snapGuides.x || snapGuides.y)) {
-        ctx.save();
-        ctx.strokeStyle = "rgba(52, 211, 153, 0.9)";
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([8, 6]);
-        if (snapGuides.x) {
-          ctx.beginPath();
-          ctx.moveTo(snapGuides.gx, 0);
-          ctx.lineTo(snapGuides.gx, height);
-          ctx.stroke();
-        }
-        if (snapGuides.y) {
-          ctx.beginPath();
-          ctx.moveTo(0, snapGuides.gy);
-          ctx.lineTo(width, snapGuides.gy);
-          ctx.stroke();
-        }
-        ctx.setLineDash([]);
-        ctx.restore();
-      }
     };
     img.src = imageUrl;
   }, [
@@ -339,18 +365,109 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
     depth,
     showSafeZone,
     youtubePreview,
-    dragging,
-    snapGuides,
     drawStyledText,
     t.thumbnail.timestampSafe,
   ]);
 
+  /**
+   * Overlay pass: active-layer bounding guide + snap guides.
+   * Drawn on a separate canvas so exported thumbnails never contain editor chrome.
+   */
+  useEffect(() => {
+    const canvas = guideCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const { width, height } = canvasSize;
+    canvas.width = width;
+    canvas.height = height;
+    ctx.clearRect(0, 0, width, height);
+
+    if (activeLayer) {
+      const layerPos = activeLayer.pos ?? "bottom";
+      const baseY =
+        layerPos === "top"
+          ? activeLayer.fontSize * 1.2
+          : layerPos === "center"
+            ? height / 2
+            : height - activeLayer.fontSize * 1.1;
+      const box = measureLayerBox(ctx, activeLayer, width / 2, baseY, width);
+
+      const pad = Math.max(10, activeLayer.fontSize * 0.22);
+      const bx = box.x - pad;
+      const by = box.y - pad;
+      const bw = box.width + pad * 2;
+      const bh = box.height + pad * 2;
+      const radius = Math.min(18, bw / 2, bh / 2);
+
+      ctx.save();
+      ctx.fillStyle = dragging
+        ? "rgba(139, 92, 246, 0.12)"
+        : "rgba(139, 92, 246, 0.06)";
+      ctx.strokeStyle = dragging
+        ? "rgba(167, 139, 250, 0.95)"
+        : "rgba(167, 139, 250, 0.6)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash(dragging ? [] : [12, 8]);
+      ctx.beginPath();
+      ctx.roundRect(bx, by, bw, bh, radius);
+      ctx.fill();
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Corner ticks communicate "draggable region".
+      const arm = Math.min(24, bw * 0.22, bh * 0.35);
+      ctx.strokeStyle = "rgba(233, 213, 255, 0.95)";
+      ctx.lineWidth = 3;
+      ctx.lineCap = "round";
+      const corners: [number, number, number, number][] = [
+        [bx, by + arm, bx, by],
+        [bx, by, bx + arm, by],
+        [bw + bx - arm, by, bw + bx, by],
+        [bw + bx, by, bw + bx, by + arm],
+        [bx, by + bh - arm, bx, by + bh],
+        [bx, by + bh, bx + arm, by + bh],
+        [bw + bx - arm, by + bh, bw + bx, by + bh],
+        [bw + bx, by + bh - arm, bw + bx, by + bh],
+      ];
+      for (const [x1, y1, x2, y2] of corners) {
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    if (dragging && (snapGuides.x || snapGuides.y)) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(52, 211, 153, 0.9)";
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([8, 6]);
+      if (snapGuides.x) {
+        ctx.beginPath();
+        ctx.moveTo(snapGuides.gx, 0);
+        ctx.lineTo(snapGuides.gx, height);
+        ctx.stroke();
+      }
+      if (snapGuides.y) {
+        ctx.beginPath();
+        ctx.moveTo(0, snapGuides.gy);
+        ctx.lineTo(width, snapGuides.gy);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+  }, [activeLayer, canvasSize, dragging, snapGuides, measureLayerBox]);
+
   const canvasPointFromEvent = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return null;
+    const canvas = e.currentTarget;
     const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
+    if (!rect.width || !rect.height) return null;
+    const scaleX = canvasSize.width / rect.width;
+    const scaleY = canvasSize.height / rect.height;
     return {
       x: (e.clientX - rect.left) * scaleX,
       y: (e.clientY - rect.top) * scaleY,
@@ -654,10 +771,11 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
         </span>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-white/10 bg-black/30">
+      <div className="relative overflow-hidden rounded-xl border border-white/10 bg-black/30">
+        <canvas ref={canvasRef} className="mx-auto block h-auto w-full max-w-full" />
         <canvas
-          ref={canvasRef}
-          className="mx-auto block h-auto w-full max-w-full touch-none cursor-grab active:cursor-grabbing"
+          ref={guideCanvasRef}
+          className="absolute inset-0 block h-full w-full touch-none cursor-grab active:cursor-grabbing"
           style={{ touchAction: "none" }}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
@@ -803,7 +921,7 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
               }}
               rows={2}
               placeholder={t.thumbnail.textPlaceholder}
-              className="w-full resize-y rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none placeholder:text-white/30 focus:border-glow-purple/40"
+              className="font-emoji w-full resize-y rounded-lg border border-white/25 bg-white/5 px-3 py-2 text-sm text-white outline-none placeholder:text-zinc-300 focus:border-glow-purple/40"
             />
             {layer.stickerId && (
               <div className="mt-2 flex flex-wrap gap-1.5">
@@ -820,7 +938,7 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
                           )
                         );
                       }}
-                      className="rounded-full border px-2.5 py-0.5 text-[10px] font-extrabold"
+                      className="font-emoji rounded-full border px-2.5 py-0.5 text-[10px] font-extrabold"
                       style={{
                         borderColor: badge.stroke,
                         backgroundColor: badge.fill,
@@ -828,7 +946,11 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
                       }}
                       title="Remove sticker"
                     >
-                      {badge.emoji ? `${badge.emoji} ` : ""}
+                      {badge.emoji ? (
+                        <span className="font-emoji mr-0.5" aria-hidden>
+                          {badge.emoji}
+                        </span>
+                      ) : null}
                       {badge.label} ×
                     </button>
                   );
@@ -848,7 +970,7 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
               key={s}
               type="button"
               onClick={() => insertSymbol(s)}
-              className="rounded-lg border border-white/10 px-2.5 py-1.5 text-sm text-white/80 hover:border-white/25"
+              className="font-emoji rounded-lg border border-white/10 px-2.5 py-1.5 text-sm text-white/80 hover:border-white/25"
             >
               {s}
             </button>
@@ -867,7 +989,7 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
                 key={id}
                 type="button"
                 onClick={() => insertSticker(id)}
-                className={`rounded-full border px-3 py-1.5 text-[11px] font-extrabold tracking-wide ${
+                className={`font-emoji rounded-full border px-3 py-1.5 text-[11px] font-extrabold tracking-wide ${
                   selected ? "ring-2 ring-white/70" : ""
                 }`}
                 style={{
@@ -877,7 +999,11 @@ export default function ThumbnailEditor({ imageUrl, aspectRatio }: Props) {
                   boxShadow: selected ? `0 0 14px ${badge.glow}` : "0 0 10px rgba(0,0,0,0.25)",
                 }}
               >
-                {badge.emoji ? `${badge.emoji} ` : ""}
+                {badge.emoji ? (
+                  <span className="font-emoji mr-1" aria-hidden>
+                    {badge.emoji}
+                  </span>
+                ) : null}
                 {badge.label}
               </button>
             );

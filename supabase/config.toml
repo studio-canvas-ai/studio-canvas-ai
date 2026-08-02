@@ -1,0 +1,5 @@
+# Minimal config for Edge Function deploys (project linked via `supabase link`).
+project_id = "oorujqbivznftsyqilyj"
+
+[functions.naver-userinfo]
+verify_jwt = false

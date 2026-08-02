@@ -1,22 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X, Zap, Crown } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { useCredits } from "@/components/CreditsProvider";
 import { CREDIT_PACKS, creditPackAmount } from "@/lib/data";
-import { formatUsdWithKrw } from "@/lib/currency";
-import { shouldShowKrw } from "@/lib/paymentRouting";
+import { formatUsd } from "@/lib/currency";
+import { isDomesticMarket, readGeoCountryFromDocument } from "@/lib/market";
 
 export default function CreditTopUpModal() {
   const { t, locale } = useI18n();
   const { showTopUpModal, setShowTopUpModal, planId, refreshAccount } = useCredits();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [geoCountry, setGeoCountry] = useState<string | null>(null);
   const isSubscriber = planId !== "free";
-  const showKrw = shouldShowKrw(locale);
 
-  if (!showTopUpModal) return null;
+  useEffect(() => {
+    setGeoCountry(readGeoCountryFromDocument());
+  }, []);
+
+  useEffect(() => {
+    if (showTopUpModal && isDomesticMarket(locale, geoCountry)) {
+      setShowTopUpModal(false);
+    }
+  }, [showTopUpModal, locale, geoCountry, setShowTopUpModal]);
+
+  if (!showTopUpModal || isDomesticMarket(locale, geoCountry)) return null;
 
   const purchase = async (packId: (typeof CREDIT_PACKS)[number]["id"]) => {
     setBusy(true);
@@ -91,12 +101,9 @@ export default function CreditTopUpModal() {
         <div className="flex flex-col gap-2">
           {CREDIT_PACKS.map((pack) => {
             const credits = creditPackAmount(pack, isSubscriber);
-            const price = formatUsdWithKrw(pack.price, showKrw);
-            const label = showKrw && price.krwLabel
-              ? `${credits} credits · ${price.usdLabel} (${price.krwLabel})`
-              : t.credits.packLabel
-                  .replace("{credits}", String(credits))
-                  .replace("{price}", String(pack.price));
+            const label = t.credits.packLabel
+              .replace("{credits}", String(credits))
+              .replace("{price}", String(pack.price));
             return (
               <button
                 key={pack.id}
@@ -109,6 +116,7 @@ export default function CreditTopUpModal() {
                   <Zap className="h-4 w-4 text-amber-300" />
                   {label}
                 </span>
+                <span className="font-semibold text-white">{formatUsd(pack.price)}</span>
               </button>
             );
           })}

@@ -10,10 +10,14 @@ import {
   type BillingInterval,
   CREDIT_PACKS,
   pricingPlanIds,
+  syncPlanOfferKrw,
 } from "@/lib/data";
 import { getUserById } from "@/lib/db/credits";
 import type { Locale } from "@/lib/i18n/types";
 import { LOCALES } from "@/lib/i18n/types";
+import { getSiteUrl } from "@/lib/site";
+import { resolveCheckoutRegion } from "@/lib/paymentRouting";
+import { ensureUsdKrwRate } from "@/lib/currency";
 
 export const runtime = "nodejs";
 
@@ -40,7 +44,19 @@ export async function POST(req: Request) {
     body.locale && LOCALES.includes(body.locale as Locale) ? body.locale : "en"
   ) as Locale;
 
+  // Credit packs are global-only (not sold on the Korean / domestic market).
+  if (body.kind === "credit_pack" && resolveCheckoutRegion(locale) === "domestic") {
+    return NextResponse.json(
+      { error: "credit_packs_unavailable_in_domestic_market" },
+      { status: 403 }
+    );
+  }
+
   try {
+    // Refresh FX cache before KRW amounts are computed for the order.
+    await ensureUsdKrwRate();
+    syncPlanOfferKrw();
+
     const order = await createPaymentOrder({
       userId,
       kind: body.kind,
@@ -51,7 +67,7 @@ export async function POST(req: Request) {
       locale,
     });
 
-    const baseUrl = process.env.NEXTAUTH_URL || "";
+    const baseUrl = getSiteUrl();
     const successPath =
       body.kind === "credit_pack"
         ? `/generate?payment=success&orderId=${order.id}`

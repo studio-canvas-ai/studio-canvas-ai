@@ -4,32 +4,28 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowUpRight, Sparkles } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
-import { stylePacksMeta } from "@/lib/data";
+import {
+  stylePacksMeta,
+  CONCEPT_GROUP_IDS,
+  CONCEPT_GROUP_EMOJI,
+  type ConceptGroupId,
+} from "@/lib/data";
 
-const categoryKeys = [
-  "all",
-  "lifestyle",
-  "cinematic",
-  "business",
-  "cultureEast",
-  "cultureWest",
-  "urban",
-  "studio",
-] as const;
+const conceptTabs = ["all", ...CONCEPT_GROUP_IDS] as const;
 
 export default function StyleCollection({
   initialCategory = "all",
 }: {
-  initialCategory?: string;
+  initialCategory?: ConceptGroupId | "all";
 }) {
   const { t } = useI18n();
   const router = useRouter();
-  const [activeCategory, setActiveCategory] = useState<string>(initialCategory);
+  const [activeCategory, setActiveCategory] = useState<ConceptGroupId | "all">(initialCategory);
 
   const filtered =
     activeCategory === "all"
       ? stylePacksMeta
-      : stylePacksMeta.filter((p) => p.categoryKey === activeCategory);
+      : stylePacksMeta.filter((p) => p.conceptGroup === activeCategory);
 
   const handleViewAll = () => {
     setActiveCategory("all");
@@ -50,27 +46,37 @@ export default function StyleCollection({
             <p className="mt-4 max-w-lg text-white/50">{t.styles.subtitle}</p>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {categoryKeys.map((cat) => (
-              <button
-                key={cat}
-                type="button"
-                onClick={() => setActiveCategory(cat)}
-                className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-300 sm:px-4 ${
-                  activeCategory === cat
-                    ? "bg-white/10 text-white shadow-glow-sm"
-                    : "text-white/40 hover:bg-white/5 hover:text-white/70"
-                }`}
-              >
-                {t.styles.categories[cat]}
-              </button>
-            ))}
+          <div className="flex flex-col items-start gap-2 sm:items-end">
+            <div className="flex flex-wrap gap-2">
+              {conceptTabs.map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setActiveCategory(cat)}
+                  className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-300 sm:px-4 ${
+                    activeCategory === cat
+                      ? "bg-white/10 text-white shadow-glow-sm"
+                      : "text-white/40 hover:bg-white/5 hover:text-white/70"
+                  }`}
+                >
+                  {cat === "all"
+                    ? t.creator.conceptGroups.all
+                    : `${CONCEPT_GROUP_EMOJI[cat]} ${t.creator.conceptGroups[cat]}`}
+                </button>
+              ))}
+            </div>
+            {activeCategory !== "all" && (
+              <p className="text-xs text-glow-emerald/80">
+                ( {t.creator.conceptGroupHints[activeCategory]} )
+              </p>
+            )}
           </div>
         </div>
 
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((pack, idx) => {
             const packT = t.styles.packs[pack.id as keyof typeof t.styles.packs];
+            if (!packT) return null;
             return (
               <article
                 key={pack.id}
@@ -102,25 +108,32 @@ export default function StyleCollection({
                   </div>
 
                   <div className="absolute right-4 bottom-4 left-4">
-                    <span className="mb-2 inline-block rounded-full bg-white/10 px-2.5 py-0.5 text-[10px] font-medium tracking-wider text-white/70 uppercase backdrop-blur-sm">
-                      {t.styles.categories[pack.categoryKey]}
+                    <span className="mb-2 inline-block rounded-full border border-white/20 bg-black/60 px-2.5 py-0.5 text-[10px] font-bold tracking-wider text-white backdrop-blur-md">
+                      {`${CONCEPT_GROUP_EMOJI[pack.conceptGroup]} ${packT.badge ?? t.creator.conceptGroups[pack.conceptGroup]}`}
                     </span>
                     <h3 className="font-display text-lg font-semibold leading-tight sm:text-xl">
                       {packT.name}
                     </h3>
-                    <p className="mt-1 line-clamp-2 text-xs text-white/50 sm:text-sm">
+                    <p className="mt-1 line-clamp-2 text-xs font-medium text-zinc-100 sm:text-sm">
                       {packT.description}
                     </p>
                     <div className="mt-3 flex flex-wrap gap-1.5">
+                      <span className="rounded-md border border-violet-400/50 bg-violet-950/60 px-2 py-0.5 text-[10px] font-semibold text-violet-200">
+                        {t.creator.compositionTags[pack.composition]}
+                      </span>
                       {packT.tags.map((tag) => (
                         <span
                           key={tag}
-                          className="rounded-md bg-white/5 px-2 py-0.5 text-[10px] text-white/40"
+                          className="rounded-md border border-emerald-500/40 bg-emerald-950/50 px-2 py-0.5 text-[10px] font-semibold text-emerald-300"
                         >
-                          {tag}
+                          {`#${tag}`}
                         </span>
                       ))}
                     </div>
+                    <span className="btn-primary mt-3 flex w-full items-center justify-center gap-1 py-2.5 text-sm font-bold text-white shadow-md">
+                      {t.creator.makeWithStyle}
+                      <ArrowUpRight className="h-4 w-4 shrink-0" />
+                    </span>
                   </div>
                 </div>
               </article>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Download, ImageIcon, Share2, Trash2, Wand2 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { useCredits } from "@/components/CreditsProvider";
+import { useFeedback } from "@/components/FeedbackProvider";
 import FaceProfilePanel from "@/components/FaceProfilePanel";
 import {
   getAccountMeta,
@@ -26,6 +27,7 @@ type TabId = "works" | "models";
 export default function MyGalleryTabs() {
   const { t } = useI18n();
   const { planId } = useCredits();
+  const { confirm, showToast } = useFeedback();
   const [tab, setTab] = useState<TabId>("works");
   const [works, setWorks] = useState<GalleryHistoryItem[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -95,9 +97,17 @@ export default function MyGalleryTabs() {
     }
   };
 
-  const handleDelete = (item: GalleryHistoryItem) => {
-    if (!window.confirm(t.gallery.worksDeleteConfirm)) return;
+  const handleDelete = async (item: GalleryHistoryItem) => {
+    const approved = await confirm({
+      title: t.gallery.worksDeleteConfirmTitle,
+      message: t.gallery.worksDeleteConfirm,
+      confirmLabel: t.gallery.worksDeleteYes,
+      cancelLabel: t.gallery.worksDeleteNo,
+      tone: "danger",
+    });
+    if (!approved) return;
     setWorks(deleteGalleryHistory(item.id));
+    showToast(t.gallery.worksDeleteDone, "success");
   };
 
   const tabs: { id: TabId; label: string }[] = [
@@ -190,7 +200,7 @@ export default function MyGalleryTabs() {
                       </Link>
                       <button
                         type="button"
-                        onClick={() => handleDelete(item)}
+                        onClick={() => void handleDelete(item)}
                         className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-red-400/30 bg-red-500/10 py-2 text-xs text-red-200 hover:bg-red-500/20"
                       >
                         <Trash2 className="h-3.5 w-3.5" />

@@ -1,10 +1,25 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import Kakao from "next-auth/providers/kakao";
+import Facebook from "next-auth/providers/facebook";
+import Instagram from "next-auth/providers/instagram";
+import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
 import Credentials from "next-auth/providers/credentials";
 import type { OAuthConfig } from "next-auth/providers";
 import { findOrCreateOAuthUser } from "@/lib/db/credits";
 import type { AuthProviderId } from "@/lib/db/types";
+import {
+  isSupabaseConfigured,
+  getSupabaseUrl,
+  getSupabaseAnonKey,
+} from "@/lib/supabase/config";
+import { createClient as createSupabaseAdminClient } from "@supabase/supabase-js";
+import {
+  extractSupabaseOAuthProfile,
+  SUPABASE_SOCIAL_PROVIDERS,
+} from "@/lib/supabase/oauth";
+import { authJsCookiesConfig } from "@/lib/authCookies";
+import { hasConfiguredAuthSecret, requireAuthSecret } from "@/lib/authSecret";
 
 type NaverProfile = {
   resultcode: string;
@@ -44,6 +59,29 @@ function NaverProvider(): OAuthConfig<NaverProfile> {
   };
 }
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function isValidEmail(email: string): boolean {
+  return EMAIL_PATTERN.test(email);
+}
+
+/** Admin accounts must come from a real OAuth identity, never passwordless email. */
+function isAdminEmail(email: string): boolean {
+  return (process.env.ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean)
+    .includes(email);
+}
+
+/** Passwordless email login is a dev-only convenience. */
+function credentialsSignupEnabled(): boolean {
+  if (process.env.NODE_ENV === "production") {
+    return process.env.ALLOW_CREDENTIALS_SIGNUP === "true";
+  }
+  return true;
+}
+
 function buildProviders() {
   const list = [];
   if (process.env.KAKAO_CLIENT_ID && process.env.KAKAO_CLIENT_SECRET) {
@@ -62,8 +100,101 @@ function buildProviders() {
       })
     );
   }
+
+  // Bridge: Supabase Auth (Google etc.) → app user DB → NextAuth JWT session
+  if (isSupabaseConfigured()) {
+    list.push(
+      Credentials({
+        id: "supabase",
+        name: "Supabase",
+        credentials: {
+          accessToken: { label: "Access Token", type: "text" },
+        },
+        async authorize(credentials) {
+          const accessToken = String(credentials?.accessToken || "").trim();
+          if (!accessToken) return null;
+
+          const url = getSupabaseUrl();
+          const anon = getSupabaseAnonKey();
+          if (!url || !anon) return null;
+
+          const supabase = createSupabaseAdminClient(url, anon, {
+            auth: { persistSession: false, autoRefreshToken: false },
+          });
+          const {
+            data: { user },
+            error,
+          } = await supabase.auth.getUser(accessToken);
+          if (error || !user) return null;
+
+          const profile = extractSupabaseOAuthProfile(user);
+
+          const { user: dbUser } = await findOrCreateOAuthUser({
+            provider: profile.provider,
+            providerAccountId: profile.providerAccountId,
+            email: profile.email,
+            name: profile.name,
+            image: profile.image,
+          });
+
+          try {
+            const { upsertProfileWithAccessToken } = await import(
+              "@/lib/supabase/profile"
+            );
+            await upsertProfileWithAccessToken(accessToken, {
+              id: user.id,
+              email: profile.email,
+              fullName: profile.name,
+              avatarUrl: profile.image,
+              provider: profile.provider,
+              appUserId: dbUser.id,
+            });
+          } catch {
+            /* profile sync must never block login */
+          }
+
+          return {
+            id: dbUser.id,
+            email: dbUser.email,
+            name: dbUser.name,
+            image: dbUser.image,
+          };
+        },
+      })
+    );
+  }
+
   if (process.env.NAVER_CLIENT_ID && process.env.NAVER_CLIENT_SECRET) {
     list.push(NaverProvider());
+  }
+  if (process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET) {
+    list.push(
+      MicrosoftEntraID({
+        id: "microsoft",
+        name: "Microsoft",
+        clientId: process.env.MICROSOFT_CLIENT_ID,
+        clientSecret: process.env.MICROSOFT_CLIENT_SECRET,
+        issuer:
+          process.env.MICROSOFT_ISSUER ||
+          "https://login.microsoftonline.com/common/v2.0",
+      })
+    );
+  }
+  if (process.env.FACEBOOK_CLIENT_ID && process.env.FACEBOOK_CLIENT_SECRET) {
+    list.push(
+      Facebook({
+        clientId: process.env.FACEBOOK_CLIENT_ID,
+        clientSecret: process.env.FACEBOOK_CLIENT_SECRET,
+      })
+    );
+  }
+  if (process.env.INSTAGRAM_CLIENT_ID && process.env.INSTAGRAM_CLIENT_SECRET) {
+    list.push(
+      Instagram({
+        clientId: process.env.INSTAGRAM_CLIENT_ID,
+        clientSecret: process.env.INSTAGRAM_CLIENT_SECRET,
+      })
+    );
   }
 
   if (process.env.NODE_ENV !== "production") {
@@ -93,50 +224,58 @@ function buildProviders() {
     );
   }
 
-  // Always available for local / demo email signup → grants FREE_CREDITS via findOrCreate
-  list.push(
-    Credentials({
-      id: "credentials",
-      name: "Email",
-      credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" },
-      },
-      async authorize(credentials) {
-        const email = String(credentials?.email || "")
-          .trim()
-          .toLowerCase();
-        if (!email || !email.includes("@")) return null;
-        const { user } = await findOrCreateOAuthUser({
-          provider: "credentials",
-          providerAccountId: email,
-          email,
-          name: email.split("@")[0],
-        });
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          image: user.image,
-        };
-      },
-    })
-  );
+  // Email sign-up is a local/demo convenience only: it has no password store, so it
+  // must never be reachable in production or with a shared-secret deployment.
+  if (credentialsSignupEnabled()) {
+    list.push(
+      Credentials({
+        id: "credentials",
+        name: "Email",
+        credentials: {
+          email: { label: "Email", type: "email" },
+          password: { label: "Password", type: "password" },
+          name: { label: "Name", type: "text" },
+        },
+        async authorize(credentials) {
+          const email = String(credentials?.email || "")
+            .trim()
+            .toLowerCase();
+          if (!isValidEmail(email)) return null;
+          if (isAdminEmail(email)) return null;
+          const displayName = String(credentials?.name || "")
+            .trim()
+            .slice(0, 80);
+          const { user } = await findOrCreateOAuthUser({
+            provider: "credentials",
+            providerAccountId: email,
+            email,
+            name: displayName || email.split("@")[0],
+          });
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            image: user.image,
+          };
+        },
+      })
+    );
+  }
 
   return list;
 }
 
-export const authConfigured = () =>
-  Boolean(process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET);
+export const authConfigured = () => hasConfiguredAuthSecret();
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  secret:
-    process.env.AUTH_SECRET ||
-    process.env.NEXTAUTH_SECRET ||
-    "dev-only-studio-canvas-secret-change-me",
+  secret: requireAuthSecret(),
+  // Prefer AUTH_URL / NEXTAUTH_URL = https://www.studio-canvas-ai.com in production.
+  // trustHost allows Auth.js to honor the request Host (custom domain) when set.
   trustHost: true,
   providers: buildProviders(),
-  session: { strategy: "jwt" },
+  session: { strategy: "jwt", maxAge: 30 * 24 * 60 * 60 },
+  // Avoid `__Host-` CSRF cookies (often rejected on custom domains after OAuth redirects).
+  cookies: authJsCookiesConfig(),
   pages: {
     signIn: "/generate",
     error: "/generate",
@@ -144,7 +283,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     async signIn({ user, account }) {
       if (!account) return false;
-      if (account.provider === "credentials" || account.provider === "google-mock") return true;
+      if (
+        account.provider === "credentials" ||
+        account.provider === "google-mock" ||
+        account.provider === "supabase"
+      ) {
+        return true;
+      }
       const provider = account.provider as AuthProviderId;
       await findOrCreateOAuthUser({
         provider,
@@ -158,7 +303,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async jwt({ token, account, user }) {
       if (account && user) {
         token.authProvider = account.provider;
-        if (account.provider === "credentials" || account.provider === "google-mock") {
+        if (
+          account.provider === "credentials" ||
+          account.provider === "google-mock" ||
+          account.provider === "supabase"
+        ) {
           token.uid = user.id;
           const { getUserById } = await import("@/lib/db/credits");
           const dbUser = await getUserById(user.id!);
@@ -203,9 +352,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 });
 
 export function listSocialProviders(): AuthProviderId[] {
+  if (isSupabaseConfigured()) {
+    // All social buttons route through Supabase Auth when the project is wired up.
+    return [...SUPABASE_SOCIAL_PROVIDERS];
+  }
+
   const out: AuthProviderId[] = [];
-  if (process.env.KAKAO_CLIENT_ID && process.env.KAKAO_CLIENT_SECRET) out.push("kakao");
   if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) out.push("google");
+  if (process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET) out.push("microsoft");
+  if (process.env.FACEBOOK_CLIENT_ID && process.env.FACEBOOK_CLIENT_SECRET) out.push("facebook");
+  if (process.env.INSTAGRAM_CLIENT_ID && process.env.INSTAGRAM_CLIENT_SECRET) out.push("instagram");
+  if (process.env.KAKAO_CLIENT_ID && process.env.KAKAO_CLIENT_SECRET) out.push("kakao");
   if (process.env.NAVER_CLIENT_ID && process.env.NAVER_CLIENT_SECRET) out.push("naver");
   return out;
 }

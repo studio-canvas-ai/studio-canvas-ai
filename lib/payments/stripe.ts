@@ -26,7 +26,9 @@ function planLabel(planId: string, interval: BillingInterval): string {
         : planId === "pro"
           ? "Pro"
           : "Starter";
-  return `${name} (${interval === "annual" ? "Annual" : "Monthly"})`;
+  const cadence =
+    interval === "annual" ? "Annual" : interval === "quarterly" ? "3-Month" : "Monthly";
+  return `${name} (${cadence})`;
 }
 
 export async function createStripeCheckoutSession(input: {
@@ -38,7 +40,11 @@ export async function createStripeCheckoutSession(input: {
   const stripe = getStripe();
   if (!stripe) throw new Error("STRIPE_SECRET_KEY missing");
 
-  const isSubscription = input.order.kind === "subscription";
+  const isPlanPurchase = input.order.kind === "subscription";
+  const interval = input.order.billingInterval ?? "annual";
+  // Annual passes are prepaid one-time purchases. Only monthly plans create
+  // recurring Stripe subscriptions.
+  const isRecurringSubscription = isPlanPurchase && interval === "monthly";
   const amountUsd = input.order.amountUsd ?? 0;
   const amountCents = Math.round(amountUsd * 100);
 
@@ -63,7 +69,7 @@ export async function createStripeCheckoutSession(input: {
   };
 
   const baseParams: Stripe.Checkout.SessionCreateParams = {
-    mode: isSubscription ? "subscription" : "payment",
+    mode: isRecurringSubscription ? "subscription" : "payment",
     success_url: `${input.successUrl}${input.successUrl.includes("?") ? "&" : "?"}session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: input.cancelUrl,
     client_reference_id: input.order.id,
@@ -76,8 +82,7 @@ export async function createStripeCheckoutSession(input: {
         : {}),
   };
 
-  if (isSubscription && input.order.planId) {
-    const interval = input.order.billingInterval ?? "annual";
+  if (isRecurringSubscription && input.order.planId) {
     baseParams.line_items = [
       {
         price_data: {
@@ -87,14 +92,32 @@ export async function createStripeCheckoutSession(input: {
             name: planLabel(input.order.planId, interval),
             description: `${input.order.credits} portrait credits / period`,
           },
-          recurring: {
-            interval: interval === "annual" ? "year" : "month",
-          },
+          recurring: { interval: "month" },
         },
         quantity: 1,
       },
     ];
     baseParams.subscription_data = { metadata };
+  } else if (isPlanPurchase && input.order.planId) {
+    baseParams.line_items = [
+      {
+        price_data: {
+          currency: "usd",
+          unit_amount: amountCents,
+          product_data: {
+            name: planLabel(input.order.planId, interval),
+            description:
+              interval === "annual"
+                ? `${input.order.credits} portrait credits · 12-month prepaid pass · no auto-renewal`
+                : interval === "quarterly"
+                  ? `${input.order.credits} portrait credits · 3-month prepaid pass · no auto-renewal`
+                  : `${input.order.credits} portrait credits`,
+          },
+        },
+        quantity: 1,
+      },
+    ];
+    baseParams.payment_intent_data = { metadata };
   } else {
     baseParams.line_items = [
       {
@@ -139,12 +162,48 @@ export async function cancelStripeSubscriptionAtPeriodEnd(
   });
 }
 
+export async function cancelStripeSubscriptionImmediately(
+  subscriptionId: string
+): Promise<void> {
+  const stripe = getStripe();
+  if (!stripe) throw new Error("STRIPE_SECRET_KEY missing");
+  const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+  if (subscription.status !== "canceled") {
+    await stripe.subscriptions.cancel(subscriptionId);
+  }
+}
+
 export async function resumeStripeSubscription(subscriptionId: string): Promise<void> {
   const stripe = getStripe();
   if (!stripe) throw new Error("STRIPE_SECRET_KEY missing");
   await stripe.subscriptions.update(subscriptionId, {
     cancel_at_period_end: false,
   });
+}
+
+export async function createStripeRefund(input: {
+  paymentIntentId?: string | null;
+  checkoutSessionId?: string | null;
+  reason?: "duplicate" | "fraudulent" | "requested_by_customer";
+}): Promise<{ refundId: string; paymentIntentId: string }> {
+  const stripe = getStripe();
+  if (!stripe) throw new Error("STRIPE_SECRET_KEY missing");
+
+  let paymentIntentId = input.paymentIntentId?.trim() || "";
+  if (!paymentIntentId && input.checkoutSessionId) {
+    const session = await stripe.checkout.sessions.retrieve(input.checkoutSessionId);
+    const pi = session.payment_intent;
+    paymentIntentId = typeof pi === "string" ? pi : pi?.id ?? "";
+  }
+  if (!paymentIntentId) {
+    throw new Error("Stripe payment intent missing for refund");
+  }
+
+  const refund = await stripe.refunds.create({
+    payment_intent: paymentIntentId,
+    reason: input.reason ?? "requested_by_customer",
+  });
+  return { refundId: refund.id, paymentIntentId };
 }
 
 export function verifyStripeWebhook(

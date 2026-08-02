@@ -97,21 +97,23 @@ export function detectScript(text: string): "ko" | "ja" | "zh" | "en" {
   return "en";
 }
 
+/** System color-emoji stack first — Google Noto Color Emoji web font often tofu/`?` on Windows. */
+export const EMOJI_FONT =
+  '"Segoe UI Emoji", "Apple Color Emoji", "Android Emoji", "Noto Color Emoji", "Segoe UI Symbol", sans-serif';
+
 /** i18n font fallback — prevents tofu □□□ for CJK / emoji */
 export function fontForText(preset: FontPreset, text: string): string {
   const script = detectScript(text);
-  const emoji =
-    '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Segoe UI Symbol"';
   if (script === "ja") {
-    return `${emoji}, "Noto Sans JP", ${FONT_STACK[preset]}`;
+    return `${EMOJI_FONT}, "Noto Sans JP", ${FONT_STACK[preset]}`;
   }
   if (script === "zh") {
-    return `${emoji}, "Noto Sans SC", ${FONT_STACK[preset]}`;
+    return `${EMOJI_FONT}, "Noto Sans SC", ${FONT_STACK[preset]}`;
   }
   if (script === "en" && preset === "neon") {
-    return `${emoji}, "Orbitron", "Noto Sans", sans-serif`;
+    return `${EMOJI_FONT}, "Orbitron", "Noto Sans", sans-serif`;
   }
-  return `${emoji}, ${FONT_STACK[preset]}`;
+  return `${EMOJI_FONT}, ${FONT_STACK[preset]}`;
 }
 
 export function createLayer(partial?: Partial<TextLayer>): TextLayer {
@@ -160,12 +162,30 @@ export function applyColorRange(
 }
 
 export function isEmojiChar(ch: string): boolean {
-  return /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/u.test(ch);
+  // Prefer Extended_Pictographic so surrogate-pair emoji (🔥 etc.) match as one unit
+  try {
+    return /\p{Extended_Pictographic}/u.test(ch) || /[\uFE0F\u200D]/u.test(ch);
+  } catch {
+    return /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/u.test(ch);
+  }
+}
+
+/** Iterate UTF-16 string by Unicode code point (avoids splitting emoji into `?`). */
+export function forEachCodePoint(
+  text: string,
+  fn: (ch: string, utf16Index: number) => void
+): void {
+  for (let i = 0; i < text.length; ) {
+    const cp = text.codePointAt(i)!;
+    const ch = String.fromCodePoint(cp);
+    fn(ch, i);
+    i += ch.length;
+  }
 }
 
 export function fontForChar(preset: FontPreset, ch: string): string {
   if (isEmojiChar(ch)) {
-    return '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Segoe UI Symbol", sans-serif';
+    return EMOJI_FONT;
   }
   return fontForText(preset, ch);
 }
@@ -302,10 +322,7 @@ export function segmentText(text: string): TextSegment[] {
   return segments.length ? segments : [{ kind: "text", value: text }];
 }
 
-const EMOJI_FONT =
-  '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Segoe UI Symbol", sans-serif';
-
-/** Draw a single emoji char via offscreen canvas (color emoji fallback). */
+/** Draw a single emoji (full code point) with system color-emoji fonts. */
 export function drawEmojiChar(
   ctx: CanvasRenderingContext2D,
   ch: string,
@@ -313,23 +330,17 @@ export function drawEmojiChar(
   y: number,
   fontSize: number
 ): number {
-  const pad = Math.ceil(fontSize * 0.15);
-  const size = Math.ceil(fontSize * 1.25);
-  const off = document.createElement("canvas");
-  off.width = size + pad * 2;
-  off.height = size + pad * 2;
-  const octx = off.getContext("2d");
-  if (!octx) {
-    ctx.font = `700 ${fontSize}px ${EMOJI_FONT}`;
-    ctx.fillText(ch, x, y);
-    return ctx.measureText(ch).width || fontSize;
-  }
-  octx.font = `${fontSize}px ${EMOJI_FONT}`;
-  octx.textAlign = "center";
-  octx.textBaseline = "middle";
-  octx.fillText(ch, off.width / 2, off.height / 2);
-  const w = size;
-  ctx.drawImage(off, x, y - fontSize * 0.55, w, w);
+  ctx.save();
+  ctx.font = `${Math.round(fontSize)}px ${EMOJI_FONT}`;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.shadowBlur = 0;
+  ctx.shadowColor = "transparent";
+  ctx.fillStyle = "#000";
+  // Native fillText preserves color emoji on Win/macOS; offscreen blit often loses color → `?`
+  ctx.fillText(ch, x, y);
+  const w = ctx.measureText(ch).width || fontSize * 1.1;
+  ctx.restore();
   return w;
 }
 

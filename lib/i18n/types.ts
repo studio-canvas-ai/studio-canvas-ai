@@ -10,6 +10,14 @@ export interface LocaleInfo {
   flag: string;
 }
 
+export interface StylePackCopy {
+  name: string;
+  description: string;
+  tags: string[];
+  /** Overrides the concept-group label shown on the card image badge. */
+  badge?: string;
+}
+
 export const LOCALE_INFO: LocaleInfo[] = [
   { code: "en", label: "English", nativeName: "English", flag: "🇺🇸" },
   { code: "kr", label: "Korean", nativeName: "한국어", flag: "🇰🇷" },
@@ -25,6 +33,12 @@ export const LOCALE_INFO: LocaleInfo[] = [
 
 export interface Translations {
   meta: { title: string; description: string };
+  /** Shared modal/toast chrome (FeedbackProvider defaults). */
+  common: {
+    cancel: string;
+    confirm: string;
+    close: string;
+  };
   nav: {
     home: string;
     creator: string;
@@ -38,6 +52,8 @@ export interface Translations {
     trial: string;
     menu: string;
     topup: string;
+    promoCode: string;
+    promoBalance: string;
   };
   hero: {
     badge: string;
@@ -101,7 +117,44 @@ export interface Translations {
     uploadErrorTooLarge: string;
     uploadErrorConvert: string;
     styleSelectHint: string;
+    conceptTitle: string;
+    conceptSubtitle: string;
+    conceptGroups: {
+      all: string;
+      professional: string;
+      lifestyle: string;
+      editorial: string;
+      traditional: string;
+      vintage: string;
+    };
+    conceptGroupHints: {
+      professional: string;
+      lifestyle: string;
+      editorial: string;
+      traditional: string;
+      vintage: string;
+    };
+    compositionTags: {
+      headshot: string;
+      upperBody: string;
+      fullBody: string;
+    };
+    makeWithStyle: string;
+    styleLocked: string;
+    resultTitle: string;
+    resultSubtitle: string;
+    actionDownloadHd: string;
+    actionSaveGallery: string;
+    actionRetryStyle: string;
+    savedToGalleryDone: string;
+    viewMyGallery: string;
+    generateFailed: string;
+    generateFailedRefunded: string;
+    generateNetworkError: string;
+    generateRetryHint: string;
+    generateRetry: string;
     prev: string;
+    backStep: string;
     next: string;
     startTraining: string;
     trainingProgress: string;
@@ -113,8 +166,16 @@ export interface Translations {
     downloadPortrait: string;
     deletePortrait: string;
     deletePortraitConfirm: string;
+    deletePortraitConfirmTitle: string;
+    deletePortraitDone: string;
     deleteConfirmYes: string;
     deleteConfirmNo: string;
+    summaryTitle: string;
+    summaryStyleLabel: string;
+    summarySubjectLabel: string;
+    summaryBackgroundLabel: string;
+    summaryPhotosLabel: string;
+    summaryPhotosValue: string;
     resultReady: string;
     aspectRatioLabel: string;
     aspect916: string;
@@ -137,6 +198,12 @@ export interface Translations {
     draftA: string;
     draftB: string;
     focusDraft: string;
+    draftDownload: string;
+    compareButton: string;
+    compareTitle: string;
+    compareSubtitle: string;
+    compareSliderLabel: string;
+    compareClose: string;
     bgModeLabel: string;
     bgAuto: string;
     bgTags: string;
@@ -162,6 +229,11 @@ export interface Translations {
     regenerateWithCredit: string;
     regenerateNeedCredit: string;
     draftSelected: string;
+    confirmDraftSelect: string;
+    comparePhaseTitle: string;
+    comparePhaseSubtitle: string;
+    detailPhaseTitle: string;
+    detailPhaseSubtitle: string;
     savedToGallery: string;
     validationMissingFields: string;
     validationUploadMin: string;
@@ -276,20 +348,37 @@ export interface Translations {
   };
   auth: {
     title: string;
+    welcomeTitle: string;
     subtitle: string;
     email: string;
+    emailPlaceholder: string;
+    name: string;
+    namePlaceholder: string;
     password: string;
+    passwordPlaceholder: string;
     signup: string;
     login: string;
+    signupWithEmail: string;
+    agreeTermsPrefix: string;
+    agreeTermsAnd: string;
+    termsOfService: string;
+    privacyPolicy: string;
+    termsRequired: string;
+    switchToLogin: string;
+    switchToSignup: string;
     freeCredits: string;
     skipToGenerate: string;
     continueWithKakao: string;
     continueWithGoogle: string;
     continueWithNaver: string;
+    continueWithMicrosoft: string;
+    continueWithFacebook: string;
+    continueWithInstagram: string;
     orEmail: string;
     socialHint: string;
     googlePrimary: string;
     mockLoginHint: string;
+    providerUnavailable: string;
   };
   promotion: {
     title: string;
@@ -321,6 +410,7 @@ export interface Translations {
     expiry: string;
     cvc: string;
     creditsIncluded: string;
+    creditsIncludedAnnual: string;
     payNow: string;
     processing: string;
     simulated: string;
@@ -333,6 +423,10 @@ export interface Translations {
     secureCheckout: string;
     vatIncluded: string;
     autoRenewNotice: string;
+    annualOneTimeNotice: string;
+    annualExpiryNotice: string;
+    quarterlyOneTimeNotice: string;
+    quarterlyExpiryNotice: string;
     termsLabel: string;
     termsRequired: string;
     refundNotice: string;
@@ -349,7 +443,11 @@ export interface Translations {
     billingInterval: string;
     monthly: string;
     annual: string;
+    quarterly: string;
     nextBilling: string;
+    expiryDate: string;
+    annualNoRenewNotice: string;
+    quarterlyNoRenewNotice: string;
     paymentMethod: string;
     changePayment: string;
     cancelSubscription: string;
@@ -364,6 +462,10 @@ export interface Translations {
     paymentHistory: string;
     noPayments: string;
     viewReceipt: string;
+    requestRefund: string;
+    refundSuccess: string;
+    refundDenied: string;
+    refunded: string;
     creditsRemaining: string;
     freePlan: string;
     loginRequired: string;
@@ -386,13 +488,14 @@ export interface Translations {
       studio: string;
     };
     packs: {
-      "luxury-lifestyle": { name: string; description: string; tags: string[] };
-      "cinematic-poster": { name: string; description: string; tags: string[] };
-      "business-executive": { name: string; description: string; tags: string[] };
-      "cultural-elegance": { name: string; description: string; tags: string[] };
-      "classic-western": { name: string; description: string; tags: string[] };
-      "neon-urban": { name: string; description: string; tags: string[] };
-      "soft-studio": { name: string; description: string; tags: string[] };
+      "luxury-lifestyle": StylePackCopy;
+      "cinematic-poster": StylePackCopy;
+      "business-executive": StylePackCopy;
+      "cultural-elegance-east": StylePackCopy;
+      "cultural-elegance-west": StylePackCopy;
+      "classic-western": StylePackCopy;
+      "neon-urban": StylePackCopy;
+      "soft-studio": StylePackCopy;
     };
   };
   gallery: {
@@ -400,6 +503,9 @@ export interface Translations {
     title: string;
     subtitle: string;
     portfolio: string;
+    myResultsTitle: string;
+    myResultsEmpty: string;
+    myResultsCta: string;
     works: string;
     analyzing: string;
     generating: string;
@@ -419,6 +525,10 @@ export interface Translations {
     worksReedit: string;
     worksDelete: string;
     worksDeleteConfirm: string;
+    worksDeleteConfirmTitle: string;
+    worksDeleteDone: string;
+    worksDeleteYes: string;
+    worksDeleteNo: string;
     retentionActiveBanner: string;
     expiryBadge: string;
     items: {
@@ -435,6 +545,7 @@ export interface Translations {
     title: string;
     subtitle: string;
     perMonth: string;
+    perQuarter: string;
     mostPopular: string;
     getStarted: string;
     selectPlan: string;
@@ -443,8 +554,10 @@ export interface Translations {
     addonTitle: string;
     addonSubtitle: string;
     annualBilling: string;
+    quarterlyBilling: string;
     monthlyBilling: string;
     annualSubscription: string;
+    quarterlySubscription: string;
     monthlySubscription: string;
     annualRecommended: string;
     monthlyPopular: string;
@@ -457,7 +570,10 @@ export interface Translations {
     permanentBenefit: string;
     watermarkBenefit: string;
     annualPrepaid: string;
+    quarterlyPrepaid: string;
     upgradeNotice: string;
+    upgradeNoticeQuarterly: string;
+    quarterlyNoAutoRenewNotice: string;
     vatNotice: string;
     plans: {
       starter: { name: string; description: string; features: string[] };

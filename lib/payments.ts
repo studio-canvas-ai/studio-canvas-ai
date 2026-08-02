@@ -2,8 +2,9 @@ import {
   CREDIT_PACKS,
   type BillingInterval,
   creditPackAmount,
-  creditPackPricesKrw,
   getPlanOffer,
+  billingPeriodDays,
+  isPrepaidPass,
   pricingPlanIds,
 } from "@/lib/data";
 import { usdToKrw } from "@/lib/currency";
@@ -16,6 +17,7 @@ import {
   createStripeCheckoutSession,
   stripeConfigured,
 } from "@/lib/payments/stripe";
+import { getSiteUrl } from "@/lib/site";
 
 export type CheckoutKind = "subscription" | "credit_pack";
 
@@ -36,7 +38,7 @@ export function getPaymentProvider(locale?: Locale): PaymentProviderId {
 }
 
 export function isDemoCheckoutAllowed(): boolean {
-  const host = process.env.NEXTAUTH_URL ?? "";
+  const host = getSiteUrl();
   return host.includes("localhost") || host.includes("127.0.0.1");
 }
 
@@ -66,7 +68,8 @@ export async function createPaymentOrder(input: {
       const interval = input.billingInterval ?? "annual";
       const offer = getPlanOffer(input.planId, interval);
       amountUsd = offer.totalUsd;
-      baseAmountKrw = offer.totalKrw;
+      // Live/cached FX — do not rely on module-load static totalKrw alone.
+      baseAmountKrw = usdToKrw(amountUsd);
       amountKrw = baseAmountKrw;
       credits = offer.credits;
 
@@ -98,7 +101,7 @@ export async function createPaymentOrder(input: {
       const pack = CREDIT_PACKS.find((p) => p.id === input.packId);
       if (!pack) throw new Error("invalid pack");
       amountUsd = pack.price;
-      amountKrw = creditPackPricesKrw[pack.id];
+      amountKrw = usdToKrw(pack.price);
       credits = creditPackAmount(pack, input.isSubscriber);
     }
 
@@ -167,8 +170,12 @@ export async function markOrderPaid(params: {
 
     o.status = "paid";
     o.paidAt = now;
+    o.creditsRemaining = o.credits;
     o.externalPaymentKey = params.externalPaymentKey;
     if (params.receiptUrl) o.receiptUrl = params.receiptUrl;
+    if (params.externalPaymentKey?.startsWith("pi_")) {
+      o.stripePaymentIntentId = params.externalPaymentKey;
+    }
 
     user.credits = Math.round((user.credits + o.credits) * 10) / 10;
     user.maxCredits = Math.max(user.maxCredits, user.credits);
@@ -187,9 +194,14 @@ export async function markOrderPaid(params: {
       const isRenewal = previousPlanId === o.planId && previousInterval === interval;
       user.planId = o.planId;
       user.billingInterval = interval;
+      if (isPrepaidPass(interval)) {
+        // Prepaid passes are one-time checkouts, not provider subscriptions.
+        delete user.stripeSubscriptionId;
+        user.cancelAtPeriodEnd = false;
+        delete user.scheduledCancelAt;
+      }
       user.currentPeriodStart = now;
-      user.currentPeriodEnd =
-        now + (interval === "annual" ? 365 : 30) * 24 * 60 * 60 * 1000;
+      user.currentPeriodEnd = now + billingPeriodDays(interval) * 24 * 60 * 60 * 1000;
       user.lastPlanAmountKrw = o.baseAmountKrw ?? o.amountKrw;
       user.lastPlanAmountUsd = o.amountUsd;
       db.ledger.push({
@@ -248,7 +260,10 @@ export async function saveBillingCredentials(input: {
 export async function getUserPaymentHistory(userId: string) {
   const db = getDb();
   return Object.values(db.orders)
-    .filter((o) => o.userId === userId && o.status === "paid")
+    .filter(
+      (o) =>
+        o.userId === userId && (o.status === "paid" || o.status === "refunded")
+    )
     .sort((a, b) => (b.paidAt ?? b.createdAt) - (a.paidAt ?? a.createdAt));
 }
 
@@ -278,6 +293,36 @@ export async function confirmTossPayment(params: {
     throw new Error((data as { message?: string }).message || "Toss confirm failed");
   }
   return data as { receipt?: { url?: string } };
+}
+
+/** Toss Payments cancel/refund API (domestic PG — NHN KCP via Toss). */
+export async function cancelTossPayment(params: {
+  paymentKey: string;
+  cancelReason: string;
+  cancelAmount?: number;
+}) {
+  const secret = process.env.TOSS_SECRET_KEY;
+  if (!secret) throw new Error("TOSS_SECRET_KEY missing");
+  const auth = Buffer.from(`${secret}:`).toString("base64");
+  const res = await fetch(
+    `https://api.tosspayments.com/v1/payments/${encodeURIComponent(params.paymentKey)}/cancel`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${auth}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        cancelReason: params.cancelReason,
+        ...(params.cancelAmount != null ? { cancelAmount: params.cancelAmount } : {}),
+      }),
+    }
+  );
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error((data as { message?: string }).message || "Toss cancel failed");
+  }
+  return data as { paymentKey?: string; cancels?: unknown[] };
 }
 
 export function orderAmountForProvider(order: PaymentOrder): number {

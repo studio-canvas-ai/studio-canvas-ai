@@ -8,6 +8,9 @@ export type AuthProviderId =
   | "kakao"
   | "google"
   | "naver"
+  | "microsoft"
+  | "facebook"
+  | "instagram"
   | "credentials"
   | "google-mock";
 
@@ -60,7 +63,9 @@ export type CreditLedgerEntry = {
     | "subscription_renewal"
     | "credit_pack"
     | "admin_adjust"
-    | "refund";
+    | "refund"
+    | "payment_refund"
+    | "system_error_restore";
   meta?: Record<string, string | number | boolean | null>;
   createdAt: number;
 };
@@ -80,7 +85,9 @@ export type PaymentOrder = {
   prorationCreditKrw?: number;
   amountKrw: number;
   credits: number;
-  status: "pending" | "paid" | "failed" | "cancelled";
+  /** Remaining unused credits from this payment (FIFO consumption). */
+  creditsRemaining?: number;
+  status: "pending" | "paid" | "failed" | "cancelled" | "refunded";
   externalPaymentKey?: string;
   stripeCheckoutSessionId?: string;
   stripePaymentIntentId?: string;
@@ -90,6 +97,11 @@ export type PaymentOrder = {
   paidAt?: number;
   failedAt?: number;
   failureReason?: string;
+  refundedAt?: number;
+  refundId?: string;
+  refundReason?: string;
+  /** system_error | customer_request | admin_exception */
+  refundKind?: "auto" | "system_error" | "admin_exception";
 };
 
 export type ProcessedWebhookEvent = {

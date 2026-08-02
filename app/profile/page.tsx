@@ -13,6 +13,7 @@ import {
 import { useI18n } from "@/components/I18nProvider";
 import { useCredits } from "@/components/CreditsProvider";
 import type { BillingInterval } from "@/lib/data";
+import { isPrepaidPass } from "@/lib/data";
 import { normalizeSubscriptionLifecycle } from "@/lib/subscriptionState";
 
 type AccountSnapshot = {
@@ -39,6 +40,8 @@ type Receipt = {
   paidAt: number;
   receiptUrl: string | null;
   provider: string;
+  status?: string;
+  refundEligible?: boolean;
 };
 
 function planLabel(planId: string) {
@@ -60,7 +63,7 @@ function formatDate(ts: number | null | undefined, locale: string) {
 
 export default function ProfilePage() {
   const { t, locale } = useI18n();
-  const { isAuthenticated, setShowAuthModal, refreshAccount } = useCredits();
+  const { isAuthenticated, openAuthModal, refreshAccount } = useCredits();
   const [account, setAccount] = useState<AccountSnapshot | null>(null);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,6 +71,7 @@ export default function ProfilePage() {
   const [message, setMessage] = useState<string | null>(null);
   const [showCancel, setShowCancel] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+  const [refundingId, setRefundingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -114,7 +118,7 @@ export default function ProfilePage() {
         <p className="mt-2 text-sm text-white/50">{t.mypage.loginRequired}</p>
         <button
           type="button"
-          onClick={() => setShowAuthModal(true)}
+          onClick={() => openAuthModal({ clearPending: true })}
           className="btn-primary mt-6 px-6 py-2.5 text-sm"
         >
           {t.nav.login}
@@ -204,6 +208,29 @@ export default function ProfilePage() {
     }
   };
 
+  const handleRefund = async (orderId: string) => {
+    setRefundingId(orderId);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/payments/refund", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId }),
+      });
+      const data = (await res.json()) as { error?: string; message?: string };
+      if (!res.ok) {
+        throw new Error(data.message || data.error || t.mypage.refundDenied);
+      }
+      setMessage(t.mypage.refundSuccess);
+      await refreshAccount();
+      await load();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : t.mypage.refundDenied);
+    } finally {
+      setRefundingId(null);
+    }
+  };
+
   return (
     <main className="mx-auto max-w-3xl px-4 pt-28 pb-16">
       <div className="mb-8">
@@ -238,11 +265,19 @@ export default function ProfilePage() {
             <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
               <p className="text-xs text-white/40">{t.mypage.billingInterval}</p>
               <p className="mt-1 text-sm text-white">
-                {account.billingInterval === "annual" ? t.mypage.annual : t.mypage.monthly}
+                {account.billingInterval === "quarterly"
+                  ? t.mypage.quarterly
+                  : account.billingInterval === "annual"
+                    ? t.mypage.annual
+                    : t.mypage.monthly}
               </p>
             </div>
             <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-              <p className="text-xs text-white/40">{t.mypage.nextBilling}</p>
+              <p className="text-xs text-white/40">
+                {account.billingInterval && isPrepaidPass(account.billingInterval)
+                  ? t.mypage.expiryDate
+                  : t.mypage.nextBilling}
+              </p>
               <p className="mt-1 text-sm text-white">
                 {formatDate(account.currentPeriodEnd, locale)}
               </p>
@@ -256,12 +291,22 @@ export default function ProfilePage() {
           </div>
         )}
 
+        {account.planId !== "free" &&
+          account.billingInterval &&
+          isPrepaidPass(account.billingInterval) && (
+          <p className="mt-4 rounded-xl border border-amber-300/25 bg-amber-400/[0.07] px-4 py-3 text-sm text-amber-100">
+            {account.billingInterval === "quarterly"
+              ? t.mypage.quarterlyNoRenewNotice
+              : t.mypage.annualNoRenewNotice}
+          </p>
+        )}
+
         {lifecycle === "CANCELED_PENDING" && (
           <p className="mt-4 text-sm text-amber-200">{t.mypage.cancelPending}</p>
         )}
 
         <div className="mt-6 flex flex-wrap gap-3">
-          {account.stripeCustomerId && (
+          {account.stripeCustomerId && account.billingInterval === "monthly" && (
             <button
               type="button"
               disabled={busy}
@@ -272,7 +317,9 @@ export default function ProfilePage() {
               {t.mypage.changePayment}
             </button>
           )}
-          {account.planId !== "free" && lifecycle === "ACTIVE" && (
+          {account.planId !== "free" &&
+            account.billingInterval === "monthly" &&
+            lifecycle === "ACTIVE" && (
             <button
               type="button"
               disabled={busy}
@@ -283,7 +330,7 @@ export default function ProfilePage() {
               {t.mypage.cancelSubscription}
             </button>
           )}
-          {lifecycle === "CANCELED_PENDING" && (
+          {account.billingInterval === "monthly" && lifecycle === "CANCELED_PENDING" && (
             <button
               type="button"
               disabled={busy}
@@ -341,14 +388,19 @@ export default function ProfilePage() {
                 <div>
                   <p className="text-sm text-white">
                     {r.kind === "subscription" ? "Subscription" : "Credit pack"} · {r.credits}C
+                    {r.status === "refunded" ? (
+                      <span className="ml-2 text-xs text-amber-200">({t.mypage.refunded})</span>
+                    ) : null}
                   </p>
                   <p className="text-xs text-white/40">
                     {formatDate(r.paidAt, locale)} · {r.provider}
                   </p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <span className="text-sm font-medium text-white">
-                    {r.currency === "USD" ? `$${r.amountUsd}` : `₩${r.amountKrw.toLocaleString()}`}
+                    {r.currency === "USD"
+                      ? `$${Number(r.amountUsd).toFixed(2)}`
+                      : `₩${r.amountKrw.toLocaleString()}`}
                   </span>
                   {r.receiptUrl && (
                     <a
@@ -360,6 +412,16 @@ export default function ProfilePage() {
                       {t.mypage.viewReceipt}
                       <ExternalLink className="h-3 w-3" />
                     </a>
+                  )}
+                  {r.status === "paid" && r.refundEligible && (
+                    <button
+                      type="button"
+                      disabled={refundingId === r.id}
+                      onClick={() => void handleRefund(r.id)}
+                      className="rounded-lg border border-amber-300/40 bg-amber-400/10 px-2.5 py-1 text-xs font-medium text-amber-100 transition hover:bg-amber-400/20 disabled:opacity-50"
+                    >
+                      {refundingId === r.id ? "..." : t.mypage.requestRefund}
+                    </button>
                   )}
                 </div>
               </li>
