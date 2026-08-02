@@ -12,6 +12,7 @@ import {
 } from "@/lib/supabase/config";
 import {
   signInWithSupabaseOAuth,
+  signInWithMicrosoft,
   signInWithKakao,
   signInWithNaver,
 } from "@/lib/supabase/oauth";
@@ -146,6 +147,30 @@ export default function AuthModal() {
     window.location.href = "/generate";
   };
 
+  const handleMicrosoftLogin = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const next = pendingPlanId ? "/pricing" : "/generate";
+      const { error: oauthError } = await signInWithMicrosoft(next);
+      if (oauthError) {
+        console.error("마이크로소프트 로그인 오류:", oauthError.message);
+        setError(
+          oauthError.message ||
+            "로그인 중 문제가 발생했습니다. 설정을 다시 확인해 주세요."
+        );
+        setBusy(false);
+        return;
+      }
+      // Browser navigates to Microsoft; keep busy state.
+    } catch (err) {
+      console.error("예기치 못한 오류가 발생했습니다:", err);
+      const message = err instanceof Error ? err.message : t.auth.providerUnavailable;
+      setError(message);
+      setBusy(false);
+    }
+  };
+
   const handleKakaoLogin = async () => {
     setBusy(true);
     setError(null);
@@ -189,6 +214,10 @@ export default function AuthModal() {
   };
 
   const handleSocial = async (provider: SocialProviderId) => {
+    if (provider === "microsoft") {
+      await handleMicrosoftLogin();
+      return;
+    }
     if (provider === "kakao") {
       await handleKakaoLogin();
       return;
@@ -356,6 +385,10 @@ export default function AuthModal() {
                   type="button"
                   disabled={busy}
                   onClick={() => {
+                    if (id === "microsoft") {
+                      void handleMicrosoftLogin();
+                      return;
+                    }
                     if (id === "kakao") {
                       void handleKakaoLogin();
                       return;

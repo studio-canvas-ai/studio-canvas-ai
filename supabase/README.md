@@ -45,6 +45,35 @@ Redeploy after changing any `NEXT_PUBLIC_*` variable.
 - Authorized redirect URIs: `https://oorujqbivznftsyqilyj.supabase.co/auth/v1/callback`
 - Client ID + Secret → Supabase → Authentication → Providers → Google
 
+## Microsoft Custom OAuth (`custom:microsoft`)
+
+App code: `signInWithMicrosoft()` → `provider: 'custom:microsoft'`,
+`redirectTo: window.location.origin` (production: `https://www.studio-canvas-ai.com`).
+
+> Do **not** set app `redirectTo` to `/auth/v1/callback` on the site host.
+> That path is Supabase’s provider callback on `*.supabase.co`.
+
+### Azure / Entra app registration
+
+| Field | Value |
+|--------|--------|
+| Redirect URI (Web) | `https://oorujqbivznftsyqilyj.supabase.co/auth/v1/callback` |
+| Supported account types | Multitenant + personal Microsoft accounts (or as needed) |
+| Client ID / Secret | → Supabase Custom provider |
+
+### Supabase → Authentication → Providers → Custom (identifier: `microsoft`)
+
+| Field | Value |
+|--------|--------|
+| Provider type | OAuth2 / OIDC |
+| Authorization URL | `https://login.microsoftonline.com/common/oauth2/v2.0/authorize` |
+| Token URL | `https://login.microsoftonline.com/common/oauth2/v2.0/token` |
+| Userinfo URL | `https://graph.microsoft.com/oidc/userinfo` |
+| Scopes | `openid profile email offline_access` |
+| Client ID / Secret | from Azure app registration |
+
+Auth Redirect URLs must include `https://www.studio-canvas-ai.com/**`.
+
 ## Kakao OAuth (`kakao`)
 
 Built-in Supabase provider. App code: `signInWithKakao()` → `provider: 'kakao'`,

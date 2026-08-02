@@ -15,14 +15,14 @@ const AUTH_NEXT_KEY = "sca_auth_next";
 
 /**
  * Map our UI provider ids → Supabase Auth OAuth provider names.
- * Microsoft uses Azure AD (`azure`). Instagram / Naver are not first-class
- * Supabase providers; they can use custom OAuth if configured in the dashboard.
+ * Microsoft is configured as Custom OAuth (`custom:microsoft`) in the dashboard.
+ * Instagram / Naver are also custom providers.
  */
 const TO_SUPABASE: Record<SocialOAuthId, Provider | `custom:${string}`> = {
   google: "google",
   facebook: "facebook",
   kakao: "kakao",
-  microsoft: "azure",
+  microsoft: "custom:microsoft",
   instagram: "custom:instagram",
   naver: "custom:naver",
 };
@@ -42,6 +42,10 @@ export function mapSupabaseProviderToAuthId(
       return "facebook";
     case "kakao":
       return "kakao";
+    case "custom:microsoft":
+    case "microsoft":
+    case "azure":
+      return "microsoft";
     case "custom:instagram":
     case "instagram":
       return "instagram";
@@ -247,6 +251,55 @@ export async function signInWithSupabaseOAuth(
   });
 
   return { error: error ? new Error(error.message) : null };
+}
+
+/**
+ * Supabase Custom OAuth for Microsoft (`custom:microsoft`).
+ *
+ * Azure app Redirect URI must be Supabase's callback (not the site origin):
+ *   https://oorujqbivznftsyqilyj.supabase.co/auth/v1/callback
+ * App `redirectTo` is the site origin; middleware forwards `?code=` → /auth/callback.
+ */
+export async function signInWithMicrosoft(
+  nextPath = "/generate"
+): Promise<{ data: unknown; error: Error | null }> {
+  try {
+    if (!isSupabaseConfigured()) {
+      const err = new Error(
+        getSupabaseConfigError() ||
+          "Supabase is not configured (check NEXT_PUBLIC_SUPABASE_URL / ANON_KEY)."
+      );
+      console.error("마이크로소프트 로그인 오류:", err.message);
+      return { data: null, error: err };
+    }
+
+    saveAuthNextPath(nextPath);
+
+    const supabase = createSupabaseBrowserClient();
+    const redirectTo =
+      typeof window !== "undefined"
+        ? window.location.origin
+        : "https://www.studio-canvas-ai.com";
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "custom:microsoft" as Provider,
+      options: {
+        redirectTo,
+        scopes: "openid profile email offline_access",
+      },
+    });
+
+    if (error) {
+      console.error("마이크로소프트 로그인 오류:", error.message);
+      return { data, error: new Error(error.message) };
+    }
+
+    return { data, error: null };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("예기치 못한 오류가 발생했습니다:", err);
+    return { data: null, error: new Error(message) };
+  }
 }
 
 /**
