@@ -12,6 +12,7 @@ import { FeedbackProvider } from "@/components/FeedbackProvider";
 import { CreditsProvider } from "@/components/CreditsProvider";
 import AuthSessionProvider from "@/components/AuthSessionProvider";
 import AuthModal from "@/components/AuthModal";
+import SupabaseAuthBootstrap from "@/components/SupabaseAuthBootstrap";
 import CreditDepletionModal from "@/components/CreditDepletionModal";
 import PaymentModal from "@/components/PaymentModal";
 import CreditTopUpModal from "@/components/CreditTopUpModal";
@@ -37,6 +38,20 @@ export const metadata: Metadata = {
   metadataBase: new URL(PRODUCTION_SITE_URL),
   title: "Studio Canvas AI — Your Personal AI Portrait Studio",
   description: siteDescription,
+  applicationName: "Studio Canvas AI",
+  manifest: "/manifest.json",
+  icons: {
+    icon: [
+      { url: "/icon.png", type: "image/png", sizes: "192x192" },
+      { url: "/icon.png", type: "image/png", sizes: "512x512" },
+    ],
+    shortcut: [{ url: "/icon.png", type: "image/png", sizes: "512x512" }],
+    apple: [{ url: "/icon.png", type: "image/png", sizes: "180x180" }],
+  },
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#0D0E12" },
+    { media: "(prefers-color-scheme: dark)", color: "#0D0E12" },
+  ],
   alternates: {
     canonical: "/",
   },
@@ -52,6 +67,14 @@ export const metadata: Metadata = {
     title: "Studio Canvas AI — Your Personal AI Portrait Studio",
     description: siteDescription,
   },
+  appleWebApp: {
+    capable: true,
+    title: "Studio Canvas AI",
+    statusBarStyle: "black-translucent",
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
+  },
 };
 
 function AppShell({ children }: { children: React.ReactNode }) {
@@ -59,6 +82,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
     <AuthSessionProvider>
       <FeedbackProvider>
         <CreditsProvider>
+          <SupabaseAuthBootstrap />
           {children}
           <AuthModal />
           <CreditDepletionModal />
@@ -97,6 +121,11 @@ export default async function RootLayout({
         className="min-h-full bg-navy font-sans text-white antialiased"
         style={{ backgroundColor: "#0D0E12", color: "#ffffff" }}
       >
+        {/*
+          Kakao SDK is NOT loaded/initialized here.
+          Share-only path: lib/kakaoShare.ts loads SDK on demand so auth/session
+          and YouTube share never share a global Kakao.init side channel.
+        */}
         <GoogleFontsLoader />
         {isAuthRoute ? (
           <AuthShell>{children}</AuthShell>
