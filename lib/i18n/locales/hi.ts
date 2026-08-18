@@ -1,5 +1,6 @@
 import type { Translations } from "../types";
 import en from "./en";
+import { canvasStudioHi } from "../canvasStudio";
 
 const hi: Translations = {
   ...en,
@@ -8,6 +9,7 @@ const hi: Translations = {
     confirm: "पुष्टि करें",
     close: "बंद करें",
   },
+  canvasStudio: canvasStudioHi,
   creator: {
     ...en.creator,
     generateFailed: "AI पोर्ट्रेट जनरेट नहीं हो सका।",

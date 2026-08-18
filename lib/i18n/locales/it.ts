@@ -1,5 +1,6 @@
 import type { Translations } from "../types";
 import en from "./en";
+import { canvasStudioIt } from "../canvasStudio";
 
 const it: Translations = {
   ...en,
@@ -8,6 +9,7 @@ const it: Translations = {
     confirm: "Conferma",
     close: "Chiudi",
   },
+  canvasStudio: canvasStudioIt,
   creator: {
     ...en.creator,
     generateFailed: "Generazione del ritratto IA non riuscita.",

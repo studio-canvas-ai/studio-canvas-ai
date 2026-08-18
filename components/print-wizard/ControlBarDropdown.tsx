@@ -22,14 +22,18 @@ function useFixedBelowMenu(
   open: boolean,
   triggerRef: React.RefObject<HTMLElement | null>,
   minWidth: number,
-  maxWidth = 420
+  maxWidth = 420,
+  anchorSelector?: string
 ) {
   const [style, setStyle] = useState<CSSProperties>({});
 
   const update = useCallback(() => {
     const el = triggerRef.current;
     if (!el) return;
-    const r = el.getBoundingClientRect();
+    const anchor = anchorSelector
+      ? (el.closest(anchorSelector) as HTMLElement | null)
+      : null;
+    const r = (anchor ?? el).getBoundingClientRect();
     const maxW = Math.min(maxWidth, Math.max(180, window.innerWidth - 16));
     const width = clamp(Math.max(r.width, minWidth), 180, maxW);
     let left = r.left;
@@ -37,7 +41,8 @@ function useFixedBelowMenu(
       left = window.innerWidth - width - 8;
     }
     left = Math.max(8, left);
-    const top = r.bottom + 8;
+    const triggerBottom = el.getBoundingClientRect().bottom;
+    const top = triggerBottom + 8;
     const maxHeight = Math.max(140, window.innerHeight - top - 12);
     setStyle({
       position: "fixed",
@@ -47,7 +52,7 @@ function useFixedBelowMenu(
       maxHeight,
       zIndex: MENU_Z,
     });
-  }, [maxWidth, minWidth, triggerRef]);
+  }, [anchorSelector, maxWidth, minWidth, triggerRef]);
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -71,6 +76,8 @@ type ControlBarDropdownProps = {
   onOpenChange: (open: boolean) => void;
   menuMinWidth?: number;
   menuMaxWidth?: number;
+  /** CSS selector — size the menu to this ancestor (e.g. the spec row). */
+  menuAnchorSelector?: string;
   children: ReactNode;
   className?: string;
   /** Stretch trigger to full column width (center panel). */
@@ -90,6 +97,7 @@ export default function ControlBarDropdown({
   onOpenChange,
   menuMinWidth = 240,
   menuMaxWidth = 420,
+  menuAnchorSelector,
   children,
   className = "",
   fullWidth = false,
@@ -101,7 +109,8 @@ export default function ControlBarDropdown({
     open,
     triggerRef,
     menuMinWidth,
-    menuMaxWidth
+    menuMaxWidth,
+    menuAnchorSelector
   );
 
   useEffect(() => {
@@ -211,13 +220,13 @@ export function ControlMenuItem({
       role="option"
       aria-selected={active}
       onClick={onClick}
-      className={`w-full rounded-xl px-3 py-2.5 text-left transition ${
+      className={`w-full rounded-lg px-2.5 py-2 text-left transition ${
         active
           ? "bg-indigo-500/20 text-slate-50 ring-1 ring-indigo-400/35"
           : "text-slate-200 hover:bg-slate-800/80"
       }`}
     >
-      <span className="block text-[13px] font-semibold [word-break:keep-all]">
+      <span className="block text-[12px] font-semibold leading-snug [word-break:keep-all]">
         {title}
       </span>
       {description ? (

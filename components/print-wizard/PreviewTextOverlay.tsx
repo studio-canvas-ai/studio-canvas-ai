@@ -1,0 +1,595 @@
+"use client";
+
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
+import { ClipboardCopy, CopyPlus, Trash2 } from "lucide-react";
+import { useI18n } from "@/components/I18nProvider";
+import {
+  collectSnapTargets,
+  drawSnapGuides,
+  rectFromBox,
+  snapLayerRect,
+  SNAP_THRESHOLD_PX,
+  type SnapGuides,
+} from "@/lib/canvas/snapGuides";
+import { formatFormFieldText, formFieldFromLayerId } from "@/lib/printWizardTextFormat";
+import {
+  boxToLayerPatch,
+  canvasTextScale,
+  clampBoxToStage,
+  duplicateTextLayer,
+  layerToBox,
+  removeTextLayer,
+} from "@/lib/printWizardTextLayers";
+import { drawPrintLayerInBox } from "@/lib/printWizardTextDraw";
+import { colorPresetFill, fontForText, type TextLayer } from "@/lib/thumbnailStyles";
+
+export type PreviewTextOverlayProps = {
+  layers: TextLayer[];
+  onLayersChange: (layers: TextLayer[]) => void;
+  interactive?: boolean;
+  activeLayerId?: string | null;
+  onActiveLayerChange?: (id: string | null) => void;
+};
+
+type ResizeHandle = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
+
+type DragKind = "move" | "resize";
+
+type DragState = {
+  kind: DragKind;
+  handle?: ResizeHandle;
+  layerId: string;
+  startClientX: number;
+  startClientY: number;
+  startBox: { x: number; y: number; width: number; height: number };
+  liveBox: { x: number; y: number; width: number; height: number };
+  pointerType: string;
+  stageW: number;
+  stageH: number;
+};
+
+const DRAG_THRESHOLD_PX = 4;
+
+function textAlignClass(align: TextLayer["align"]): string {
+  if (align === "left") return "justify-start text-left";
+  if (align === "right") return "justify-end text-right";
+  return "justify-center text-center";
+}
+
+function LayerTextCanvas({
+  layer,
+  width,
+  height,
+  scale,
+}: {
+  layer: TextLayer;
+  width: number;
+  height: number;
+  scale: number;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || width < 1 || height < 1) return;
+    const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+    canvas.width = Math.max(1, Math.round(width * dpr));
+    canvas.height = Math.max(1, Math.round(height * dpr));
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+    drawPrintLayerInBox(ctx, layer, width, height, scale);
+  }, [layer, width, height, scale]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      aria-hidden
+      className="pointer-events-none absolute inset-0 h-full w-full"
+    />
+  );
+}
+
+const HANDLES: Array<{ id: ResizeHandle; className: string; cursor: string }> = [
+  { id: "nw", className: "left-0 top-0 -translate-x-1/2 -translate-y-1/2", cursor: "nwse-resize" },
+  { id: "n", className: "left-1/2 top-0 -translate-x-1/2 -translate-y-1/2", cursor: "ns-resize" },
+  { id: "ne", className: "right-0 top-0 translate-x-1/2 -translate-y-1/2", cursor: "nesw-resize" },
+  { id: "e", className: "right-0 top-1/2 translate-x-1/2 -translate-y-1/2", cursor: "ew-resize" },
+  { id: "se", className: "bottom-0 right-0 translate-x-1/2 translate-y-1/2", cursor: "nwse-resize" },
+  { id: "s", className: "bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2", cursor: "ns-resize" },
+  { id: "sw", className: "bottom-0 left-0 -translate-x-1/2 translate-y-1/2", cursor: "nesw-resize" },
+  { id: "w", className: "left-0 top-1/2 -translate-x-1/2 -translate-y-1/2", cursor: "ew-resize" },
+];
+
+function applyResize(
+  start: { x: number; y: number; width: number; height: number },
+  dx: number,
+  dy: number,
+  handle: ResizeHandle
+): { x: number; y: number; width: number; height: number } {
+  let { x, y, width, height } = start;
+
+  if (handle.includes("e")) width = start.width + dx;
+  if (handle.includes("w")) {
+    width = start.width - dx;
+    x = start.x + dx;
+  }
+  if (handle.includes("s")) height = start.height + dy;
+  if (handle.includes("n")) {
+    height = start.height - dy;
+    y = start.y + dy;
+  }
+
+  width = Math.max(48, width);
+  height = Math.max(16, height);
+  return { x, y, width, height };
+}
+
+export default function PreviewTextOverlay({
+  layers,
+  onLayersChange,
+  interactive = true,
+  activeLayerId = null,
+  onActiveLayerChange,
+}: PreviewTextOverlayProps) {
+  const { t } = useI18n();
+  const cs = t.canvasStudio;
+  const hostRef = useRef<HTMLDivElement>(null);
+  const guideRef = useRef<HTMLCanvasElement>(null);
+  const dragRef = useRef<DragState | null>(null);
+  const layersRef = useRef(layers);
+  const [size, setSize] = useState({ w: 1, h: 1 });
+  const [snapGuides, setSnapGuides] = useState<SnapGuides>({
+    vertical: [],
+    horizontal: [],
+  });
+  const [hoverId, setHoverId] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [pointerActive, setPointerActive] = useState(false);
+  const [liveBox, setLiveBox] = useState<{
+    id: string;
+    box: { x: number; y: number; width: number; height: number };
+  } | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const lastTapRef = useRef<{ id: string; t: number } | null>(null);
+
+  layersRef.current = layers;
+
+  const measureStage = () => {
+    const rect = hostRef.current?.getBoundingClientRect();
+    const w = rect?.width ?? size.w;
+    const h = rect?.height ?? size.h;
+    return { w: Math.max(1, w), h: Math.max(1, h) };
+  };
+
+  useEffect(() => {
+    const el = hostRef.current;
+    if (!el) return;
+    const apply = () => {
+      const { width, height } = el.getBoundingClientRect();
+      setSize({ w: Math.max(1, width), h: Math.max(1, height) });
+    };
+    apply();
+    const ro = new ResizeObserver(() => apply());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const canvas = guideRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    canvas.width = size.w;
+    canvas.height = size.h;
+    ctx.clearRect(0, 0, size.w, size.h);
+    if (dragging) drawSnapGuides(ctx, snapGuides, size.w, size.h);
+  }, [size, snapGuides, dragging]);
+
+  const scale = canvasTextScale(size.w, size.h);
+  const snapPx = Math.max(SNAP_THRESHOLD_PX, Math.min(size.w, size.h) * 0.025);
+
+  const getBoxes = useCallback(() => {
+    return layersRef.current.map((layer) => ({
+      id: layer.id,
+      box:
+        dragRef.current?.layerId === layer.id
+          ? dragRef.current.liveBox
+          : layerToBox(layer, size.w, size.h),
+    }));
+  }, [size.w, size.h]);
+
+  const commitBox = useCallback(
+    (
+      layerId: string,
+      box: { x: number; y: number; width: number; height: number },
+      mode: DragKind,
+      startBox: { width: number; height: number },
+      stageW: number,
+      stageH: number
+    ) => {
+      const w = Math.max(1, stageW);
+      const h = Math.max(1, stageH);
+      onLayersChange(
+        layersRef.current.map((layer) => {
+          if (layer.id !== layerId) return layer;
+          const clamped = clampBoxToStage(box, w, h);
+          return {
+            ...layer,
+            ...boxToLayerPatch(layer, clamped, w, h, mode, startBox),
+          };
+        })
+      );
+    },
+    [onLayersChange]
+  );
+
+  const handlePointerDown = (
+    e: ReactPointerEvent<HTMLElement>,
+    layerId: string,
+    kind: DragKind,
+    handle?: ResizeHandle
+  ) => {
+    if (!interactive || (e.button !== 0 && e.pointerType === "mouse")) return;
+    if (editingId === layerId && kind === "move") return;
+    e.stopPropagation();
+    if (kind === "resize") e.preventDefault();
+    const layer = layersRef.current.find((l) => l.id === layerId);
+    if (!layer) return;
+    onActiveLayerChange?.(layerId);
+    const stage = measureStage();
+    const box = layerToBox(layer, stage.w, stage.h);
+    dragRef.current = {
+      kind,
+      handle,
+      layerId,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startBox: box,
+      liveBox: box,
+      pointerType: e.pointerType || "mouse",
+      stageW: stage.w,
+      stageH: stage.h,
+    };
+    setLiveBox({ id: layerId, box });
+    setPointerActive(true);
+    if (kind === "resize") setDragging(true);
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+  };
+
+  useEffect(() => {
+    if (!pointerActive) return;
+
+    const onMove = (e: PointerEvent) => {
+      const drag = dragRef.current;
+      if (!drag) return;
+      const dx = e.clientX - drag.startClientX;
+      const dy = e.clientY - drag.startClientY;
+      const dist = Math.hypot(dx, dy);
+
+      if (drag.kind === "move" && !dragging && dist < DRAG_THRESHOLD_PX) {
+        return;
+      }
+      if (drag.kind === "move" && !dragging) {
+        setDragging(true);
+      }
+
+      let nextBox = { ...drag.startBox };
+
+      if (drag.kind === "move") {
+        nextBox = {
+          ...nextBox,
+          x: drag.startBox.x + dx,
+          y: drag.startBox.y + dy,
+        };
+      } else if (drag.handle) {
+        nextBox = applyResize(drag.startBox, dx, dy, drag.handle);
+      }
+
+      const anchors = getBoxes().filter((a) => a.id !== drag.layerId);
+      const targets = collectSnapTargets(
+        drag.stageW,
+        drag.stageH,
+        anchors,
+        drag.layerId
+      );
+      const { deltaX, deltaY, guides } = snapLayerRect(
+        rectFromBox(nextBox),
+        targets.vertical,
+        targets.horizontal,
+        Math.max(SNAP_THRESHOLD_PX, Math.min(drag.stageW, drag.stageH) * 0.025)
+      );
+      nextBox = {
+        ...nextBox,
+        x: nextBox.x + deltaX,
+        y: nextBox.y + deltaY,
+      };
+      drag.liveBox = nextBox;
+      setLiveBox({ id: drag.layerId, box: nextBox });
+      setSnapGuides(guides);
+    };
+
+    const onUp = () => {
+      const drag = dragRef.current;
+      if (drag) {
+        const dx = drag.liveBox.x - drag.startBox.x;
+        const dy = drag.liveBox.y - drag.startBox.y;
+        const moved = Math.hypot(dx, dy) > DRAG_THRESHOLD_PX;
+        if (!moved && drag.kind === "move") {
+          const now = Date.now();
+          const prev = lastTapRef.current;
+          if (prev && prev.id === drag.layerId && now - prev.t < 380) {
+            setEditingId(drag.layerId);
+            lastTapRef.current = null;
+          } else {
+            setEditingId(drag.layerId);
+            lastTapRef.current = { id: drag.layerId, t: now };
+          }
+        } else {
+          commitBox(
+            drag.layerId,
+            drag.liveBox,
+            drag.kind,
+            drag.startBox,
+            drag.stageW,
+            drag.stageH
+          );
+        }
+      }
+      dragRef.current = null;
+      setDragging(false);
+      setPointerActive(false);
+      setLiveBox(null);
+      setSnapGuides({ vertical: [], horizontal: [] });
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, [pointerActive, dragging, getBoxes, commitBox]);
+
+  const handleCopy = async (layer: TextLayer) => {
+    try {
+      await navigator.clipboard.writeText(layer.text);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const handleDuplicate = (layerId: string) => {
+    onLayersChange(duplicateTextLayer(layersRef.current, layerId));
+  };
+
+  const handleDelete = (layerId: string) => {
+    onLayersChange(removeTextLayer(layersRef.current, layerId));
+    if (activeLayerId === layerId) onActiveLayerChange?.(null);
+    setEditingId((id) => (id === layerId ? null : id));
+    setHoverId((id) => (id === layerId ? null : id));
+  };
+
+  if (!layers.length) return null;
+
+  return (
+    <div
+      ref={hostRef}
+      className="pointer-events-none absolute inset-0 z-[2]"
+      style={{ transformOrigin: "top left" }}
+    >
+      <canvas
+        ref={guideRef}
+        aria-hidden
+        className="pointer-events-none absolute inset-0 z-[20]"
+      />
+
+      {interactive && activeLayerId ? (
+        <div
+          role="presentation"
+          data-overlay-deselect
+          className="pointer-events-auto absolute inset-0 z-[4]"
+          onPointerDown={(e) => {
+            if (e.target !== e.currentTarget) return;
+            e.stopPropagation();
+            onActiveLayerChange?.(null);
+            setEditingId(null);
+            setHoverId(null);
+          }}
+        />
+      ) : null}
+
+      {layers.map((layer) => {
+        const measured = layerToBox(layer, size.w, size.h);
+        const box = liveBox?.id === layer.id ? liveBox.box : measured;
+        const isActive = activeLayerId === layer.id;
+        const isHover = hoverId === layer.id;
+        const isEditing = editingId === layer.id;
+        if (!layer.text.trim() && !isActive && !isHover && !isEditing) {
+          return null;
+        }
+        const showChrome = interactive && (isActive || isHover || isEditing);
+        const fontSize = Math.max(
+          8,
+          Math.round((layer.fontSize || 48) * scale)
+        );
+        const fontFamily = fontForText(
+          layer.fontPreset || "pretendard",
+          layer.text
+        );
+        const field = formFieldFromLayerId(layer.id);
+        const alignClass = textAlignClass(layer.align);
+        const letterSpacing =
+          field === "date" || field === "programs"
+            ? 0
+            : (layer.letterSpacing ?? 0) * scale;
+
+        return (
+          <div
+            key={layer.id}
+            data-text-layer={layer.id}
+            className={`pointer-events-auto absolute z-[5] touch-none select-none ${
+              interactive && !isEditing
+                ? "cursor-grab active:cursor-grabbing"
+                : ""
+            } ${isActive ? "z-[6]" : ""}`}
+            style={{
+              left: box.x,
+              top: box.y,
+              width: box.width,
+              height: box.height,
+            }}
+            onMouseEnter={() => setHoverId(layer.id)}
+            onMouseLeave={() =>
+              setHoverId((id) => (id === layer.id ? null : id))
+            }
+            onPointerDown={(e) => handlePointerDown(e, layer.id, "move")}
+            onClick={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => {
+              if (!interactive) return;
+              e.stopPropagation();
+              onActiveLayerChange?.(layer.id);
+              setEditingId(layer.id);
+            }}
+          >
+            {showChrome ? (
+              <div className="absolute -top-4 right-0 z-[8] flex items-center gap-px">
+                <button
+                  type="button"
+                  title={cs.copy}
+                  aria-label={cs.copy}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void handleCopy(layer);
+                  }}
+                  className="inline-flex h-4 w-4 items-center justify-center rounded-[3px] border border-white/25 bg-black/80 text-white/90 shadow-sm hover:bg-black"
+                >
+                  <ClipboardCopy className="h-2.5 w-2.5" />
+                </button>
+                <button
+                  type="button"
+                  title={cs.duplicate}
+                  aria-label={cs.duplicate}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDuplicate(layer.id);
+                  }}
+                  className="inline-flex h-4 w-4 items-center justify-center rounded-[3px] border border-white/25 bg-black/80 text-white/90 shadow-sm hover:bg-black"
+                >
+                  <CopyPlus className="h-2.5 w-2.5" />
+                </button>
+                <button
+                  type="button"
+                  title={cs.delete}
+                  aria-label={cs.delete}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(layer.id);
+                  }}
+                  className="inline-flex h-4 w-4 items-center justify-center rounded-[3px] border border-white/25 bg-black/80 text-white/90 shadow-sm hover:bg-rose-950 hover:text-rose-200"
+                >
+                  <Trash2 className="h-2.5 w-2.5" />
+                </button>
+              </div>
+            ) : null}
+
+            <div
+              className={`relative h-full w-full rounded-[3px] ${
+                showChrome
+                  ? "bg-violet-500/10 shadow-[0_0_0_1.5px_#818cf8]"
+                  : "bg-transparent"
+              }`}
+              style={
+                showChrome
+                  ? { outline: "1.5px dashed #6366f1", outlineOffset: 0 }
+                  : undefined
+              }
+            >
+              {isEditing ? (
+                <textarea
+                  autoFocus
+                  value={layer.text}
+                  onBlur={() => {
+                    setEditingId(null);
+                    if (field) {
+                      const formatted = formatFormFieldText(field, layer.text);
+                      if (formatted !== layer.text) {
+                        onLayersChange(
+                          layersRef.current.map((l) =>
+                            l.id === layer.id ? { ...l, text: formatted } : l
+                          )
+                        );
+                      }
+                    }
+                  }}
+                  onChange={(e) => {
+                    const text = e.target.value;
+                    onLayersChange(
+                      layersRef.current.map((l) =>
+                        l.id === layer.id ? { ...l, text } : l
+                      )
+                    );
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") setEditingId(null);
+                  }}
+                  className={`font-emoji h-full w-full resize-none overflow-hidden border-0 bg-transparent p-0.5 outline-none ${alignClass}`}
+                  style={{
+                    color: colorPresetFill(layer.color),
+                    fontFamily,
+                    fontSize,
+                    fontWeight: layer.fontWeight ?? 700,
+                    textAlign: layer.align || "center",
+                    lineHeight: layer.lineHeight ?? 1.25,
+                    letterSpacing,
+                    whiteSpace: "pre-wrap",
+                    overflowWrap: "anywhere",
+                    wordBreak: "break-word",
+                    boxSizing: "border-box",
+                  }}
+                />
+              ) : (
+                <LayerTextCanvas
+                  layer={layer}
+                  width={box.width}
+                  height={box.height}
+                  scale={scale}
+                />
+              )}
+
+              {showChrome
+                ? HANDLES.map((h) => (
+                    <span
+                      key={h.id}
+                      role="presentation"
+                      aria-hidden
+                      onPointerDown={(e) =>
+                        handlePointerDown(e, layer.id, "resize", h.id)
+                      }
+                      className={`absolute z-[9] h-1.5 w-1.5 touch-none rounded-[1px] border border-indigo-500 bg-white shadow pointer-coarse:h-2.5 pointer-coarse:w-2.5 ${h.className}`}
+                      style={{ cursor: h.cursor }}
+                    />
+                  ))
+                : null}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}

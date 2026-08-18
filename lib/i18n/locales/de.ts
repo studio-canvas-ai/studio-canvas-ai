@@ -1,5 +1,6 @@
 import type { Translations } from "../types";
 import en from "./en";
+import { canvasStudioDe } from "../canvasStudio";
 
 const de: Translations = {
   ...en,
@@ -8,6 +9,7 @@ const de: Translations = {
     confirm: "Bestätigen",
     close: "Schließen",
   },
+  canvasStudio: canvasStudioDe,
   creator: {
     ...en.creator,
     generateFailed: "KI-Porträt konnte nicht erzeugt werden.",

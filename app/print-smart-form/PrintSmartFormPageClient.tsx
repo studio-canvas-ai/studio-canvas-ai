@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
-import PrintWizardStep2 from "@/components/print-wizard/PrintWizardStep2";
+import PrintWizardStep2, {
+  type PrintWizardNavState,
+} from "@/components/print-wizard/PrintWizardStep2";
 import { useCredits } from "@/components/CreditsProvider";
 import { isPrintSmartFormAdminEmail } from "@/lib/printSmartForm";
 
@@ -11,11 +13,16 @@ export default function PrintSmartFormPageClient() {
   const router = useRouter();
   const { authUser, socialProvidersLoaded } = useCredits();
   const allowed = isPrintSmartFormAdminEmail(authUser?.email);
+  const [printNav, setPrintNav] = useState<PrintWizardNavState>({ step: 1 });
 
   useEffect(() => {
     if (!socialProvidersLoaded) return;
     if (!allowed) router.replace("/");
   }, [allowed, router, socialProvidersLoaded]);
+
+  const handleNavChange = useCallback((nav: PrintWizardNavState) => {
+    setPrintNav(nav);
+  }, []);
 
   if (!socialProvidersLoaded || !allowed) {
     return (
@@ -28,10 +35,15 @@ export default function PrintSmartFormPageClient() {
 
   return (
     <main className="print-wizard-shell relative flex h-svh flex-col overflow-hidden bg-[#0B0F19]">
-      <Navbar />
-      {/* Navbar is position:fixed — reserve its height so content is not clipped */}
+      <Navbar
+        printWizardBack={
+          printNav.step === 2 && printNav.onBack
+            ? { onClick: printNav.onBack }
+            : undefined
+        }
+      />
       <div className="min-h-0 flex-1 overflow-hidden pt-12 md:pt-14 lg:pt-16">
-        <PrintWizardStep2 />
+        <PrintWizardStep2 onNavChange={handleNavChange} />
       </div>
     </main>
   );

@@ -1,5 +1,6 @@
 import type { Translations } from "../types";
 import en from "./en";
+import { canvasStudioVi } from "../canvasStudio";
 
 const vi: Translations = {
   ...en,
@@ -8,6 +9,7 @@ const vi: Translations = {
     confirm: "Xác nhận",
     close: "Đóng",
   },
+  canvasStudio: canvasStudioVi,
   creator: {
     ...en.creator,
     generateFailed: "Tạo chân dung AI thất bại.",

@@ -1,5 +1,6 @@
 import type { Locale, Translations } from "./types";
 import { LOCALES } from "./types";
+import { applyChromeOverlay } from "./chrome";
 import en from "./locales/en";
 import kr from "./locales/kr";
 import es from "./locales/es";
@@ -12,6 +13,7 @@ import vi from "./locales/vi";
 import hi from "./locales/hi";
 
 export * from "./types";
+export { fillCanvas } from "./canvasStudio";
 
 export const translations: Record<Locale, Translations> = {
   en,
@@ -30,8 +32,14 @@ export function isValidLocale(value: string): value is Locale {
   return LOCALES.includes(value as Locale);
 }
 
+/**
+ * Resolve UI copy for a locale.
+ * Unknown codes fall back to English. Non-en/kr packs also receive chrome
+ * overlays (nav/hero/footer/credits) so the language selector visibly switches.
+ */
 export function getTranslations(locale: Locale): Translations {
-  return translations[locale] ?? translations.en;
+  const base = translations[locale] ?? translations.en;
+  return applyChromeOverlay(locale, base);
 }
 
 /** Detect locale from browser Accept-Language header */
