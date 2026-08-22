@@ -79,7 +79,7 @@ const COVER_PRIORITY: SmartInputField[] = [
 
 const DETAIL_PRIORITY: SmartInputField[] = ["programs", "organizer"];
 
-/** 17 용도 — layout tone + page distribution strategy. */
+/** 용도 — layout tone + page distribution strategy. */
 const USE_PROFILES: Record<PrintUseId, UseLayoutProfile> = {
   banner: { layoutKind: "poster-bold", distribution: "banner-wide" },
   lookbook: { layoutKind: "corporate", distribution: "lookbook-minimal" },
@@ -87,6 +87,7 @@ const USE_PROFILES: Record<PrintUseId, UseLayoutProfile> = {
   sns: { layoutKind: "product", distribution: "flyer-split" },
   poster: { layoutKind: "poster-bold", distribution: "flyer-split" },
   "id-photo": { layoutKind: "formal", distribution: "minimal" },
+  "concept-photo": { layoutKind: "product", distribution: "lookbook-minimal" },
   pamphlet: { layoutKind: "seminar", distribution: "tri-fold" },
   menu: { layoutKind: "menu", distribution: "menu-split" },
   flyer: { layoutKind: "poster-bold", distribution: "flyer-split" },
@@ -622,7 +623,11 @@ export function applyAutoLayoutState(
 
   if (overrides.bgPresetId !== undefined) {
     bgPresetId = overrides.bgPresetId;
-  } else if (!bgPresetId && resolveUseProfile(useId).defaultBgPresetId) {
+  } else if (
+    overrides.useId !== undefined &&
+    !bgPresetId &&
+    resolveUseProfile(useId).defaultBgPresetId
+  ) {
     bgPresetId = resolveUseProfile(useId).defaultBgPresetId as BgPresetId;
   }
 

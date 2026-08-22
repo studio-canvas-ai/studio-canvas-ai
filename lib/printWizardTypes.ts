@@ -33,7 +33,33 @@ export const PRINT_FORMATS = [
 
 export type PrintFormatId = (typeof PRINT_FORMATS)[number]["id"];
 
-/** Purpose / use case (용도). */
+/** Banner/hanging ratios excluded from the photo lookbook 규격 menu. */
+const PHOTO_EXCLUDED_FORMAT_IDS = new Set<PrintFormatId>([
+  "ratio-3-1",
+  "ratio-4-1",
+]);
+
+/**
+ * Photo lookbook wizard (화보 뚝딱생성기) — pictorial + print sizes,
+ * without extreme banner ratios (3:1 / 4:1).
+ */
+export const PHOTO_FORMATS = PRINT_FORMATS.filter(
+  (f) => !PHOTO_EXCLUDED_FORMAT_IDS.has(f.id)
+);
+
+export function isPhotoFormatId(id: string): boolean {
+  return PHOTO_FORMATS.some((f) => f.id === id);
+}
+
+/** Clamp banner ratios (and unknown ids) to a safe photo default. */
+export function coercePhotoFormatId(
+  id: string | null | undefined
+): PrintFormatId {
+  if (id && isPhotoFormatId(id)) return id as PrintFormatId;
+  return "ratio-9-16";
+}
+
+/** Purpose / use case (용도) — print / marketing catalog. */
 export const PRINT_USES = [
   { id: "banner", label: "배너" },
   { id: "lookbook", label: "화보" },
@@ -54,7 +80,31 @@ export const PRINT_USES = [
   { id: "invitation", label: "청첩장·초청장" },
 ] as const;
 
-export type PrintUseId = (typeof PRINT_USES)[number]["id"];
+/**
+ * Photo lookbook wizard (화보 뚝딱생성기) — pictorial / portrait uses only.
+ * Keep this list short; do not surface print/marketing uses here.
+ */
+export const PHOTO_USES = [
+  { id: "lookbook", label: "화보" },
+  { id: "sns", label: "프로필 / SNS" },
+  { id: "id-photo", label: "증명사진" },
+  { id: "concept-photo", label: "컨셉 포토" },
+] as const;
+
+export type PhotoUseId = (typeof PHOTO_USES)[number]["id"];
+export type PrintUseId =
+  | (typeof PRINT_USES)[number]["id"]
+  | (typeof PHOTO_USES)[number]["id"];
+
+export function isPhotoUseId(id: string): id is PhotoUseId {
+  return PHOTO_USES.some((u) => u.id === id);
+}
+
+/** Clamp any use id to the photo catalog (invalid / print-only → 화보). */
+export function coercePhotoUseId(id: string | null | undefined): PhotoUseId {
+  if (id && isPhotoUseId(id)) return id;
+  return "lookbook";
+}
 
 /** @deprecated Prefer PRINT_FORMATS + PRINT_USES — kept for session migration. */
 export const PRINT_CATEGORIES = [
@@ -389,6 +439,40 @@ export const PRINT_CUSTOM_SIZE_MAX_INCH =
 
 export type PrintWizardStep = 1 | 2;
 
+export type PrintDecoLayer = {
+  id: string;
+  /** Deco catalog item id (mutually exclusive with `symbol`). */
+  decoId?: string;
+  /** Emoji or special character (mutually exclusive with `decoId`). */
+  symbol?: string;
+  /** Clockwise rotation in degrees. */
+  rotation?: number;
+  /** Normalized stage fractions (0–1). */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type PrintPhotoLayer = {
+  id: string;
+  src: string;
+  photoKind: "original" | "cutout";
+  /** Normalized stage fractions (0–1). */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Opaque content rect as fractions of the source image (cutout auto-crop). */
+  trim?: { x: number; y: number; w: number; h: number };
+};
+
+/** Cover-crop focal offset. -1..1, 0 = centered. Never leaves empty frame edges. */
+export type PrintBackgroundPan = {
+  x: number;
+  y: number;
+};
+
 export type PrintWizardState = {
   formatId: PrintFormatId;
   useId: PrintUseId;
@@ -399,6 +483,8 @@ export type PrintWizardState = {
   backgroundUrl: string | null;
   /** Per-page backgrounds aligned with pageCount (index 0 = 1면). */
   backgroundUrls: string[];
+  /** Per-page cover-crop pan so format changes can be reframed. */
+  backgroundPansByPage?: PrintBackgroundPan[];
   /** Free-form order / prompt (preset injection target). */
   mainPrompt: string;
   selectedPromptPresetId: string | null;
@@ -407,6 +493,10 @@ export type PrintWizardState = {
   inputs: SmartInputValues;
   /** Per-page text layer layouts (index 0 = 1면). */
   textLayersByPage?: TextLayer[][];
+  /** Per-page user photos placed in the preview drag box. */
+  photoLayersByPage?: PrintPhotoLayer[][];
+  /** Per-page deco tools from the catalog. */
+  decoLayersByPage?: PrintDecoLayer[][];
   /** Visual style / mood for Flux modifiers (Form AI bg + agent). */
   visualStyle: VisualStyleSelection;
   /** Wizard screen — 1 = input/planning, 2 = canvas + advanced edit. */
@@ -415,7 +505,31 @@ export type PrintWizardState = {
   draftReady?: boolean;
   /** User dismissed fold-line guides (cut/safe lines always remain). */
   foldGuidesHidden?: boolean;
+  /** True only after the user picks that spec — reset clears these. */
+  specPicks?: PrintWizardSpecPicks;
 };
+
+export type PrintWizardSpecPicks = {
+  format: boolean;
+  style: boolean;
+  use: boolean;
+  pages: boolean;
+};
+
+export function emptySpecPicks(): PrintWizardSpecPicks {
+  return { format: false, style: false, use: false, pages: false };
+}
+
+export function markSpecPick(
+  state: PrintWizardState,
+  key: keyof PrintWizardSpecPicks,
+  value = true
+): PrintWizardState {
+  return {
+    ...state,
+    specPicks: { ...(state.specPicks ?? emptySpecPicks()), [key]: value },
+  };
+}
 
 export function defaultPrintWizardState(): PrintWizardState {
   return {
@@ -434,6 +548,7 @@ export function defaultPrintWizardState(): PrintWizardState {
     wizardStep: 1,
     draftReady: false,
     foldGuidesHidden: false,
+    specPicks: emptySpecPicks(),
   };
 }
 
@@ -466,8 +581,11 @@ export function formatCustomSizeLabel(size: PrintCustomSize): string {
 }
 
 export function useById(id: PrintUseId | string) {
-  const found = PRINT_USES.find((u) => u.id === id);
-  return found ?? PRINT_USES.find((u) => u.id === "flyer")!;
+  const fromPrint = PRINT_USES.find((u) => u.id === id);
+  if (fromPrint) return fromPrint;
+  const fromPhoto = PHOTO_USES.find((u) => u.id === id);
+  if (fromPhoto) return fromPhoto;
+  return PRINT_USES.find((u) => u.id === "flyer")!;
 }
 
 /** @deprecated */
@@ -500,6 +618,7 @@ export function normalizeFormatId(id: unknown): PrintFormatId | null {
 export function normalizeUseId(id: unknown): PrintUseId | null {
   if (typeof id !== "string") return null;
   if (PRINT_USES.some((u) => u.id === id)) return id as PrintUseId;
+  if (PHOTO_USES.some((u) => u.id === id)) return id as PrintUseId;
   switch (id) {
     case "banner-use":
       return "hanging-banner";

@@ -3,20 +3,18 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { useSearchParams } from "next/navigation";
+import { createPortal } from "react-dom";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlignCenter,
   AlignLeft,
   AlignRight,
-  BringToFront,
+  ArrowLeft,
   ChevronDown,
-  Download,
   Home,
   ImagePlus,
   Plus,
   RotateCcw,
-  SendToBack,
-  Share2,
   Trash2,
 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
@@ -71,14 +69,12 @@ import {
   displayPlaneUrl,
   processSubjectViaApi,
   requestAiCommand,
-  requestPrintReadyExport,
   toRawImageUrl,
 } from "@/lib/aiCommand";
 import {
   IMAGE_STYLE_PRESETS,
   MOOD_STYLE_PRESETS,
   emptyVisualStyleSelection,
-  visualStyleSelectionLabel,
   type VisualStyleSelection,
 } from "@/lib/ai/visualStylePresets";
 import {
@@ -86,14 +82,40 @@ import {
   EmojiMoreDropdown,
   StickerMoreDropdown,
 } from "@/components/StudioStylePickers";
+import DecoToolCatalogDropdown from "@/components/print-wizard/DecoToolCatalogDropdown";
 import { useCanvasStore } from "@/lib/canvas/canvasStore";
-import { addPhotoLayerFromFile } from "@/lib/canvas/addPhotoLayer";
+import {
+  loadImageNaturalSize,
+  readFileAsDataUrl,
+  type PhotoKind,
+} from "@/lib/canvas/addPhotoLayer";
 import { buildObjectsFromStudioPlanes } from "@/lib/canvas/syncFromStudio";
 import {
   exportKonvaPrintDataUrl,
 } from "@/lib/canvas/printExportFromStore";
+import type { CanvasObject } from "@/lib/canvas/types";
 import type { StudioKonvaStageHandle } from "@/components/canvas/StudioKonvaStage";
 import CanvasUploadToolbar from "@/components/canvas/CanvasUploadToolbar";
+import StudioExportButtonGroup from "@/components/canvas/StudioExportButtonGroup";
+import type { RecentProjectNamespace } from "@/lib/canvas/recentProjects";
+import { fillCanvas } from "@/lib/i18n";
+import { shareWithFallback } from "@/lib/webShare";
+import { useExportGate } from "@/lib/useExportGate";
+import { projectStorageErrorMessage } from "@/lib/projectStorage";
+import { useProjectStorage } from "@/lib/canvas/useProjectStorage";
+import { PRINT_SMART_FORM_PATH } from "@/lib/printSmartForm";
+import {
+  parseProgramEntries,
+  programNumFontCss,
+  programNumberColumnWidth,
+} from "@/lib/printWizardTextFormat";
+import { wrapParagraph } from "@/lib/printWizardTextDraw";
+import {
+  buildStudioProject,
+  readProjectFile,
+  takePendingStudioProject,
+  type StudioCanvasProjectV1,
+} from "@/lib/canvas/projectFile";
 
 const StudioKonvaStage = dynamic(
   () =>
@@ -704,27 +726,68 @@ export type AiTemplateStudioProps = {
   mode?: "utility" | "agent";
   initialBackgroundUrl?: string | null;
   initialOverlayLayers?: TextLayer[];
+  /** Controlled overlay layers (print wizard preview sync). */
+  controlledOverlayLayers?: TextLayer[];
+  onControlledOverlayLayersChange?: (layers: TextLayer[]) => void;
   /** Overlay-only form copy (never sent to Flux as burn-in). */
   formFields?: Record<string, string> | null;
   /** Seed style / mood selection (print wizard → agent). */
   initialVisualStyle?: VisualStyleSelection | null;
   /** Hide home chrome when embedded in print wizard studio. */
   embedded?: boolean;
+  /** print-wizard-step2 = 2-column canvas + edit panel (Step 2 wizard). */
+  layout?: "default" | "print-wizard-step2";
+  /** Edit panel only — no header, no Konva preview (print wizard Step 2 right column). */
+  panelOnly?: boolean;
+  /** Hide built-in download stack (parent provides export). */
+  hideExport?: boolean;
+  /** Hide conversational AI command box (print wizard Step 2). */
+  hideAiCommand?: boolean;
+  /** Render text-layer list into this host (print wizard middle gutter). */
+  textLayersHost?: HTMLElement | null;
+  /** Return to Step 1 planning instead of routing away. */
+  onBackToPlanning?: () => void;
+  /** Print wizard — insert deco tool from catalog onto canvas. */
+  onDecoCatalogPick?: (decoId: string) => void;
+  /** Print wizard — insert emoji/symbol as independent canvas object. */
+  onCanvasSymbolPick?: (symbol: string) => void;
   heading?: string;
+  /** Isolated pending-project hand-off key (print vs photo wizard). */
+  pendingProjectKey?: string;
+  recentNamespace?: RecentProjectNamespace;
 };
 
 export default function AiTemplateStudio({
   mode = "utility",
   initialBackgroundUrl = null,
   initialOverlayLayers,
+  controlledOverlayLayers,
+  onControlledOverlayLayersChange,
   formFields = null,
   initialVisualStyle = null,
   embedded = false,
+  layout = "default",
+  panelOnly = false,
+  hideExport = false,
+  hideAiCommand = false,
+  textLayersHost = null,
+  onBackToPlanning,
+  onDecoCatalogPick,
+  onCanvasSymbolPick,
   heading,
+  pendingProjectKey,
+  recentNamespace = "shared",
 }: AiTemplateStudioProps) {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const { t } = useI18n();
+  const cs = t.canvasStudio;
   const { showToast } = useFeedback();
+  const { requireSubscription, premiumModal } = useExportGate();
+  const { downloadAndRemember, openRecent } = useProjectStorage({
+    pendingProjectKey,
+    recentNamespace,
+  });
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const guideCanvasRef = useRef<HTMLCanvasElement>(null);
   const konvaStageRef = useRef<StudioKonvaStageHandle | null>(null);
@@ -734,6 +797,11 @@ export default function AiTemplateStudio({
   const stageRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const viewportFitDoneRef = useRef(false);
+  /** When true, next plane→store sync discards prior image transforms (fresh Center & Fit). Starts true so first measured stage never inherits 1080-fallback coords. */
+  const forcePlaneRefitRef = useRef(true);
+  /** One-shot: preserve imported object transforms across the next plane sync. */
+  const hydrateCanvasObjectsRef = useRef<CanvasObject[] | null>(null);
+  const projectFileInputRef = useRef<HTMLInputElement>(null);
   const loadedImageRef = useRef<HTMLImageElement | null>(null);
   const loadedBgImageRef = useRef<HTMLImageElement | null>(null);
   const paintRef = useRef<() => void>(() => undefined);
@@ -748,17 +816,20 @@ export default function AiTemplateStudio({
   const viewOffsetRef = useRef({ x: 0, y: 0 });
   const [hasClipboardLayer, setHasClipboardLayer] = useState(false);
 
-  const canvasSelectedId = useCanvasStore((s) => s.selectedId);
+  useEffect(() => {
+    useCanvasStore.getState().resetDocument({
+      mode,
+      dpi: PRINT_DPI,
+    });
+    return () => {
+      useCanvasStore.getState().resetDocument({
+        mode: "utility",
+        dpi: PRINT_DPI,
+      });
+    };
+  }, [mode, pendingProjectKey, recentNamespace]);
+
   const canvasObjects = useCanvasStore((s) => s.objects);
-  const selectedCanvasObject = useMemo(
-    () => canvasObjects.find((o) => o.id === canvasSelectedId) ?? null,
-    [canvasObjects, canvasSelectedId]
-  );
-  const canEditSelectedObject = Boolean(
-    selectedCanvasObject &&
-      !selectedCanvasObject.locked &&
-      selectedCanvasObject.type !== "background"
-  );
   const hasUserPhotoLayers = canvasObjects.some((o) => o.type === "photo");
 
   /** SubjectLayer — cutout / portrait (transparent PNG after ImageProcessor). */
@@ -772,10 +843,33 @@ export default function AiTemplateStudio({
   const [zoomPct, setZoomPct] = useState(100);
   const [naturalSize, setNaturalSize] = useState({ w: 1080, h: 1350 });
   /** OverlayLayers — text / stickers (never cleared by bg commands). */
-  const [overlayLayers, setOverlayLayers] = useState<TextLayer[]>(() =>
+  const [internalOverlayLayers, setInternalOverlayLayers] = useState<TextLayer[]>(() =>
     initialOverlayLayers?.length
       ? initialOverlayLayers.map((l) => ({ ...l }))
       : [makeDefaultLayer(0)]
+  );
+  const isOverlayControlled =
+    controlledOverlayLayers != null && onControlledOverlayLayersChange != null;
+  const overlayLayers = isOverlayControlled
+    ? controlledOverlayLayers
+    : internalOverlayLayers;
+  const setOverlayLayers = useCallback(
+    (updater: TextLayer[] | ((prev: TextLayer[]) => TextLayer[])) => {
+      if (isOverlayControlled && onControlledOverlayLayersChange) {
+        const next =
+          typeof updater === "function"
+            ? updater(controlledOverlayLayers)
+            : updater;
+        onControlledOverlayLayersChange(next);
+        return;
+      }
+      setInternalOverlayLayers(updater);
+    },
+    [
+      isOverlayControlled,
+      controlledOverlayLayers,
+      onControlledOverlayLayersChange,
+    ]
   );
   const [activeLayerId, setActiveLayerId] = useState<string | null>(null);
   const [commandInput, setCommandInput] = useState("");
@@ -973,8 +1067,11 @@ export default function AiTemplateStudio({
 
   // Sync Template Studio planes → shared Konva canvas store (utility + agent).
   useEffect(() => {
-    const stageW = Math.max(1, Math.round(viewSize.w || canvasSize.width));
-    const stageH = Math.max(1, Math.round(viewSize.h || canvasSize.height));
+    // Wait for the real host box. Fitting against canvasSize (1080) then
+    // keeping those coords on a ~400px stage is what left-shifts the hero.
+    const stageW = Math.round(viewSize.w);
+    const stageH = Math.round(viewSize.h);
+    if (stageW < 16 || stageH < 16) return;
     useCanvasStore.getState().setMeta({
       width: stageW,
       height: stageH,
@@ -982,6 +1079,36 @@ export default function AiTemplateStudio({
       dpi: PRINT_DPI,
     });
     const prev = useCanvasStore.getState().objects;
+    const forceRefit = forcePlaneRefitRef.current;
+    if (forceRefit) forcePlaneRefitRef.current = false;
+    const hydrated = hydrateCanvasObjectsRef.current;
+    if (hydrated) hydrateCanvasObjectsRef.current = null;
+    // Fresh image fit: ignore prior image/photo transforms (keep text only).
+    // Import restore: use hydrated objects so transforms survive plane sync.
+    let previous = forceRefit
+      ? prev.filter((o) => o.type === "text")
+      : hydrated || prev;
+    // Real image metrics arrived after a placeholder 1080×1350 fit — Center & Fit again.
+    if (
+      !hydrated &&
+      !forceRefit &&
+      naturalSize.w > 1 &&
+      naturalSize.h > 1
+    ) {
+      const subject = previous.find((o) => o.id === "plane-subject");
+      if (subject && subject.type !== "text") {
+        const boxAspect =
+          Math.abs(subject.width * (subject.scaleX || 1)) /
+          Math.max(1, Math.abs(subject.height * (subject.scaleY || 1)));
+        const natAspect = naturalSize.w / naturalSize.h;
+        const aspectDrift =
+          Math.abs(boxAspect - natAspect) /
+          Math.max(boxAspect, natAspect, 0.0001);
+        if (aspectDrift > 0.04 && Math.abs(subject.rotation || 0) < 0.5) {
+          previous = previous.filter((o) => o.id !== "plane-subject");
+        }
+      }
+    }
     const next = buildObjectsFromStudioPlanes({
       stageW,
       stageH,
@@ -989,13 +1116,11 @@ export default function AiTemplateStudio({
       subjectUrl: subjectLayer,
       subjectNatural: naturalSize,
       overlayLayers,
-      previous: prev,
+      previous,
     });
     useCanvasStore.getState().setObjects(next);
   }, [
     backgroundImage,
-    canvasSize.height,
-    canvasSize.width,
     mode,
     naturalSize.h,
     naturalSize.w,
@@ -1169,6 +1294,76 @@ export default function AiTemplateStudio({
           ctx.restore();
         }
       } else {
+        const isPlainPrintLayer =
+          layer.id.startsWith("form-") && !stickerId;
+        const fillColor = colorPresetFill(layer.color);
+
+        if (isPlainPrintLayer && layer.id === "form-programs") {
+          const entries = parseProgramEntries(pureText);
+          if (entries.length) {
+            const numColW = programNumberColumnWidth(
+              entries,
+              fontSize,
+              fontWeight,
+              ctx
+            );
+            const gap = fontSize * 0.35;
+            const labelFont = `${fontWeight} ${fontSize}px ${fontForText(fontPreset, pureText)}`;
+            ctx.font = labelFont;
+            const labelMax = Math.max(8, contentW - numColW - gap);
+            let startX = blockX;
+            if (align === "center") startX = blockX;
+            else if (align === "right") startX = blockX + contentW - (numColW + gap + labelMax);
+
+            ctx.save();
+            ctx.fillStyle = fillColor;
+            ctx.shadowBlur = 0;
+            ctx.shadowColor = "transparent";
+            const numFont = programNumFontCss(fontWeight, fontSize);
+            let lineY = blockTop + 0.5 * lineHeightPx;
+            for (const entry of entries) {
+              ctx.font = labelFont;
+              const wrapped = wrapParagraph(ctx, entry.label, labelMax, 0);
+              ctx.font = numFont;
+              ctx.textAlign = "right";
+              ctx.fillText(`${entry.num}.`, startX + numColW, lineY);
+              ctx.font = labelFont;
+              ctx.textAlign = "left";
+              for (let wi = 0; wi < wrapped.length; wi++) {
+                ctx.fillText(wrapped[wi]!, startX + numColW + gap, lineY);
+                lineY += lineHeightPx;
+              }
+            }
+            ctx.restore();
+            ctx.shadowBlur = 0;
+            return;
+          }
+        }
+
+        if (isPlainPrintLayer) {
+          for (let li = 0; li < lines.length; li++) {
+            const line = lines[li] ?? "";
+            const lineW = lineWidths[li] ?? fontSize * 2.2;
+            const lineY = blockTop + (li + 0.5) * lineHeightPx;
+            const lineX = lineAnchorX(
+              align,
+              lineW,
+              xAnchor,
+              width,
+              layer.offsetX
+            );
+            ctx.save();
+            ctx.font = `${fontWeight} ${fontSize}px ${fontForText(fontPreset, line)}`;
+            ctx.fillStyle = fillColor;
+            ctx.shadowBlur = 0;
+            ctx.shadowColor = "transparent";
+            ctx.fillText(line, lineX, lineY);
+            ctx.restore();
+          }
+          ctx.shadowBlur = 0;
+          return;
+        }
+
         const lineStartOffsets: number[] = [];
         let offset = 0;
         for (let li = 0; li < lines.length; li++) {
@@ -1954,10 +2149,16 @@ export default function AiTemplateStudio({
   };
 
   const updateActive = (patch: Partial<TextLayer>) => {
-    if (!activeLayer) return;
+    const id = activeLayerId;
+    if (!id) {
+      showToast("먼저 텍스트 레이어를 선택해 주세요.", "info");
+      return;
+    }
     setOverlayLayers((prev) =>
-      prev.map((l) => (l.id === activeLayer.id ? { ...l, ...patch } : l))
+      prev.map((l) => (l.id === id ? { ...l, ...patch } : l))
     );
+    // Keep Konva selection on the edited text layer.
+    useCanvasStore.getState().select(id);
   };
 
   const addLayer = () => {
@@ -2153,6 +2354,10 @@ export default function AiTemplateStudio({
   }, [contextMenu]);
 
   const insertSymbol = (symbol: string) => {
+    if (onCanvasSymbolPick) {
+      onCanvasSymbolPick(symbol);
+      return;
+    }
     if (!activeLayer) return;
     const el = layerTextareaRefs.current[activeLayer.id];
     const start = el?.selectionStart ?? activeLayer.text.length;
@@ -2175,18 +2380,57 @@ export default function AiTemplateStudio({
     updateActive({ stickerId: activeLayer.stickerId === id ? null : id });
   };
 
+  const resetViewportCenterFit = useCallback(() => {
+    setZoomPct(100);
+    setViewOffset({ x: 0, y: 0 });
+    viewOffsetRef.current = { x: 0, y: 0 };
+    setPan(normalizeImagePan({ x: 0, y: 0, scale: 1 }));
+  }, []);
+
+  /** Drop residual image/photo layers and force next sync to Center & Fit. */
+  const clearResidualVisualAssets = useCallback(() => {
+    useCanvasStore.getState().clearImageLayers();
+    forcePlaneRefitRef.current = true;
+  }, []);
+
+  /**
+   * Upload → sole main subject: clear old hero/bg/photos, mount new asset
+   * centered in the stage (Center & Fit).
+   */
+  const installMainAssetFromFile = useCallback(
+    async (file: File, mode: PhotoKind) => {
+      if (!file.type.startsWith("image/")) {
+        throw new Error("image_only");
+      }
+      setEntrySource("default");
+      clearResidualVisualAssets();
+      loadedBgImageRef.current = null;
+      loadedImageRef.current = null;
+      setBackgroundImage(null);
+
+      const dataUrl = await readFileAsDataUrl(file);
+      let displaySrc = dataUrl;
+      if (mode === "cutout") {
+        const cutoutHttps = await processSubjectViaApi(toRawImageUrl(dataUrl));
+        displaySrc = toSubjectDisplayUrl(cutoutHttps);
+      }
+      const natural = await loadImageNaturalSize(displaySrc);
+      setNaturalSize({ w: natural.w, h: natural.h });
+      forcePlaneRefitRef.current = true;
+      setSubjectLayer(displaySrc);
+      resetViewportCenterFit();
+      requestAnimationFrame(() => paintRef.current());
+    },
+    [clearResidualVisualAssets, resetViewportCenterFit]
+  );
+
   const onPickFile = (file: File | null) => {
     if (!file || !file.type.startsWith("image/")) return;
     void (async () => {
-      setEntrySource("default");
       setUploadProcessing(true);
       try {
-        await addPhotoLayerFromFile(file, { mode: "original" });
-        setZoomPct(100);
-        setViewOffset({ x: 0, y: 0 });
-        viewOffsetRef.current = { x: 0, y: 0 };
-        requestAnimationFrame(() => paintRef.current());
-        showToast("원본 사진을 새 레이어로 추가했습니다.", "success");
+        await installMainAssetFromFile(file, "original");
+        showToast("원본 이미지를 중앙에 장착했습니다.", "success");
       } catch (err) {
         showToast(
           err instanceof Error ? err.message : "사진 업로드에 실패했습니다.",
@@ -2204,6 +2448,7 @@ export default function AiTemplateStudio({
     setSubjectLayer(HERO_AFTER_IMAGE);
     setBackgroundImage(null);
     loadedBgImageRef.current = null;
+    setNaturalSize({ w: 1080, h: 1080 });
     setAspectRatio("1:1");
     setPan(normalizeImagePan({ x: 0, y: 0, scale: 1 }));
     setZoomPct(100);
@@ -2218,6 +2463,7 @@ export default function AiTemplateStudio({
     setCustomSizeOpen(false);
     setCustomPrint(null);
     viewportFitDoneRef.current = false;
+    forcePlaneRefitRef.current = true;
     useCanvasStore.getState().resetDocument({
       mode,
       dpi: PRINT_DPI,
@@ -2241,6 +2487,9 @@ export default function AiTemplateStudio({
       opts?.intent === "remove_bg" ||
       /remove.?bg|rembg|누끼|배경\s*지워/i.test(opts?.kind || "");
 
+    // Drop leftover photo residuals; force Center & Fit on next sync.
+    clearResidualVisualAssets();
+
     for (const action of actions) {
       if (action.plane === "subject") {
         const display = toSubjectDisplayUrl(action.imageUrl);
@@ -2252,9 +2501,11 @@ export default function AiTemplateStudio({
           setBackgroundImage(null);
         }
       } else if (action.plane === "background") {
+        loadedBgImageRef.current = null;
         setBackgroundImage(bustDisplayUrl(displayPlaneUrl(action.imageUrl)));
       }
     }
+    resetViewportCenterFit();
     requestAnimationFrame(() => paintRef.current());
   };
 
@@ -2265,7 +2516,7 @@ export default function AiTemplateStudio({
     if (!command || commandBusy || uploadProcessing) return;
     setCommandInput("");
     setCommandBusy(true);
-    setCommandLog((prev) => [...prev.slice(-8), { role: "user", text: command }]);
+    setCommandLog((prev) => [...prev.slice(-9), { role: "user", text: command }]);
     try {
       const selectedObj = useCanvasStore
         .getState()
@@ -2301,7 +2552,7 @@ export default function AiTemplateStudio({
         ? `${result.message} (${lang} → EN Flux)${warn}`
         : result.message;
       setCommandLog((prev) => [
-        ...prev.slice(-8),
+        ...prev.slice(-9),
         {
           role: "assistant",
           text: `[${result.kind}] ${detail}`,
@@ -2316,7 +2567,7 @@ export default function AiTemplateStudio({
         err instanceof Error ? err.message : "명령 처리에 실패했습니다.";
       console.error("[AiTemplateStudio] command failed", err);
       setCommandLog((prev) => [
-        ...prev.slice(-8),
+        ...prev.slice(-9),
         { role: "assistant", text: msg },
       ]);
       showToast(msg, "error");
@@ -2325,79 +2576,70 @@ export default function AiTemplateStudio({
     }
   };
 
-  const downloadPng = async () => {
+  const captureExportDataUrl = (targetW: number): string => {
+    const fromKonva =
+      exportKonvaPrintDataUrl(
+        konvaStageRef.current,
+        Math.max(1, viewSize.w),
+        Math.max(1, viewSize.h),
+        targetW
+      ) || "";
+    if (fromKonva) return fromKonva;
+    const exportCanvas = document.createElement("canvas");
+    const tw = Math.max(1, Math.round(targetW));
+    const th = Math.max(
+      1,
+      Math.round((tw * exportSize.height) / Math.max(1, exportSize.width))
+    );
+    paintTo(exportCanvas, tw, th, { updateAnchors: false });
+    return exportCanvas.toDataURL("image/png");
+  };
+
+  const buildCurrentProject = () => {
+    const snapshot = useCanvasStore.getState().getExportSnapshot();
+    return buildStudioProject({
+      mode,
+      subjectUrl: subjectLayer,
+      backgroundUrl: backgroundImage,
+      overlayLayers,
+      aspectRatio,
+      customPrint,
+      naturalSize,
+      visualStyle,
+      canvas: snapshot,
+    });
+  };
+
+  /** Local-only dual download: result PNG + sealed editable .sca (subscribers). */
+  const downloadWithProject = async (quality: "standard" | "high") => {
+    if (!requireSubscription()) return;
     setBusy(true);
     try {
-      const label = customPrint
-        ? `print-${customPrint.width}x${customPrint.height}${customPrint.unit}-${PRINT_DPI}dpi`
-        : mode === "agent"
-          ? `print-agent-${PRINT_DPI}dpi`
-          : `ai-template-studio`;
-
-      // Prefer Konva export — matches interactive bounding-box layout.
-      let dataUrl =
-        exportKonvaPrintDataUrl(
-          konvaStageRef.current,
-          Math.max(1, viewSize.w),
-          Math.max(1, viewSize.h),
-          exportSize.width
-        ) || "";
-
-      if (!dataUrl) {
-        const exportCanvas = document.createElement("canvas");
-        paintTo(exportCanvas, exportSize.width, exportSize.height, {
-          updateAnchors: false,
-        });
-        dataUrl = exportCanvas.toDataURL("image/png");
-      }
-
-      const blob = await (await fetch(dataUrl)).blob();
-      const a = document.createElement("a");
-      const href = URL.createObjectURL(blob);
-      a.href = href;
-      a.download = `${label}-${Date.now()}.png`;
-      a.click();
-      URL.revokeObjectURL(href);
-
-      // Agent / print-ready: also try R2 persistence of the High-DPI composite.
-      if (mode === "agent" || customPrint) {
-        try {
-          const snapshot = useCanvasStore.getState().getExportSnapshot();
-          const stored = await requestPrintReadyExport({
-            formatLabel: label,
-            dpi: PRINT_DPI,
-            persist: true,
-            requestId: snapshot.updatedAt
-              ? `canvas_${snapshot.updatedAt}`
-              : undefined,
-            planes: [
-              {
-                role: "full",
-                dataUrl,
-                contentType: "image/png",
-                width: exportSize.width,
-                height: exportSize.height,
-              },
-            ],
-          });
-          if (stored.persisted) {
-            showToast(
-              `인쇄용 PNG + R2 원본 저장 완료 (${exportSize.width}×${exportSize.height}px)`,
-              "success"
+      const targetW =
+        quality === "high"
+          ? exportSize.width
+          : Math.min(
+              1280,
+              Math.max(720, Math.round(exportSize.width * 0.42))
             );
-            return;
-          }
-        } catch (err) {
-          console.warn("[AiTemplateStudio] R2 print-export skipped", err);
-        }
-      }
-
-      showToast(
-        customPrint || mode === "agent"
-          ? `인쇄용 PNG 다운로드 완료 (${exportSize.width}×${exportSize.height}px)`
-          : "이미지를 다운로드했습니다.",
-        "success"
-      );
+      const dataUrl = captureExportDataUrl(targetW);
+      if (!dataUrl) throw new Error("export_empty");
+      const imageBlob = await (await fetch(dataUrl)).blob();
+      const project = buildCurrentProject();
+      const label = customPrint
+        ? `print-${customPrint.width}x${customPrint.height}${customPrint.unit}`
+        : mode === "agent"
+          ? "print-agent"
+          : "ai-template-studio";
+      await downloadAndRemember({
+        imageBlob,
+        project,
+        baseName: `${label}-${quality}`,
+        successMessage:
+          quality === "high"
+            ? `고화질 PNG + 수정파일 저장 · 최근 파일에 등록 (${targetW}px)`
+            : `일반화질 PNG + 수정파일 저장 · 최근 파일에 등록 (${targetW}px)`,
+      });
     } catch {
       showToast("다운로드에 실패했습니다.", "error");
     } finally {
@@ -2405,28 +2647,99 @@ export default function AiTemplateStudio({
     }
   };
 
-  const shareImage = async () => {
-    if (typeof navigator === "undefined" || !navigator.share) {
-      showToast("이 기기에서는 공유를 지원하지 않습니다.", "info");
-      return;
-    }
+  const applyStudioProject = useCallback(
+    (project: StudioCanvasProjectV1) => {
+      forcePlaneRefitRef.current = false;
+      hydrateCanvasObjectsRef.current = project.canvas.objects;
+      loadedImageRef.current = null;
+      loadedBgImageRef.current = null;
+      setEntrySource("default");
+      setSubjectLayer(project.studio.subjectUrl || "");
+      setBackgroundImage(project.studio.backgroundUrl);
+      setNaturalSize(project.studio.naturalSize);
+      const nextLayers =
+        project.studio.overlayLayers.length > 0
+          ? project.studio.overlayLayers.map((l) => ({
+              ...l,
+              ranges: l.ranges?.map((r) => ({ ...r })) ?? [],
+            }))
+          : [makeDefaultLayer(0)];
+      setOverlayLayers(nextLayers);
+      setActiveLayerId(nextLayers[0]!.id);
+      if (project.studio.customPrint) {
+        setCustomPrint(project.studio.customPrint);
+      } else {
+        setCustomPrint(null);
+        const ar = project.studio.aspectRatio as AspectRatioKey;
+        if (
+          ar === "original" ||
+          (ASPECT_TABS as readonly string[]).includes(ar)
+        ) {
+          setAspectRatio(ar);
+        }
+      }
+      if (project.studio.visualStyle) {
+        setVisualStyle(project.studio.visualStyle);
+      }
+      useCanvasStore.getState().setMeta(project.canvas.meta);
+      useCanvasStore.getState().setObjects(project.canvas.objects);
+      useCanvasStore.getState().select(project.canvas.selectedId);
+      resetViewportCenterFit();
+      requestAnimationFrame(() => paintRef.current());
+    },
+    [resetViewportCenterFit]
+  );
+
+  const loadProjectFromFile = async (file: File | null) => {
+    if (!file) return;
+    if (!requireSubscription()) return;
     setBusy(true);
     try {
-      const exportCanvas = document.createElement("canvas");
-      paintTo(exportCanvas, exportSize.width, exportSize.height, {
-        updateAnchors: false,
-      });
-      const blob = await new Promise<Blob | null>((resolve) =>
-        exportCanvas.toBlob(resolve, "image/png")
+      const project = await readProjectFile(file);
+      applyStudioProject(project);
+      showToast("수정파일을 불러와 편집 상태를 복원했습니다.", "success");
+    } catch (err) {
+      showToast(projectStorageErrorMessage(err), "error");
+    } finally {
+      setBusy(false);
+      if (projectFileInputRef.current) projectFileInputRef.current.value = "";
+    }
+  };
+
+  // Restore project handed off from print Step-2 recent-file picker.
+  useEffect(() => {
+    const pending = takePendingStudioProject(pendingProjectKey);
+    if (!pending) return;
+    applyStudioProject(pending);
+    showToast("최근 수정파일을 복원했습니다.", "success");
+  }, [applyStudioProject, pendingProjectKey, showToast]);
+
+  const shareImage = async () => {
+    if (!requireSubscription()) return;
+    setBusy(true);
+    try {
+      const dataUrl = captureExportDataUrl(
+        Math.min(1920, Math.max(1080, exportSize.width))
       );
-      if (!blob) throw new Error("blob");
-      const file = new File([blob], "ai-template-studio.png", {
-        type: "image/png",
+      const blob = await (await fetch(dataUrl)).blob();
+      const file = new File(
+        [blob],
+        mode === "agent" ? "print-agent.png" : "ai-template-studio.png",
+        { type: "image/png" }
+      );
+      const result = await shareWithFallback({
+        title:
+          mode === "agent"
+            ? "AI 1분 인쇄물 뚝딱 생성기"
+            : "AI 템플릿 스튜디오",
+        text: "Studio Canvas AI에서 만든 이미지를 공유합니다.",
+        file,
       });
-      await navigator.share({
-        title: "AI 템플릿 스튜디오",
-        files: [file],
-      });
+      if (result === "shared") {
+        showToast("기기 공유 시트로 이미지를 공유했습니다.", "success");
+      } else if (result === "copied") {
+        showToast("공유가 지원되지 않아 링크/텍스트를 복사했습니다.", "info");
+      }
     } catch {
       showToast("공유가 취소되었거나 실패했습니다.", "info");
     } finally {
@@ -2470,26 +2783,225 @@ export default function AiTemplateStudio({
     </button>
   );
 
+  const goBack = () => {
+    if (onBackToPlanning) {
+      onBackToPlanning();
+      return;
+    }
+    if (mode === "agent" || embedded) {
+      router.push(PRINT_SMART_FORM_PATH);
+      return;
+    }
+    router.push("/");
+  };
+
+  const textLayersPanel = textLayersHost ? (
+    <div className="w-full rounded-2xl border border-white/10 bg-black/35 p-3">
+      <div className="flex min-w-0 items-center gap-2 pb-2">
+        <p className="shrink-0 text-sm font-medium whitespace-nowrap text-white/70">
+          {cs.textLayers}
+        </p>
+        <button
+          type="button"
+          onClick={addLayer}
+          className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-emerald-400/35 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-500/20"
+        >
+          <Plus className="h-3.5 w-3.5 shrink-0" />
+          {cs.addTextLayer}
+        </button>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {overlayLayers.map((layer, idx) => (
+          <div
+            key={layer.id}
+            className={`flex min-w-0 items-center gap-2 rounded-xl border px-2 py-1.5 transition ${
+              activeLayer?.id === layer.id
+                ? "border-purple-400/50 bg-purple-500/5"
+                : "border-white/10 bg-black/25"
+            }`}
+            onClick={() => {
+              selectionClearedRef.current = false;
+              setActiveLayerId(layer.id);
+            }}
+          >
+            <span className="shrink-0 whitespace-nowrap rounded-md bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-200">
+              {fillCanvas(cs.layerN, { n: idx + 1 })}
+            </span>
+            <input
+              type="text"
+              data-layer-id={layer.id}
+              value={layer.text}
+              onFocus={() => {
+                selectionClearedRef.current = false;
+                setActiveLayerId(layer.id);
+              }}
+              onChange={(e) => {
+                const nextValue = stripStickerTokens(e.target.value);
+                setOverlayLayers((prev) =>
+                  prev.map((l) =>
+                    l.id === layer.id ? { ...l, text: nextValue } : l
+                  )
+                );
+              }}
+              placeholder={PLACEHOLDER_TEXT}
+              className={`font-emoji min-w-0 flex-1 truncate rounded-lg border bg-black/30 px-2 py-1 text-sm font-semibold whitespace-nowrap text-white outline-none placeholder:text-sm placeholder:font-normal placeholder:text-white/35 ${
+                activeLayer?.id === layer.id
+                  ? "border-purple-400/70 ring-2 ring-purple-400/30"
+                  : "border-white/10 focus:border-purple-400/40"
+              }`}
+            />
+            <button
+              type="button"
+              aria-label="Delete layer"
+              onClick={(e) => {
+                e.stopPropagation();
+                removeLayer(layer.id);
+              }}
+              className="shrink-0 rounded-md p-1 text-red-300/80 hover:bg-red-500/10"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  ) : (
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-sm font-medium text-white/70">{cs.textLayers}</p>
+        <button
+          type="button"
+          onClick={addLayer}
+          className="inline-flex items-center gap-1 rounded-lg border border-emerald-400/35 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-500/20"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          {cs.addTextLayer}
+        </button>
+      </div>
+      <div className="space-y-2">
+        {overlayLayers.map((layer, idx) => (
+          <div
+            key={layer.id}
+            className={`rounded-xl border p-2.5 transition ${
+              activeLayer?.id === layer.id
+                ? "border-purple-400/50 bg-purple-500/5"
+                : "border-white/10 bg-black/25"
+            }`}
+            onClick={() => {
+              selectionClearedRef.current = false;
+              setActiveLayerId(layer.id);
+            }}
+          >
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <span className="rounded-md bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-200">
+                {fillCanvas(cs.layerN, { n: idx + 1 })}
+              </span>
+              <button
+                type="button"
+                aria-label="Delete layer"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeLayer(layer.id);
+                }}
+                className="rounded-md p-1 text-red-300/80 hover:bg-red-500/10"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <textarea
+              ref={(node) => {
+                layerTextareaRefs.current[layer.id] = node;
+                autoResizeLayerTextarea(node);
+              }}
+              data-layer-id={layer.id}
+              value={layer.text}
+              onFocus={() => {
+                selectionClearedRef.current = false;
+                setActiveLayerId(layer.id);
+              }}
+              onChange={(e) => {
+                const nextValue = stripStickerTokens(e.target.value);
+                setOverlayLayers((prev) =>
+                  prev.map((l) =>
+                    l.id === layer.id ? { ...l, text: nextValue } : l
+                  )
+                );
+                autoResizeLayerTextarea(e.currentTarget);
+              }}
+              rows={1}
+              placeholder={PLACEHOLDER_TEXT}
+              className={`font-emoji w-full resize-y overflow-hidden rounded-lg border bg-black/30 px-3 py-1.5 text-2xl font-bold leading-tight tracking-wide text-white outline-none placeholder:text-sm placeholder:font-normal placeholder:text-white/35 ${
+                activeLayer?.id === layer.id
+                  ? "border-purple-400/70 ring-2 ring-purple-400/30"
+                  : "border-white/10 focus:border-purple-400/40"
+              }`}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const isPrintWizardStep2 = layout === "print-wizard-step2";
+  const isPanelOnly = panelOnly === true;
+  const shellHeightClass = isPanelOnly
+    ? "min-h-0"
+    : isPrintWizardStep2
+      ? "h-full min-h-0"
+      : "h-[100dvh]";
+  const gridClass = isPanelOnly
+    ? "flex min-h-0 flex-col gap-2.5"
+    : isPrintWizardStep2
+      ? "lg:grid-cols-2 [&>section:first-child]:lg:row-span-2 [&>section:nth-child(2)]:lg:col-start-2 [&>section:nth-child(2)]:lg:row-start-1 [&>section:nth-child(3)]:lg:col-start-2 [&>section:nth-child(3)]:lg:row-start-2"
+      : "lg:grid-cols-3";
+  const panelSectionClass = isPanelOnly
+    ? "flex min-h-0 flex-col gap-4 rounded-2xl border border-white/10 bg-black/35 p-4"
+    : "flex min-h-0 flex-col gap-4 rounded-2xl border border-white/10 bg-black/35 p-4 lg:overflow-y-auto";
+
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden bg-[#0b0d12] text-white">
+    <div
+      className={`flex ${shellHeightClass} flex-col ${
+        isPanelOnly
+          ? "overflow-visible text-white"
+          : "overflow-hidden bg-[#0b0d12] text-white"
+      }`}
+    >
+      {!isPanelOnly ? (
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-6">
-        <div className="min-w-0">
-          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-purple-300/80">
-            Studio Canvas AI · {mode === "agent" ? "Agent" : "Utility"}
-          </p>
-          <h1 className="truncate text-base font-semibold sm:text-lg">
-            {heading ||
-              (mode === "agent"
-                ? "AI 1분 인쇄물 에이전트"
-                : "AI 템플릿 스튜디오")}
-          </h1>
-          <p className="hidden text-xs text-white/45 sm:block">
-            {mode === "agent"
-              ? "폼 텍스트는 별도 레이어 · AI는 시각만 · 아이덴티티 고정 편집 · 인쇄용 고해상도"
-              : entrySource === "general-photo"
-                ? "일반사진 원본 위에 텍스트 · 스티커 · 자간 · 행간 편집을 바로 시작합니다"
-                : "비율 · AI 배경 · 문구 · 스티커를 한 화면에서 편집합니다"}
-          </p>
+        <div className="flex min-w-0 items-start gap-2.5 sm:gap-3">
+          <button
+            type="button"
+            onClick={goBack}
+            aria-label={
+              isPrintWizardStep2 ? cs.wizardBackToPlanning : cs.backAria
+            }
+            title={isPrintWizardStep2 ? cs.wizardBackToPlanning : cs.backAria}
+            className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/15 bg-white/5 text-white/80 transition hover:border-white/25 hover:bg-white/10 hover:text-white"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <div className="min-w-0">
+            <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-purple-300/80">
+              {mode === "agent" ? cs.agentEyebrow : cs.utilityEyebrow}
+            </p>
+            <h1 className="truncate text-base font-semibold sm:text-lg">
+              {heading ||
+                (isPrintWizardStep2
+                  ? cs.wizardStep2Title
+                  : mode === "agent"
+                    ? cs.agentTitle
+                    : cs.utilityTitle)}
+            </h1>
+            <p className="hidden text-xs text-white/45 sm:block">
+              {isPrintWizardStep2
+                ? cs.wizardStep2Subtitle
+                : mode === "agent"
+                  ? cs.agentSubtitle
+                  : entrySource === "general-photo"
+                    ? cs.generalPhotoSubtitle
+                    : cs.utilitySubtitle}
+            </p>
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <button
@@ -2498,7 +3010,7 @@ export default function AiTemplateStudio({
             className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-500/20"
           >
             <RotateCcw className="h-3.5 w-3.5" />
-            초기화
+            {cs.reset}
           </button>
           {embedded ? null : (
             <Link
@@ -2506,41 +3018,45 @@ export default function AiTemplateStudio({
               className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white/80 transition hover:bg-white/10"
             >
               <Home className="h-3.5 w-3.5" />
-              메인페이지로 가기
+              {cs.goHome}
             </Link>
           )}
         </div>
       </header>
+      ) : null}
 
-      <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-4 overflow-y-auto p-4 lg:grid-cols-3 lg:gap-6 lg:overflow-hidden lg:px-6 lg:pb-6">
-        {/* Column 1 — Preview */}
+      <div
+        className={
+          isPanelOnly
+            ? gridClass
+            : `grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-4 overflow-y-auto p-4 lg:gap-6 lg:overflow-hidden lg:px-6 lg:pb-6 ${gridClass}`
+        }
+      >
+        {!isPanelOnly ? (
         <section className="flex min-h-0 min-w-0 flex-col gap-2 rounded-2xl border border-white/10 bg-black/35 p-3 sm:p-4 lg:h-full lg:overflow-hidden">
           {/* Single-line canvas toolbar — above stage only */}
-          <div className="flex w-full shrink-0 flex-nowrap items-center gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <button
-              type="button"
-              onClick={bringSelectedToFront}
-              disabled={!canEditSelectedObject}
-              title="맨 앞으로"
-              className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold text-white/75 transition hover:bg-white/10 disabled:opacity-40 sm:text-[11px] sm:px-2.5 sm:py-1.5"
-            >
-              <BringToFront className="h-3.5 w-3.5" />
-              맨 앞으로
-            </button>
-            <button
-              type="button"
-              onClick={sendSelectedToBack}
-              disabled={!canEditSelectedObject}
-              title="맨 뒤로"
-              className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold text-white/75 transition hover:bg-white/10 disabled:opacity-40 sm:text-[11px] sm:px-2.5 sm:py-1.5"
-            >
-              <SendToBack className="h-3.5 w-3.5" />
-              맨 뒤로
-            </button>
+          <div className="flex w-full min-w-0 shrink-0 flex-nowrap items-center gap-1 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <CanvasUploadToolbar
               dense
               nowrap
               className="shrink-0"
+              disabled={uploadProcessing || commandBusy || busy}
+              requireSubscription={requireSubscription}
+              onInstallFile={async (file, mode) => {
+                setUploadProcessing(true);
+                try {
+                  await installMainAssetFromFile(file, mode);
+                } finally {
+                  setUploadProcessing(false);
+                }
+              }}
+              onLoadRecentProject={(project) => {
+                openRecent(project, {
+                  currentMode: mode,
+                  applyLocal: applyStudioProject,
+                });
+              }}
+              recentNamespace={recentNamespace}
               onDeleteObject={(id, type) => {
                 if (type === "text") removeLayer(id);
                 else if (type === "subject") {
@@ -2656,7 +3172,7 @@ export default function AiTemplateStudio({
                     setContextMenu(null);
                   }}
                 >
-                  <span>복사</span>
+                  <span>{cs.copy}</span>
                   <span className="text-[10px] text-white/35">Ctrl+C</span>
                 </button>
                 <button
@@ -2666,7 +3182,7 @@ export default function AiTemplateStudio({
                     duplicateLayer(contextMenu.layerId);
                   }}
                 >
-                  <span>복제하기</span>
+                  <span>{cs.duplicate}</span>
                   <span className="text-[10px] text-white/35">Ctrl+D</span>
                 </button>
                 <button
@@ -2677,7 +3193,7 @@ export default function AiTemplateStudio({
                     pasteClipboardLayer();
                   }}
                 >
-                  <span>붙여넣기</span>
+                  <span>{cs.paste}</span>
                   <span className="text-[10px] text-white/35">Ctrl+V</span>
                 </button>
                 <div className="my-1 border-t border-white/10" />
@@ -2692,7 +3208,7 @@ export default function AiTemplateStudio({
                     setContextMenu(null);
                   }}
                 >
-                  <span>맨 앞으로</span>
+                  <span>{cs.bringFront}</span>
                 </button>
                 <button
                   type="button"
@@ -2705,7 +3221,7 @@ export default function AiTemplateStudio({
                     setContextMenu(null);
                   }}
                 >
-                  <span>맨 뒤로</span>
+                  <span>{cs.sendBack}</span>
                 </button>
                 <button
                   type="button"
@@ -2718,7 +3234,7 @@ export default function AiTemplateStudio({
                     setContextMenu(null);
                   }}
                 >
-                  <span>삭제</span>
+                  <span>{cs.delete}</span>
                   <span className="text-[10px] text-white/35">Del</span>
                 </button>
               </div>
@@ -2730,7 +3246,7 @@ export default function AiTemplateStudio({
                 className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-2 text-white/50"
               >
                 <ImagePlus className="h-8 w-8" />
-                <span className="text-sm">이미지를 업로드하세요</span>
+                <span className="text-sm">{cs.uploadImage}</span>
               </button>
             ) : null}
             <input
@@ -2775,9 +3291,17 @@ export default function AiTemplateStudio({
             </span>
           </div>
         </section>
+        ) : null}
 
         {/* Column 2 — Background & copy */}
-        <section className="flex min-h-0 flex-col gap-4 rounded-2xl border border-white/10 bg-black/35 p-4 lg:overflow-y-auto">
+        <section
+          className={
+            isPanelOnly && hideAiCommand && textLayersHost
+              ? "contents"
+              : panelSectionClass
+          }
+        >
+          {!(isPrintWizardStep2 || isPanelOnly) ? (
           <div>
             <p className="mb-2 text-sm font-medium text-white/70">
               {t.creator.aspectRatioLabel}
@@ -2860,7 +3384,7 @@ export default function AiTemplateStudio({
                               : "border-white/10 bg-white/5 text-white/75 hover:bg-white/10"
                           }`}
                         >
-                          <span>직접 입력 / 프리 사이즈</span>
+                          <span>{cs.customSize}</span>
                           <ChevronDown
                             className={`h-3.5 w-3.5 transition-transform ${
                               customSizeOpen ? "rotate-180" : ""
@@ -2889,7 +3413,7 @@ export default function AiTemplateStudio({
                             <div className="grid grid-cols-2 gap-2">
                               <label className="space-y-1">
                                 <span className="text-[10px] text-white/45">
-                                  가로 ({customUnit})
+                                  {cs.width} ({customUnit})
                                 </span>
                                 <input
                                   type="number"
@@ -2904,7 +3428,7 @@ export default function AiTemplateStudio({
                               </label>
                               <label className="space-y-1">
                                 <span className="text-[10px] text-white/45">
-                                  세로 ({customUnit})
+                                  {cs.height} ({customUnit})
                                 </span>
                                 <input
                                   type="number"
@@ -2946,7 +3470,7 @@ export default function AiTemplateStudio({
                               onClick={applyCustomPrintSize}
                               className="w-full rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:opacity-90"
                             >
-                              적용
+                              {cs.apply}
                             </button>
                           </div>
                         ) : null}
@@ -2973,8 +3497,20 @@ export default function AiTemplateStudio({
                   }`}
                 >
                   <span className="max-w-[11rem] truncate">
-                    {visualStyleSelectionLabel(visualStyle, "ko") ||
-                      "스타일 선택"}
+                    {[
+                      visualStyle.imageStyleId
+                        ? cs.imageStyles[
+                            visualStyle.imageStyleId as keyof typeof cs.imageStyles
+                          ]
+                        : null,
+                      visualStyle.moodStyleId
+                        ? cs.moodStyles[
+                            visualStyle.moodStyleId as keyof typeof cs.moodStyles
+                          ]
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ") || cs.styleSelect}
                   </span>
                   <ChevronDown
                     className={`h-3.5 w-3.5 shrink-0 transition-transform ${
@@ -2987,7 +3523,7 @@ export default function AiTemplateStudio({
                     <div className="space-y-3">
                       <div className="space-y-1.5">
                         <p className="px-1 text-[11px] font-semibold text-white/40">
-                          이미지 스타일
+                          {cs.imageStyle}
                         </p>
                         <div className="flex flex-col gap-1">
                           {IMAGE_STYLE_PRESETS.map((preset) => {
@@ -3009,9 +3545,12 @@ export default function AiTemplateStudio({
                                     : "bg-white/5 text-white/65 hover:bg-white/10 hover:text-white"
                                 }`}
                               >
-                                <span className="block">{preset.labelKo}</span>
-                                <span className="mt-0.5 block text-[10px] font-medium text-white/40">
-                                  {preset.labelEn}
+                                <span className="block">
+                                  {
+                                    cs.imageStyles[
+                                      preset.id as keyof typeof cs.imageStyles
+                                    ]
+                                  }
                                 </span>
                               </button>
                             );
@@ -3020,7 +3559,7 @@ export default function AiTemplateStudio({
                       </div>
                       <div className="border-t border-white/10 pt-3 space-y-1.5">
                         <p className="px-1 text-[11px] font-semibold text-white/40">
-                          조명 및 분위기
+                          {cs.moodStyle}
                         </p>
                         <div className="flex flex-col gap-1">
                           {MOOD_STYLE_PRESETS.map((preset) => {
@@ -3042,9 +3581,12 @@ export default function AiTemplateStudio({
                                     : "bg-white/5 text-white/65 hover:bg-white/10 hover:text-white"
                                 }`}
                               >
-                                <span className="block">{preset.labelKo}</span>
-                                <span className="mt-0.5 block text-[10px] font-medium text-white/40">
-                                  {preset.labelEn}
+                                <span className="block">
+                                  {
+                                    cs.moodStyles[
+                                      preset.id as keyof typeof cs.moodStyles
+                                    ]
+                                  }
                                 </span>
                               </button>
                             );
@@ -3059,7 +3601,7 @@ export default function AiTemplateStudio({
                         }}
                         className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-semibold text-white/55 hover:bg-white/10 hover:text-white/80"
                       >
-                        스타일 초기화
+                        {cs.styleReset}
                       </button>
                     </div>
                   </div>
@@ -3075,7 +3617,9 @@ export default function AiTemplateStudio({
               ) : null}
             </div>
           </div>
+          ) : null}
 
+          {!hideAiCommand ? (
           <div
             className={`rounded-xl p-4 shadow-lg ${
               entrySource === "general-photo"
@@ -3089,7 +3633,7 @@ export default function AiTemplateStudio({
                   entrySource === "general-photo" ? "text-emerald-200" : "text-purple-300"
                 }`}
               >
-                대화형 AI 명령
+                {cs.aiCommand}
               </span>
               <span className="text-xs text-gray-400">
                 {uploadProcessing
@@ -3135,7 +3679,7 @@ export default function AiTemplateStudio({
                 onClick={() => void runStudioCommand()}
                 className="whitespace-nowrap rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {commandBusy ? "처리 중..." : "실행"}
+                {commandBusy ? cs.processing : cs.run}
               </button>
             </div>
             <div className="mt-2.5 flex flex-wrap content-start gap-x-1.5 gap-y-2">
@@ -3165,85 +3709,15 @@ export default function AiTemplateStudio({
               ))}
             </div>
           </div>
+          ) : null}
 
-          <div>
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <p className="text-sm font-medium text-white/70">텍스트 레이어</p>
-              <button
-                type="button"
-                onClick={addLayer}
-                className="inline-flex items-center gap-1 rounded-lg border border-emerald-400/35 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-500/20"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                텍스트 레이어 추가
-              </button>
-            </div>
-            <div className="space-y-2">
-              {overlayLayers.map((layer, idx) => (
-                <div
-                  key={layer.id}
-                  className={`rounded-xl border p-2.5 transition ${
-                    activeLayer?.id === layer.id
-                      ? "border-purple-400/50 bg-purple-500/5"
-                      : "border-white/10 bg-black/25"
-                  }`}
-                  onClick={() => {
-                    selectionClearedRef.current = false;
-                    setActiveLayerId(layer.id);
-                  }}
-                >
-                  <div className="mb-1.5 flex items-center justify-between gap-2">
-                    <span className="rounded-md bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-200">
-                      레이어{idx + 1}
-                    </span>
-                    <button
-                      type="button"
-                      aria-label="Delete layer"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeLayer(layer.id);
-                      }}
-                      className="rounded-md p-1 text-red-300/80 hover:bg-red-500/10"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                  <textarea
-                    ref={(node) => {
-                      layerTextareaRefs.current[layer.id] = node;
-                      autoResizeLayerTextarea(node);
-                    }}
-                    data-layer-id={layer.id}
-                    value={layer.text}
-                    onFocus={() => {
-                      selectionClearedRef.current = false;
-                      setActiveLayerId(layer.id);
-                    }}
-                    onChange={(e) => {
-                      const nextValue = stripStickerTokens(e.target.value);
-                      setOverlayLayers((prev) =>
-                        prev.map((l) =>
-                          l.id === layer.id ? { ...l, text: nextValue } : l
-                        )
-                      );
-                      autoResizeLayerTextarea(e.currentTarget);
-                    }}
-                    rows={1}
-                    placeholder={PLACEHOLDER_TEXT}
-                    className={`font-emoji w-full resize-y overflow-hidden rounded-lg border bg-black/30 px-3 py-1.5 text-2xl font-bold leading-tight tracking-wide text-white outline-none placeholder:text-sm placeholder:font-normal placeholder:text-white/35 ${
-                      activeLayer?.id === layer.id
-                        ? "border-purple-400/70 ring-2 ring-purple-400/30"
-                        : "border-white/10 focus:border-purple-400/40"
-                    }`}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
+          {textLayersHost
+            ? createPortal(textLayersPanel, textLayersHost)
+            : textLayersPanel}
         </section>
 
         {/* Column 3 — Style & download */}
-        <section className="flex min-h-0 flex-col gap-4 rounded-2xl border border-white/10 bg-black/35 p-4 lg:overflow-y-auto">
+        <section className={panelSectionClass}>
           {activeLayer ? (
             <>
               <div>
@@ -3275,6 +3749,10 @@ export default function AiTemplateStudio({
                   onPick={insertSticker}
                 />
               </div>
+
+              {onDecoCatalogPick ? (
+                <DecoToolCatalogDropdown onPick={onDecoCatalogPick} />
+              ) : null}
 
               <div>
                 <p className="mb-2 text-xs font-medium text-white/60">
@@ -3469,37 +3947,25 @@ export default function AiTemplateStudio({
             </>
           ) : null}
 
-          <div className="mt-auto grid gap-2 border-t border-white/10 pt-4">
-            <button
-              type="button"
-              onClick={() => void downloadPng()}
-              disabled={busy}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-teal-500 px-4 py-3 text-sm font-semibold text-white shadow-lg disabled:opacity-50"
-            >
-              <Download className="h-4 w-4 shrink-0" />
-              다운로드 (이미지)
-            </button>
-            <button
-              type="button"
-              onClick={() => void shareImage()}
-              disabled={busy}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-white/85 hover:bg-white/10 disabled:opacity-50"
-            >
-              <Share2 className="h-4 w-4 shrink-0" />
-              공유하기
-            </button>
-            <button
-              type="button"
-              onClick={() => void downloadPng()}
-              disabled={busy}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-white/85 hover:bg-white/10 disabled:opacity-50"
-            >
-              <Download className="h-4 w-4 shrink-0" />
-              고해상도 PNG 다운로드
-            </button>
-          </div>
+          {!hideExport ? (
+          <StudioExportButtonGroup
+            busy={busy}
+            onDownloadStandard={() => void downloadWithProject("standard")}
+            onDownloadHigh={() => void downloadWithProject("high")}
+            onLoadProjectClick={() => {
+              if (!requireSubscription()) return;
+              projectFileInputRef.current?.click();
+            }}
+            onLoadFromGallery={(project) => applyStudioProject(project)}
+            requireSubscription={requireSubscription}
+            onShare={() => void shareImage()}
+            fileInputRef={projectFileInputRef}
+            onFileChange={(file) => void loadProjectFromFile(file)}
+          />
+          ) : null}
         </section>
       </div>
+      {premiumModal}
     </div>
   );
 }

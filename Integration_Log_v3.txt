@@ -1,0 +1,493 @@
+# 네이버로 계속하기 (Naver OAuth 2.0 Login) 연동 완벽 가이드
+
+> Studio Canvas AI (Next.js) — **「네이버로 계속하기」** 구현·아키텍처·트러블슈팅 기록  
+> 기준 코드: `lib/supabase/oauth.ts`, `lib/supabase/naver-userinfo.ts`, `app/api/auth/naver/userinfo`, Auth bridge  
+> 최종 정리일: 2026-08-08  
+> 파일: `Integration_Log_v3.txt` (프로젝트 Root)
+
+---
+
+## 0. 한 줄 요약 (현재 아키텍처)
+
+| 항목 | 실제 구현 |
+|------|-----------|
+| 로그인 방식 | **OAuth 2.0 Authorization Code** (+ Supabase PKCE) |
+| 주 경로 | **Supabase Custom OAuth** — `provider: "custom:naver"` |
+| 프론트 진입 | `AuthModal` → `signInWithNaver()` → Naver 동의 화면 |
+| 토큰 교환 | **Supabase GoTrue**가 Naver Token URL과 교환 (앱 서버가 code↔token 직접 호출하지 않음) |
+| Userinfo | Naver `/v1/nid/me`는 `response` 중첩 → **평탄화 프록시 필수** |
+| 권장 Userinfo | Edge Function `…/functions/v1/naver-userinfo` (`verify_jwt = false`) |
+| 대체 Userinfo | Next.js `GET /api/auth/naver/userinfo` |
+| 앱 세션 | `/auth/callback` (code exchange) → `/auth/bridge` → NextAuth JWT + 앱 유저 DB |
+| 폴백 | Auth.js `NaverProvider` (`lib/auth.ts`) — Supabase 미구성 시 env 키로 동작 |
+| Scopes | **`profile` only** — `openid` 포함 금지 (포함 시 userinfo 프록시 스킵) |
+
+네이버 **로그인(OAuth)** 과 카카오 **톡 공유(JS SDK)** 는 완전히 다른 파이프라인입니다. 이 문서는 **로그인만** 다룹니다.
+
+---
+
+## 1. 핵심 파일 구조 및 라우팅
+
+### 1.1 프론트엔드 트리거 · 인증 요청 진입점
+
+| 경로 | 역할 |
+|------|------|
+| `components/AuthModal.tsx` | 「네이버로 계속하기」 버튼, `NaverLogo`, `handleNaverLogin` |
+| `lib/supabase/oauth.ts` | **`signInWithNaver`**, `custom:naver` 매핑, `buildAuthCallbackRedirectTo`, `extractSupabaseOAuthProfile` |
+| `lib/supabase/client.ts` | 브라우저 Supabase 클라이언트 |
+| `lib/i18n/locales/kr.ts` 등 | `continueWithNaver` 문구 |
+| `components/CreditsProvider.tsx` | 소셜 provider 타입에 `"naver"` 포함 |
+
+**버튼 → OAuth 시작 (`AuthModal`):**
+
+```
+handleNaverLogin()
+  setBusy(true)
+  try
+    next ← resolveAuthNext()
+    signInWithNaver(next)
+      → saveAuthNextPath(next)
+      → supabase.auth.signInWithOAuth({
+           provider: "custom:naver",
+           options: {
+             redirectTo: `${origin}/auth/callback?next=…`,
+             scopes: "profile",
+           },
+         })
+    (성공) 브라우저가 Naver로 이동 — busy 유지
+  catch → console.error("로그인 에러:") + 모달 에러 + setBusy(false)
+```
+
+### 1.2 콜백 · 토큰 · 세션 라우트 (백엔드 / Edge)
+
+| 경로 | 역할 |
+|------|------|
+| **Naver Developers Callback** | `https://oorujqbivznftsyqilyj.supabase.co/auth/v1/callback` — **code를 Supabase가 수신** |
+| Supabase GoTrue | authorize → token 교환 → **Userinfo URL** 호출 → `auth.users` 생성 |
+| `middleware.ts` | Site URL(`/`)로 온 `?code=` / `?error=` 를 `/auth/callback`으로 포워드 |
+| `app/auth/callback/route.ts` | PKCE **code exchange** (`exchangeSupabaseCode`) → `/auth/bridge` |
+| `lib/supabase/exchange.ts` | 서버에서 code ↔ Supabase 세션 쿠키 |
+| `app/auth/bridge/*` | 클라이언트: Supabase 세션 → `/api/auth/supabase-bridge` → NextAuth 세션 |
+| `app/api/auth/supabase-bridge/route.ts` | 앱 유저 upsert + Auth.js JWT 발급 |
+| `app/api/auth/naver/userinfo/route.ts` | **Userinfo 프록시** (Naver nested → OIDC flat) |
+| `lib/supabase/naver-userinfo.ts` | flatten / Authorization 정규화 / Naver fetch |
+| `supabase/functions/naver-userinfo/index.ts` | 동일 로직의 **Edge Function** (권장 Userinfo URL) |
+| `lib/auth.ts` | Auth.js `NaverProvider` 폴백 (직접 `nid/me` + `profile(response)`) |
+
+### 1.3 Token Exchange 로직 구조 (누가 무엇을 하는가)
+
+앱 서버가 Naver `token` 엔드포인트를 **직접** 치지는 않습니다. 교환은 **Supabase Auth**가 담당합니다.
+
+```
+[Browser]
+  AuthModal → signInWithOAuth(custom:naver)
+       │
+       ▼
+[Naver]  /oauth2.0/authorize  (response_type=code, client_id, redirect_uri=Supabase callback, state)
+       │
+       ▼
+[Supabase]  /auth/v1/callback?code=…&state=…
+       │  1) state 검증 (CSRF)
+       │  2) POST https://nid.naver.com/oauth2.0/token  (code → access_token)
+       │  3) GET  {Userinfo URL}  Authorization: Bearer <access_token>
+       │  4) email/sub로 auth.users 확정
+       │  5) 앱 redirectTo로 PKCE code 전달
+       ▼
+[App]  /  or /auth/callback?code=…&next=/generate
+       │  middleware가 / → /auth/callback 포워드 가능
+       ▼
+[App]  exchangeSupabaseCode → session cookies
+       ▼
+[App]  /auth/bridge → supabase-bridge → NextAuth session + 크레딧 유저
+```
+
+**Userinfo 프록시 내부 (`fetchNaverOidcUserinfo`):**
+
+```
+normalizeNaverAuthorization(header)   // Bearer 정규화
+  → GET https://openapi.naver.com/v1/nid/me
+  → flattenNaverUserinfo({ resultcode, response })
+       response.id    → sub, id
+       response.email → email  (없으면 `${id}@users.naver.id`)
+       name/nickname/profile_image → name / picture
+  → JSON { sub, id, email, email_verified, … }
+```
+
+### 1.4 엔드투엔드 시퀀스 (요약 다이어그램)
+
+```
+User → AuthModal → signInWithNaver
+     → Naver consent
+     → Supabase token + userinfo proxy
+     → Site /auth/callback (PKCE)
+     → /auth/bridge (session mint)
+     → /generate (or saved next) ± terms-consent
+```
+
+---
+
+## 2. 트러블슈팅 및 에러 핸들링
+
+### 2.1 `Error getting user email from external provider`
+
+#### 증상
+- Custom OAuth 설정 후 네이버 동의까지는 되나, Supabase에서 이메일 추출 실패로 로그인 중단
+
+#### 원인
+Naver `/v1/nid/me` 응답 형태:
+
+```json
+{
+  "resultcode": "00",
+  "message": "success",
+  "response": {
+    "id": "…",
+    "email": "user@naver.com",
+    "nickname": "…"
+  }
+}
+```
+
+Supabase GoTrue는 **최상위** `email` / `sub`를 기대합니다. Userinfo URL을 Naver에 **직접** 두면 `response.email`을 못 읽어 위 에러가 납니다.
+
+#### 해결
+1. Manual OAuth2의 **Userinfo URL**을 평탄화 프록시로 지정  
+   - 권장: `https://oorujqbivznftsyqilyj.supabase.co/functions/v1/naver-userinfo`  
+   - 대체: `https://www.studio-canvas-ai.com/api/auth/naver/userinfo`
+2. 프록시가 `{ sub, email, email_verified, … }` flat JSON 반환
+3. Edge Function은 **`verify_jwt = false`** (`supabase/config.toml`) — 헤더의 Bearer는 **Naver access token**, Supabase JWT가 아님. JWT 검증 ON이면 401로 userinfo 실패
+
+---
+
+### 2.2 Redirect URI 불일치
+
+#### 증상
+- Naver 콘솔 오류, `redirect_uri_mismatch`, 또는 동의 후 잘못된 호스트로 복귀
+
+#### 원인·규칙
+
+| 위치 | 올바른 Callback / Redirect |
+|------|----------------------------|
+| **네이버 개발자센터** Callback URL | `https://<project-ref>.supabase.co/auth/v1/callback` |
+| **Supabase** Auth Redirect URLs | `https://www.studio-canvas-ai.com/**` (및 apex 필요 시) |
+| **앱 `redirectTo`** | `https://www.studio-canvas-ai.com/auth/callback?next=…` |
+
+잘못하기 쉬운 패턴: 네이버 Callback에 **사이트 `/auth/callback`** 을 넣는 것.  
+→ code는 **반드시 Supabase**가 받아야 token 교환이 됩니다.
+
+#### 해결
+- 네이버: Supabase callback만 등록  
+- Supabase Site URL / Redirect Allow List: 프로덕션 www(및 apex)  
+- `buildAuthCallbackRedirectTo`가 origin + `/auth/callback` + `next` 사용
+
+---
+
+### 2.3 State 검증 실패 / CSRF
+
+#### 증상
+- `invalid state`, OAuth error로 `/generate?authError=…` 리다이렉트
+
+#### 원인
+- 다른 탭/브라우저에서 authorize 시작 후 callback  
+- 쿠키(파티션/차단)로 PKCE verifier·state 유실  
+- www ↔ apex, http ↔ https 혼용으로 쿠키 도메인 불일치
+
+#### 해결
+- 동일 브라우저·동일 origin에서 플로우 완료  
+- Redirect Allow List / Site URL을 **실제 접속 호스트**와 일치  
+- `middleware`가 `/`의 `?code=`만 `/auth/callback`으로 넘겨 누락 방지  
+- callback의 `formatOAuthError`로 사용자 노출 메시지 정규화
+
+---
+
+### 2.4 Scopes에 `openid` 포함 시 userinfo 스킵
+
+#### 증상
+- 프록시를 등록했는데도 이메일을 못 받거나, 프록시 로그에 요청이 안 옴
+
+#### 원인
+Supabase Custom OAuth에서 scope에 **`openid`** 가 있으면 OIDC 경로로 가정하고 **userinfo URL을 호출하지 않을 수 있음**.
+
+#### 해결
+- Dashboard Scopes: **`profile` only**  
+- 코드: `signInWithNaver` → `scopes: "profile"`  
+- 주석: *Avoid `openid` so Auth uses the (proxied) userinfo endpoint.*
+
+---
+
+### 2.5 CORS / Deployment Protection
+
+#### 증상
+- GoTrue → Userinfo URL 호출 실패 (브라우저가 아니라 **서버 간** 호출이므로 “CORS”처럼 보이지만 실제로는 네트워크·인증 차단인 경우가 많음)
+
+#### 대응
+- 프록시에 `OPTIONS` + `Access-Control-Allow-Origin: *` (방어적)  
+- **Vercel Deployment Protection**이 `/api/auth/naver/userinfo`를 막으면 GoTrue가 403/401 → **Edge Function Userinfo 권장**  
+- Edge Function `verify_jwt=false` 필수
+
+---
+
+### 2.6 세션 상태 동기화 실패 (callback ↔ bridge)
+
+#### 증상
+- Naver/Supabase까지 성공했는데 앱은 비로그인 / `auth_bridge_failed` / `missing_code`
+
+#### 원인
+- Site URL로만 `?code=`가 오고 `/auth/callback` 미도달 (과거)  
+- bridge에서 `getSession()` 타이밍(쿠키 지연)  
+- `next` path 유실 → 잘못된 랜딩
+
+#### 해결
+- `middleware`: `/` + `code|error*` → `/auth/callback`  
+- `BridgeClient`: 세션 짧은 재시도 + `sessionStorage` `sca_auth_next`  
+- `safeAuthNextPath` / `safeNextPath`: open-redirect 방지 (`//` 거부, `/`만 허용)  
+- 약관 미동의 시 `terms-consent`로 분기 후 원래 `next` 복귀
+
+---
+
+### 2.7 이메일 미동의 · 합성 이메일
+
+#### 증상
+- 네이버에서 이메일 미제공 → Supabase required-email 실패 또는 앱 이메일 공백
+
+#### 해결
+1. 네이버 개발자센터 API 권한: **이메일 = 필수 동의**  
+2. 프록시: email 없으면 `` `${id}@users.naver.id` ``  
+3. `extractSupabaseOAuthProfile`: naver용 동일 synthetic 폴백  
+4. Supabase: 필요 시 “Allow users without an email” (가능하면 필수 동의로 해결)
+
+---
+
+### 2.8 예외 처리 · 방어적 프로그래밍 요약
+
+| 계층 | 방어 |
+|------|------|
+| `signInWithNaver` | try/catch, Supabase 미구성 검사, `console.error("로그인 에러:")`, Error 반환 |
+| `AuthModal.handleNaverLogin` | UI 에러 + busy 해제; 성공 시 리다이렉트 대기 |
+| `naver-userinfo` | Auth 헤더 정규화, JSON parse 가드, resultcode/`id` 검증, 401/502 구분 |
+| API route | OPTIONS CORS, try/catch → 500, `Cache-Control: no-store` |
+| Edge Function | fetch try/catch, CORS, `sub` 필수 검증 |
+| `/auth/callback` | OAuth error / missing code / exchange failure → `authError` 쿼리 |
+| Bridge | timeout, session retry, failRedirect |
+| Auth.js `NaverProvider` | `profile()`에서 `response` unwrap (폴백 경로) |
+
+---
+
+## 3. 네이버 개발자 콘솔 · 환경 변수 · 보안
+
+### 3.1 콘솔 설정 체크리스트
+
+**네이버 개발자센터 (애플리케이션)**
+
+| 항목 | 값 |
+|------|-----|
+| Client ID | 애플리케이션 식별자 |
+| Client Secret | 서버/Supabase만 — **브라우저·NEXT_PUBLIC 금지** |
+| Callback URL | `https://oorujqbivznftsyqilyj.supabase.co/auth/v1/callback` |
+| API 권한 | 회원 프로필 + **이메일(필수 동의 권장)** |
+
+**Supabase → Authentication → Providers → Custom (`naver`)**
+
+| Field | Value |
+|--------|--------|
+| Type | **OAuth2** (OIDC auto-discovery 아님) |
+| Authorization URL | `https://nid.naver.com/oauth2.0/authorize` |
+| Token URL | `https://nid.naver.com/oauth2.0/token` |
+| Userinfo URL | Edge Function 또는 `/api/auth/naver/userinfo` |
+| Scopes | `profile` |
+| Client ID / Secret | 네이버와 동일 |
+
+**Supabase Auth URL 설정**
+
+- Site URL: `https://www.studio-canvas-ai.com`  
+- Redirect URLs: `https://www.studio-canvas-ai.com/**` (+ apex 필요 시)
+
+### 3.2 환경 변수 관리 표준
+
+| 변수 | 저장 위치 | 용도 |
+|------|-----------|------|
+| (Naver Client ID/Secret) | **Supabase Dashboard** Custom Provider | **주 경로** token 교환 |
+| `NAVER_CLIENT_ID` | Vercel / `.env` (서버 only) | Auth.js **폴백** |
+| `NAVER_CLIENT_SECRET` | Vercel / `.env` (서버 only) | Auth.js **폴백** |
+| `NEXT_PUBLIC_SUPABASE_URL` | 공개 | Auth 호스트 |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | 공개 | 브라우저 클라이언트 |
+
+규칙:
+
+- Secret은 **절대** `NEXT_PUBLIC_*` 금지  
+- 주 경로에서는 앱 env의 `NAVER_*`가 비어 있어도 Dashboard에만 있으면 동작  
+- `.env.example`에 빈 플레이스홀더 + Userinfo URL 문서화 (실비밀 커밋 금지)
+
+### 3.3 Authorization Code 생명주기 · 프로필 정규화
+
+```
+1. authorize (+ state / PKCE)
+2. code (one-time, short-lived) → Supabase callback
+3. access_token → userinfo proxy → flat OIDC
+4. Supabase session (access + refresh)
+5. App PKCE code → /auth/callback exchange
+6. Bridge → NextAuth JWT (앱 세션)
+7. extractSupabaseOAuthProfile → provider=naver, email/name/image, synthetic email 폴백
+8. findOrCreateOAuthUser / credits (signup bonus 등)
+```
+
+**정규화 매핑**
+
+| Naver `response` | OIDC / 앱 |
+|------------------|-----------|
+| `id` | `sub`, `id` |
+| `email` | `email` (+ `email_verified` if present) |
+| `name` / `nickname` | `name`, `preferred_username` |
+| `profile_image` | `picture` |
+| (email 없음) | `{id}@users.naver.id` |
+
+---
+
+## 4. 범용 아키텍처 가이드 (Reusable Blueprint)
+
+다른 Next.js + Supabase 프로젝트에 **네이버 로그인을 이식**할 때 이 블루프린트를 그대로 적용할 수 있습니다.
+
+### 4.1 왜 Custom OAuth + Userinfo Proxy인가?
+
+- Supabase에 first-class `naver` provider가 없음 → `custom:naver`  
+- Naver userinfo가 비표준 nested JSON → GoTrue가 email을 못 읽음 → **반드시 flatten proxy**  
+- Token 교환은 IdP 비밀을 쓰는 GoTrue에 맡기고, 앱은 PKCE 세션만 브리지
+
+### 4.2 최소 구현 체크리스트 (신규 프로젝트)
+
+1. 네이버 앱 생성 → Callback = `https://<ref>.supabase.co/auth/v1/callback`  
+2. Edge Function `naver-userinfo` 배포 (`--no-verify-jwt`)  
+3. Supabase Custom Provider Manual OAuth2 + scopes=`profile`  
+4. Redirect Allow List에 사이트 origin  
+5. `signInWithOAuth({ provider: 'custom:naver', options: { redirectTo, scopes: 'profile' } })`  
+6. `/auth/callback` code exchange + `/auth/bridge` (또는 동등한 세션 브리지)  
+7. middleware: Site URL의 `?code=` 포워드  
+8. 이메일 필수 동의 + synthetic email 폴백
+
+### 4.3 권장 소스 패턴 (의사코드)
+
+```ts
+// lib/auth/naver.ts
+export async function signInWithNaver(next = "/app") {
+  try {
+    if (!isSupabaseConfigured()) throw new Error("Supabase not configured");
+    saveNext(next);
+    const supabase = createBrowserClient();
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "custom:naver",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+        scopes: "profile", // never add openid
+      },
+    });
+    if (error) {
+      console.error("로그인 에러:", error.message);
+      return { error };
+    }
+    return { data, error: null };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error("로그인 에러:", message);
+    return { error: new Error(message) };
+  }
+}
+```
+
+```ts
+// userinfo proxy core
+const naver = await fetch("https://openapi.naver.com/v1/nid/me", {
+  headers: { Authorization: `Bearer ${accessToken}` },
+});
+const { resultcode, response } = await naver.json();
+if (String(resultcode) !== "00" || !response?.id) throw new Error("bad profile");
+return {
+  sub: String(response.id),
+  id: String(response.id),
+  email: response.email || `${response.id}@users.naver.id`,
+  email_verified: Boolean(response.email),
+  name: response.name || response.nickname,
+  picture: response.profile_image,
+};
+```
+
+### 4.4 하지 말 것 (Anti-patterns)
+
+| Anti-pattern | 결과 |
+|--------------|------|
+| Userinfo URL = Naver `/v1/nid/me` 직결 | email 추출 실패 |
+| Scopes에 `openid` | 프록시 미호출 |
+| 네이버 Callback = 사이트 URL | token 교환 주체 붕괴 |
+| Edge Function JWT verify ON | Bearer(Naver) 거부 |
+| Client Secret을 프론트에 노출 | 보안 사고 |
+| www/apex·http 혼용 | state/쿠키·redirect 실패 |
+| Vercel Protection 뒤 Next userinfo만 사용 | GoTrue 403 |
+
+### 4.5 Auth.js 단독 폴백 패턴 (Supabase 없이)
+
+`lib/auth.ts`의 `NaverProvider`처럼:
+
+- authorize / token / userinfo URL을 Auth.js에 직접 등록  
+- `profile(profile) { const p = profile.response; … }` 로 **반드시 unwrap**  
+- Callback은 Auth.js 표준 `/api/auth/callback/naver`  
+- Studio Canvas는 Supabase 우선이므로 프로덕션 주 경로는 **Custom OAuth**
+
+### 4.6 검증 시나리오
+
+- [ ] 신규 가입: 네이버 동의 → bridge → 앱 세션 + (해당 시) 가입 보너스  
+- [ ] 재로그인: 동일 identity  
+- [ ] 이메일 필수 동의 ON  
+- [ ] Userinfo URL을 curl로 Bearer 테스트 → flat JSON  
+- [ ] `openid` 제거 확인  
+- [ ] www / 시크릿 창 / 모바일  
+- [ ] 실패 시 `?authError=` 및 콘솔 `로그인 에러:`  
+
+---
+
+## 5. 개발 일지 타임라인 (요약)
+
+1. **초기**: Auth.js `NaverProvider` + `NAVER_CLIENT_*` (nested `response`를 `profile()`에서 unwrap)  
+2. **마이그레이션**: Supabase Auth 중심 — `signInWithOAuth({ provider: 'custom:naver' })` + AuthModal 연결  
+3. **핵심 장애**: `Error getting user email from external provider` → nested JSON  
+4. **해결**: Next.js `/api/auth/naver/userinfo` + Edge `naver-userinfo` flatten proxy  
+5. **세부 안정화**: scopes=`profile`, JWT verify off, synthetic email, CORS OPTIONS, middleware code 포워드, bridge 세션 재시도  
+6. **현재**: 프로덕션 Custom Naver OAuth 안정. Auth.js Naver는 env 폴백으로 유지
+
+---
+
+## 6. 빠른 레퍼런스 (복붙용)
+
+```text
+UI 버튼          : components/AuthModal.tsx → handleNaverLogin
+OAuth 시작       : lib/supabase/oauth.ts → signInWithNaver
+Provider id      : custom:naver
+Scopes           : profile   (!openid)
+Authorize        : https://nid.naver.com/oauth2.0/authorize
+Token            : https://nid.naver.com/oauth2.0/token
+Naver me         : https://openapi.naver.com/v1/nid/me
+Userinfo (권장)  : https://oorujqbivznftsyqilyj.supabase.co/functions/v1/naver-userinfo
+Userinfo (대체)  : https://www.studio-canvas-ai.com/api/auth/naver/userinfo
+Flatten 로직     : lib/supabase/naver-userinfo.ts
+Naver Callback   : https://oorujqbivznftsyqilyj.supabase.co/auth/v1/callback
+App callback     : /auth/callback → /auth/bridge
+Secrets          : Supabase Dashboard (+ optional NAVER_CLIENT_* for Auth.js)
+```
+
+---
+
+## 7. FAQ
+
+**Q. 앱의 `NAVER_CLIENT_SECRET`이 비어 있어도 로그인이 되나요?**  
+A. 주 경로(Supabase Custom Provider)에 Client ID/Secret이 있으면 됩니다. `NAVER_*`는 Auth.js 폴백용입니다.
+
+**Q. Token exchange API를 Next.js에 직접 만들어야 하나요?**  
+A. 아니요. Supabase GoTrue가 Naver token URL과 교환합니다. 앱은 userinfo 프록시와 PKCE 세션 브리지만 담당합니다.
+
+**Q. 카카오 로그인과 같은 구조인가요?**  
+A. 흐름(콜백→bridge)은 유사하지만, 카카오는 first-class `kakao` provider이고 네이버는 **custom + userinfo proxy**가 필수입니다.
+
+**Q. 가장 흔한 재발 원인 3가지는?**  
+A. (1) Userinfo를 Naver에 직결 (2) scopes에 `openid` (3) 네이버 Callback을 사이트 URL로 설정
+
+---
+
+*이 문서는 저장소 실제 코드(`oauth.ts`, `naver-userinfo`, AuthModal, callback/bridge, supabase/README, `.env.example`)와 연동 과정에서 발생한 email nested 오류·Redirect/State/CORS·세션 동기화 이슈 해결을 기준으로 작성되었습니다.*

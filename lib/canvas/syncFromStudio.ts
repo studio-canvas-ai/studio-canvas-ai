@@ -2,8 +2,11 @@
  * Hydrate / sync canvas store from Template Studio planes + TextLayers.
  */
 
-import type { TextLayer } from "@/lib/thumbnailStyles";
-import { colorPresetFill } from "@/lib/thumbnailStyles";
+import type { FontPreset, TextLayer } from "@/lib/thumbnailStyles";
+import {
+  colorPresetFill,
+  fontForText,
+} from "@/lib/thumbnailStyles";
 import {
   defaultImageObject,
   defaultTextObject,
@@ -71,6 +74,24 @@ function findPrev(previous: CanvasObject[] | undefined, id: string) {
 }
 
 /**
+ * Keep a prior plane transform only when it still belongs on this stage.
+ * Drops stale 1080-fallback coords that overflow a measured preview stage.
+ */
+function shouldPreservePlaneTransform(
+  prev: CanvasObject | null,
+  src: string,
+  stageW: number,
+  stageH: number
+): boolean {
+  if (!prev || prev.type === "text" || prev.src !== src) return false;
+  const width = Math.abs(prev.width * (prev.scaleX || 1));
+  const height = Math.abs(prev.height * (prev.scaleY || 1));
+  if (width < 8 || height < 8) return false;
+  if (width > stageW * 1.45 && height > stageH * 1.45) return false;
+  return true;
+}
+
+/**
  * Build ordered canvas objects from studio planes + text overlays.
  * Keeps prior x/y/rotation/scale when the same id + src/text still exist.
  * User photo / sticker layers from `previous` are preserved (multi-layer add).
@@ -95,7 +116,12 @@ export function buildObjectsFromStudioPlanes(
     const natW = backgroundNatural?.w || stageW;
     const natH = backgroundNatural?.h || stageH;
     const fitted = coverRect(natW, natH, stageW, stageH);
-    const sameSrc = prev && prev.type !== "text" && prev.src === backgroundUrl;
+    const keep = shouldPreservePlaneTransform(
+      prev,
+      backgroundUrl,
+      stageW,
+      stageH
+    );
     out.push(
       defaultImageObject({
         id: BG_ID,
@@ -103,7 +129,7 @@ export function buildObjectsFromStudioPlanes(
         src: backgroundUrl,
         locked: true,
         zIndex: 0,
-        ...(sameSrc
+        ...(keep && prev
           ? {
               x: prev.x,
               y: prev.y,
@@ -123,7 +149,12 @@ export function buildObjectsFromStudioPlanes(
     const natW = subjectNatural?.w || stageW;
     const natH = subjectNatural?.h || stageH;
     const fitted = containRect(natW, natH, stageW, stageH);
-    const sameSrc = prev && prev.type !== "text" && prev.src === subjectUrl;
+    const keep = shouldPreservePlaneTransform(
+      prev,
+      subjectUrl,
+      stageW,
+      stageH
+    );
     out.push(
       defaultImageObject({
         id: SUBJECT_ID,
@@ -131,7 +162,7 @@ export function buildObjectsFromStudioPlanes(
         src: subjectUrl,
         locked: false,
         zIndex: 10,
-        ...(sameSrc
+        ...(keep && prev
           ? {
               x: prev.x,
               y: prev.y,
@@ -162,13 +193,13 @@ export function buildObjectsFromStudioPlanes(
   overlayLayers.forEach((layer, index) => {
     const id = layer.id || `text-${index}`;
     const prev = findPrev(previous, id);
-    const fontSize = Math.max(12, layer.fontSize || 48);
+    const fontSize = Math.max(12, Math.round(layer.fontSize || 48));
+    const lineHeightMul = layer.lineHeight ?? 1.25;
     const maxW = Math.max(80, stageW * (layer.maxWidth ?? 0.88));
     const text = layer.text || "";
+    const lineCount = Math.max(1, text.split("\n").length);
     const height = Math.max(
-      fontSize *
-        (layer.lineHeight ?? 1.25) *
-        Math.max(1, text.split("\n").length),
+      fontSize * lineHeightMul * lineCount,
       fontSize * 1.4
     );
     const posY =
@@ -179,40 +210,87 @@ export function buildObjectsFromStudioPlanes(
           : stageH * 0.78;
     const baseX = (stageW - maxW) / 2 + (layer.offsetX || 0) * stageW;
     const baseY = posY + (layer.offsetY || 0) * stageH;
+    const lockedW =
+      layer.boxW && layer.boxW > 0 ? Math.max(80, layer.boxW * stageW) : maxW;
+    const lockedH =
+      layer.boxH && layer.boxH > 0
+        ? Math.max(fontSize * 1.4, layer.boxH * stageH)
+        : height;
 
     const sameText =
       prev && prev.type === "text" && prev.text === text && prev.id === id;
+
+    // Always take live style from TextLayer so font slider / preset clicks apply
+    // to Konva (incl. emoji/special glyphs via fontForText → EMOJI_FONT).
+    const fontPreset = (layer.fontPreset || "variety") as FontPreset;
+    const fontFamily = fontForText(fontPreset, text || "가A");
+
+    // Keep drag/resize pose when text content is unchanged, but never freeze
+    // fontSize/fontFamily — that caused the “slider dead / emoji bomb” bugs.
+    let geom: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      rotation: number;
+      scaleX: number;
+      scaleY: number;
+    };
+    if (
+      layer.layoutLocked &&
+      typeof layer.manualX === "number" &&
+      typeof layer.manualY === "number"
+    ) {
+      geom = {
+        x: layer.manualX * stageW,
+        y: layer.manualY * stageH,
+        width: lockedW,
+        height: lockedH,
+        rotation: sameText && prev?.type === "text" ? prev.rotation : 0,
+        scaleX: sameText && prev?.type === "text" ? prev.scaleX : 1,
+        scaleY: sameText && prev?.type === "text" ? prev.scaleY : 1,
+      };
+    } else if (sameText && prev.type === "text") {
+      const prevFs = Math.max(1, prev.fontSize || fontSize);
+      const scaledH = Math.max(
+        height,
+        Math.round(prev.height * (fontSize / prevFs))
+      );
+      geom = {
+        x: prev.x,
+        y: prev.y,
+        width: prev.width,
+        height: scaledH,
+        rotation: prev.rotation,
+        scaleX: prev.scaleX,
+        scaleY: prev.scaleY,
+      };
+    } else {
+      geom = {
+        x: baseX,
+        y: baseY,
+        width: maxW,
+        height,
+        rotation: 0,
+        scaleX: 1,
+        scaleY: 1,
+      };
+    }
 
     out.push(
       defaultTextObject({
         id,
         text,
-        fontFamily: "Pretendard, Apple SD Gothic Neo, sans-serif",
+        fontFamily,
         fontWeight: layer.fontWeight ?? 700,
         fill: colorPresetFill(layer.color),
         align: layer.align || "center",
-        lineHeight: layer.lineHeight ?? 1.25,
+        lineHeight: lineHeightMul,
         letterSpacing: layer.letterSpacing ?? 0,
+        fontSize,
         zIndex:
           sameText && prev.type === "text" ? prev.zIndex : 50 + index,
-        ...(sameText && prev.type === "text"
-          ? {
-              x: prev.x,
-              y: prev.y,
-              width: prev.width,
-              height: prev.height,
-              rotation: prev.rotation,
-              scaleX: prev.scaleX,
-              scaleY: prev.scaleY,
-              fontSize: prev.fontSize,
-            }
-          : {
-              x: baseX,
-              y: baseY,
-              width: maxW,
-              height,
-              fontSize,
-            }),
+        ...geom,
       })
     );
   });

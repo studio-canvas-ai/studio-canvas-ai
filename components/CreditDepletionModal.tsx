@@ -1,21 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Zap, ArrowUpRight, X } from "lucide-react";
 import Link from "next/link";
 import { useI18n } from "@/components/I18nProvider";
 import { useCredits } from "@/components/CreditsProvider";
-import { isDomesticMarket, readGeoCountryFromDocument } from "@/lib/market";
+import { isDomesticMarket } from "@/lib/market";
 
 export default function CreditDepletionModal() {
   const { t, locale } = useI18n();
   const { showCreditModal, setShowCreditModal, setShowTopUpModal } = useCredits();
-  const [geoCountry, setGeoCountry] = useState<string | null>(null);
-
-  useEffect(() => {
-    setGeoCountry(readGeoCountryFromDocument());
-  }, []);
-  const showCreditTopUp = !isDomesticMarket(locale, geoCountry);
+  const showCreditTopUp = !isDomesticMarket(locale);
 
   if (!showCreditModal) return null;
 

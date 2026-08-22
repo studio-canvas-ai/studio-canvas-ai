@@ -1,16 +1,23 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, X } from "lucide-react";
+import { ArrowLeft, Loader2, Trash2, X } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { fillCanvas } from "@/lib/i18n";
 import CanvasUploadToolbar from "@/components/canvas/CanvasUploadToolbar";
+import PreviewPhotoOverlay from "@/components/print-wizard/PreviewPhotoOverlay";
+import PreviewDecoOverlay from "@/components/print-wizard/PreviewDecoOverlay";
 import { useFeedback } from "@/components/FeedbackProvider";
 import { useCanvasStore } from "@/lib/canvas/canvasStore";
+import type { PhotoKind } from "@/lib/canvas/addPhotoLayer";
 import { stashPendingStudioProject } from "@/lib/canvas/projectFile";
-import { PRINT_STUDIO_PATH } from "@/lib/printWizardSession";
+import type { RecentProjectNamespace } from "@/lib/canvas/recentProjects";
+import {
+  PRINT_PENDING_PROJECT_KEY,
+  PRINT_WIZARD_STUDIO_PATH,
+} from "@/lib/wizard/wizardProduct";
 import PreviewTextOverlay from "@/components/print-wizard/PreviewTextOverlay";
 import PrintBlueprintOverlay from "@/components/print-wizard/PrintBlueprintOverlay";
 import {
@@ -19,10 +26,19 @@ import {
 } from "@/lib/printWizardBlueprint";
 import type { TextLayer } from "@/lib/thumbnailStyles";
 import {
+  BG_PAN_SENSITIVITY,
+  bgPanObjectPosition,
+  normalizeBgPan,
+  pageBackgroundUrl,
+} from "@/lib/printWizardBg";
+import {
   resolvePrintAspect,
+  type PrintBackgroundPan,
   type PrintCustomSize,
+  type PrintDecoLayer,
   type PrintFormatId,
   type PrintPageCount,
+  type PrintPhotoLayer,
   type PrintUseId,
 } from "@/lib/printWizardTypes";
 
@@ -33,6 +49,8 @@ export type PreviewCanvasProps = {
   customSize?: PrintCustomSize | null;
   backgroundUrl: string | null;
   backgroundUrls?: string[];
+  backgroundPansByPage?: PrintBackgroundPan[];
+  onBackgroundPanChange?: (pageIndex: number, pan: PrintBackgroundPan) => void;
   generating?: boolean;
   titlePreview?: string;
   subtitlePreview?: string;
@@ -43,6 +61,15 @@ export type PreviewCanvasProps = {
   /** Per-page interactive text boxes (index 0 = 1면). */
   overlayLayersByPage?: TextLayer[][];
   onOverlayLayersChange?: (pageIndex: number, layers: TextLayer[]) => void;
+  photoLayersByPage?: PrintPhotoLayer[][];
+  onPhotoLayersChange?: (pageIndex: number, layers: PrintPhotoLayer[]) => void;
+  activePhotoLayerId?: string | null;
+  onActivePhotoLayerChange?: (id: string | null) => void;
+  decoLayersByPage?: PrintDecoLayer[][];
+  onDecoLayersChange?: (pageIndex: number, layers: PrintDecoLayer[]) => void;
+  activeDecoLayerId?: string | null;
+  onActiveDecoLayerChange?: (id: string | null) => void;
+  onInstallPhoto?: (file: File, mode: PhotoKind) => Promise<void>;
   activeTextLayerId?: string | null;
   onActiveTextLayerChange?: (id: string | null) => void;
   textOverlayInteractive?: boolean;
@@ -51,12 +78,30 @@ export type PreviewCanvasProps = {
   /** When false, back arrow is omitted (e.g. Step 2 uses Navbar back). */
   showHeaderBack?: boolean;
   /** Step 2 keeps only the delete control on the canvas toolbar. */
-  toolbarMode?: "full" | "delete-only";
+  toolbarMode?: "full" | "delete-only" | "no-upload";
+  /** Enlarge remaining header toolbar controls (photo wizard). */
+  toolbarRoomy?: boolean;
   exportBusy?: boolean;
   requireSubscription?: () => boolean;
   onOpenRecentProject?: (project: import("@/lib/canvas/projectFile").StudioCanvasProjectV1) => void;
   foldGuidesHidden?: boolean;
   onHideFoldGuides?: () => void;
+  /** Clear wizard inputs + canvas so the user can start over. */
+  onResetWorkspace?: () => void;
+  /** Photo lookbook: clear only canvas images (vaults / recent untouched). */
+  onClearCanvasImages?: () => void;
+  studioPath?: string;
+  pendingProjectKey?: string;
+  /** Overrides left-panel heading (default: cs.printTitle). */
+  panelTitle?: string;
+  recentNamespace?: RecentProjectNamespace;
+  /**
+   * How the plate image fills the stage.
+   * Photo lookbook uses `contain` so ID/portrait sources are not cropped/zoomed.
+   */
+  backgroundFit?: "cover" | "contain";
+  /** Bumps when lookbook plate changes so <img> remounts immediately. */
+  contentEpoch?: number;
 };
 
 type LightboxState = {
@@ -143,6 +188,8 @@ export default function PreviewCanvas({
   customSize = null,
   backgroundUrl,
   backgroundUrls = [],
+  backgroundPansByPage,
+  onBackgroundPanChange,
   generating = false,
   titlePreview = "",
   subtitlePreview = "",
@@ -152,6 +199,15 @@ export default function PreviewCanvas({
   programsPreview = "",
   overlayLayersByPage,
   onOverlayLayersChange,
+  photoLayersByPage,
+  onPhotoLayersChange,
+  activePhotoLayerId = null,
+  onActivePhotoLayerChange,
+  decoLayersByPage,
+  onDecoLayersChange,
+  activeDecoLayerId = null,
+  onActiveDecoLayerChange,
+  onInstallPhoto,
   activeTextLayerId = null,
   onActiveTextLayerChange,
   textOverlayInteractive = true,
@@ -159,16 +215,26 @@ export default function PreviewCanvas({
   onCurrentPageChange,
   showHeaderBack = true,
   toolbarMode = "full",
+  toolbarRoomy = false,
   exportBusy = false,
   requireSubscription,
   onOpenRecentProject,
   foldGuidesHidden = false,
   onHideFoldGuides,
+  onResetWorkspace,
+  onClearCanvasImages,
+  studioPath = PRINT_WIZARD_STUDIO_PATH,
+  pendingProjectKey = PRINT_PENDING_PROJECT_KEY,
+  panelTitle,
+  recentNamespace = "shared",
+  backgroundFit = "cover",
+  contentEpoch = 0,
 }: PreviewCanvasProps) {
   const router = useRouter();
   const { t } = useI18n();
   const cs = t.canvasStudio;
   const { showToast } = useFeedback();
+  const useContainBg = backgroundFit === "contain";
   const aspect = resolvePrintAspect(formatId, customSize);
   const totalPages = pageCount;
   const pageLabel =
@@ -184,10 +250,21 @@ export default function PreviewCanvas({
     originX: number;
     originY: number;
   } | null>(null);
+  const bgPanRef = useRef<{
+    pageIndex: number;
+    startX: number;
+    startY: number;
+    origin: PrintBackgroundPan;
+    frameW: number;
+    frameH: number;
+    moved: boolean;
+  } | null>(null);
+  const skipLightboxClickRef = useRef(false);
 
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
   const [floatPos, setFloatPos] = useState({ x: EDGE_GAP, y: 72 });
   const [dragging, setDragging] = useState(false);
+  const [bgPanning, setBgPanning] = useState(false);
 
   // Seed canvas meta so Step-2 uploads land at print aspect before studio opens.
   useEffect(() => {
@@ -201,8 +278,75 @@ export default function PreviewCanvas({
     });
   }, [aspect]);
 
-  const activeBg =
-    backgroundUrls[Math.max(0, currentPage - 1)] || backgroundUrl || null;
+  const panForPage = useCallback(
+    (pageIndex: number): PrintBackgroundPan =>
+      normalizeBgPan(backgroundPansByPage?.[pageIndex]),
+    [backgroundPansByPage]
+  );
+
+  const startBackgroundPan = (
+    e: React.PointerEvent<HTMLElement>,
+    pageIndex: number
+  ) => {
+    if (!onBackgroundPanChange) return;
+    if (e.button !== 0 && e.pointerType === "mouse") return;
+    const t = e.target as HTMLElement;
+    if (t.closest("[data-text-layer]") || t.closest("[data-photo-layer]") || t.closest("[data-deco-layer]")) {
+      return;
+    }
+    const stage = (e.currentTarget.closest("[data-page-stage]") as HTMLElement | null)
+      ?? e.currentTarget;
+    const rect = stage.getBoundingClientRect();
+    if (rect.width < 8 || rect.height < 8) return;
+    e.stopPropagation();
+    if (e.pointerType === "touch") e.preventDefault();
+    skipLightboxClickRef.current = false;
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    bgPanRef.current = {
+      pageIndex,
+      startX: e.clientX,
+      startY: e.clientY,
+      origin: panForPage(pageIndex),
+      frameW: rect.width,
+      frameH: rect.height,
+      moved: false,
+    };
+    setBgPanning(true);
+  };
+
+  useEffect(() => {
+    if (!bgPanning) return;
+    const onMove = (e: PointerEvent) => {
+      const drag = bgPanRef.current;
+      if (!drag || !onBackgroundPanChange) return;
+      const dx = (e.clientX - drag.startX) / Math.max(1, drag.frameW);
+      const dy = (e.clientY - drag.startY) / Math.max(1, drag.frameH);
+      if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) > 4) {
+        drag.moved = true;
+        skipLightboxClickRef.current = true;
+        e.preventDefault();
+      }
+      onBackgroundPanChange(
+        drag.pageIndex,
+        normalizeBgPan({
+          x: drag.origin.x - dx * BG_PAN_SENSITIVITY,
+          y: drag.origin.y - dy * BG_PAN_SENSITIVITY,
+        })
+      );
+    };
+    const onUp = () => {
+      bgPanRef.current = null;
+      setBgPanning(false);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, [bgPanning, onBackgroundPanChange]);
 
   const floatOuterW = lightbox
     ? lightbox.imgW + BODY_PAD
@@ -323,8 +467,11 @@ export default function PreviewCanvas({
   };
 
   const openLightboxForPage = (pageNumber: number) => {
-    const src =
-      backgroundUrls[Math.max(0, pageNumber - 1)] || backgroundUrl || null;
+    const src = pageBackgroundUrl(
+      backgroundUrls,
+      backgroundUrl,
+      Math.max(0, pageNumber - 1)
+    );
     if (!src) return;
     const card = pageCardEl(pageNumber);
     if (!card) return;
@@ -336,7 +483,11 @@ export default function PreviewCanvas({
     if (t.closest("[data-page-card]")) return;
     if (t.closest("[data-mini-thumb]")) return;
     if (t.closest("[data-text-layer]")) return;
+    if (t.closest("[data-photo-layer]")) return;
+    if (t.closest("[data-deco-layer]")) return;
     onActiveTextLayerChange?.(null);
+    onActivePhotoLayerChange?.(null);
+    onActiveDecoLayerChange?.(null);
   };
 
   const openLightbox = (
@@ -402,16 +553,39 @@ export default function PreviewCanvas({
           </button>
         ) : null}
         <h2 className="shrink-0 text-[12px] font-semibold tracking-tight text-slate-200 [word-break:keep-all] sm:text-[13px]">
-          {cs.printTitle}
+          {panelTitle ?? cs.printTitle}
         </h2>
         <div className="min-w-0 flex-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <CanvasUploadToolbar
-            dense
+            dense={!toolbarRoomy}
+            roomy={toolbarRoomy}
             nowrap
             className="justify-start"
-            actions={toolbarMode === "delete-only" ? "delete-only" : "full"}
+            actions={
+              toolbarMode === "delete-only"
+                ? "delete-only"
+                : toolbarMode === "no-upload"
+                  ? "no-upload"
+                  : "full"
+            }
             disabled={exportBusy || generating}
             requireSubscription={requireSubscription}
+            extraDeletable={
+              activePhotoLayerId
+                ? { id: activePhotoLayerId, type: "photo" }
+                : null
+            }
+            onInstallFile={onInstallPhoto}
+            onDeleteObject={(id, type) => {
+              if (type !== "photo" || !onPhotoLayersChange) return;
+              const pageIndex = Math.max(0, currentPage - 1);
+              const current = photoLayersByPage?.[pageIndex] ?? [];
+              onPhotoLayersChange(
+                pageIndex,
+                current.filter((layer) => layer.id !== id)
+              );
+              if (activePhotoLayerId === id) onActivePhotoLayerChange?.(null);
+            }}
             onLoadRecentProject={
               toolbarMode === "delete-only"
                 ? undefined
@@ -420,16 +594,39 @@ export default function PreviewCanvas({
                       onOpenRecentProject(project);
                       return;
                     }
-                    stashPendingStudioProject(project);
+                    stashPendingStudioProject(project, pendingProjectKey);
                     showToast(
                       "최근 수정파일을 불러왔습니다. 스튜디오로 이동합니다.",
                       "success"
                     );
-                    router.push(PRINT_STUDIO_PATH);
+                    router.push(studioPath);
                   }
             }
+            recentNamespace={recentNamespace}
           />
         </div>
+        {onResetWorkspace ? (
+          <button
+            type="button"
+            onClick={onResetWorkspace}
+            disabled={exportBusy || generating}
+            title={cs.reset}
+            aria-label={cs.reset}
+            className={
+              toolbarRoomy
+                ? "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-red-400/40 bg-red-500/10 px-3 text-[12px] font-semibold leading-none text-red-200 transition hover:bg-red-500/20 disabled:opacity-40"
+                : "inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-red-400/40 bg-red-500/10 px-2 text-[10px] font-semibold leading-none text-red-200 transition hover:bg-red-500/20 disabled:opacity-40"
+            }
+          >
+            <Trash2
+              className={
+                toolbarRoomy ? "h-3.5 w-3.5 shrink-0" : "h-3 w-3 shrink-0"
+              }
+              aria-hidden
+            />
+            <span className="whitespace-nowrap">{cs.reset}</span>
+          </button>
+        ) : null}
       </header>
 
       <div
@@ -442,7 +639,7 @@ export default function PreviewCanvas({
         >
           {Array.from({ length: totalPages }, (_, index) => {
             const pageNum = index + 1;
-            const pageBg = backgroundUrls[index] || backgroundUrl || null;
+            const pageBg = pageBackgroundUrl(backgroundUrls, backgroundUrl, index);
             const pageBlueprint = shouldShowPrintBlueprint(formatId, useId)
               ? resolvePrintBlueprint(
                   formatId,
@@ -457,7 +654,7 @@ export default function PreviewCanvas({
                 key={pageNum}
                 id={`preview-page-${pageNum}`}
                 data-preview-page={pageNum}
-                className="flex h-full min-h-full w-full shrink-0 snap-start items-center justify-center p-1.5 sm:p-2 [container-type:size]"
+                className="flex h-full min-h-full w-full shrink-0 snap-start items-center justify-center overflow-visible p-1.5 sm:p-2 [container-type:size]"
               >
                 <div
                   data-page-card
@@ -468,8 +665,18 @@ export default function PreviewCanvas({
                   }
                   onClick={(e) => {
                     e.stopPropagation();
+                    if (skipLightboxClickRef.current) {
+                      skipLightboxClickRef.current = false;
+                      return;
+                    }
                     if (!pageBg) return;
                     if ((e.target as HTMLElement).closest("[data-text-layer]")) {
+                      return;
+                    }
+                    if ((e.target as HTMLElement).closest("[data-photo-layer]")) {
+                      return;
+                    }
+                    if ((e.target as HTMLElement).closest("[data-deco-layer]")) {
                       return;
                     }
                     openLightbox(pageBg, pageNum, e.currentTarget);
@@ -482,35 +689,167 @@ export default function PreviewCanvas({
                       openLightbox(pageBg, pageNum, e.currentTarget);
                     }
                   }}
-                  className={`relative overflow-hidden rounded-md border border-slate-700/70 bg-[#0B0F19] shadow-[0_12px_36px_rgba(0,0,0,0.4)] ${
+                  className={`relative overflow-visible rounded-md border border-slate-700/70 bg-[#0B0F19] shadow-[0_12px_36px_rgba(0,0,0,0.4)] ${
                     pageBg
-                      ? "cursor-zoom-in outline-none ring-indigo-400/0 transition hover:ring-2 hover:ring-indigo-400/40 focus-visible:ring-2 focus-visible:ring-indigo-400/50"
+                      ? "outline-none ring-indigo-400/0 transition hover:ring-2 hover:ring-indigo-400/40 focus-visible:ring-2 focus-visible:ring-indigo-400/50"
                       : ""
                   }`}
                   style={pageCardStyle}
                 >
                   <div
                     data-page-stage
-                    className="absolute inset-0 overflow-hidden"
+                    className="absolute inset-0 overflow-visible"
                     style={{ transformOrigin: "top left" }}
                   >
+                  <div className="absolute inset-0 overflow-hidden rounded-md">
                   {pageBg ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      key={`${pageNum}-${pageBg.slice(0, 48)}`}
-                      src={pageBg}
-                      alt=""
-                      className="pointer-events-none absolute inset-0 h-full w-full object-cover"
-                      style={{ animation: "pw-fade-in 0.7s ease forwards" }}
-                    />
+                    <>
+                    {useContainBg ? (
+                      <div className="relative flex h-full w-full items-center justify-center bg-black/90 p-[5%]">
+                        <div className="relative inline-flex max-h-full max-w-full">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            key={`${pageNum}-e${contentEpoch}-${pageBg}`}
+                            src={pageBg}
+                            alt=""
+                            draggable={false}
+                            className="h-auto w-auto max-h-full max-w-full object-contain"
+                            style={{ animation: "pw-fade-in 0.7s ease forwards" }}
+                          />
+                          {onClearCanvasImages &&
+                          textOverlayInteractive &&
+                          !lightbox ? (
+                            <button
+                              type="button"
+                              title="캔버스 이미지 삭제"
+                              aria-label="캔버스 이미지 삭제"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onClearCanvasImages();
+                              }}
+                              className="absolute right-0 top-0 z-[6] inline-flex h-6 w-6 items-center justify-center rounded-bl-md bg-black/75 text-white/90 shadow-sm transition hover:bg-rose-600 hover:text-white"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          key={`${pageNum}-e${contentEpoch}-${pageBg}`}
+                          src={pageBg}
+                          alt=""
+                          draggable={false}
+                          className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+                          style={{
+                            objectPosition: bgPanObjectPosition(
+                              panForPage(index)
+                            ),
+                            animation: "pw-fade-in 0.7s ease forwards",
+                          }}
+                        />
+                        {onClearCanvasImages &&
+                        textOverlayInteractive &&
+                        !lightbox ? (
+                          <button
+                            type="button"
+                            title="캔버스 이미지 삭제"
+                            aria-label="캔버스 이미지 삭제"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onClearCanvasImages();
+                            }}
+                            className="absolute right-0 top-0 z-[6] inline-flex h-6 w-6 items-center justify-center rounded-bl-md bg-black/75 text-white/90 shadow-sm transition hover:bg-rose-600 hover:text-white"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                          </button>
+                        ) : null}
+                        {onBackgroundPanChange &&
+                        textOverlayInteractive &&
+                        !lightbox ? (
+                          <div
+                            data-bg-pan
+                            className={`absolute inset-0 z-0 touch-none ${
+                              bgPanning ? "cursor-grabbing" : "cursor-grab"
+                            }`}
+                            onPointerDown={(e) => startBackgroundPan(e, index)}
+                          />
+                        ) : null}
+                      </>
+                    )}
+                    </>
                   ) : (
                     <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(99,102,241,0.22),transparent_55%),radial-gradient(ellipse_at_80%_80%,rgba(16,185,129,0.12),transparent_50%),linear-gradient(160deg,#121824,#0B0F19)]" />
                   )}
 
+                  {pageBlueprint ? (
+                    <PrintBlueprintOverlay
+                      blueprint={pageBlueprint}
+                      foldGuidesHidden={foldGuidesHidden}
+                      onHideFoldGuides={onHideFoldGuides}
+                      removeFoldLabel={cs.removeFoldGuides}
+                    />
+                  ) : null}
+
+                  <span className="pointer-events-none absolute top-2 left-2 z-[3] rounded bg-indigo-600/85 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                    {fillCanvas(cs.pageOf, { page: pageNum, total: totalPages })}
+                  </span>
+                  </div>
+
+                  {photoLayersByPage?.[index]?.length && onPhotoLayersChange ? (
+                    <PreviewPhotoOverlay
+                      layers={photoLayersByPage[index]}
+                      onLayersChange={(layers) =>
+                        onPhotoLayersChange(index, layers)
+                      }
+                      interactive={
+                        textOverlayInteractive &&
+                        currentPage === pageNum &&
+                        !lightbox
+                      }
+                      activeLayerId={
+                        currentPage === pageNum ? activePhotoLayerId : null
+                      }
+                      onActiveLayerChange={(id) => {
+                        onActivePhotoLayerChange?.(id);
+                        if (id) {
+                          onActiveTextLayerChange?.(null);
+                          onActiveDecoLayerChange?.(null);
+                        }
+                      }}
+                    />
+                  ) : null}
+
+                  {decoLayersByPage?.[index]?.length && onDecoLayersChange ? (
+                    <PreviewDecoOverlay
+                      layers={decoLayersByPage[index]}
+                      onLayersChange={(layers) =>
+                        onDecoLayersChange(index, layers)
+                      }
+                      interactive={
+                        textOverlayInteractive &&
+                        currentPage === pageNum &&
+                        !lightbox
+                      }
+                      activeLayerId={
+                        currentPage === pageNum ? activeDecoLayerId : null
+                      }
+                      onActiveLayerChange={(id) => {
+                        onActiveDecoLayerChange?.(id);
+                        if (id) {
+                          onActiveTextLayerChange?.(null);
+                          onActivePhotoLayerChange?.(null);
+                        }
+                      }}
+                    />
+                  ) : null}
+
                   {/* Form-to-Design: draggable text boxes over pure visual bg. */}
                   {overlayLayersByPage?.[index]?.length &&
                   onOverlayLayersChange ? (
-                    <div data-text-overlay className="pointer-events-none absolute inset-0 z-[2]">
+                    <div data-text-overlay className="pointer-events-none absolute inset-0 z-[2] overflow-visible">
                       <PreviewTextOverlay
                         layers={overlayLayersByPage[index]}
                         onLayersChange={(layers) =>
@@ -524,7 +863,15 @@ export default function PreviewCanvas({
                         activeLayerId={
                           currentPage === pageNum ? activeTextLayerId : null
                         }
-                        onActiveLayerChange={onActiveTextLayerChange}
+                        onActiveLayerChange={(id) => {
+                          onActiveTextLayerChange?.(id);
+                          if (id) {
+                            onActivePhotoLayerChange?.(null);
+                            onActiveDecoLayerChange?.(null);
+                          }
+                        }}
+                      pageIndex={index}
+                      backgroundSrc={pageBg}
                       />
                     </div>
                   ) : (
@@ -568,19 +915,6 @@ export default function PreviewCanvas({
                       </div>
                     </div>
                   )}
-
-                  {pageBlueprint ? (
-                    <PrintBlueprintOverlay
-                      blueprint={pageBlueprint}
-                      foldGuidesHidden={foldGuidesHidden}
-                      onHideFoldGuides={onHideFoldGuides}
-                      removeFoldLabel={cs.removeFoldGuides}
-                    />
-                  ) : null}
-
-                  <span className="pointer-events-none absolute top-2 left-2 z-[3] rounded bg-indigo-600/85 px-1.5 py-0.5 text-[9px] font-bold text-white">
-                    {fillCanvas(cs.pageOf, { page: pageNum, total: totalPages })}
-                  </span>
                   </div>
                 </div>
               </div>
@@ -605,7 +939,11 @@ export default function PreviewCanvas({
             {Array.from({ length: totalPages }, (_, index) => {
               const pageNum = index + 1;
               const isSelected = currentPage === pageNum;
-              const thumbBg = backgroundUrls[index] || backgroundUrl || null;
+              const thumbBg = pageBackgroundUrl(
+                backgroundUrls,
+                backgroundUrl,
+                index
+              );
               return (
                 <button
                   key={pageNum}
@@ -625,12 +963,28 @@ export default function PreviewCanvas({
                   }`}
                 >
                   {thumbBg ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={thumbBg}
-                      alt=""
-                      className="absolute inset-0 h-full w-full object-cover"
-                    />
+                    useContainBg ? (
+                      <div className="flex h-full w-full items-center justify-center bg-black/90 p-[5%]">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={thumbBg}
+                          alt=""
+                          className="h-auto w-auto max-h-full max-w-full object-contain"
+                        />
+                      </div>
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={thumbBg}
+                        alt=""
+                        className="absolute inset-0 h-full w-full object-cover"
+                        style={{
+                          objectPosition: bgPanObjectPosition(
+                            panForPage(index)
+                          ),
+                        }}
+                      />
+                    )
                   ) : (
                     <div className="absolute inset-0 bg-[#1a2234]" />
                   )}
@@ -699,25 +1053,93 @@ export default function PreviewCanvas({
               <div className="flex min-h-0 flex-1 items-start justify-center overflow-auto overscroll-contain bg-[#0B0F19] p-2">
                 <div
                   data-page-stage
-                  className="relative overflow-hidden"
+                  className="relative overflow-visible"
                   style={{
                     width: lightbox.imgW,
                     height: lightbox.imgH,
                     transformOrigin: "top left",
                   }}
                 >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={lightbox.src}
-                  alt={`${lightbox.pageNum}페이지 확대`}
-                  draggable={false}
-                  className="pointer-events-none absolute inset-0 h-full w-full object-cover"
-                />
+                <div className="absolute inset-0 overflow-hidden">
+                {useContainBg ? (
+                  <div className="flex h-full w-full items-center justify-center bg-black/90 p-[5%]">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={lightbox.src}
+                      alt={`${lightbox.pageNum}페이지 확대`}
+                      draggable={false}
+                      className="h-auto w-auto max-h-full max-w-full object-contain"
+                    />
+                  </div>
+                ) : (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={lightbox.src}
+                      alt={`${lightbox.pageNum}페이지 확대`}
+                      draggable={false}
+                      className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+                      style={{
+                        objectPosition: bgPanObjectPosition(
+                          panForPage(lightbox.pageNum - 1)
+                        ),
+                      }}
+                    />
+                    {onBackgroundPanChange && textOverlayInteractive ? (
+                      <div
+                        data-bg-pan
+                        className={`absolute inset-0 z-0 touch-none ${
+                          bgPanning ? "cursor-grabbing" : "cursor-grab"
+                        }`}
+                        onPointerDown={(e) =>
+                          startBackgroundPan(e, lightbox.pageNum - 1)
+                        }
+                      />
+                    ) : null}
+                  </>
+                )}
+                </div>
+                {photoLayersByPage?.[lightbox.pageNum - 1]?.length &&
+                onPhotoLayersChange ? (
+                  <PreviewPhotoOverlay
+                    layers={photoLayersByPage[lightbox.pageNum - 1]}
+                    onLayersChange={(layers) =>
+                      onPhotoLayersChange(lightbox.pageNum - 1, layers)
+                    }
+                    interactive={textOverlayInteractive}
+                    activeLayerId={activePhotoLayerId}
+                    onActiveLayerChange={(id) => {
+                      onActivePhotoLayerChange?.(id);
+                      if (id) {
+                        onActiveTextLayerChange?.(null);
+                        onActiveDecoLayerChange?.(null);
+                      }
+                    }}
+                  />
+                ) : null}
+                {decoLayersByPage?.[lightbox.pageNum - 1]?.length &&
+                onDecoLayersChange ? (
+                  <PreviewDecoOverlay
+                    layers={decoLayersByPage[lightbox.pageNum - 1]}
+                    onLayersChange={(layers) =>
+                      onDecoLayersChange(lightbox.pageNum - 1, layers)
+                    }
+                    interactive={textOverlayInteractive}
+                    activeLayerId={activeDecoLayerId}
+                    onActiveLayerChange={(id) => {
+                      onActiveDecoLayerChange?.(id);
+                      if (id) {
+                        onActiveTextLayerChange?.(null);
+                        onActivePhotoLayerChange?.(null);
+                      }
+                    }}
+                  />
+                ) : null}
                 {overlayLayersByPage?.[lightbox.pageNum - 1]?.length &&
                 onOverlayLayersChange ? (
                   <div
                     data-text-overlay
-                    className="pointer-events-none absolute inset-0 z-[2]"
+                    className="pointer-events-none absolute inset-0 z-[2] overflow-visible"
                   >
                     <PreviewTextOverlay
                       layers={overlayLayersByPage[lightbox.pageNum - 1]}
@@ -726,7 +1148,15 @@ export default function PreviewCanvas({
                       }
                       interactive={textOverlayInteractive}
                       activeLayerId={activeTextLayerId}
-                      onActiveLayerChange={onActiveTextLayerChange}
+                      onActiveLayerChange={(id) => {
+                        onActiveTextLayerChange?.(id);
+                        if (id) {
+                          onActivePhotoLayerChange?.(null);
+                          onActiveDecoLayerChange?.(null);
+                        }
+                      }}
+                      pageIndex={lightbox.pageNum - 1}
+                      backgroundSrc={lightbox.src}
                     />
                   </div>
                 ) : (

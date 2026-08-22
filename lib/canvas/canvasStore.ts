@@ -43,6 +43,8 @@ export type CanvasStoreState = {
   /** Stack under every object (above locked background if present). */
   sendToBack: (id: string) => void;
   clearSelection: () => void;
+  /** Drop all image planes/photos/stickers; keep text overlays. */
+  clearImageLayers: () => void;
   resetDocument: (meta?: Partial<CanvasDocumentMeta>) => void;
   getExportSnapshot: () => CanvasExportSnapshot;
 };
@@ -143,6 +145,24 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
     }),
 
   clearSelection: () => set({ selectedId: null, editingTextId: null }),
+
+  clearImageLayers: () =>
+    set((s) => {
+      const next = s.objects.filter((o) => o.type === "text");
+      const selectedStill =
+        s.selectedId && next.some((o) => o.id === s.selectedId)
+          ? s.selectedId
+          : null;
+      const editingStill =
+        s.editingTextId && next.some((o) => o.id === s.editingTextId)
+          ? s.editingTextId
+          : null;
+      return {
+        objects: sortByZIndex(next),
+        selectedId: selectedStill,
+        editingTextId: editingStill,
+      };
+    }),
 
   resetDocument: (meta) =>
     set({

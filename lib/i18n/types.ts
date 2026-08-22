@@ -74,11 +74,19 @@ export interface Translations {
     ctaTemplateStudioLine1: string;
     /** Template studio CTA — line 2 */
     ctaTemplateStudioLine2: string;
-    /** Admin-only home CTA → /print-smart-form */
+    /** Home CTA → /print-smart-form (public) */
     ctaPrintSmartForm: string;
     ctaPrintSmartFormLine1: string;
     ctaPrintSmartFormLine2: string;
     printSmartFormComingSoon: string;
+    /** Home CTA → /ai-photo-generator */
+    ctaPhotoGenerator: string;
+    ctaPhotoGeneratorLine1: string;
+    ctaPhotoGeneratorLine2: string;
+    photoGeneratorComingSoon: string;
+    photoGeneratorPlaceholderBody: string;
+    /** Step 2 wizard eyebrow — photo lookbook generator */
+    photoWizardStep2: string;
     /** Step 2 wizard eyebrow */
     printWizardStep2: string;
     ctaRegisterPhotos: string;
@@ -324,6 +332,8 @@ export interface Translations {
     step3Desc: string;
     step4Title: string;
     step4Desc: string;
+    step5Title: string;
+    step5Desc: string;
     subject: string;
     subjectMale: string;
     subjectFemale: string;
@@ -355,6 +365,7 @@ export interface Translations {
     uploadErrorUnsupported: string;
     uploadErrorTooLarge: string;
     uploadErrorConvert: string;
+    uploadLimitFull: string;
     styleSelectHint: string;
     conceptTitle: string;
     conceptSubtitle: string;
@@ -489,6 +500,8 @@ export interface Translations {
     regenerateDone: string;
     regenerateNeedDraft: string;
     regenerateBusyLabel: string;
+    bgFusionGenerating: string;
+    bgFusionNeedSelfies: string;
     draftSelected: string;
     confirmDraftSelect: string;
     comparePhaseTitle: string;
@@ -667,6 +680,9 @@ export interface Translations {
     deleteConfirm: string;
     deleteDone: string;
     deleteFailed: string;
+    deletePhotoConfirmTitle: string;
+    deletePhotoConfirm: string;
+    deletePhotoDone: string;
   };
   returnUser: {
     badge: string;
@@ -931,12 +947,17 @@ export interface Translations {
     photosRateLimited: string;
     worksEmpty: string;
     worksDownload: string;
+    worksDownloadStandard: string;
+    worksDownloadHigh: string;
     worksShare: string;
     worksReedit: string;
+    worksPortraitFromFace: string;
     worksDelete: string;
+    worksDeleteAria: string;
     worksDeleteConfirm: string;
     worksDeleteConfirmTitle: string;
     worksDeleteDone: string;
+    worksDeleteFailed: string;
     worksDeleteYes: string;
     worksDeleteNo: string;
     retentionActiveBanner: string;

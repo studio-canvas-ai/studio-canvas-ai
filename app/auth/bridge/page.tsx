@@ -1,23 +1,15 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { useEffect } from "react";
+import BridgeClient from "./BridgeClient";
 
 /**
  * Fully client-only auth bridge.
  * - No server await / cookies / Supabase on the server
- * - BridgeClient is ssr:false so it never runs during SSR
  * - Escape timers run in the browser only (useEffect + inline script in HTML)
+ * - BridgeClient is statically imported so session work starts without an
+ *   extra dynamic() chunk fetch (Supabase client remains lazily imported)
  */
-const BridgeClient = dynamic(() => import("./BridgeClient"), {
-  ssr: false,
-  loading: () => (
-    <p className="text-sm text-white/70" id="sca-bridge-status">
-      Signing you in…
-    </p>
-  ),
-});
-
 const ESCAPE_JS = `
 (function(){
   try {
@@ -28,7 +20,7 @@ const ESCAPE_JS = `
         window.__scaBridgeEscaped = true;
         location.replace("/generate?authError=" + encodeURIComponent("bridge_inline_timeout"));
       } catch (e) {}
-    }, 8000);
+    }, 12000);
   } catch (e) {}
 })();
 `;
@@ -46,14 +38,14 @@ export default function AuthBridgePage() {
       window.location.replace(
         `/generate?authError=${encodeURIComponent("bridge_client_timeout")}`
       );
-    }, 8000);
+    }, 12000);
     return () => window.clearTimeout(timer);
   }, []);
 
   return (
-    <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 px-6 text-center">
+    <>
       <script dangerouslySetInnerHTML={{ __html: ESCAPE_JS }} />
       <BridgeClient />
-    </div>
+    </>
   );
 }

@@ -6,15 +6,15 @@ import { Suspense } from "react";
 
 export default function PricingPage() {
   return (
-    <main className="relative min-h-screen overflow-hidden">
+    <main className="relative overflow-x-hidden">
       <Navbar />
-      <div className="pt-8">
-        <Suspense fallback={null}>
-          <PaymentReturnBanner />
-        </Suspense>
-        <PricingSection />
+      <Suspense fallback={null}>
+        <PaymentReturnBanner />
+      </Suspense>
+      <PricingSection layout="page" />
+      <div className="[&_footer>div]:py-8 md:[&_footer>div]:py-10 lg:[&_footer>div]:py-10">
+        <Footer />
       </div>
-      <Footer />
     </main>
   );
 }

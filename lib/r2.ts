@@ -1,31 +1,49 @@
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 export type R2Config = {
   accountId: string;
   accessKeyId: string;
   secretAccessKey: string;
   bucketName: string;
+  endpoint?: string;
   publicUrl?: string;
 };
 
+function envFirst(...keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = process.env[key]?.trim().replace(/^["']|["']$/g, "");
+    if (!value) continue;
+    // `vercel env pull` redacts sensitive values as `[SENSITIVE]`.
+    if (value === "[SENSITIVE]" || value === "SENSITIVE") continue;
+    return value;
+  }
+  return undefined;
+}
+
 export function getR2Config(): R2Config | null {
-  const accountId = process.env.R2_ACCOUNT_ID;
-  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-  const bucketName = process.env.R2_BUCKET_NAME;
+  const accountId = envFirst("R2_ACCOUNT_ID", "CLOUDFLARE_ACCOUNT_ID");
+  const accessKeyId = envFirst("R2_ACCESS_KEY_ID", "CLOUDFLARE_ACCESS_KEY_ID");
+  const secretAccessKey = envFirst(
+    "R2_SECRET_ACCESS_KEY",
+    "CLOUDFLARE_SECRET_ACCESS_KEY"
+  );
+  const bucketName = envFirst("R2_BUCKET_NAME", "CLOUDFLARE_BUCKET_NAME");
   if (!accountId || !accessKeyId || !secretAccessKey || !bucketName) return null;
   return {
     accountId,
     accessKeyId,
     secretAccessKey,
     bucketName,
-    publicUrl: process.env.R2_PUBLIC_URL,
+    endpoint: envFirst("R2_ENDPOINT", "CLOUDFLARE_R2_ENDPOINT"),
+    publicUrl: envFirst("R2_PUBLIC_URL", "CLOUDFLARE_R2_PUBLIC_URL"),
   };
 }
 
@@ -34,13 +52,20 @@ export function isR2Configured(): boolean {
 }
 
 export function createR2Client(config: R2Config): S3Client {
+  // R2 is S3-compatible but rejects AWS SDK v3 default CRC32 checksums
+  // and virtual-hosted bucket URLs. Path-style + checksums only when required.
   return new S3Client({
     region: "auto",
-    endpoint: `https://${config.accountId}.r2.cloudflarestorage.com`,
+    endpoint:
+      config.endpoint ||
+      `https://${config.accountId}.r2.cloudflarestorage.com`,
+    forcePathStyle: true,
     credentials: {
       accessKeyId: config.accessKeyId,
       secretAccessKey: config.secretAccessKey,
     },
+    requestChecksumCalculation: "WHEN_REQUIRED",
+    responseChecksumValidation: "WHEN_REQUIRED",
   });
 }
 
@@ -51,6 +76,40 @@ export function publicObjectUrl(config: R2Config, key: string): string {
   return `https://${config.bucketName}.${config.accountId}.r2.cloudflarestorage.com/${key}`;
 }
 
+/** Browser → R2 direct upload (bypasses Vercel request body limits). */
+export async function createSignedPutUrl(
+  config: R2Config,
+  key: string,
+  contentType: string,
+  expiresInSec = 900
+): Promise<string> {
+  const client = createR2Client(config);
+  const command = new PutObjectCommand({
+    Bucket: config.bucketName,
+    Key: key,
+    ContentType: contentType,
+  });
+  return getSignedUrl(client, command, { expiresIn: expiresInSec });
+}
+
+export async function headR2Object(
+  client: S3Client,
+  bucket: string,
+  key: string
+): Promise<{ contentLength?: number; contentType?: string } | null> {
+  try {
+    const res = await client.send(
+      new HeadObjectCommand({ Bucket: bucket, Key: key })
+    );
+    return {
+      contentLength: res.ContentLength,
+      contentType: res.ContentType,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function putR2Object(
   client: S3Client,
   bucket: string,
@@ -58,14 +117,19 @@ export async function putR2Object(
   body: Buffer | Uint8Array,
   contentType: string
 ) {
-  await client.send(
-    new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      Body: body,
-      ContentType: contentType,
-    })
-  );
+  try {
+    await client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: body,
+        ContentType: contentType,
+      })
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`r2_put_failed:${key}:${message}`);
+  }
 }
 
 export async function getR2Object(

@@ -13,6 +13,53 @@ export function pageCountLabel(pageCount: number): string {
   return `${pageCount}면`;
 }
 
+/** Front / inner / back framing so each page gets a distinct composition. */
+export function pageFaceBrief(
+  pageIndex: number,
+  pageCount: number,
+  useLabel: string
+): string {
+  const n = pageIndex + 1;
+  const total = Math.max(1, pageCount);
+  const piece = useLabel.trim() || "print piece";
+  if (total === 1) {
+    return `single-sided ${piece}, page 1 of 1, complete one-page composition with calm negative space for typography`;
+  }
+  if (n === 1) {
+    return `FRONT of a ${total}-page ${piece} (page 1 of ${total}): hero establishing shot of the same theme, inviting composition, extra open space in the upper third for a headline — unique to the cover, never reused on later pages`;
+  }
+  if (n === total) {
+    return `BACK/closing of a ${total}-page ${piece} (page ${n} of ${total}): same world and color palette as the front but a clearly different camera angle, depth, and layout — complementary reverse side, never a duplicate of page 1`;
+  }
+  return `INNER page ${n} of ${total} for a ${piece}: continuation of the same theme with a distinct mid-story framing and different focal objects — not a copy of the cover`;
+}
+
+function pageCopyHint(state: PrintWizardState, pageIndex: number): string {
+  const layers = state.textLayersByPage?.[pageIndex] ?? [];
+  const texts = layers
+    .map((layer) => layer.text.trim())
+    .filter(Boolean)
+    .slice(0, 4);
+  if (!texts.length) return "";
+  return `this page carries overlay copy (do not render any letters): ${texts.join(" / ")}`;
+}
+
+/** Per-page prompt: shared concept + unique face/purpose. */
+export function buildPagePrintAiContext(
+  state: PrintWizardState,
+  pageIndex: number
+): string {
+  const base = buildUnifiedPrintAiContext(state);
+  if (!base) return "";
+  const use = useById(state.useId);
+  const face = pageFaceBrief(pageIndex, state.pageCount, use.label);
+  const copy = pageCopyHint(state, pageIndex);
+  const combined = copy ? `${base}. ${face}. ${copy}` : `${base}. ${face}`;
+  return combined.length > 1950
+    ? `${combined.slice(0, 1947).trimEnd()}...`
+    : combined;
+}
+
 /** Single organic context string for Flux / layout — options + tags together. */
 export function buildUnifiedPrintAiContext(state: PrintWizardState): string {
   const format = formatById(state.formatId);

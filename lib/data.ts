@@ -208,7 +208,7 @@ export const PLAN_OFFERS: Record<BillingInterval, readonly PlanOffer[]> = {
       monthlyUsd: 4.17,
       totalUsd: 49.99,
       totalKrw: 67_486,
-      credits: 200,
+      credits: 900,
       profileSlots: 3,
       resolution: "4K",
       fastGeneration: false,
@@ -223,7 +223,7 @@ export const PLAN_OFFERS: Record<BillingInterval, readonly PlanOffer[]> = {
       monthlyUsd: 8.33,
       totalUsd: 99.99,
       totalKrw: 134_986,
-      credits: 500,
+      credits: 2_400,
       profileSlots: 5,
       resolution: "4K",
       fastGeneration: true,
@@ -233,12 +233,12 @@ export const PLAN_OFFERS: Record<BillingInterval, readonly PlanOffer[]> = {
       highlighted: true,
     },
     {
-      planId: "enterprise",
+      planId: "pro",
       interval: "annual",
       monthlyUsd: 16.67,
       totalUsd: 199.99,
       totalKrw: 269_986,
-      credits: 1_500,
+      credits: 7_000,
       profileSlots: 10,
       resolution: "4K",
       fastGeneration: true,
@@ -255,8 +255,8 @@ export const PLAN_OFFERS: Record<BillingInterval, readonly PlanOffer[]> = {
       interval: "quarterly",
       monthlyUsd: 4.33,
       totalUsd: 12.99,
-      totalKrw: 17_536,
-      credits: 60,
+      totalKrw: 19_900,
+      credits: 90,
       profileSlots: 2,
       resolution: "4K",
       fastGeneration: true,
@@ -270,8 +270,8 @@ export const PLAN_OFFERS: Record<BillingInterval, readonly PlanOffer[]> = {
       interval: "quarterly",
       monthlyUsd: 9.0,
       totalUsd: 26.99,
-      totalKrw: 36_436,
-      credits: 150,
+      totalKrw: 39_900,
+      credits: 240,
       profileSlots: 7,
       resolution: "4K",
       fastGeneration: true,
@@ -285,8 +285,8 @@ export const PLAN_OFFERS: Record<BillingInterval, readonly PlanOffer[]> = {
       interval: "quarterly",
       monthlyUsd: 18.66,
       totalUsd: 55.99,
-      totalKrw: 75_586,
-      credits: 450,
+      totalKrw: 79_900,
+      credits: 700,
       profileSlots: 15,
       resolution: "4K",
       fastGeneration: true,
@@ -302,8 +302,8 @@ export const PLAN_OFFERS: Record<BillingInterval, readonly PlanOffer[]> = {
       interval: "monthly",
       monthlyUsd: 4.99,
       totalUsd: 4.99,
-      totalKrw: 6_736,
-      credits: 20,
+      totalKrw: 7_900,
+      credits: 30,
       profileSlots: 1,
       resolution: "FHD",
       fastGeneration: false,
@@ -317,8 +317,8 @@ export const PLAN_OFFERS: Record<BillingInterval, readonly PlanOffer[]> = {
       interval: "monthly",
       monthlyUsd: 9.99,
       totalUsd: 9.99,
-      totalKrw: 13_486,
-      credits: 50,
+      totalKrw: 15_900,
+      credits: 80,
       profileSlots: 5,
       resolution: "4K",
       fastGeneration: true,
@@ -332,8 +332,8 @@ export const PLAN_OFFERS: Record<BillingInterval, readonly PlanOffer[]> = {
       interval: "monthly",
       monthlyUsd: 19.99,
       totalUsd: 19.99,
-      totalKrw: 26_986,
-      credits: 150,
+      totalKrw: 29_900,
+      credits: 230,
       profileSlots: 10,
       resolution: "4K",
       fastGeneration: true,
@@ -346,9 +346,56 @@ export const PLAN_OFFERS: Record<BillingInterval, readonly PlanOffer[]> = {
 };
 
 export function getPlanOffer(planId: PricingPlanId, interval: BillingInterval): PlanOffer {
-  const offer = PLAN_OFFERS[interval].find((item) => item.planId === planId);
-  if (!offer) throw new Error(`Plan ${planId} is not available for ${interval} billing`);
-  return offer;
+  const offers = PLAN_OFFERS[interval];
+  const direct = offers.find((item) => item.planId === planId);
+  if (direct) return direct;
+
+  // Legacy annual "enterprise" ↔ domestic/global "pro" top tier.
+  if (planId === "enterprise") {
+    const pro = offers.find((item) => item.planId === "pro");
+    if (pro) return pro;
+  }
+  if (planId === "pro" && interval === "annual") {
+    const legacy = offers.find((item) => item.planId === "enterprise");
+    if (legacy) return legacy;
+  }
+
+  throw new Error(`Plan ${planId} is not available for ${interval} billing`);
+}
+
+/** Fixed VAT-inclusive KRW for domestic monthly subscriptions (Toss / PortOne). */
+export const DOMESTIC_MONTHLY_PRICES_KRW = {
+  starter: 7_900,
+  standard: 15_900,
+  pro: 29_900,
+} as const;
+
+/** Fixed VAT-inclusive KRW for domestic 3-month prepaid passes (Toss / PortOne). */
+export const DOMESTIC_QUARTERLY_PRICES_KRW = {
+  starter: 19_900,
+  standard: 39_900,
+  pro: 79_900,
+} as const;
+
+export type DomesticMonthlyPlanId = keyof typeof DOMESTIC_MONTHLY_PRICES_KRW;
+export type DomesticQuarterlyPlanId = keyof typeof DOMESTIC_QUARTERLY_PRICES_KRW;
+
+export function getDomesticMonthlyPriceKrw(
+  planId: PricingPlanId
+): number | null {
+  if (planId === "starter" || planId === "standard" || planId === "pro") {
+    return DOMESTIC_MONTHLY_PRICES_KRW[planId];
+  }
+  return null;
+}
+
+export function getDomesticQuarterlyPriceKrw(
+  planId: PricingPlanId
+): number | null {
+  if (planId === "starter" || planId === "standard" || planId === "pro") {
+    return DOMESTIC_QUARTERLY_PRICES_KRW[planId];
+  }
+  return null;
 }
 
 /** Legacy monthly maps retained for existing consumers. */
@@ -363,41 +410,59 @@ export const FREE_CREDITS = 2;
 
 /** Monthly plan credit allotment (server + client) */
 export const PLAN_CREDITS: Record<PricingPlanId, number> = {
-  starter: 20,
-  standard: 50,
-  pro: 150,
+  starter: 30,
+  standard: 80,
+  pro: 230,
   enterprise: 1_500,
 };
 
-/** KRW amounts for Toss / PortOne checkout (USD × rate, floored) */
+/** KRW amounts for Toss / PortOne — monthly uses fixed domestic list prices. */
 export const pricingPricesKrw: Record<PricingPlanId, number> = {
-  starter: usdToKrw(pricingPrices.starter),
-  standard: usdToKrw(pricingPrices.standard),
-  pro: usdToKrw(pricingPrices.pro),
+  starter: DOMESTIC_MONTHLY_PRICES_KRW.starter,
+  standard: DOMESTIC_MONTHLY_PRICES_KRW.standard,
+  pro: DOMESTIC_MONTHLY_PRICES_KRW.pro,
   enterprise: usdToKrw(pricingPrices.enterprise),
 };
 export const PROMPT_MAX_LENGTH = 100;
 export const MIN_SELFIE_UPLOADS = 1;
+export const MAX_SELFIE_UPLOADS = 10;
 export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
-export const ACCEPTED_IMAGE_EXT = ["jpg", "jpeg", "png", "webp", "heic", "heif"] as const;
+export const ACCEPTED_IMAGE_EXT = [
+  "jpg",
+  "jpeg",
+  "png",
+  "webp",
+  "heic",
+  "heif",
+  "avif",
+  "svg",
+] as const;
 export const ACCEPTED_IMAGE_MIME = [
   "image/jpeg",
   "image/png",
   "image/webp",
   "image/heic",
   "image/heif",
+  "image/avif",
+  "image/svg+xml",
 ] as const;
 
-/** #60 / #104: regenerate costs 0.5 credit; free retouch path removed from UI */
+/** #60 / #104: regenerate costs 1 credit; free retouch path removed from UI */
 export const RETOUCH_FREE_PER_CYCLE = 0;
-export const RETOUCH_EXTRA_COST = 0.5;
-export const REGENERATE_CREDIT_COST = 0.5;
-export const RETOUCH_NEXT_DAY_ENTRY_COST = 0.5;
+export const RETOUCH_EXTRA_COST = 1;
+export const REGENERATE_CREDIT_COST = 1;
+export const RETOUCH_NEXT_DAY_ENTRY_COST = 1;
 export const RETOUCH_DAILY_MAX = 50;
 export const GENERATE_DRAFT_COUNT = 2;
 
 /** Baseline cost of one initial generation. */
 export const GENERATE_CREDIT_COST = 1;
+
+/** Cost to export / download a finished portrait (HD, print, etc.). */
+export const DOWNLOAD_CREDIT_COST = 1;
+
+/** Face/object model training → A/B draft generation cost. */
+export const TRAIN_CREDIT_COST = 5;
 
 /**
  * Server-side price list per style pack. The client never decides what it pays —
@@ -415,10 +480,11 @@ export const STYLE_CREDIT_COST: Record<string, number> = {
 };
 
 export function resolveGenerationCost(
-  mode: "initial" | "regenerate",
+  mode: "initial" | "regenerate" | "train",
   styleIds: string[] = []
 ): number {
   if (mode === "regenerate") return REGENERATE_CREDIT_COST;
+  if (mode === "train") return TRAIN_CREDIT_COST;
   const styleId = styleIds.find((id) => id in STYLE_CREDIT_COST);
   return styleId ? STYLE_CREDIT_COST[styleId] : GENERATE_CREDIT_COST;
 }
@@ -442,9 +508,27 @@ export function planTotalKrw(totalUsd: number) {
   return usdToKrw(totalUsd);
 }
 
+/**
+ * Refresh FX-derived KRW on annual offers.
+ * Domestic monthly + quarterly Starter/Standard/Pro keep fixed list prices (VAT included).
+ */
 export function syncPlanOfferKrw() {
   for (const interval of Object.keys(PLAN_OFFERS) as BillingInterval[]) {
     for (const offer of PLAN_OFFERS[interval]) {
+      if (interval === "monthly") {
+        const fixed = getDomesticMonthlyPriceKrw(offer.planId);
+        if (fixed != null) {
+          (offer as { totalKrw: number }).totalKrw = fixed;
+          continue;
+        }
+      }
+      if (interval === "quarterly") {
+        const fixed = getDomesticQuarterlyPriceKrw(offer.planId);
+        if (fixed != null) {
+          (offer as { totalKrw: number }).totalKrw = fixed;
+          continue;
+        }
+      }
       (offer as { totalKrw: number }).totalKrw = planTotalKrw(offer.totalUsd);
     }
   }

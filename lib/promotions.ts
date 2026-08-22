@@ -173,6 +173,38 @@ export function getPromotionByToken(token?: string | null): PromotionCode | null
   return code;
 }
 
+/** Refund promotion credits after a failed generation (mirrors creditUser). */
+export async function creditPromotionWallet(input: {
+  token?: string | null;
+  amount: number;
+  reason?: string;
+}) {
+  const promotionId = verifyPromotionCookieToken(input.token);
+  if (!promotionId) return { ok: false as const, reason: "invalid" as const };
+  const amount = Math.round(input.amount * 10) / 10;
+  if (amount <= 0) {
+    return { ok: false as const, reason: "invalid" as const };
+  }
+  return withDbLock((db) => {
+    const item = db.promotionCodes[promotionId];
+    if (!item) return { ok: false as const, reason: "invalid" as const };
+    item.remainingCredits = Math.round((item.remainingCredits + amount) * 10) / 10;
+    if (item.remainingCredits > 0) {
+      item.isExpired = false;
+      item.expiredAt = undefined;
+    }
+    item.lastUsedAt = Date.now();
+    db.promotionHistory.push(
+      history(item.id, "refund", amount, item.remainingCredits)
+    );
+    return {
+      ok: true as const,
+      promotion: item,
+      transactionId: db.promotionHistory.at(-1)!.id,
+    };
+  });
+}
+
 export async function debitPromotionWallet(input: {
   token?: string | null;
   amount: number;

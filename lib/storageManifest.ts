@@ -9,10 +9,21 @@ import {
 } from "@/lib/r2";
 import { computeExpiresAt, type RetentionContext } from "@/lib/retentionPolicy";
 
+/** HD originals idle TTL — protects lunch/outage gaps; ghosts purged after this. */
+export const ORIGINAL_IDLE_TTL_MS = 24 * 60 * 60 * 1000;
+
 export type StorageManifest = {
   id: string;
   createdAt: number;
+  /** Gallery / thumbnail retention (plan-based). */
   expiresAt: number | null;
+  /**
+   * When the HD original may be purged after idle time.
+   * Extended on download/access so active edit sessions are never cut mid-work.
+   */
+  originalExpiresAt?: number;
+  /** Last successful HD original access (download). */
+  lastAccessedAt?: number;
   planAtCreation: PlanId;
   thumbnailKey: string;
   originalKey: string;
@@ -33,6 +44,25 @@ export function thumbKeyFor(id: string) {
 
 export function originalKeyFor(id: string, ext = "jpg") {
   return `${ORIGINAL_PREFIX}${id}.${ext}`;
+}
+
+export function computeOriginalExpiresAt(
+  fromMs = Date.now(),
+  ttlMs = ORIGINAL_IDLE_TTL_MS
+): number {
+  return fromMs + ttlMs;
+}
+
+/** Deadline used by purge + download gate. */
+export function resolveOriginalExpiry(manifest: StorageManifest): number | null {
+  if (manifest.originalDeleted) return null;
+  if (typeof manifest.originalExpiresAt === "number") {
+    return manifest.originalExpiresAt;
+  }
+  // Legacy manifests: keep plan gallery expiry for originals until first access
+  // rewrites originalExpiresAt under the 24h idle policy.
+  if (manifest.expiresAt != null) return manifest.expiresAt;
+  return computeOriginalExpiresAt(manifest.createdAt);
 }
 
 export async function saveStorageManifest(manifest: StorageManifest): Promise<void> {
@@ -61,6 +91,25 @@ export async function loadStorageManifest(id: string): Promise<StorageManifest |
   }
 }
 
+/**
+ * Bump last activity so an in-progress edit session keeps its HD original
+ * for another full idle window (24h from now).
+ */
+export async function touchOriginalAccess(
+  id: string,
+  now = Date.now()
+): Promise<StorageManifest | null> {
+  const manifest = await loadStorageManifest(id);
+  if (!manifest || manifest.originalDeleted) return manifest;
+  const next: StorageManifest = {
+    ...manifest,
+    lastAccessedAt: now,
+    originalExpiresAt: computeOriginalExpiresAt(now),
+  };
+  await saveStorageManifest(next);
+  return next;
+}
+
 export function buildManifest(
   id: string,
   planAtCreation: PlanId,
@@ -73,12 +122,18 @@ export function buildManifest(
     id,
     createdAt,
     expiresAt: computeExpiresAt(createdAt, { ...ctx, planId: planAtCreation }),
+    originalExpiresAt: computeOriginalExpiresAt(createdAt),
+    lastAccessedAt: createdAt,
     planAtCreation,
     thumbnailKey,
     originalKey,
   };
 }
 
+/**
+ * Nightly cron: delete HD originals that have been idle past originalExpiresAt.
+ * Thumbnails / meta stay for gallery retention (expiresAt).
+ */
 export async function purgeExpiredOriginals(now = Date.now()): Promise<{
   scanned: number;
   deleted: number;
@@ -100,7 +155,9 @@ export async function purgeExpiredOriginals(now = Date.now()): Promise<{
       continue;
     }
     if (manifest.originalDeleted) continue;
-    if (manifest.expiresAt == null || manifest.expiresAt > now) continue;
+
+    const deadline = resolveOriginalExpiry(manifest);
+    if (deadline == null || deadline > now) continue;
 
     await deleteR2Object(client, config.bucketName, manifest.originalKey);
     manifest.originalDeleted = true;

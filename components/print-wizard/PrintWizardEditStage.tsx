@@ -6,10 +6,16 @@ import StudioExportButtonGroup from "@/components/canvas/StudioExportButtonGroup
 import PreviewCanvas from "@/components/print-wizard/PreviewCanvas";
 import PrintWizardStep2Layout from "@/components/print-wizard/PrintWizardStep2Layout";
 import { usePrintWizardExport } from "@/lib/canvas/usePrintWizardExport";
-import { resolvePrintAspect } from "@/lib/printWizardTypes";
+import { resolvePrintAspect, type PrintBackgroundPan, type PrintDecoLayer, type PrintPhotoLayer, type PrintWizardState } from "@/lib/printWizardTypes";
+import {
+  reconcileLayersTypographyBox,
+  referencePrintStageSize,
+} from "@/lib/printWizardTextLayers";
 import { toDisplayImageSrc } from "@/lib/resultSession";
-import type { PrintWizardState } from "@/lib/printWizardTypes";
+import { pageBackgroundUrl } from "@/lib/printWizardBg";
 import type { TextLayer } from "@/lib/thumbnailStyles";
+import type { PhotoKind } from "@/lib/canvas/addPhotoLayer";
+import type { RecentProjectNamespace } from "@/lib/canvas/recentProjects";
 
 const AiTemplateStudio = dynamic(
   () => import("@/components/AiTemplateStudio"),
@@ -22,13 +28,31 @@ export type PrintWizardEditStageProps = {
   onCurrentPageChange: (page: number) => void;
   textLayersByPage: TextLayer[][];
   onTextLayersChange: (pageIndex: number, layers: TextLayer[]) => void;
+  photoLayersByPage?: PrintPhotoLayer[][];
+  onPhotoLayersChange?: (pageIndex: number, layers: PrintPhotoLayer[]) => void;
+  decoLayersByPage?: PrintDecoLayer[][];
+  onDecoLayersChange?: (pageIndex: number, layers: PrintDecoLayer[]) => void;
+  onDecoCatalogPick?: (decoId: string) => void;
+  onCanvasSymbolPick?: (symbol: string) => void;
+  onBackgroundPanChange?: (pageIndex: number, pan: PrintBackgroundPan) => void;
+  activePhotoLayerId?: string | null;
+  onActivePhotoLayerChange?: (id: string | null) => void;
+  activeDecoLayerId?: string | null;
+  onActiveDecoLayerChange?: (id: string | null) => void;
+  onInstallPhoto?: (file: File, mode: PhotoKind) => Promise<void>;
   activeTextLayerId?: string | null;
   onActiveTextLayerChange?: (id: string | null) => void;
   onHideFoldGuides?: () => void;
+  onResetWorkspace?: () => void;
+  onClearCanvasImages?: () => void;
+  studioPath?: string;
+  pendingProjectKey?: string;
+  panelTitle?: string;
+  recentNamespace?: RecentProjectNamespace;
 };
 
 /**
- * Step 2 — Print wizard preview (left) + Template Studio edit panel (right).
+ * Step 2 ??Print wizard preview (left) + Template Studio edit panel (right).
  */
 export default function PrintWizardEditStage({
   state,
@@ -36,15 +60,38 @@ export default function PrintWizardEditStage({
   onCurrentPageChange,
   textLayersByPage,
   onTextLayersChange,
+  photoLayersByPage,
+  onPhotoLayersChange,
+  decoLayersByPage,
+  onDecoLayersChange,
+  onDecoCatalogPick,
+  onCanvasSymbolPick,
+  onBackgroundPanChange,
+  activePhotoLayerId = null,
+  onActivePhotoLayerChange,
+  activeDecoLayerId = null,
+  onActiveDecoLayerChange,
+  onInstallPhoto,
   activeTextLayerId = null,
   onActiveTextLayerChange,
   onHideFoldGuides,
+  onResetWorkspace,
+  onClearCanvasImages,
+  studioPath,
+  pendingProjectKey,
+  panelTitle,
+  recentNamespace,
 }: PrintWizardEditStageProps) {
   const aspect = resolvePrintAspect(state.formatId, state.customSize);
-  const activeBg =
-    state.backgroundUrls[Math.max(0, currentPage - 1)] ||
-    state.backgroundUrl ||
-    null;
+  const typographyStage = useMemo(
+    () => referencePrintStageSize(aspect),
+    [aspect]
+  );
+  const activeBg = pageBackgroundUrl(
+    state.backgroundUrls,
+    state.backgroundUrl,
+    Math.max(0, currentPage - 1)
+  );
 
   const pageIndex = Math.max(0, currentPage - 1);
   const overlayLayers = useMemo(
@@ -53,7 +100,11 @@ export default function PrintWizardEditStage({
   );
 
   const backgroundUrl = useMemo(() => {
-    const raw = state.backgroundUrls[0] || state.backgroundUrl || null;
+    const raw = pageBackgroundUrl(
+      state.backgroundUrls,
+      state.backgroundUrl,
+      0
+    );
     return raw ? toDisplayImageSrc(raw) : null;
   }, [state.backgroundUrl, state.backgroundUrls]);
 
@@ -67,6 +118,7 @@ export default function PrintWizardEditStage({
     projectFileInputRef,
     downloadWithProject,
     loadProjectFile,
+    loadProjectFromGallery,
     sharePreview,
     requireSubscription,
     premiumModal: exportPremiumModal,
@@ -75,6 +127,9 @@ export default function PrintWizardEditStage({
     customSize: state.customSize,
     aspect,
     titlePreview: state.inputs.title,
+    studioPath,
+    pendingProjectKey,
+    recentNamespace,
   });
 
   return (
@@ -94,6 +149,8 @@ export default function PrintWizardEditStage({
             customSize={state.customSize}
             backgroundUrl={state.backgroundUrl}
             backgroundUrls={state.backgroundUrls}
+            backgroundPansByPage={state.backgroundPansByPage}
+            onBackgroundPanChange={onBackgroundPanChange}
             datePreview={state.inputs.date}
             titlePreview={state.inputs.title}
             subtitlePreview={state.inputs.subtitle}
@@ -102,6 +159,15 @@ export default function PrintWizardEditStage({
             programsPreview={state.inputs.programs}
             overlayLayersByPage={textLayersByPage}
             onOverlayLayersChange={onTextLayersChange}
+            photoLayersByPage={photoLayersByPage}
+            onPhotoLayersChange={onPhotoLayersChange}
+            activePhotoLayerId={activePhotoLayerId}
+            onActivePhotoLayerChange={onActivePhotoLayerChange}
+            decoLayersByPage={decoLayersByPage}
+            onDecoLayersChange={onDecoLayersChange}
+            activeDecoLayerId={activeDecoLayerId}
+            onActiveDecoLayerChange={onActiveDecoLayerChange}
+            onInstallPhoto={onInstallPhoto}
             activeTextLayerId={activeTextLayerId}
             onActiveTextLayerChange={onActiveTextLayerChange}
             currentPage={currentPage}
@@ -112,6 +178,11 @@ export default function PrintWizardEditStage({
             requireSubscription={requireSubscription}
             foldGuidesHidden={state.foldGuidesHidden}
             onHideFoldGuides={onHideFoldGuides}
+            onResetWorkspace={onResetWorkspace}
+            onClearCanvasImages={onClearCanvasImages}
+            studioPath={studioPath}
+            pendingProjectKey={pendingProjectKey}
+            panelTitle={panelTitle}
           />
         }
         editPanel={
@@ -127,10 +198,19 @@ export default function PrintWizardEditStage({
                 initialBackgroundUrl={backgroundUrl}
                 controlledOverlayLayers={overlayLayers}
                 onControlledOverlayLayersChange={(layers) =>
-                  onTextLayersChange(pageIndex, layers)
+                  onTextLayersChange(
+                    pageIndex,
+                    reconcileLayersTypographyBox(
+                      layers,
+                      typographyStage.w,
+                      typographyStage.h
+                    )
+                  )
                 }
                 formFields={formFields}
                 initialVisualStyle={state.visualStyle}
+                onDecoCatalogPick={onDecoCatalogPick}
+                onCanvasSymbolPick={onCanvasSymbolPick}
               />
             </div>
             <div className="shrink-0">
@@ -142,6 +222,8 @@ export default function PrintWizardEditStage({
                   if (!requireSubscription()) return;
                   projectFileInputRef.current?.click();
                 }}
+                onLoadFromGallery={(project) => loadProjectFromGallery(project)}
+                requireSubscription={requireSubscription}
                 onShare={() => void sharePreview()}
                 fileInputRef={projectFileInputRef}
                 onFileChange={(file) => void loadProjectFile(file)}

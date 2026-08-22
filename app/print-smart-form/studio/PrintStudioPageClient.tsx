@@ -6,11 +6,8 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import dynamic from "next/dynamic";
 import Navbar from "@/components/Navbar";
-import { useCredits } from "@/components/CreditsProvider";
-import {
-  isPrintSmartFormAdminEmail,
-  PRINT_SMART_FORM_PATH,
-} from "@/lib/printSmartForm";
+import { PRINT_PENDING_PROJECT_KEY } from "@/lib/wizard/wizardProduct";
+import { PRINT_SMART_FORM_PATH } from "@/lib/printSmartForm";
 import { readPrintWizardSession } from "@/lib/printWizardSession";
 import type { PrintWizardState } from "@/lib/printWizardTypes";
 import { smartInputsToTextLayers } from "@/lib/ai/formToDesign";
@@ -28,20 +25,13 @@ const AiTemplateStudio = dynamic(
  */
 export default function PrintStudioPageClient() {
   const router = useRouter();
-  const { authUser, socialProvidersLoaded } = useCredits();
-  const allowed = isPrintSmartFormAdminEmail(authUser?.email);
   const [session, setSession] = useState<PrintWizardState | null>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (!socialProvidersLoaded) return;
-    if (!allowed) {
-      router.replace("/");
-      return;
-    }
     setSession(readPrintWizardSession());
     setReady(true);
-  }, [allowed, router, socialProvidersLoaded]);
+  }, []);
 
   const overlayLayers = useMemo(
     () => (session ? smartInputsToTextLayers(session.inputs) : []),
@@ -60,7 +50,7 @@ export default function PrintStudioPageClient() {
     return { ...session.inputs };
   }, [session]);
 
-  if (!socialProvidersLoaded || !allowed || !ready) {
+  if (!ready) {
     return (
       <main className="print-wizard-shell relative min-h-screen overflow-hidden bg-[#0B0F19]">
         <Navbar />
@@ -103,11 +93,15 @@ export default function PrintStudioPageClient() {
       <AiTemplateStudio
         mode="agent"
         embedded
+        layout="print-wizard-step2"
         heading="AI 1분 인쇄물 에이전트"
+        recentNamespace="shared"
         initialBackgroundUrl={backgroundUrl}
         initialOverlayLayers={overlayLayers}
         formFields={formFields}
         initialVisualStyle={session.visualStyle}
+        pendingProjectKey={PRINT_PENDING_PROJECT_KEY}
+        onBackToPlanning={() => router.push(PRINT_SMART_FORM_PATH)}
       />
     </main>
   );

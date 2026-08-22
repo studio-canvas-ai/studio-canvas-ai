@@ -15,10 +15,23 @@ import {
   type TextLayer,
 } from "@/lib/thumbnailStyles";
 
+const PLACEHOLDER_PREFIX_RE = /^\s*(상단문구:|중간문구:|하단문구:)\s*/;
+
+function stripLayerPlaceholderPrefix(text: string): string {
+  return text.replace(PLACEHOLDER_PREFIX_RE, "");
+}
+
 export function displayTextForLayer(layer: TextLayer): string {
   const field = formFieldFromLayerId(layer.id);
-  if (!field) return layer.text;
-  return formatFormFieldText(field, layer.text);
+  if (!field) return stripLayerPlaceholderPrefix(layer.text);
+  return stripLayerPlaceholderPrefix(formatFormFieldText(field, layer.text));
+}
+
+function layerGlyphPad(fontSize: number): { padX: number; padY: number } {
+  return {
+    padX: Math.max(4, Math.round(fontSize * 0.16)),
+    padY: Math.max(6, Math.round(fontSize * 0.22)),
+  };
 }
 
 function lineXForAlign(
@@ -95,8 +108,7 @@ export function drawPrintLayerInBox(
   const fontPreset = layer.fontPreset || "pretendard";
   const lineHeightMul = layer.lineHeight ?? 1.25;
   const lineHeightPx = fontSize * lineHeightMul;
-  const padX = Math.max(2, fontSize * 0.08);
-  const padY = Math.max(2, fontSize * 0.06);
+  const { padX, padY } = layerGlyphPad(fontSize);
   const fill = colorPresetFill(layer.color);
   const align = layer.align || "center";
   const letterSpacing =

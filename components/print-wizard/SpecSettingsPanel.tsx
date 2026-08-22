@@ -7,31 +7,40 @@ import { ChevronDown } from "lucide-react";
 import {
   FIELD_CATEGORIES,
   PRINT_FORMATS,
+  PHOTO_FORMATS,
   PRINT_USES,
+  PHOTO_USES,
   PRINT_PAGE_COUNTS,
   PRINT_CUSTOM_SIZE_MAX_CM,
   PRINT_CUSTOM_SIZE_MAX_INCH,
   fieldById,
+  emptySpecPicks,
   type BgPresetId,
   type PrintCustomSize,
   type PrintCustomUnit,
   type PrintFormatId,
   type PrintUseId,
   type PrintPageCount,
+  type PrintWizardSpecPicks,
 } from "@/lib/printWizardTypes";
+import type { WizardProductId } from "@/lib/wizard/wizardProduct";
 import {
   KEYWORD_TAG_CATEGORIES,
-  appendKeywordTag,
+  toggleKeywordTag,
   selectedKeywordTags,
   type KeywordTagCategoryId,
 } from "@/lib/printWizardKeywordTags";
+import {
+  PHOTO_LOOKBOOK_EXAMPLE_HINT,
+  getPhotoLookbookExampleCategories,
+} from "@/lib/photoLookbookExamples";
 import ControlBarDropdown, {
   ControlMenuItem,
 } from "@/components/print-wizard/ControlBarDropdown";
 import AiBackgroundPromptBar from "@/components/print-wizard/AiBackgroundPromptBar";
+import PhotoLookbookPromptPanel from "@/components/print-wizard/PhotoLookbookPromptPanel";
 import {
   IMAGE_STYLE_PRESETS,
-  MOOD_STYLE_PRESETS,
   type VisualStyleSelection,
 } from "@/lib/ai/visualStylePresets";
 
@@ -40,12 +49,17 @@ export type SpecSettingsPanelProps = {
   useId: PrintUseId;
   pageCount: PrintPageCount;
   customSize: PrintCustomSize | null;
+  specPicks?: PrintWizardSpecPicks;
   bgKeyword: string;
   bgPresetId: BgPresetId | null;
   selectedPromptPresetId: string | null;
   mainPrompt: string;
   visualStyle: VisualStyleSelection;
   generating?: boolean;
+  /** Photo: which generate action is running. */
+  generatingKind?: "background" | "subject" | null;
+  /** Photo wizard shows the short pictorial use list only. */
+  productId?: WizardProductId;
   onFormatChange: (id: PrintFormatId) => void;
   onCustomSizeApply: (size: PrintCustomSize) => void;
   onUseChange: (id: PrintUseId) => void;
@@ -53,6 +67,8 @@ export type SpecSettingsPanelProps = {
   onBgKeywordChange: (keyword: string) => void;
   onBgPresetPick: (id: BgPresetId) => void;
   onGenerateBackground: () => void;
+  /** Photo: dedicated subject-edit generate. */
+  onGenerateSubject?: () => void;
   onPromptPresetPick: (id: string, prompt: string) => void;
   onMainPromptChange: (value: string) => void;
   onVisualStyleChange: (next: VisualStyleSelection) => void;
@@ -60,7 +76,8 @@ export type SpecSettingsPanelProps = {
 
 type OpenKey = "format" | "style" | "use" | "pages" | "prompt" | "bg" | null;
 
-const PRESET_FORMATS = PRINT_FORMATS.filter((f) => f.id !== "free");
+const PRINT_PRESET_FORMATS = PRINT_FORMATS.filter((f) => f.id !== "free");
+const PHOTO_PRESET_FORMATS = PHOTO_FORMATS.filter((f) => f.id !== "free");
 
 function exampleCategoryLabel(
   id: KeywordTagCategoryId,
@@ -85,12 +102,15 @@ export default function SpecSettingsPanel({
   useId,
   pageCount,
   customSize,
+  specPicks: specPicksProp,
   bgKeyword,
   bgPresetId,
   selectedPromptPresetId: _selectedPromptPresetId,
   mainPrompt,
   visualStyle,
   generating = false,
+  generatingKind = null,
+  productId = "print",
   onFormatChange,
   onCustomSizeApply,
   onUseChange,
@@ -98,11 +118,12 @@ export default function SpecSettingsPanel({
   onBgKeywordChange,
   onBgPresetPick,
   onGenerateBackground,
+  onGenerateSubject,
   onPromptPresetPick: _onPromptPresetPick,
   onMainPromptChange,
   onVisualStyleChange,
 }: SpecSettingsPanelProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const cs = t.canvasStudio;
   const formatTitle = (id: string, fallback: string) =>
     id === "original"
@@ -112,24 +133,32 @@ export default function SpecSettingsPanel({
         : fallback;
   const useTitle = (id: keyof typeof cs.uses, fallback: string) =>
     cs.uses[id] ?? fallback;
+  const isPhotoProduct = productId === "photo";
+  const useCatalog = isPhotoProduct ? PHOTO_USES : PRINT_USES;
+  const presetFormats = isPhotoProduct
+    ? PHOTO_PRESET_FORMATS
+    : PRINT_PRESET_FORMATS;
+  const resolveUseLabel = (id: PrintUseId | string, fallback: string) => {
+    if (isPhotoProduct && id === "sns") {
+      return cs.uses["profile-sns"] ?? fallback;
+    }
+    return useTitle(id as keyof typeof cs.uses, fallback);
+  };
   const pageTitle = (value: number) =>
     value === 1
       ? cs.pageSingle
       : value === 2
         ? cs.pageDouble
         : fillCanvas(cs.pageN, { n: value });
-  const styleValueLabel = [
-    visualStyle.imageStyleId
-      ? cs.imageStyles[
-          visualStyle.imageStyleId as keyof typeof cs.imageStyles
-        ]
-      : null,
-    visualStyle.moodStyleId
-      ? cs.moodStyles[visualStyle.moodStyleId as keyof typeof cs.moodStyles]
-      : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const styleValueLabel = visualStyle.imageStyleId
+    ? cs.imageStyles[
+        visualStyle.imageStyleId as keyof typeof cs.imageStyles
+      ] ??
+      IMAGE_STYLE_PRESETS.find((p) => p.id === visualStyle.imageStyleId)?.[
+        locale === "kr" ? "labelKo" : "labelEn"
+      ] ??
+      ""
+    : "";
   const [openKey, setOpenKey] = useState<OpenKey>(null);
   const [freeSizeOpen, setFreeSizeOpen] = useState(false);
   const [customUnit, setCustomUnit] = useState<PrintCustomUnit>(
@@ -194,26 +223,99 @@ export default function SpecSettingsPanel({
     setFreeSizeOpen(false);
   };
 
+  const specPicks = specPicksProp ?? emptySpecPicks();
   const pickedExampleTags = selectedKeywordTags(bgKeyword);
+  const selectedPhotoExample = isPhotoProduct
+    ? getPhotoLookbookExampleCategories({
+        useId,
+        imageStyleId: visualStyle.imageStyleId,
+      })
+        .flatMap((c) => [...c.examples])
+        .find((ex) => ex === bgKeyword.trim()) ?? null
+    : null;
+  const useValueLabel = resolveUseLabel(
+    useId,
+    useCatalog.find((u) => u.id === useId)?.label ??
+      PRINT_USES.find((u) => u.id === useId)?.label ??
+      useId
+  );
+  const pageValueLabel = pageTitle(pageCount);
+  const fieldValueLabel = bgPresetId
+    ? cs.bgPresets[bgPresetId] ?? fieldById(bgPresetId)?.label
+    : "";
+  const exampleValueLabel = isPhotoProduct
+    ? selectedPhotoExample
+      ? selectedPhotoExample.length > 22
+        ? `${selectedPhotoExample.slice(0, 22)}…`
+        : selectedPhotoExample
+      : bgKeyword.trim()
+        ? bgKeyword.trim().length > 22
+          ? `${bgKeyword.trim().slice(0, 22)}…`
+          : bgKeyword.trim()
+        : ""
+    : [...pickedExampleTags].join(" · ");
+  const specTags = [
+    specPicks.format && formatValueLabel
+      ? { label: cs.specFormat, value: formatValueLabel }
+      : null,
+    specPicks.style && styleValueLabel
+      ? { label: cs.specStyle, value: styleValueLabel }
+      : null,
+    specPicks.use && useValueLabel
+      ? { label: cs.specUse, value: useValueLabel }
+      : null,
+    !isPhotoProduct && specPicks.pages && pageValueLabel
+      ? { label: cs.specPages, value: pageValueLabel }
+      : null,
+    exampleValueLabel
+      ? { label: cs.specExample, value: exampleValueLabel }
+      : null,
+    !isPhotoProduct && fieldValueLabel
+      ? { label: cs.specBg, value: fieldValueLabel }
+      : null,
+  ].filter((tag): tag is { label: string; value: string } => Boolean(tag));
+  const canGenerateBackground = isPhotoProduct
+    ? specPicks.format &&
+      specPicks.style &&
+      specPicks.use &&
+      bgKeyword.trim().length > 0
+    : specPicks.format &&
+      specPicks.style &&
+      specPicks.use &&
+      specPicks.pages &&
+      pickedExampleTags.size >= 1 &&
+      bgKeyword.trim().length > 0;
+  const canGenerateSubject = Boolean(
+    isPhotoProduct &&
+      specPicks.format &&
+      specPicks.style &&
+      specPicks.use &&
+      mainPrompt.trim().length > 0
+  );
 
   return (
-    <section className="flex h-full min-h-0 flex-col gap-3 overflow-hidden rounded-2xl border border-slate-800 bg-[#121824] p-3 shadow-[0_8px_32px_rgba(0,0,0,0.35)] sm:p-4">
-      {/* 규격 · 스타일 · 용도 · 장수 · 예시 · 분야 — single compact row */}
-      <div data-spec-row className="flex shrink-0 flex-row items-center gap-1.5">
+    <section className="flex h-full min-h-0 flex-col gap-2.5 overflow-y-auto rounded-2xl border border-slate-800 bg-[#121824] p-3 shadow-[0_8px_32px_rgba(0,0,0,0.35)] sm:p-3.5">
+      {/* 규격 · 스타일 · 용도 · (인쇄: 장수) · 예시 · (인쇄: 분야) */}
+      <div
+        data-spec-row
+        className={`flex shrink-0 flex-row items-center ${
+          isPhotoProduct ? "gap-2" : "gap-1.5"
+        }`}
+      >
         <ControlBarDropdown
           compact
           label={cs.specFormat}
-          value={formatValueLabel}
+          value={specPicks.format ? formatValueLabel : undefined}
           open={openKey === "format"}
           onOpenChange={(v) => setOpenKey(v ? "format" : null)}
           menuMinWidth={320}
           menuMaxWidth={380}
         >
           <div className="grid grid-cols-2 gap-1">
-            {PRESET_FORMATS.map((fmt) => (
+            {presetFormats.map((fmt) => (
               <ControlMenuItem
                 key={fmt.id}
-                active={formatId === fmt.id}
+                active={specPicks.format && formatId === fmt.id}
                 title={formatTitle(fmt.id, fmt.label)}
                 onClick={() => {
                   onFormatChange(fmt.id);
@@ -231,7 +333,7 @@ export default function SpecSettingsPanel({
                 setSizeError(null);
               }}
               className={`flex w-full items-center justify-between rounded-lg border px-2.5 py-2 text-left text-[12px] font-semibold transition ${
-                formatId === "free" || freeSizeOpen
+                (specPicks.format && formatId === "free") || freeSizeOpen
                   ? "border-indigo-400/40 bg-indigo-500/15 text-slate-50"
                   : "border-slate-700/80 bg-[#0E1420] text-slate-200 hover:border-slate-600 hover:bg-slate-800/60"
               }`}
@@ -338,67 +440,38 @@ export default function SpecSettingsPanel({
         <ControlBarDropdown
           compact
           label={cs.specStyle}
-          value={styleValueLabel || undefined}
+          value={specPicks.style ? styleValueLabel || undefined : undefined}
           open={openKey === "style"}
           onOpenChange={(v) => setOpenKey(v ? "style" : null)}
-          menuMinWidth={300}
-          menuMaxWidth={360}
+          menuMinWidth={400}
+          menuMaxWidth={480}
         >
-          <div className="space-y-2.5">
-            <div>
-              <p className="mb-1 px-0.5 text-[10px] font-semibold tracking-wide text-slate-500">
-                {cs.imageStyle}
-              </p>
-              <div className="grid grid-cols-1 gap-1">
-                {IMAGE_STYLE_PRESETS.map((preset) => {
-                  const active = visualStyle.imageStyleId === preset.id;
-                  return (
-                    <ControlMenuItem
-                      key={preset.id}
-                      active={active}
-                      title={
-                        cs.imageStyles[
-                          preset.id as keyof typeof cs.imageStyles
-                        ]
-                      }
-                      onClick={() => {
-                        onVisualStyleChange({
-                          ...visualStyle,
-                          imageStyleId: active ? null : preset.id,
-                        });
-                      }}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-            <div className="border-t border-slate-800 pt-2">
-              <p className="mb-1 px-0.5 text-[10px] font-semibold tracking-wide text-slate-500">
-                {cs.moodStyle}
-              </p>
-              <div className="grid grid-cols-1 gap-1">
-                {MOOD_STYLE_PRESETS.map((preset) => {
-                  const active = visualStyle.moodStyleId === preset.id;
-                  return (
-                    <ControlMenuItem
-                      key={preset.id}
-                      active={active}
-                      title={
-                        cs.moodStyles[
-                          preset.id as keyof typeof cs.moodStyles
-                        ]
-                      }
-                      onClick={() => {
-                        onVisualStyleChange({
-                          ...visualStyle,
-                          moodStyleId: active ? null : preset.id,
-                        });
-                      }}
-                    />
-                  );
-                })}
-              </div>
-            </div>
+          <div className="flex flex-col gap-0.5">
+            {IMAGE_STYLE_PRESETS.map((preset) => {
+              const active = visualStyle.imageStyleId === preset.id;
+              const name =
+                cs.imageStyles[
+                  preset.id as keyof typeof cs.imageStyles
+                ] ??
+                (locale === "kr" ? preset.labelKo : preset.labelEn);
+              const hint = locale === "kr" ? preset.hintKo : preset.hintEn;
+              return (
+                <ControlMenuItem
+                  key={preset.id}
+                  active={active}
+                  oneLine
+                  title={name}
+                  hint={hint}
+                  onClick={() => {
+                    onVisualStyleChange({
+                      imageStyleId: active ? null : preset.id,
+                      moodStyleId: null,
+                    });
+                    setOpenKey(null);
+                  }}
+                />
+              );
+            })}
             <button
               type="button"
               onClick={() => {
@@ -408,7 +481,7 @@ export default function SpecSettingsPanel({
                 });
                 setOpenKey(null);
               }}
-              className="w-full rounded-lg border border-slate-700/80 bg-[#0E1420] px-2.5 py-2 text-[11px] font-semibold text-slate-400 hover:border-slate-600 hover:text-slate-200"
+              className="mt-1 w-full rounded-lg border border-slate-700/80 bg-[#0E1420] px-2.5 py-2 text-[11px] font-semibold text-slate-400 hover:border-slate-600 hover:text-slate-200"
             >
               {cs.styleReset}
             </button>
@@ -418,18 +491,24 @@ export default function SpecSettingsPanel({
         <ControlBarDropdown
           compact
           label={cs.specUse}
-          value={useTitle(useId, PRINT_USES.find((u) => u.id === useId)?.label ?? useId)}
+          value={specPicks.use ? useValueLabel : undefined}
           open={openKey === "use"}
           onOpenChange={(v) => setOpenKey(v ? "use" : null)}
-          menuMinWidth={300}
-          menuMaxWidth={360}
+          menuMinWidth={isPhotoProduct ? 220 : 300}
+          menuMaxWidth={isPhotoProduct ? 280 : 360}
         >
-          <div className="grid grid-cols-2 gap-1">
-            {PRINT_USES.map((item) => (
+          <div
+            className={
+              isPhotoProduct
+                ? "flex flex-col gap-0.5"
+                : "grid grid-cols-2 gap-1"
+            }
+          >
+            {useCatalog.map((item) => (
               <ControlMenuItem
                 key={item.id}
-                active={useId === item.id}
-                title={useTitle(item.id, item.label)}
+                active={specPicks.use && useId === item.id}
+                title={resolveUseLabel(item.id, item.label)}
                 onClick={() => {
                   onUseChange(item.id);
                   setOpenKey(null);
@@ -439,152 +518,214 @@ export default function SpecSettingsPanel({
           </div>
         </ControlBarDropdown>
 
-        <ControlBarDropdown
-          compact
-          label={cs.specPages}
-          value={pageTitle(pageCount)}
-          open={openKey === "pages"}
-          onOpenChange={(v) => setOpenKey(v ? "pages" : null)}
-          menuMinWidth={180}
-          menuMaxWidth={220}
-        >
-          {PRINT_PAGE_COUNTS.map((item) => (
-            <ControlMenuItem
-              key={item.value}
-              active={pageCount === item.value}
-              title={pageTitle(item.value)}
-              onClick={() => {
-                onPageCountChange(item.value);
-                setOpenKey(null);
-              }}
-            />
-          ))}
-        </ControlBarDropdown>
+        {!isPhotoProduct ? (
+          <ControlBarDropdown
+            compact
+            label={cs.specPages}
+            value={specPicks.pages ? pageValueLabel : undefined}
+            open={openKey === "pages"}
+            onOpenChange={(v) => setOpenKey(v ? "pages" : null)}
+            menuMinWidth={180}
+            menuMaxWidth={220}
+          >
+            {PRINT_PAGE_COUNTS.map((item) => (
+              <ControlMenuItem
+                key={item.value}
+                active={specPicks.pages && pageCount === item.value}
+                title={pageTitle(item.value)}
+                onClick={() => {
+                  onPageCountChange(item.value);
+                  setOpenKey(null);
+                }}
+              />
+            ))}
+          </ControlBarDropdown>
+        ) : null}
 
         <ControlBarDropdown
           compact
           label={cs.specExample}
+          value={exampleValueLabel || undefined}
           open={openKey === "prompt"}
           onOpenChange={(v) => setOpenKey(v ? "prompt" : null)}
-          menuMinWidth={640}
-          menuMaxWidth={920}
+          menuMinWidth={isPhotoProduct ? 320 : 280}
+          menuMaxWidth={isPhotoProduct ? 520 : 640}
           menuAnchorSelector="[data-spec-row]"
         >
-          <div className="flex flex-col gap-2.5 p-2 sm:p-2.5">
-            {KEYWORD_TAG_CATEGORIES.map((group) => (
-              <div
-                key={group.id}
-                className="flex flex-col gap-1.5 sm:flex-row sm:items-start"
-              >
-                <p className="w-[7.5rem] shrink-0 pt-1 text-[11px] font-bold tracking-wide text-indigo-200/90 [word-break:keep-all]">
-                  {exampleCategoryLabel(group.id, cs)}
-                </p>
-                <div className="flex min-w-0 flex-1 flex-row flex-wrap gap-1.5">
-                  {group.tags.map((tag) => {
-                    const on = pickedExampleTags.has(tag);
-                    return (
-                      <button
-                        key={tag}
-                        type="button"
-                        onClick={() => {
-                          onBgKeywordChange(appendKeywordTag(bgKeyword, tag));
-                        }}
-                        className={`rounded-full border px-2.5 py-1.5 text-[11px] font-semibold [word-break:keep-all] transition pointer-coarse:min-h-9 pointer-coarse:px-3 ${
-                          on
-                            ? "border-indigo-400/50 bg-indigo-500/20 text-indigo-100"
-                            : "border-slate-700 bg-[#0E1420] text-slate-300 hover:border-slate-500 hover:text-white"
-                        }`}
-                      >
-                        {tag}
-                      </button>
-                    );
-                  })}
+          {isPhotoProduct ? (
+            <div className="flex max-h-[min(70vh,32rem)] flex-col gap-3 overflow-y-auto p-2.5 sm:p-3">
+              <p className="shrink-0 text-[12px] font-bold leading-snug text-red-500 [word-break:keep-all]">
+                {PHOTO_LOOKBOOK_EXAMPLE_HINT}
+              </p>
+              {getPhotoLookbookExampleCategories({
+                useId,
+                imageStyleId: visualStyle.imageStyleId,
+              }).map((group) => (
+                <div key={group.id} className="flex flex-col gap-1.5">
+                  <p className="text-[11px] font-bold tracking-wide text-indigo-200/90 [word-break:keep-all]">
+                    {group.label}
+                  </p>
+                  <div className="flex flex-col gap-1.5">
+                    {group.examples.map((example) => {
+                      const on = bgKeyword.trim() === example;
+                      return (
+                        <button
+                          key={example}
+                          type="button"
+                          onClick={() => {
+                            onBgKeywordChange(example);
+                            setOpenKey(null);
+                          }}
+                          className={`rounded-lg border px-2.5 py-2 text-left text-[11px] font-medium leading-snug [word-break:keep-all] transition pointer-coarse:min-h-10 ${
+                            on
+                              ? "border-indigo-400 bg-indigo-500/20 text-indigo-50 ring-2 ring-indigo-400/60"
+                              : "border-slate-700 bg-[#0E1420] text-slate-300 hover:border-slate-500 hover:text-white"
+                          }`}
+                        >
+                          {example}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2.5 p-2 sm:p-2.5">
+              {KEYWORD_TAG_CATEGORIES.map((group) => (
+                <div
+                  key={group.id}
+                  className="flex flex-col gap-1.5 sm:flex-row sm:items-start"
+                >
+                  <p className="w-[7.5rem] shrink-0 pt-1 text-[11px] font-bold tracking-wide text-indigo-200/90 [word-break:keep-all]">
+                    {exampleCategoryLabel(group.id, cs)}
+                  </p>
+                  <div className="flex min-w-0 flex-1 flex-row flex-wrap gap-1.5">
+                    {group.tags.map((tag) => {
+                      const on = pickedExampleTags.has(tag);
+                      return (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => {
+                            onBgKeywordChange(toggleKeywordTag(bgKeyword, tag));
+                          }}
+                          className={`rounded-full border px-2.5 py-1.5 text-[11px] font-semibold [word-break:keep-all] transition pointer-coarse:min-h-9 pointer-coarse:px-3 ${
+                            on
+                              ? "border-indigo-400/50 bg-indigo-500/20 text-indigo-100"
+                              : "border-slate-700 bg-[#0E1420] text-slate-300 hover:border-slate-500 hover:text-white"
+                          }`}
+                        >
+                          {tag}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </ControlBarDropdown>
 
-        <ControlBarDropdown
-          compact
-          label={cs.specBg}
-          value={
-            bgPresetId
-              ? cs.bgPresets[bgPresetId] ?? fieldById(bgPresetId)?.label
-              : undefined
-          }
-          open={openKey === "bg"}
-          onOpenChange={(v) => setOpenKey(v ? "bg" : null)}
-          menuMinWidth={640}
-          menuMaxWidth={920}
-          menuAnchorSelector="[data-spec-row]"
-        >
-          <div className="flex flex-col gap-2.5 p-2 sm:p-2.5">
-            {FIELD_CATEGORIES.map((group) => (
-              <div
-                key={group.id}
-                className="flex flex-col gap-1.5 sm:flex-row sm:items-start"
-              >
-                <p className="w-[7.5rem] shrink-0 pt-1 text-[11px] font-bold tracking-wide text-indigo-200/90 [word-break:keep-all]">
-                  {cs.fieldGroups[group.id]}
-                </p>
-                <div className="flex min-w-0 flex-1 flex-row flex-wrap gap-1.5">
-                  {group.items.map((item) => {
-                    const on = bgPresetId === item.id;
-                    const title = cs.bgPresets[item.id] ?? item.label;
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => {
-                          onBgPresetPick(item.id as BgPresetId);
-                          setOpenKey(null);
-                        }}
-                        className={`rounded-full border px-2.5 py-1.5 text-[11px] font-semibold [word-break:keep-all] transition pointer-coarse:min-h-9 pointer-coarse:px-3 ${
-                          on
-                            ? "border-indigo-400/50 bg-indigo-500/20 text-indigo-100"
-                            : "border-slate-700 bg-[#0E1420] text-slate-300 hover:border-slate-500 hover:text-white"
-                        }`}
-                      >
-                        {title}
-                      </button>
-                    );
-                  })}
+        {!isPhotoProduct ? (
+          <ControlBarDropdown
+            compact
+            label={cs.specBg}
+            value={
+              bgPresetId
+                ? cs.bgPresets[bgPresetId] ?? fieldById(bgPresetId)?.label
+                : undefined
+            }
+            open={openKey === "bg"}
+            onOpenChange={(v) => setOpenKey(v ? "bg" : null)}
+            menuMinWidth={280}
+            menuMaxWidth={640}
+            menuAnchorSelector="[data-spec-row]"
+          >
+            <div className="flex flex-col gap-2.5 p-2 sm:p-2.5">
+              {FIELD_CATEGORIES.map((group) => (
+                <div
+                  key={group.id}
+                  className="flex flex-col gap-1.5 sm:flex-row sm:items-start"
+                >
+                  <p className="w-[7.5rem] shrink-0 pt-1 text-[11px] font-bold tracking-wide text-indigo-200/90 [word-break:keep-all]">
+                    {cs.fieldGroups[group.id]}
+                  </p>
+                  <div className="flex min-w-0 flex-1 flex-row flex-wrap gap-1.5">
+                    {group.items.map((item) => {
+                      const on = bgPresetId === item.id;
+                      const title = cs.bgPresets[item.id] ?? item.label;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            onBgPresetPick(item.id as BgPresetId);
+                            setOpenKey(null);
+                          }}
+                          className={`rounded-full border px-2.5 py-1.5 text-[11px] font-semibold [word-break:keep-all] transition pointer-coarse:min-h-9 pointer-coarse:px-3 ${
+                            on
+                              ? "border-indigo-400/50 bg-indigo-500/20 text-indigo-100"
+                              : "border-slate-700 bg-[#0E1420] text-slate-300 hover:border-slate-500 hover:text-white"
+                          }`}
+                        >
+                          {title}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </ControlBarDropdown>
+              ))}
+            </div>
+          </ControlBarDropdown>
+        ) : null}
       </div>
 
-      {/* Compact tools + full-width AI 배경 생성 */}
-      <AiBackgroundPromptBar
-        value={bgKeyword}
-        generating={generating}
-        bgPresetId={bgPresetId}
-        contextHint={`${formatValueLabel ?? ""} · ${useTitle(
-          useId,
-          PRINT_USES.find((u) => u.id === useId)?.label ?? useId
-        )} · ${pageTitle(pageCount)}`}
-        onChange={onBgKeywordChange}
-        onPresetPick={onBgPresetPick}
-        onGenerate={onGenerateBackground}
-        expandedContent={
-          <div className="space-y-1">
-            <p className="text-[11px] font-medium text-slate-500">
-              주문 / 초안 프롬프트
-            </p>
-            <textarea
-              value={mainPrompt}
-              onChange={(e) => onMainPromptChange(e.target.value)}
-              aria-label="메인 프롬프트 / 주문 내용"
-              rows={2}
-              placeholder="예시에서 선택하거나 주문 내용을 입력하세요."
-              className="min-h-[3.5rem] w-full resize-none rounded-lg border border-slate-700 bg-[#0B0F19] px-2.5 py-1.5 text-sm leading-relaxed text-slate-100 outline-none placeholder:text-slate-600 focus:border-slate-500 focus:ring-2 focus:ring-indigo-500/20"
-            />
-          </div>
-        }
-      />
+      {/* Photo: two-tier prompts. Print: single Adobe-style bar. */}
+      {isPhotoProduct ? (
+        <div className="flex w-full shrink-0 flex-col">
+          <PhotoLookbookPromptPanel
+            bgValue={bgKeyword}
+            subjectValue={mainPrompt}
+            generating={generating}
+            generatingKind={generatingKind}
+            specTags={specTags}
+            canGenerateBackground={Boolean(canGenerateBackground)}
+            canGenerateSubject={canGenerateSubject}
+            onBgChange={onBgKeywordChange}
+            onSubjectChange={onMainPromptChange}
+            onGenerateBackground={onGenerateBackground}
+            onGenerateSubject={() => onGenerateSubject?.()}
+          />
+        </div>
+      ) : (
+        <AiBackgroundPromptBar
+          productId={productId}
+          value={bgKeyword}
+          generating={generating}
+          bgPresetId={bgPresetId}
+          specTags={specTags}
+          canGenerate={canGenerateBackground}
+          onChange={onBgKeywordChange}
+          onPresetPick={onBgPresetPick}
+          onGenerate={onGenerateBackground}
+          expandedContent={
+            <div className="space-y-1">
+              <p className="text-[11px] font-medium text-slate-500">
+                주문 / 초안 프롬프트
+              </p>
+              <textarea
+                value={mainPrompt}
+                onChange={(e) => onMainPromptChange(e.target.value)}
+                aria-label="메인 프롬프트 / 주문 내용"
+                rows={2}
+                placeholder="예시에서 선택하거나 주문 내용을 입력하세요."
+                className="min-h-[3.5rem] w-full resize-none rounded-lg border border-slate-700 bg-[#0B0F19] px-2.5 py-1.5 text-sm leading-relaxed text-slate-100 outline-none placeholder:text-slate-600 focus:border-slate-500 focus:ring-2 focus:ring-indigo-500/20"
+              />
+            </div>
+          }
+        />
+      )}
 
       {/* Reserved empty space for future tools */}
       <div className="min-h-0 flex-1" aria-hidden />

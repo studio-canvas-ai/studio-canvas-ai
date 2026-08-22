@@ -15,9 +15,16 @@ export type CanvasStudioCopy = {
   agentSubtitle: string;
   generalPhotoSubtitle: string;
   printTitle: string;
+  photoTitle: string;
   downloadStandard: string;
   downloadHigh: string;
   loadEditFile: string;
+  loadFromGallery: string;
+  loadFromGalleryTitle: string;
+  loadFromGalleryEmpty: string;
+  loadFromGalleryBusy: string;
+  loadFromGalleryDone: string;
+  loadFromGalleryFailed: string;
   share: string;
   downloadPairHint: string;
   saveEditFileHint: string;
@@ -54,6 +61,8 @@ export type CanvasStudioCopy = {
   bgGenerateTitle: string;
   bgPlaceholder: string;
   bgHint: string;
+  pageFillHint1: string;
+  pageFillHint2: string;
   tagCatBackground: string;
   tagCatMood: string;
   tagCatEvent: string;
@@ -83,8 +92,11 @@ export type CanvasStudioCopy = {
     lookbook: string;
     calendar: string;
     sns: string;
+    /** Photo wizard label for sns use (프로필 / SNS). */
+    "profile-sns": string;
     poster: string;
     "id-photo": string;
+    "concept-photo": string;
     pamphlet: string;
     menu: string;
     flyer: string;
@@ -122,6 +134,12 @@ export type CanvasStudioCopy = {
     "pixar-3d": string;
     "warm-watercolor": string;
     "corporate-minimal": string;
+    "cinematic-film": string;
+    "neon-cyberpunk": string;
+    "vintage-retro": string;
+    "minimal-flat-art": string;
+    "fantasy-epic": string;
+    "id-photo-studio": string;
   };
   moodStyles: {
     bright: string;
@@ -162,9 +180,16 @@ export const canvasStudioKr: CanvasStudioCopy = {
   generalPhotoSubtitle:
     "일반사진 원본 위에 텍스트 · 스티커 · 자간 · 행간 편집을 바로 시작합니다",
   printTitle: "AI 뚝딱 생성기",
+  photoTitle: "화보 뚝딱생성기",
   downloadStandard: "일반화질 다운로드",
   downloadHigh: "고화질 다운로드",
-  loadEditFile: "수정용파일불러오기",
+  loadEditFile: "수정용 파일 불러오기",
+  loadFromGallery: "내 갤러리에서 불러오기",
+  loadFromGalleryTitle: "서버 임시 보관 수정파일 ({max}/10)",
+  loadFromGalleryEmpty: "저장된 수정파일이 없습니다. 다운로드 시 .sca가 자동 등록됩니다.",
+  loadFromGalleryBusy: "목록 불러오는 중…",
+  loadFromGalleryDone: "갤러리 수정파일을 불러왔습니다.",
+  loadFromGalleryFailed: "수정파일 불러오기에 실패했습니다.",
   share: "공유하기",
   downloadPairHint:
     "다운로드 시 결과 이미지와 보안 수정파일(.sca)이 함께 저장됩니다",
@@ -201,10 +226,11 @@ export const canvasStudioKr: CanvasStudioCopy = {
   bgGenerate: "AI 배경 생성하기",
   bgGenerating: "AI 배경 생성 중…",
   bgGenerateTitle: "AI 배경 생성",
-  bgPlaceholder:
-    "한강공원야경, 전통한옥, 로맨틱분위기, 은은한조명, 푸른잔디밭, 역동적인느낌, 우아한분위기, 따뜻한목재느낌, 축제무대, 열정적인콘서트",
+  bgPlaceholder: "원하는대로 단어를 수정하셔도 됩니다",
   bgHint:
     "상단 [예시]에서 키워드를 누르면 입력창에 추가됩니다. 규격·스타일·용도·장수·분야와 함께 하나의 컨텍스트로 생성되며, 입력창에서 직접 수정·삭제할 수 있습니다.",
+  pageFillHint1: "각페이지를 클릭해서 내용을 채우고,",
+  pageFillHint2: "완성작업은 다음페이지에서 하세요",
   tagCatBackground: "배경",
   tagCatMood: "분위기, 느낌",
   tagCatEvent: "행사, 공연",
@@ -234,8 +260,10 @@ export const canvasStudioKr: CanvasStudioCopy = {
     lookbook: "화보",
     calendar: "달력",
     sns: "SNS",
+    "profile-sns": "프로필 / SNS",
     poster: "포스터",
     "id-photo": "증명사진",
+    "concept-photo": "컨셉 포토",
     pamphlet: "팸플릿",
     menu: "메뉴판",
     flyer: "전단지",
@@ -292,6 +320,12 @@ export const canvasStudioKr: CanvasStudioCopy = {
     "pixar-3d": "3D 픽사풍",
     "warm-watercolor": "따뜻한 수채화",
     "corporate-minimal": "비즈니스 미니멀",
+    "cinematic-film": "시네마틱 필름",
+    "neon-cyberpunk": "네온 사이버펑크",
+    "vintage-retro": "빈티지 레트로",
+    "minimal-flat-art": "미니멀 플랫아트",
+    "fantasy-epic": "판타지 에픽 톤",
+    "id-photo-studio": "증명사진용",
   },
   moodStyles: {
     bright: "화사하고 밝은",
@@ -325,9 +359,16 @@ export const canvasStudioEn: CanvasStudioCopy = {
   generalPhotoSubtitle:
     "Start editing text, stickers, tracking, and leading on the original photo",
   printTitle: "AI Instant Generator",
+  photoTitle: "Photo Lookbook Generator",
   downloadStandard: "Standard download",
   downloadHigh: "High-quality download",
   loadEditFile: "Load editable file",
+  loadFromGallery: "Load from My Gallery",
+  loadFromGalleryTitle: "Server draft projects ({max}/10)",
+  loadFromGalleryEmpty: "No saved projects yet. Download to register a .sca file.",
+  loadFromGalleryBusy: "Loading list…",
+  loadFromGalleryDone: "Project loaded from gallery.",
+  loadFromGalleryFailed: "Could not load project.",
   share: "Share",
   downloadPairHint:
     "Download saves the result image and a secure editable file (.sca) together",
@@ -365,10 +406,11 @@ export const canvasStudioEn: CanvasStudioCopy = {
   bgGenerate: "Generate AI background",
   bgGenerating: "Generating AI background…",
   bgGenerateTitle: "AI background",
-  bgPlaceholder:
-    "한강공원야경, 전통한옥, 로맨틱분위기, 은은한조명, 푸른잔디밭, 역동적인느낌, 우아한분위기, 따뜻한목재느낌, 축제무대, 열정적인콘서트",
+  bgPlaceholder: "You may edit the words as you like",
   bgHint:
     "Click a keyword in Examples to append it here. Format, style, use, pages, and field merge into one prompt. You can still edit or delete the text.",
+  pageFillHint1: "Click each page to fill in the content,",
+  pageFillHint2: "then finish the work on the next step",
   tagCatBackground: "Background",
   tagCatMood: "Mood, vibe",
   tagCatEvent: "Event, performance",
@@ -398,8 +440,10 @@ export const canvasStudioEn: CanvasStudioCopy = {
     lookbook: "Lookbook",
     calendar: "Calendar",
     sns: "Social",
+    "profile-sns": "Profile / SNS",
     poster: "Poster",
     "id-photo": "ID photo",
+    "concept-photo": "Concept photo",
     pamphlet: "Pamphlet",
     menu: "Menu",
     flyer: "Flyer",
@@ -456,6 +500,12 @@ export const canvasStudioEn: CanvasStudioCopy = {
     "pixar-3d": "3D Pixar-like",
     "warm-watercolor": "Warm watercolor",
     "corporate-minimal": "Business minimal",
+    "cinematic-film": "Cinematic film",
+    "neon-cyberpunk": "Neon cyberpunk",
+    "vintage-retro": "Vintage retro",
+    "minimal-flat-art": "Minimal flat art",
+    "fantasy-epic": "Fantasy epic",
+    "id-photo-studio": "ID Photo Studio",
   },
   moodStyles: {
     bright: "Bright & airy",
@@ -488,6 +538,7 @@ export const canvasStudioJa: CanvasStudioCopy = {
   generalPhotoSubtitle:
     "元写真の上にテキスト・ステッカー・字間・行間をすぐ編集できます",
   printTitle: "AIかんたん生成",
+  photoTitle: "ルックブック生成",
   downloadStandard: "標準画質ダウンロード",
   downloadHigh: "高画質ダウンロード",
   loadEditFile: "編集用ファイルを開く",
@@ -527,10 +578,11 @@ export const canvasStudioJa: CanvasStudioCopy = {
   bgGenerate: "AI背景を生成",
   bgGenerating: "AI背景を生成中…",
   bgGenerateTitle: "AI背景生成",
-  bgPlaceholder:
-    "한강공원야경, 전통한옥, 로맨틱분위기, 은은한조명, 푸른잔디밭, 역동적인느낌, 우아한분위기, 따뜻한목재느낌, 축제무대, 열정적인콘서트",
+  bgPlaceholder: "単語はご自由に直しても大丈夫です",
   bgHint:
     "上の「例」からキーワードをクリックすると入力欄に追加されます。規格・スタイル・用途・ページ数・分野と結合して生成され、入力欄で直接編集できます。",
+  pageFillHint1: "各ページをクリックして内容を入力し、",
+  pageFillHint2: "仕上げは次のページで行ってください",
   tagCatBackground: "背景",
   tagCatMood: "雰囲気、感じ",
   tagCatEvent: "行事、公演",
@@ -560,8 +612,10 @@ export const canvasStudioJa: CanvasStudioCopy = {
     lookbook: "ルックブック",
     calendar: "カレンダー",
     sns: "SNS",
+    "profile-sns": "プロフィール / SNS",
     poster: "ポスター",
     "id-photo": "証明写真",
+    "concept-photo": "コンセプトフォト",
     pamphlet: "パンフレット",
     menu: "メニュー",
     flyer: "チラシ",
@@ -618,6 +672,12 @@ export const canvasStudioJa: CanvasStudioCopy = {
     "pixar-3d": "3Dピクサー風",
     "warm-watercolor": "暖かい水彩",
     "corporate-minimal": "ビジネスミニマル",
+    "cinematic-film": "シネマティックフィルム",
+    "neon-cyberpunk": "ネオンサイバーパンク",
+    "vintage-retro": "ヴィンテージレトロ",
+    "minimal-flat-art": "ミニマルフラットアート",
+    "fantasy-epic": "ファンタジーエピック",
+    "id-photo-studio": "証明写真用",
   },
   moodStyles: {
     bright: "明るく華やか",
@@ -637,6 +697,7 @@ export const canvasStudioZh: CanvasStudioCopy = {
   agentSubtitle: "表单文字独立图层 · AI 只处理视觉 · 身份锁定编辑 · 印刷级分辨率",
   generalPhotoSubtitle: "在原图上直接编辑文字、贴纸、字距与行距",
   printTitle: "AI 一键生成器",
+  photoTitle: "写真集生成器",
   downloadStandard: "标准画质下载",
   downloadHigh: "高清下载",
   loadEditFile: "载入可编辑文件",
@@ -675,10 +736,11 @@ export const canvasStudioZh: CanvasStudioCopy = {
   bgGenerate: "生成 AI 背景",
   bgGenerating: "正在生成 AI 背景…",
   bgGenerateTitle: "AI 背景生成",
-  bgPlaceholder:
-    "한강공원야경, 전통한옥, 로맨틱분위기, 은은한조명, 푸른잔디밭, 역동적인느낌, 우아한분위기, 따뜻한목재느낌, 축제무대, 열정적인콘서트",
+  bgPlaceholder: "可以按自己的想法修改词语",
   bgHint:
     "在上方「示例」中点击关键词即可追加到输入框。会与规格、风格、用途、页数、领域合并生成，仍可在输入框中直接修改或删除。",
+  pageFillHint1: "点击每一页填写内容，",
+  pageFillHint2: "完成作业请到下一页进行",
   tagCatBackground: "背景",
   tagCatMood: "氛围、感觉",
   tagCatEvent: "活动、演出",
@@ -708,8 +770,10 @@ export const canvasStudioZh: CanvasStudioCopy = {
     lookbook: "画报",
     calendar: "日历",
     sns: "社交",
+    "profile-sns": "形象 / 社交",
     poster: "海报",
     "id-photo": "证件照",
+    "concept-photo": "概念写真",
     pamphlet: "宣传册",
     menu: "菜单",
     flyer: "传单",
@@ -766,6 +830,12 @@ export const canvasStudioZh: CanvasStudioCopy = {
     "pixar-3d": "3D 皮克斯风",
     "warm-watercolor": "温暖水彩",
     "corporate-minimal": "商务极简",
+    "cinematic-film": "电影胶片",
+    "neon-cyberpunk": "霓虹赛博朋克",
+    "vintage-retro": "复古怀旧",
+    "minimal-flat-art": "极简扁平",
+    "fantasy-epic": "奇幻史诗",
+    "id-photo-studio": "证件照专用",
   },
   moodStyles: {
     bright: "明亮清爽",
@@ -787,6 +857,7 @@ export const canvasStudioEs: CanvasStudioCopy = {
   generalPhotoSubtitle:
     "Edita texto, stickers, tracking e interlineado sobre la foto original",
   printTitle: "Generador instantáneo IA",
+  photoTitle: "Generador de lookbook",
   downloadStandard: "Descarga calidad estándar",
   downloadHigh: "Descarga alta calidad",
   loadEditFile: "Cargar archivo editable",
@@ -827,10 +898,11 @@ export const canvasStudioEs: CanvasStudioCopy = {
   bgGenerate: "Generar fondo IA",
   bgGenerating: "Generando fondo IA…",
   bgGenerateTitle: "Fondo IA",
-  bgPlaceholder:
-    "한강공원야경, 전통한옥, 로맨틱분위기, 은은한조명, 푸른잔디밭, 역동적인느낌, 우아한분위기, 따뜻한목재느낌, 축제무대, 열정적인콘서트",
+  bgPlaceholder: "Puede editar las palabras como desee",
   bgHint:
     "El fondo sigue el formato, uso y número de páginas. Puedes seguir editando aquí después.",
+  pageFillHint1: "Haz clic en cada página para rellenar el contenido,",
+  pageFillHint2: "y termina el trabajo en el siguiente paso",
   aiCommand: "Comando IA interactivo",
   run: "Ejecutar",
   processing: "Procesando...",
@@ -856,8 +928,10 @@ export const canvasStudioEs: CanvasStudioCopy = {
     lookbook: "Lookbook",
     calendar: "Calendario",
     sns: "Redes",
+    "profile-sns": "Perfil / Redes",
     poster: "Póster",
     "id-photo": "Foto carnet",
+    "concept-photo": "Foto concepto",
     pamphlet: "Folleto",
     menu: "Menú",
     flyer: "Flyer",
@@ -914,6 +988,12 @@ export const canvasStudioEs: CanvasStudioCopy = {
     "pixar-3d": "3D estilo Pixar",
     "warm-watercolor": "Acuarela cálida",
     "corporate-minimal": "Minimalista corporativo",
+    "cinematic-film": "Cinta cinematográfica",
+    "neon-cyberpunk": "Ciberpunk neón",
+    "vintage-retro": "Vintage retro",
+    "minimal-flat-art": "Arte plano minimal",
+    "fantasy-epic": "Fantasía épica",
+    "id-photo-studio": "Foto carnet",
   },
   moodStyles: {
     bright: "Luminoso",
@@ -935,6 +1015,7 @@ export const canvasStudioFr: CanvasStudioCopy = {
   generalPhotoSubtitle:
     "Éditez texte, stickers, tracking et interligne sur la photo d’origine",
   printTitle: "Générateur instantané IA",
+  photoTitle: "Générateur lookbook",
   downloadStandard: "Télécharger qualité standard",
   downloadHigh: "Télécharger haute qualité",
   loadEditFile: "Ouvrir le fichier éditable",
@@ -975,10 +1056,11 @@ export const canvasStudioFr: CanvasStudioCopy = {
   bgGenerate: "Générer le fond IA",
   bgGenerating: "Génération du fond IA…",
   bgGenerateTitle: "Fond IA",
-  bgPlaceholder:
-    "한강공원야경, 전통한옥, 로맨틱분위기, 은은한조명, 푸른잔디밭, 역동적인느낌, 우아한분위기, 따뜻한목재느낌, 축제무대, 열정적인콘서트",
+  bgPlaceholder: "Vous pouvez modifier les mots comme vous voulez",
   bgHint:
     "Le fond suit le format, l’usage et le nombre de pages. Vous pouvez continuer à éditer ici.",
+  pageFillHint1: "Cliquez sur chaque page pour remplir le contenu,",
+  pageFillHint2: "puis terminez le travail à l’étape suivante",
   aiCommand: "Commande IA interactive",
   run: "Exécuter",
   processing: "Traitement...",
@@ -1004,8 +1086,10 @@ export const canvasStudioFr: CanvasStudioCopy = {
     lookbook: "Lookbook",
     calendar: "Calendrier",
     sns: "Réseaux",
+    "profile-sns": "Profil / Réseaux",
     poster: "Affiche",
     "id-photo": "Photo d’identité",
+    "concept-photo": "Photo concept",
     pamphlet: "Pamphlet",
     menu: "Menu",
     flyer: "Flyer",
@@ -1062,6 +1146,12 @@ export const canvasStudioFr: CanvasStudioCopy = {
     "pixar-3d": "3D style Pixar",
     "warm-watercolor": "Aquarelle chaude",
     "corporate-minimal": "Minimaliste business",
+    "cinematic-film": "Film cinématique",
+    "neon-cyberpunk": "Cyberpunk néon",
+    "vintage-retro": "Vintage rétro",
+    "minimal-flat-art": "Art plat minimal",
+    "fantasy-epic": "Fantaisie épique",
+    "id-photo-studio": "Photo d’identité",
   },
   moodStyles: {
     bright: "Lumineux",
@@ -1083,6 +1173,7 @@ export const canvasStudioDe: CanvasStudioCopy = {
   generalPhotoSubtitle:
     "Text, Sticker, Laufweite und Zeilenabstand direkt auf dem Originalfoto",
   printTitle: "KI-Sofortgenerator",
+  photoTitle: "Lookbook-Generator",
   downloadStandard: "Standardqualität laden",
   downloadHigh: "Hochqualität laden",
   loadEditFile: "Editierdatei laden",
@@ -1123,10 +1214,11 @@ export const canvasStudioDe: CanvasStudioCopy = {
   bgGenerate: "KI-Hintergrund erzeugen",
   bgGenerating: "KI-Hintergrund wird erzeugt…",
   bgGenerateTitle: "KI-Hintergrund",
-  bgPlaceholder:
-    "한강공원야경, 전통한옥, 로맨틱분위기, 은은한조명, 푸른잔디밭, 역동적인느낌, 우아한분위기, 따뜻한목재느낌, 축제무대, 열정적인콘서트",
+  bgPlaceholder: "Sie können die Wörter nach Wunsch ändern",
   bgHint:
     "Der Hintergrund folgt Format, Verwendung und Seitenzahl. Danach hier weiterbearbeiten.",
+  pageFillHint1: "Klicken Sie jede Seite an, um den Inhalt auszufüllen,",
+  pageFillHint2: "die Fertigstellung erfolgt auf der nächsten Seite",
   aiCommand: "Interaktiver KI-Befehl",
   run: "Ausführen",
   processing: "Wird verarbeitet...",
@@ -1152,8 +1244,10 @@ export const canvasStudioDe: CanvasStudioCopy = {
     lookbook: "Lookbook",
     calendar: "Kalender",
     sns: "Social",
+    "profile-sns": "Profil / Social",
     poster: "Poster",
     "id-photo": "Passfoto",
+    "concept-photo": "Konzeptfoto",
     pamphlet: "Pamphlet",
     menu: "Speisekarte",
     flyer: "Flyer",
@@ -1210,6 +1304,12 @@ export const canvasStudioDe: CanvasStudioCopy = {
     "pixar-3d": "3D Pixar-Look",
     "warm-watercolor": "Warmes Aquarell",
     "corporate-minimal": "Business-minimal",
+    "cinematic-film": "Filmisch",
+    "neon-cyberpunk": "Neon-Cyberpunk",
+    "vintage-retro": "Vintage-Retro",
+    "minimal-flat-art": "Minimales Flat-Art",
+    "fantasy-epic": "Fantasy-Epic",
+    "id-photo-studio": "ID Photo Studio",
   },
   moodStyles: {
     bright: "Hell und luftig",
@@ -1231,6 +1331,7 @@ export const canvasStudioIt: CanvasStudioCopy = {
   generalPhotoSubtitle:
     "Modifica testo, sticker, tracking e interlinea sulla foto originale",
   printTitle: "Generatore istantaneo IA",
+  photoTitle: "Generatore lookbook",
   downloadStandard: "Download qualità standard",
   downloadHigh: "Download alta qualità",
   loadEditFile: "Apri file modificabile",
@@ -1271,10 +1372,11 @@ export const canvasStudioIt: CanvasStudioCopy = {
   bgGenerate: "Genera sfondo IA",
   bgGenerating: "Generazione sfondo IA…",
   bgGenerateTitle: "Sfondo IA",
-  bgPlaceholder:
-    "한강공원야경, 전통한옥, 로맨틱분위기, 은은한조명, 푸른잔디밭, 역동적인느낌, 우아한분위기, 따뜻한목재느낌, 축제무대, 열정적인콘서트",
+  bgPlaceholder: "Puoi modificare le parole come preferisci",
   bgHint:
     "Lo sfondo segue formato, uso e numero di pagine. Puoi continuare a modificare qui.",
+  pageFillHint1: "Clicca ogni pagina per compilare i contenuti,",
+  pageFillHint2: "poi completa il lavoro nel passaggio successivo",
   aiCommand: "Comando IA interattivo",
   run: "Esegui",
   processing: "Elaborazione...",
@@ -1300,8 +1402,10 @@ export const canvasStudioIt: CanvasStudioCopy = {
     lookbook: "Lookbook",
     calendar: "Calendario",
     sns: "Social",
+    "profile-sns": "Profilo / Social",
     poster: "Poster",
     "id-photo": "Foto tessera",
+    "concept-photo": "Foto concept",
     pamphlet: "Depliant",
     menu: "Menu",
     flyer: "Flyer",
@@ -1358,6 +1462,12 @@ export const canvasStudioIt: CanvasStudioCopy = {
     "pixar-3d": "3D stile Pixar",
     "warm-watercolor": "Acquerello caldo",
     "corporate-minimal": "Minimal business",
+    "cinematic-film": "Film cinematografico",
+    "neon-cyberpunk": "Cyberpunk neon",
+    "vintage-retro": "Vintage retrò",
+    "minimal-flat-art": "Flat art minimale",
+    "fantasy-epic": "Fantasy epico",
+    "id-photo-studio": "ID Photo Studio",
   },
   moodStyles: {
     bright: "Luminoso",
@@ -1379,6 +1489,7 @@ export const canvasStudioVi: CanvasStudioCopy = {
   generalPhotoSubtitle:
     "Chỉnh chữ, sticker, giãn chữ và giãn dòng trên ảnh gốc",
   printTitle: "Trình tạo tức thì AI",
+  photoTitle: "Trình tạo lookbook",
   downloadStandard: "Tải chất lượng thường",
   downloadHigh: "Tải chất lượng cao",
   loadEditFile: "Mở tệp chỉnh sửa",
@@ -1419,10 +1530,11 @@ export const canvasStudioVi: CanvasStudioCopy = {
   bgGenerate: "Tạo nền AI",
   bgGenerating: "Đang tạo nền AI…",
   bgGenerateTitle: "Tạo nền AI",
-  bgPlaceholder:
-    "한강공원야경, 전통한옥, 로맨틱분위기, 은은한조명, 푸른잔디밭, 역동적인느낌, 우아한분위기, 따뜻한목재느낌, 축제무대, 열정적인콘서트",
+  bgPlaceholder: "Bạn có thể sửa các từ theo ý muốn",
   bgHint:
     "Nền theo khổ, mục đích và số trang. Sau khi tạo vẫn chỉnh được tại đây.",
+  pageFillHint1: "Nhấp từng trang để điền nội dung,",
+  pageFillHint2: "rồi hoàn thiện ở bước tiếp theo",
   aiCommand: "Lệnh AI tương tác",
   run: "Chạy",
   processing: "Đang xử lý...",
@@ -1448,8 +1560,10 @@ export const canvasStudioVi: CanvasStudioCopy = {
     lookbook: "Lookbook",
     calendar: "Lịch",
     sns: "Mạng xã hội",
+    "profile-sns": "Hồ sơ / Mạng xã hội",
     poster: "Poster",
     "id-photo": "Ảnh thẻ",
+    "concept-photo": "Ảnh concept",
     pamphlet: "Tờ rơi",
     menu: "Thực đơn",
     flyer: "Flyer",
@@ -1506,6 +1620,12 @@ export const canvasStudioVi: CanvasStudioCopy = {
     "pixar-3d": "3D phong Pixar",
     "warm-watercolor": "Màu nước ấm",
     "corporate-minimal": "Tối giản doanh nghiệp",
+    "cinematic-film": "Phim điện ảnh",
+    "neon-cyberpunk": "Cyberpunk neon",
+    "vintage-retro": "Vintage retro",
+    "minimal-flat-art": "Flat art tối giản",
+    "fantasy-epic": "Fantasy hoành tráng",
+    "id-photo-studio": "ID Photo Studio",
   },
   moodStyles: {
     bright: "Sáng và thoáng",
@@ -1527,6 +1647,7 @@ export const canvasStudioHi: CanvasStudioCopy = {
   generalPhotoSubtitle:
     "मूल फ़ोटो पर टेक्स्ट, स्टिकर, ट्रैकिंग और लाइन स्पेसिंग संपादित करें",
   printTitle: "AI इंस्टेंट जनरेटर",
+  photoTitle: "लुकबुक जनरेटर",
   downloadStandard: "सामान्य गुणवत्ता डाउनलोड",
   downloadHigh: "उच्च गुणवत्ता डाउनलोड",
   loadEditFile: "संपादन फ़ाइल खोलें",
@@ -1567,10 +1688,11 @@ export const canvasStudioHi: CanvasStudioCopy = {
   bgGenerate: "AI बैकग्राउंड बनाएँ",
   bgGenerating: "AI बैकग्राउंड बन रहा है…",
   bgGenerateTitle: "AI बैकग्राउंड",
-  bgPlaceholder:
-    "한강공원야경, 전통한옥, 로맨틱분위기, 은은한조명, 푸른잔디밭, 역동적인느낌, 우아한분위기, 따뜻한목재느낌, 축제무대, 열정적인콘서트",
+  bgPlaceholder: "शब्दों को अपनी इच्छा से बदल सकते हैं",
   bgHint:
     "बैकग्राउंड फ़ॉर्मैट, उपयोग और पेज संख्या के अनुसार बनता है। बाद में यहीं संपादित करें।",
+  pageFillHint1: "सामग्री भरने के लिए प्रत्येक पेज पर क्लिक करें,",
+  pageFillHint2: "काम अगले चरण में पूरा करें",
   aiCommand: "इंटरैक्टिव AI कमांड",
   run: "चलाएँ",
   processing: "प्रोसेस हो रहा है...",
@@ -1596,8 +1718,10 @@ export const canvasStudioHi: CanvasStudioCopy = {
     lookbook: "लुकबुक",
     calendar: "कैलेंडर",
     sns: "सोशल",
+    "profile-sns": "प्रोफ़ाइल / सोशल",
     poster: "पोस्टर",
     "id-photo": "आईडी फ़ोटो",
+    "concept-photo": "कॉन्सेप्ट फ़ोटो",
     pamphlet: "पैम्फलेट",
     menu: "मेनू",
     flyer: "फ्लायर",
@@ -1654,6 +1778,12 @@ export const canvasStudioHi: CanvasStudioCopy = {
     "pixar-3d": "3D पिक्सर स्टाइल",
     "warm-watercolor": "गर्म वॉटरकलर",
     "corporate-minimal": "बिज़नेस मिनिमल",
+    "cinematic-film": "सिनेमैटिक फिल्म",
+    "neon-cyberpunk": "नियॉन साइबरपंक",
+    "vintage-retro": "विंटेज रेट्रो",
+    "minimal-flat-art": "मिनिमल फ्लैट आर्ट",
+    "fantasy-epic": "फैंटसी एपिक",
+    "id-photo-studio": "ID Photo Studio",
   },
   moodStyles: {
     bright: "उज्ज्वल",

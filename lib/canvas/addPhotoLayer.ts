@@ -12,7 +12,7 @@ import {
 } from "@/lib/canvas/types";
 import { toDisplayImageSrc } from "@/lib/resultSession";
 
-function readFileAsDataUrl(file: File): Promise<string> {
+export function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -24,7 +24,9 @@ function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
-function loadNaturalSize(src: string): Promise<{ w: number; h: number }> {
+export function loadImageNaturalSize(
+  src: string
+): Promise<{ w: number; h: number }> {
   return new Promise((resolve, reject) => {
     const img = new window.Image();
     img.crossOrigin = "anonymous";
@@ -55,6 +57,10 @@ export type AddPhotoLayerResult = {
 export type AddPhotoLayerOptions = {
   stackOffset?: number;
   photoKind?: PhotoKind;
+  /** Clear prior image/photo layers before adding (default true). */
+  replaceMain?: boolean;
+  /** Contain fraction of stage (1 = full Center & Fit). */
+  maxFraction?: number;
 };
 
 /**
@@ -65,15 +71,31 @@ export async function addPhotoLayerFromSrc(
   opts?: AddPhotoLayerOptions
 ): Promise<AddPhotoLayerResult> {
   const photoKind = opts?.photoKind ?? "original";
+  const replaceMain = opts?.replaceMain !== false;
+  const maxFraction = opts?.maxFraction ?? 1;
   const trimmed = toLayerDisplaySrc(src, photoKind);
   if (!trimmed) throw new Error("empty_src");
-  const natural = await loadNaturalSize(trimmed);
+
   const store = useCanvasStore.getState();
+  if (replaceMain) {
+    store.clearImageLayers();
+  }
+
+  const natural = await loadImageNaturalSize(trimmed);
   const stageW = Math.max(1, store.meta.width || 1080);
   const stageH = Math.max(1, store.meta.height || 1350);
-  const fitted = fitImageInStage(natural.w, natural.h, stageW, stageH, 0.55);
+  const fitted = fitImageInStage(
+    natural.w,
+    natural.h,
+    stageW,
+    stageH,
+    maxFraction
+  );
   const photoCount = store.objects.filter((o) => o.type === "photo").length;
-  const jitter = (opts?.stackOffset ?? photoCount) * 18;
+  const jitter =
+    replaceMain || maxFraction >= 0.99
+      ? 0
+      : (opts?.stackOffset ?? photoCount) * 18;
   const maxZ = store.objects.reduce((m, o) => Math.max(m, o.zIndex), 0);
 
   const object = defaultImageObject({
@@ -85,6 +107,9 @@ export async function addPhotoLayerFromSrc(
     y: fitted.y + jitter,
     width: fitted.width,
     height: fitted.height,
+    rotation: 0,
+    scaleX: 1,
+    scaleY: 1,
     zIndex: maxZ + 1,
     locked: false,
   });
@@ -96,7 +121,7 @@ export async function addPhotoLayerFromSrc(
 
 /**
  * Push a new photo layer from a local file.
- * - original: keep background (for inpaint / scenic edit pipelines)
+ * - original: keep background pixels (for inpaint pipelines)
  * - cutout: run RemoveBG API first, then add transparent subject layer
  */
 export async function addPhotoLayerFromFile(
@@ -114,11 +139,15 @@ export async function addPhotoLayerFromFile(
     return addPhotoLayerFromSrc(cutoutHttps, {
       ...opts,
       photoKind: "cutout",
+      replaceMain: opts?.replaceMain !== false,
+      maxFraction: opts?.maxFraction ?? 1,
     });
   }
 
   return addPhotoLayerFromSrc(dataUrl, {
     ...opts,
     photoKind: "original",
+    replaceMain: opts?.replaceMain !== false,
+    maxFraction: opts?.maxFraction ?? 1,
   });
 }

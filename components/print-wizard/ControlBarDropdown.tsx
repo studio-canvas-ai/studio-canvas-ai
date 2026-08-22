@@ -12,7 +12,7 @@ import {
 import { createPortal } from "react-dom";
 import { ChevronDown } from "lucide-react";
 
-const MENU_Z = 260;
+const MENU_Z = 1200;
 
 function clamp(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, n));
@@ -34,13 +34,17 @@ function useFixedBelowMenu(
       ? (el.closest(anchorSelector) as HTMLElement | null)
       : null;
     const r = (anchor ?? el).getBoundingClientRect();
-    const maxW = Math.min(maxWidth, Math.max(180, window.innerWidth - 16));
-    const width = clamp(Math.max(r.width, minWidth), 180, maxW);
+  const pad = 8;
+    const maxW = Math.min(maxWidth, Math.max(180, window.innerWidth - pad * 2));
+    const preferAnchor = Boolean(anchor);
+    const width = preferAnchor
+      ? clamp(r.width, 180, maxW)
+      : clamp(Math.max(r.width, minWidth), 180, maxW);
     let left = r.left;
-    if (left + width > window.innerWidth - 8) {
-      left = window.innerWidth - width - 8;
+    if (left + width > window.innerWidth - pad) {
+      left = window.innerWidth - width - pad;
     }
-    left = Math.max(8, left);
+    left = Math.max(pad, left);
     const triggerBottom = el.getBoundingClientRect().bottom;
     const top = triggerBottom + 8;
     const maxHeight = Math.max(140, window.innerHeight - top - 12);
@@ -206,12 +210,17 @@ export default function ControlBarDropdown({
 export function ControlMenuItem({
   active,
   title,
+  hint,
   description,
+  oneLine,
   onClick,
 }: {
   active?: boolean;
   title: string;
+  hint?: string;
   description?: string;
+  /** Keep title + hint on a single packed row. */
+  oneLine?: boolean;
   onClick: () => void;
 }) {
   return (
@@ -220,15 +229,28 @@ export function ControlMenuItem({
       role="option"
       aria-selected={active}
       onClick={onClick}
-      className={`w-full rounded-lg px-2.5 py-2 text-left transition ${
+      className={`w-full rounded-lg px-2 py-2 text-left transition ${
         active
           ? "bg-indigo-500/20 text-slate-50 ring-1 ring-indigo-400/35"
           : "text-slate-200 hover:bg-slate-800/80"
       }`}
     >
-      <span className="block text-[12px] font-semibold leading-snug [word-break:keep-all]">
-        {title}
-      </span>
+      {oneLine ? (
+        <span className="inline-flex max-w-full min-w-0 items-baseline gap-1.5 overflow-hidden whitespace-nowrap">
+          <span className="shrink-0 text-[17px] font-bold leading-none tracking-tight">
+            {title}
+          </span>
+          {hint ? (
+            <span className="min-w-0 truncate text-[14px] font-medium leading-none text-pink-400">
+              ({hint})
+            </span>
+          ) : null}
+        </span>
+      ) : (
+        <span className="block text-[12px] font-semibold leading-snug [word-break:keep-all]">
+          {title}
+        </span>
+      )}
       {description ? (
         <span
           className={`mt-0.5 line-clamp-2 block text-[11px] leading-snug ${

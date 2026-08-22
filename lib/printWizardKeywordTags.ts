@@ -117,6 +117,19 @@ export const KEYWORD_TAG_CATEGORIES: readonly KeywordTagCategory[] = [
   },
 ] as const;
 
+export function toggleKeywordTag(current: string, tag: string): string {
+  const next = tag.trim();
+  if (!next) return current;
+  const parts = current
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (parts.includes(next)) {
+    return parts.filter((p) => p !== next).join(", ");
+  }
+  return parts.length ? `${parts.join(", ")}, ${next}` : next;
+}
+
 export function appendKeywordTag(current: string, tag: string): string {
   const next = tag.trim();
   if (!next) return current;

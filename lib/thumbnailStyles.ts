@@ -159,6 +159,8 @@ export type TextLayer = {
   manualX?: number;
   /** Normalized top-left Y (0–1) when layoutLocked. */
   manualY?: number;
+  /** True when the user drag-resized the box; cleared on typography slider sync. */
+  boxManual?: boolean;
 };
 
 export const COLOR_PRESETS: Record<

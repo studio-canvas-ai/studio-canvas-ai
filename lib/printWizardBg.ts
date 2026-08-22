@@ -5,6 +5,7 @@
  */
 
 import { requestAiBackground } from "@/lib/aiBackground";
+import type { PrintBackgroundPan } from "@/lib/printWizardTypes";
 
 const PALETTES: Array<[string, string, string]> = [
   ["#1a1030", "#4c1d95", "#0f766e"],
@@ -26,12 +27,76 @@ export type PrintBgGenerateParams = {
   aspect: number;
   /** 0-based page index for variation. */
   pageIndex?: number;
+  pageCount?: number;
   formatLabel?: string;
   useLabel?: string;
   allowMockFallback?: boolean;
   imageStyleId?: string | null;
   moodStyleId?: string | null;
 };
+
+export const DEFAULT_BG_PAN: PrintBackgroundPan = { x: 0, y: 0 };
+/** Drag distance (as fraction of frame) → pan units. */
+export const BG_PAN_SENSITIVITY = 2;
+
+export function clampBgPanAxis(v: number): number {
+  return Math.max(-1, Math.min(1, v));
+}
+
+export function normalizeBgPan(
+  pan?: Partial<PrintBackgroundPan> | null
+): PrintBackgroundPan {
+  const x = typeof pan?.x === "number" && Number.isFinite(pan.x) ? pan.x : 0;
+  const y = typeof pan?.y === "number" && Number.isFinite(pan.y) ? pan.y : 0;
+  return { x: clampBgPanAxis(x), y: clampBgPanAxis(y) };
+}
+
+/** CSS object-position for object-cover; 0–100% never exposes empty edges. */
+export function bgPanObjectPosition(
+  pan?: Partial<PrintBackgroundPan> | null
+): string {
+  const p = normalizeBgPan(pan);
+  return `${((p.x + 1) / 2) * 100}% ${((p.y + 1) / 2) * 100}%`;
+}
+
+export function resizeBackgroundPans(
+  prev: PrintBackgroundPan[] | undefined,
+  pageCount: number
+): PrintBackgroundPan[] {
+  const out: PrintBackgroundPan[] = [];
+  for (let i = 0; i < pageCount; i++) {
+    out.push(normalizeBgPan(prev?.[i]));
+  }
+  return out;
+}
+
+export function sanitizeBackgroundPans(
+  raw: unknown
+): PrintBackgroundPan[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  return raw.map((item) => {
+    if (!item || typeof item !== "object") return { ...DEFAULT_BG_PAN };
+    const obj = item as Record<string, unknown>;
+    return normalizeBgPan({
+      x: typeof obj.x === "number" ? obj.x : Number(obj.x),
+      y: typeof obj.y === "number" ? obj.y : Number(obj.y),
+    });
+  });
+}
+
+/** Prefer that page's own URL — never copy page 1 onto later faces. */
+export function pageBackgroundUrl(
+  urls: Array<string | null | undefined> | undefined,
+  fallback: string | null | undefined,
+  pageIndex: number
+): string | null {
+  const own = urls?.[pageIndex];
+  if (typeof own === "string" && own) return own;
+  if (pageIndex === 0 && typeof fallback === "string" && fallback) {
+    return fallback;
+  }
+  return null;
+}
 
 async function generateMockBackgroundDataUrl(
   params: PrintBgGenerateParams
@@ -112,6 +177,7 @@ export async function generatePrintBackgroundDataUrl(
       prompt: keyword,
       aspectRatio: String(aspect),
       pageIndex,
+      pageCount: params.pageCount,
       imageStyleId: params.imageStyleId,
       moodStyleId: params.moodStyleId,
     });
@@ -124,9 +190,10 @@ export async function generatePrintBackgroundDataUrl(
   }
 }
 
-/** Generate one background per page for the current print plan. */
+/** Generate one distinct background per page for the current print plan. */
 export async function generatePrintBackgroundPages(params: {
   keyword: string;
+  keywords?: string[];
   aspect: number;
   pageCount: number;
   formatLabel?: string;
@@ -136,20 +203,28 @@ export async function generatePrintBackgroundPages(params: {
   moodStyleId?: string | null;
 }): Promise<string[]> {
   const count = Math.max(1, Math.min(10, params.pageCount));
-  const urls: string[] = [];
+  const urls: string[] = Array.from({ length: count }, () => "");
   for (let i = 0; i < count; i++) {
-    urls.push(
-      await generatePrintBackgroundDataUrl({
-        keyword: params.keyword,
+    const keyword = (params.keywords?.[i] || params.keyword).trim();
+    try {
+      urls[i] = await generatePrintBackgroundDataUrl({
+        keyword,
         aspect: params.aspect,
         pageIndex: i,
+        pageCount: count,
         formatLabel: params.formatLabel,
         useLabel: params.useLabel,
         allowMockFallback: params.allowMockFallback,
         imageStyleId: params.imageStyleId,
         moodStyleId: params.moodStyleId,
-      })
-    );
+      });
+    } catch (err) {
+      if (i === 0) throw err;
+      console.error("[print-wizard] page background failed", i, err);
+    }
+  }
+  if (!urls[0]) {
+    throw new Error("AI 배경 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.");
   }
   return urls;
 }

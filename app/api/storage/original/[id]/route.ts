@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { loadStorageManifest } from "@/lib/storageManifest";
+import {
+  loadStorageManifest,
+  resolveOriginalExpiry,
+  touchOriginalAccess,
+} from "@/lib/storageManifest";
 import { getR2Config } from "@/lib/r2";
 import { resolveDownloadUrl } from "@/lib/downloadUrl";
 import { checkDownloadRateLimit } from "@/lib/rateLimit";
@@ -12,8 +16,8 @@ type Params = { params: Promise<{ id: string }> };
 /**
  * HD original download (#75 + abuse protection).
  * - Rate limit by IP / account
- * - Redirect to CDN public URL or short-lived signed R2 URL (direct download, cacheable at edge)
- * - ?proxy=1 streams through this API (legacy)
+ * - Redirect to CDN public URL or short-lived signed R2 URL
+ * - Touches lastAccessedAt so active work keeps the 24h idle original TTL
  */
 export async function GET(req: Request, { params }: Params) {
   const { id } = await params;
@@ -52,9 +56,13 @@ export async function GET(req: Request, { params }: Params) {
     return NextResponse.json({ error: "original expired and deleted" }, { status: 410 });
   }
 
-  if (manifest.expiresAt != null && manifest.expiresAt <= Date.now()) {
-    return NextResponse.json({ error: "retention period expired" }, { status: 410 });
+  const originalDeadline = resolveOriginalExpiry(manifest);
+  if (originalDeadline != null && originalDeadline <= Date.now()) {
+    return NextResponse.json({ error: "original idle retention expired" }, { status: 410 });
   }
+
+  // Active download = activity → extend 24h idle window for in-progress sessions.
+  void touchOriginalAccess(id).catch(() => undefined);
 
   const url = new URL(req.url);
   const forceProxy = url.searchParams.get("proxy") === "1";

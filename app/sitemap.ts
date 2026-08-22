@@ -4,9 +4,12 @@ import { PRODUCTION_SITE_URL } from "@/lib/site";
 const PUBLIC_PATHS = [
   "/",
   "/generate",
+  "/shorts",
+  "/shorts/studio",
   "/gallery",
   "/gallery/my",
   "/styles",
+  "/template-studio",
   "/pricing",
   "/profile",
   "/support",

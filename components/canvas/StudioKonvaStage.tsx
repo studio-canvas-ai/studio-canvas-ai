@@ -20,6 +20,7 @@ import type Konva from "konva";
 import { useCanvasStore } from "@/lib/canvas/canvasStore";
 import type { CanvasObject, CanvasTextObject } from "@/lib/canvas/types";
 import { sortByZIndex } from "@/lib/canvas/types";
+import { EMOJI_FONT } from "@/lib/thumbnailStyles";
 
 const CHECKER: CSSProperties = {
   backgroundColor: "#1a1d27",
@@ -119,6 +120,12 @@ function TextNode({
   onChange: (patch: Partial<CanvasObject>) => void;
   onEdit: () => void;
 }) {
+  // Keep emoji / special symbols on the same fontSize as Hangul/Latin.
+  const fontFamily = /emoji/i.test(obj.fontFamily)
+    ? obj.fontFamily
+    : `${obj.fontFamily}, ${EMOJI_FONT}`;
+  const fontSize = Math.max(8, Math.round(obj.fontSize || 48));
+
   return (
     <Text
       id={obj.id}
@@ -132,8 +139,8 @@ function TextNode({
       scaleY={obj.scaleY}
       opacity={obj.opacity}
       visible={obj.visible}
-      fontSize={obj.fontSize}
-      fontFamily={obj.fontFamily}
+      fontSize={fontSize}
+      fontFamily={fontFamily}
       fontStyle={obj.fontWeight >= 600 ? "bold" : "normal"}
       fill={obj.fill}
       align={obj.align}
@@ -158,7 +165,7 @@ function TextNode({
         // Scale font with box height for responsive typography.
         const nextFont = Math.max(
           10,
-          Math.round(obj.fontSize * ((scaleX + scaleY) / 2))
+          Math.round(fontSize * ((scaleX + scaleY) / 2))
         );
         onChange({
           x: node.x(),

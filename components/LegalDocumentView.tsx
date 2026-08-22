@@ -38,9 +38,12 @@ export default function LegalDocumentView({
               </p>
             ))}
             {section.bullets && section.bullets.length > 0 ? (
-              <ul className="mt-2 space-y-2 border-l border-white/10 pl-4">
-                {section.bullets.map((b) => (
-                  <li key={b.slice(0, 64)} className="text-[15px] leading-7 text-white/65">
+              <ul className="mt-2 list-none space-y-2.5 border-l border-white/10 pl-4">
+                {section.bullets.map((b, i) => (
+                  <li
+                    key={`${section.title}-${i}`}
+                    className="text-[15px] leading-7 text-white/65"
+                  >
                     {b}
                   </li>
                 ))}

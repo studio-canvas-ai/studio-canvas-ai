@@ -7,7 +7,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { ClipboardCopy, CopyPlus, Trash2 } from "lucide-react";
+import { ClipboardCopy, Plus, Trash2 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import {
   collectSnapTargets,
@@ -19,12 +19,13 @@ import {
 } from "@/lib/canvas/snapGuides";
 import { formatFormFieldText, formFieldFromLayerId } from "@/lib/printWizardTextFormat";
 import {
+  addPageTextLayerAfter,
   boxToLayerPatch,
   canvasTextScale,
-  clampBoxToStage,
-  duplicateTextLayer,
+  clampBoxAllowOverflow,
   layerToBox,
   removeTextLayer,
+  stripLayerPlaceholderPrefix,
 } from "@/lib/printWizardTextLayers";
 import { drawPrintLayerInBox } from "@/lib/printWizardTextDraw";
 import { colorPresetFill, fontForText, type TextLayer } from "@/lib/thumbnailStyles";
@@ -35,6 +36,8 @@ export type PreviewTextOverlayProps = {
   interactive?: boolean;
   activeLayerId?: string | null;
   onActiveLayerChange?: (id: string | null) => void;
+  pageIndex?: number;
+  backgroundSrc?: string | null;
 };
 
 type ResizeHandle = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
@@ -55,11 +58,17 @@ type DragState = {
 };
 
 const DRAG_THRESHOLD_PX = 4;
+const CONTRAST_DARK_COLOR = "white" as const;
+const CONTRAST_LIGHT_COLOR = "inkBlack" as const;
 
 function textAlignClass(align: TextLayer["align"]): string {
   if (align === "left") return "justify-start text-left";
   if (align === "right") return "justify-end text-right";
   return "justify-center text-center";
+}
+
+function luminanceFromRgb(r: number, g: number, b: number): number {
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
 }
 
 function LayerTextCanvas({
@@ -140,6 +149,8 @@ export default function PreviewTextOverlay({
   interactive = true,
   activeLayerId = null,
   onActiveLayerChange,
+  pageIndex = 0,
+  backgroundSrc = null,
 }: PreviewTextOverlayProps) {
   const { t } = useI18n();
   const cs = t.canvasStudio;
@@ -147,6 +158,7 @@ export default function PreviewTextOverlay({
   const guideRef = useRef<HTMLCanvasElement>(null);
   const dragRef = useRef<DragState | null>(null);
   const layersRef = useRef(layers);
+  const onLayersChangeRef = useRef(onLayersChange);
   const [size, setSize] = useState({ w: 1, h: 1 });
   const [snapGuides, setSnapGuides] = useState<SnapGuides>({
     vertical: [],
@@ -163,6 +175,7 @@ export default function PreviewTextOverlay({
   const lastTapRef = useRef<{ id: string; t: number } | null>(null);
 
   layersRef.current = layers;
+  onLayersChangeRef.current = onLayersChange;
 
   const measureStage = () => {
     const rect = hostRef.current?.getBoundingClientRect();
@@ -222,7 +235,7 @@ export default function PreviewTextOverlay({
       onLayersChange(
         layersRef.current.map((layer) => {
           if (layer.id !== layerId) return layer;
-          const clamped = clampBoxToStage(box, w, h);
+          const clamped = clampBoxAllowOverflow(box, w, h);
           return {
             ...layer,
             ...boxToLayerPatch(layer, clamped, w, h, mode, startBox),
@@ -313,6 +326,7 @@ export default function PreviewTextOverlay({
         x: nextBox.x + deltaX,
         y: nextBox.y + deltaY,
       };
+      nextBox = clampBoxAllowOverflow(nextBox, drag.stageW, drag.stageH);
       drag.liveBox = nextBox;
       setLiveBox({ id: drag.layerId, box: nextBox });
       setSnapGuides(guides);
@@ -370,8 +384,15 @@ export default function PreviewTextOverlay({
     }
   };
 
-  const handleDuplicate = (layerId: string) => {
-    onLayersChange(duplicateTextLayer(layersRef.current, layerId));
+  const handleAddAfter = (afterIndex: number) => {
+    const next = addPageTextLayerAfter(
+      layersRef.current,
+      pageIndex,
+      afterIndex
+    );
+    onLayersChange(next);
+    const added = next[Math.min(next.length - 1, afterIndex + 1)];
+    if (added) onActiveLayerChange?.(added.id);
   };
 
   const handleDelete = (layerId: string) => {
@@ -381,12 +402,63 @@ export default function PreviewTextOverlay({
     setHoverId((id) => (id === layerId ? null : id));
   };
 
+  useEffect(() => {
+    if (!backgroundSrc || !size.w || !size.h || !layers.length) return;
+    let cancelled = false;
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    image.decoding = "async";
+    image.src = backgroundSrc;
+
+    image.onload = () => {
+      if (cancelled) return;
+      try {
+        const sampleCanvas = document.createElement("canvas");
+        const sampleW = 96;
+        const sampleH = Math.max(96, Math.round((image.naturalHeight / Math.max(1, image.naturalWidth)) * 96));
+        sampleCanvas.width = sampleW;
+        sampleCanvas.height = sampleH;
+        const ctx = sampleCanvas.getContext("2d", { willReadFrequently: true });
+        if (!ctx) return;
+        ctx.drawImage(image, 0, 0, sampleW, sampleH);
+
+        const nextLayers = layersRef.current.map((layer) => {
+          if (!layer.text.trim()) return layer;
+          const box = layerToBox(layer, size.w, size.h);
+          const sx = Math.max(0, Math.min(sampleW - 1, Math.round(((box.x + box.width / 2) / size.w) * sampleW)));
+          const sy = Math.max(0, Math.min(sampleH - 1, Math.round(((box.y + box.height / 2) / size.h) * sampleH)));
+          const sw = Math.max(1, Math.min(sampleW - sx, Math.round((box.width / size.w) * sampleW)));
+          const sh = Math.max(1, Math.min(sampleH - sy, Math.round((box.height / size.h) * sampleH)));
+          const data = ctx.getImageData(sx, sy, sw, sh).data;
+          let total = 0;
+          let count = 0;
+          for (let i = 0; i < data.length; i += 4) {
+            total += luminanceFromRgb(data[i] ?? 0, data[i + 1] ?? 0, data[i + 2] ?? 0);
+            count += 1;
+          }
+          const lum = count ? total / count : 0.5;
+          const nextColor = lum < 0.32 ? CONTRAST_DARK_COLOR : CONTRAST_LIGHT_COLOR;
+          return layer.color === nextColor ? layer : { ...layer, color: nextColor };
+        });
+
+        const changed = nextLayers.some((layer, index) => layer.color !== layersRef.current[index]?.color);
+        if (changed) onLayersChangeRef.current(nextLayers);
+      } catch {
+        /* ignore CORS / sampling failures */
+      }
+    };
+
+    return () => {
+      cancelled = true;
+    };
+  }, [backgroundSrc, size.h, size.w]);
+
   if (!layers.length) return null;
 
   return (
     <div
       ref={hostRef}
-      className="pointer-events-none absolute inset-0 z-[2]"
+      className="pointer-events-none absolute inset-0 z-[2] overflow-visible"
       style={{ transformOrigin: "top left" }}
     >
       <canvas
@@ -410,7 +482,7 @@ export default function PreviewTextOverlay({
         />
       ) : null}
 
-      {layers.map((layer) => {
+      {layers.map((layer, index) => {
         const measured = layerToBox(layer, size.w, size.h);
         const box = liveBox?.id === layer.id ? liveBox.box : measured;
         const isActive = activeLayerId === layer.id;
@@ -464,33 +536,35 @@ export default function PreviewTextOverlay({
             }}
           >
             {showChrome ? (
-              <div className="absolute -top-4 right-0 z-[8] flex items-center gap-px">
-                <button
-                  type="button"
-                  title={cs.copy}
-                  aria-label={cs.copy}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void handleCopy(layer);
-                  }}
-                  className="inline-flex h-4 w-4 items-center justify-center rounded-[3px] border border-white/25 bg-black/80 text-white/90 shadow-sm hover:bg-black"
-                >
-                  <ClipboardCopy className="h-2.5 w-2.5" />
-                </button>
-                <button
-                  type="button"
-                  title={cs.duplicate}
-                  aria-label={cs.duplicate}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDuplicate(layer.id);
-                  }}
-                  className="inline-flex h-4 w-4 items-center justify-center rounded-[3px] border border-white/25 bg-black/80 text-white/90 shadow-sm hover:bg-black"
-                >
-                  <CopyPlus className="h-2.5 w-2.5" />
-                </button>
+              <div className="absolute -top-5 left-0 right-0 z-[8] flex items-center justify-between">
+                <div className="flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    title={cs.addPageLayer}
+                    aria-label={cs.addPageLayer}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleAddAfter(index);
+                    }}
+                    className="inline-flex h-4 w-4 items-center justify-center rounded-[3px] border border-white/25 bg-black/80 text-white/90 shadow-sm hover:bg-black"
+                  >
+                    <Plus className="h-2.5 w-2.5" strokeWidth={2.8} />
+                  </button>
+                  <button
+                    type="button"
+                    title={cs.copy}
+                    aria-label={cs.copy}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void handleCopy(layer);
+                    }}
+                    className="inline-flex h-4 w-4 items-center justify-center rounded-[3px] border border-white/25 bg-black/80 text-white/90 shadow-sm hover:bg-black"
+                  >
+                    <ClipboardCopy className="h-2.5 w-2.5" strokeWidth={2.4} />
+                  </button>
+                </div>
                 <button
                   type="button"
                   title={cs.delete}
@@ -537,7 +611,7 @@ export default function PreviewTextOverlay({
                     }
                   }}
                   onChange={(e) => {
-                    const text = e.target.value;
+                    const text = stripLayerPlaceholderPrefix(e.target.value);
                     onLayersChange(
                       layersRef.current.map((l) =>
                         l.id === layer.id ? { ...l, text } : l
@@ -548,7 +622,7 @@ export default function PreviewTextOverlay({
                   onKeyDown={(e) => {
                     if (e.key === "Escape") setEditingId(null);
                   }}
-                  className={`font-emoji h-full w-full resize-none overflow-hidden border-0 bg-transparent p-0.5 outline-none ${alignClass}`}
+                  className={`font-emoji h-full w-full resize-none overflow-hidden border-0 bg-transparent p-0 outline-none ${alignClass}`}
                   style={{
                     color: colorPresetFill(layer.color),
                     fontFamily,

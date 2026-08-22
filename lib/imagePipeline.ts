@@ -29,3 +29,20 @@ export async function normalizeOriginal(input: Buffer): Promise<{ buffer: Buffer
   const buffer = await sharp(input).rotate().jpeg({ quality: 92 }).toBuffer();
   return { buffer, contentType: "image/jpeg" };
 }
+
+/** General-photo cloud pipeline: max 1920px edge, WebP. */
+export const GENERAL_PHOTO_MAX_EDGE = 1920;
+export const GENERAL_PHOTO_WEBP_QUALITY = 82;
+
+export async function normalizeGeneralPhotoWebp(input: Buffer): Promise<Buffer> {
+  return sharp(input, { density: 150, failOn: "none" })
+    .rotate()
+    .resize({
+      width: GENERAL_PHOTO_MAX_EDGE,
+      height: GENERAL_PHOTO_MAX_EDGE,
+      fit: "inside",
+      withoutEnlargement: true,
+    })
+    .webp({ quality: GENERAL_PHOTO_WEBP_QUALITY })
+    .toBuffer();
+}

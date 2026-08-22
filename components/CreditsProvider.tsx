@@ -34,6 +34,14 @@ import {
   readPendingCheckout,
   savePendingCheckout,
 } from "@/lib/pendingCheckout";
+import { isGuestCheckoutAllowedClient } from "@/lib/checkoutPolicy";
+import {
+  hasUnlimitedCredits,
+  ADMIN_TEST_CREDITS,
+  isPrivilegedAdminEmail,
+} from "@/lib/unlimitedAccount";
+import { shouldApplyBrandWatermark } from "@/lib/watermarkPolicy";
+import { stashAuthErrorForModal } from "@/lib/supabase/oauthErrors";
 
 export type { PlanId } from "@/lib/faceProfiles";
 
@@ -53,11 +61,27 @@ type PromoWalletView = {
   codeSuffix: string;
 };
 
+export type AuthUserProfile = {
+  id: string | null;
+  email: string | null;
+  name: string | null;
+  image: string | null;
+};
+
 type CreditsContextValue = {
   credits: number;
   maxCredits: number;
+  /** Designated admin/test accounts: infinite bypass disabled (999 + refill at 0). */
+  unlimitedCredits: boolean;
+  /** Label for navbar / badges (`∞` only if unlimitedCredits is true). */
+  creditsLabel: string;
   isFreePlan: boolean;
+  /** True for ADMIN_EMAILS / designated unlimited accounts. */
+  isAdmin: boolean;
+  /** On-screen + download brand watermark for free non-admin users only. */
+  applyBrandWatermark: boolean;
   isAuthenticated: boolean;
+  authUser: AuthUserProfile | null;
   planId: PlanId;
   billingInterval: BillingInterval;
   showAuthModal: boolean;
@@ -79,10 +103,13 @@ type CreditsContextValue = {
   setShowPromoModal: (open: boolean) => void;
   openAuthModal: (opts?: { clearPending?: boolean }) => void;
   consumeCredit: (amount?: number) => boolean;
+  /** Apply authoritative balance from API (generate / download / me). */
+  applyServerCredits: (balance: number) => void;
   topUpCredits: (amount?: number) => void;
   purchaseCreditPack: (packId: (typeof CREDIT_PACKS)[number]["id"]) => Promise<void>;
   grantFreeCredits: () => void;
   refreshAccount: () => Promise<void>;
+  signOutUser: () => Promise<void>;
   requestSubscribe: (
     plan: (typeof pricingPlanIds)[number],
     interval?: BillingInterval
@@ -93,12 +120,42 @@ type CreditsContextValue = {
   getPortraitRetouch: (portraitId: string) => PortraitRetouchState | null;
   requestRetouch: (
     portraitId: string,
-    mode?: "retouch" | "regenerate"
+    mode?: "retouch" | "regenerate",
+    opts?: { skipCredit?: boolean }
   ) => RetouchAttemptResult;
   dailyRetouchCount: number;
 };
 
 const CreditsContext = createContext<CreditsContextValue | null>(null);
+
+function clearBrowserAuthResidue() {
+  if (typeof window === "undefined") return;
+
+  // Clears local UI caches only. Cloud-backed face profiles, general photos,
+  // and finished works live on R2/server manifests and reload after the next sign-in.
+  try {
+    localStorage.clear();
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    sessionStorage.clear();
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    for (const raw of document.cookie.split(";")) {
+      const name = raw.split("=")[0]?.trim();
+      if (!name) continue;
+      document.cookie = `${name}=; Max-Age=0; path=/; SameSite=Lax`;
+      document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`;
+    }
+  } catch {
+    /* ignore */
+  }
+}
 
 function todayKey() {
   try {
@@ -129,6 +186,8 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
   const [billingInterval, setBillingInterval] =
     useState<BillingInterval>("monthly");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authUser, setAuthUser] = useState<AuthUserProfile | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showCreditModal, setShowCreditModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -150,6 +209,13 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
   const pendingResumeDone = useRef(false);
 
   const isFreePlan = planId === "free";
+  const unlimitedCredits = hasUnlimitedCredits(authUser?.email);
+  const creditsLabel = unlimitedCredits ? "∞" : String(credits);
+  const applyBrandWatermark = shouldApplyBrandWatermark(
+    planId,
+    authUser?.email,
+    isAdmin
+  );
 
   useEffect(() => {
     const meta = getAccountMeta();
@@ -179,6 +245,23 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Surface OAuth failures from /auth/callback → /generate?authError=… (any path works)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const url = new URL(window.location.href);
+      const authError = url.searchParams.get("authError");
+      if (!authError) return;
+      stashAuthErrorForModal(authError);
+      setShowAuthModal(true);
+      url.searchParams.delete("authError");
+      const clean = `${url.pathname}${url.searchParams.toString() ? `?${url.searchParams}` : ""}${url.hash}`;
+      window.history.replaceState({}, "", clean);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   // Warm client FX cache from server (non-blocking; never breaks UI).
   useEffect(() => {
     let cancelled = false;
@@ -202,16 +285,25 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
 
   const refreshServerState = useCallback(async () => {
     try {
-      const res = await fetch("/api/account/me");
+      const res = await fetch("/api/account/me", {
+        cache: "no-store",
+        credentials: "same-origin",
+      });
       if (!res.ok) throw new Error("account unavailable");
       const data = (await res.json()) as {
         authenticated?: boolean;
+        pendingTermsConsent?: boolean;
         providers?: SocialProviderId[];
         user?: {
+          id?: string;
+          email?: string | null;
+          name?: string | null;
+          image?: string | null;
           credits: number;
           maxCredits: number;
           planId: PlanId;
           billingInterval?: BillingInterval | null;
+          isAdmin?: boolean;
         } | null;
       };
       if (Array.isArray(data.providers)) {
@@ -220,6 +312,13 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
       }
       if (data.authenticated && data.user) {
         setIsAuthenticated(true);
+        setAuthUser({
+          id: data.user.id ?? null,
+          email: data.user.email ?? null,
+          name: data.user.name ?? null,
+          image: data.user.image ?? null,
+        });
+        setIsAdmin(Boolean(data.user.isAdmin));
         setCredits(data.user.credits);
         setMaxCredits(data.user.maxCredits);
         setPlanId(data.user.planId);
@@ -241,6 +340,16 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
         }
         return;
       }
+
+      if (data.pendingTermsConsent) {
+        // Keep Supabase-driven UI auth; app member not finalized yet.
+        setSocialProvidersLoaded(true);
+        return;
+      }
+
+      // No NextAuth member session — leave Supabase listener as source of truth
+      // unless it already cleared auth.
+      setSocialProvidersLoaded(true);
     } catch {
       setSocialProvidersLoaded(true);
       /* try anonymous promo wallet */
@@ -265,6 +374,141 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
 
   const refreshAccount = refreshServerState;
 
+  const signOutUser = useCallback(async () => {
+    try {
+      const { isSupabaseConfigured } = await import("@/lib/supabase/config");
+      if (isSupabaseConfigured()) {
+        const { createSupabaseBrowserClient } = await import(
+          "@/lib/supabase/client"
+        );
+        const supabase = createSupabaseBrowserClient();
+        await supabase.auth.signOut();
+      }
+    } catch {
+      /* still clear app session */
+    }
+
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+    } catch {
+      /* ignore */
+    }
+
+    try {
+      const { signOut } = await import("next-auth/react");
+      await signOut({ redirect: false });
+    } catch {
+      /* ignore */
+    }
+
+    clearBrowserAuthResidue();
+    setIsAuthenticated(false);
+    setAuthUser(null);
+    setIsAdmin(false);
+    setCredits(FREE_CREDITS);
+    setMaxCredits(FREE_CREDITS);
+    setPlanId("free");
+    setBillingInterval("monthly");
+    setPromoWallet(null);
+    setPendingPlanId(null);
+    setPendingBillingInterval("annual");
+    setSocialProviders([]);
+    setSocialProvidersLoaded(false);
+    setShowPaymentModal(false);
+    setShowCreditModal(false);
+    setShowTopUpModal(false);
+    setShowReturnModal(false);
+    setShowPromoModal(false);
+    setShowAuthModal(false);
+    setPortraits({});
+    setDailyRetouchCount(0);
+    recentRetouchTs.current = [];
+    pendingResumeDone.current = false;
+    patchAccountMeta({ planId: "free", lastLoginAt: 0 });
+  }, []);
+
+  // Supabase session → header auth UI (survives cold local DB / post-consent reload).
+  useEffect(() => {
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
+
+    void (async () => {
+      try {
+        const { isSupabaseConfigured } = await import("@/lib/supabase/config");
+        if (!isSupabaseConfigured()) {
+          void refreshServerState();
+          return;
+        }
+        const { createSupabaseBrowserClient } = await import(
+          "@/lib/supabase/client"
+        );
+        const supabase = createSupabaseBrowserClient();
+
+        const applySupabaseUser = (
+          sbUser: {
+            id: string;
+            email?: string | null;
+            user_metadata?: Record<string, unknown> | null;
+          } | null
+        ) => {
+          if (cancelled) return;
+          if (!sbUser) return;
+          const meta = sbUser.user_metadata ?? {};
+          const image =
+            (typeof meta.avatar_url === "string" && meta.avatar_url) ||
+            (typeof meta.picture === "string" && meta.picture) ||
+            null;
+          const name =
+            (typeof meta.full_name === "string" && meta.full_name) ||
+            (typeof meta.name === "string" && meta.name) ||
+            null;
+          setIsAuthenticated(true);
+          setAuthUser((prev) => ({
+            id: sbUser.id,
+            email: sbUser.email ?? prev?.email ?? null,
+            name: name ?? prev?.name ?? null,
+            image: image ?? prev?.image ?? null,
+          }));
+          setShowAuthModal(false);
+        };
+
+        const { data: initial } = await supabase.auth.getSession();
+        if (cancelled) return;
+        if (initial.session?.user) {
+          applySupabaseUser(initial.session.user);
+        }
+        await refreshServerState();
+
+        const {
+          data: { subscription },
+        } = supabase.auth.onAuthStateChange((event, session) => {
+          if (cancelled) return;
+          if (event === "SIGNED_OUT") {
+            setIsAuthenticated(false);
+            setAuthUser(null);
+            setIsAdmin(false);
+            return;
+          }
+          if (session?.user) {
+            applySupabaseUser(session.user);
+            void refreshServerState();
+          }
+        });
+        unsubscribe = () => subscription.unsubscribe();
+      } catch {
+        if (!cancelled) void refreshServerState();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, [refreshServerState]);
+
   const ensureDailyCounter = useCallback(() => {
     const key = todayKey();
     if (key !== dailyKey) {
@@ -278,13 +522,43 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
   const consumeCredit = useCallback(
     (amount = 1) => {
       if (credits < amount) {
+        if (isPrivilegedAdminEmail(authUser?.email)) {
+          // Mirror server auto-refill so QA can keep spending after 0.
+          setCredits(Math.max(0, ADMIN_TEST_CREDITS - amount));
+          setMaxCredits((m) => Math.max(m, ADMIN_TEST_CREDITS));
+          return true;
+        }
         setShowCreditModal(true);
         return false;
       }
-      setCredits((c) => Math.max(0, Math.round((c - amount) * 10) / 10));
+      setCredits((c) => {
+        const next = Math.max(0, Math.round((c - amount) * 10) / 10);
+        if (next <= 0 && isPrivilegedAdminEmail(authUser?.email)) {
+          setMaxCredits((m) => Math.max(m, ADMIN_TEST_CREDITS));
+          return ADMIN_TEST_CREDITS;
+        }
+        return next;
+      });
       return true;
     },
-    [credits]
+    [authUser?.email, credits]
+  );
+
+  const applyServerCredits = useCallback(
+    (balance: number) => {
+      if (!Number.isFinite(balance)) return;
+      let next = Math.round(Math.max(0, balance) * 10) / 10;
+      if (next <= 0 && isPrivilegedAdminEmail(authUser?.email)) {
+        next = ADMIN_TEST_CREDITS;
+        setMaxCredits((m) => Math.max(m, ADMIN_TEST_CREDITS));
+      } else if (isPrivilegedAdminEmail(authUser?.email)) {
+        setMaxCredits((m) => Math.max(m, ADMIN_TEST_CREDITS, next));
+      } else {
+        setMaxCredits((m) => Math.max(m, next));
+      }
+      setCredits(next);
+    },
+    [authUser?.email]
   );
 
   const topUpCredits = useCallback((amount = 50) => {
@@ -328,7 +602,9 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
       setPendingPlanId(plan);
       setPendingBillingInterval(interval);
       savePendingCheckout({ planId: plan, interval });
-      if (!isAuthenticated) {
+      // TEMP KCP review: guest checkout via isGuestCheckoutAllowedClient().
+      // Restore member-only: set ALLOW_GUEST_CHECKOUT=false (see lib/checkoutPolicy.ts).
+      if (!isAuthenticated && !isGuestCheckoutAllowedClient()) {
         setShowAuthModal(true);
         return;
       }
@@ -387,17 +663,23 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
   const requestRetouch = useCallback(
     (
       portraitId: string,
-      mode: "retouch" | "regenerate" = "retouch"
+      mode: "retouch" | "regenerate" = "retouch",
+      opts?: { skipCredit?: boolean }
     ): RetouchAttemptResult => {
       const currentDaily = ensureDailyCounter();
       const existing = portraits[portraitId];
       const createdAt = existing?.createdAt ?? Date.now();
+      const spendCredits = hasUnlimitedCredits(authUser?.email)
+        ? Number.POSITIVE_INFINITY
+        : credits;
 
       const result = evaluateRetouchRequest({
         state: existing ?? null,
         portraitId,
         createdAt,
-        credits,
+        // When billing already happened (generate API / spend API), only update
+        // retouch bookkeeping — do not re-check or re-deduct wallet balance.
+        credits: opts?.skipCredit ? Number.POSITIVE_INFINITY : spendCredits,
         dailyRetouchCount: currentDaily,
         recentTimestamps: recentRetouchTs.current,
         mode,
@@ -414,22 +696,38 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
         return result;
       }
 
-      if (result.cost > 0) {
-        setCredits((c) => Math.max(0, Math.round((c - result.cost) * 10) / 10));
+      if (
+        result.cost > 0 &&
+        !opts?.skipCredit &&
+        !hasUnlimitedCredits(authUser?.email)
+      ) {
+        setCredits((c) => {
+          const next = Math.max(0, Math.round((c - result.cost) * 10) / 10);
+          if (next <= 0 && isPrivilegedAdminEmail(authUser?.email)) {
+            setMaxCredits((m) => Math.max(m, ADMIN_TEST_CREDITS));
+            return ADMIN_TEST_CREDITS;
+          }
+          return next;
+        });
       }
       setPortraits((prev) => ({ ...prev, [portraitId]: result.state }));
       setDailyRetouchCount((n) => n + 1);
       return result;
     },
-    [credits, ensureDailyCounter, portraits]
+    [authUser?.email, credits, ensureDailyCounter, portraits]
   );
 
   const value = useMemo(
     () => ({
       credits,
       maxCredits,
+      unlimitedCredits,
+      creditsLabel,
       isFreePlan,
+      isAdmin,
+      applyBrandWatermark,
       isAuthenticated,
+      authUser,
       planId,
       billingInterval,
       showAuthModal,
@@ -451,10 +749,12 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
       setShowPromoModal,
       openAuthModal,
       consumeCredit,
+      applyServerCredits,
       topUpCredits,
       purchaseCreditPack,
       grantFreeCredits,
       refreshAccount,
+      signOutUser,
       requestSubscribe,
       completePayment,
       cancelSubscription,
@@ -466,8 +766,13 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
     [
       credits,
       maxCredits,
+      unlimitedCredits,
+      creditsLabel,
       isFreePlan,
+      isAdmin,
+      applyBrandWatermark,
       isAuthenticated,
+      authUser,
       planId,
       billingInterval,
       showAuthModal,
@@ -483,10 +788,12 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
       socialProvidersLoaded,
       openAuthModal,
       consumeCredit,
+      applyServerCredits,
       topUpCredits,
       purchaseCreditPack,
       grantFreeCredits,
       refreshAccount,
+      signOutUser,
       requestSubscribe,
       completePayment,
       cancelSubscription,

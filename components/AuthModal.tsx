@@ -8,22 +8,49 @@ import { useI18n } from "@/components/I18nProvider";
 import { useCredits, type SocialProviderId } from "@/components/CreditsProvider";
 import { clearPendingCheckout } from "@/lib/pendingCheckout";
 import {
+  getSupabaseConfigError,
   isSupabaseConfigured,
 } from "@/lib/supabase/config";
 import {
   signInWithSupabaseOAuth,
   signInWithMicrosoft,
+  signInWithFacebook,
+  signInWithGoogle,
   signInWithKakao,
   signInWithNaver,
+  peekAuthNextPath,
+  consumeAuthNextPath,
 } from "@/lib/supabase/oauth";
+import { consumeStashedAuthError, formatOAuthError } from "@/lib/supabase/oauthErrors";
+import {
+  bridgeSupabaseAccessToken,
+  finalizeTermsIfNeeded,
+  isValidEmailFormat,
+  signInWithEmailPassword,
+  signUpWithEmailPassword,
+  validatePasswordStrength,
+} from "@/lib/supabase/emailAuth";
+import { buildTermsConsentUrl } from "@/lib/termsConsent";
 
 function GoogleLogo({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
-      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+      <path
+        fill="currentColor"
+        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+      />
+      <path
+        fill="currentColor"
+        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+      />
+      <path
+        fill="currentColor"
+        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+      />
+      <path
+        fill="currentColor"
+        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+      />
     </svg>
   );
 }
@@ -106,7 +133,6 @@ export default function AuthModal() {
   const {
     showAuthModal,
     setShowAuthModal,
-    grantFreeCredits,
     pendingPlanId,
     setShowPaymentModal,
     refreshAccount,
@@ -122,19 +148,46 @@ export default function AuthModal() {
 
   useEffect(() => {
     if (!showAuthModal) return;
-    setError(null);
+    const stashed = consumeStashedAuthError();
+    setError(stashed);
     setBusy(false);
     setMode("signup");
     setAgreed(false);
+    setEmail("");
+    setName("");
+    setPassword("");
   }, [showAuthModal]);
 
   if (!showAuthModal) return null;
 
-  const localGoogleMock =
-    typeof window !== "undefined" &&
-    ["localhost", "127.0.0.1"].includes(window.location.hostname) &&
-    !isSupabaseConfigured();
+  const resolveAuthNext = () =>
+    pendingPlanId ? "/pricing" : peekAuthNextPath("/");
 
+  /** Soft success: close modal + refresh nav without forcing a full navigation. */
+  const afterAuthSoft = async () => {
+    setShowAuthModal(false);
+    if (pendingPlanId) {
+      setShowPaymentModal(true);
+      await refreshAccount?.();
+      return;
+    }
+    clearPendingCheckout();
+    await refreshAccount?.();
+    try {
+      const raw = sessionStorage.getItem("sca_auth_next");
+      if (raw && raw.startsWith("/") && !raw.startsWith("//")) {
+        sessionStorage.removeItem("sca_auth_next");
+        const current = `${window.location.pathname}${window.location.search}`;
+        if (raw !== current) {
+          window.location.href = raw;
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  };
+
+  /** OAuth / hard redirect path (unchanged for social providers). */
   const afterAuth = async () => {
     setShowAuthModal(false);
     if (pendingPlanId) {
@@ -144,14 +197,62 @@ export default function AuthModal() {
     }
     clearPendingCheckout();
     await refreshAccount?.();
-    window.location.href = "/generate";
+    window.location.href = consumeAuthNextPath("/");
+  };
+
+  const mapEmailAuthError = (code: string, fallback: string) => {
+    switch (code) {
+      case "email_exists":
+        return t.auth.emailExists;
+      case "invalid_credentials":
+        return t.auth.invalidCredentials;
+      case "email_not_confirmed":
+        return t.auth.emailNotConfirmed;
+      case "network":
+        return t.auth.networkError;
+      default:
+        return fallback;
+    }
+  };
+
+  const completeWithAccessToken = async (
+    accessToken: string,
+    opts: { finalizeTerms: boolean }
+  ) => {
+    const bridged = await bridgeSupabaseAccessToken(accessToken);
+    if (!bridged.ok) {
+      setError(
+        mapEmailAuthError(
+          bridged.error === "network" ? "network" : "auth_error",
+          mode === "signup" ? t.auth.signupFailed : t.auth.loginFailed
+        )
+      );
+      return false;
+    }
+
+    if (bridged.needsTermsConsent) {
+      if (opts.finalizeTerms) {
+        const agreedOk = await finalizeTermsIfNeeded();
+        if (!agreedOk) {
+          window.location.href = buildTermsConsentUrl(resolveAuthNext());
+          return true;
+        }
+        // /api/terms/agree already minted the full app session cookie.
+      } else {
+        window.location.href = buildTermsConsentUrl(resolveAuthNext());
+        return true;
+      }
+    }
+
+    await afterAuthSoft();
+    return true;
   };
 
   const handleMicrosoftLogin = async () => {
     setBusy(true);
     setError(null);
     try {
-      const next = pendingPlanId ? "/pricing" : "/generate";
+      const next = resolveAuthNext();
       const { error: oauthError } = await signInWithMicrosoft(next);
       if (oauthError) {
         console.error("마이크로소프트 로그인 오류:", oauthError.message);
@@ -171,21 +272,81 @@ export default function AuthModal() {
     }
   };
 
+  /** Meta unified login (Facebook provider) — also used by the Instagram button. */
+  const handleMetaLogin = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const next = resolveAuthNext();
+      const { error: oauthError } = await signInWithFacebook(next);
+      if (oauthError) {
+        console.error("Meta/Facebook login error:", oauthError.message);
+        setError(
+          oauthError.message ||
+            "Meta sign-in failed. Please try again or use another method."
+        );
+        setBusy(false);
+        return;
+      }
+      // Browser navigates to Meta; keep busy state.
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t.auth.providerUnavailable;
+      console.error("Meta/Facebook login error:", message);
+      setError(message);
+      setBusy(false);
+    }
+  };
+
+  const handleFacebookLogin = handleMetaLogin;
+
+  const handleGoogleLogin = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      // Google is Supabase Auth only (not NextAuth /api/auth/callback/google).
+      if (!isSupabaseConfigured()) {
+        setError(
+          getSupabaseConfigError() ||
+            "Supabase Auth is not configured for Google login."
+        );
+        setBusy(false);
+        return;
+      }
+      const next = resolveAuthNext();
+      const { error: oauthError } = await signInWithGoogle(next);
+      if (oauthError) {
+        console.error("Google login error:", oauthError.message);
+        setError(oauthError.message);
+        setBusy(false);
+        return;
+      }
+      // Browser navigates to Google; keep busy state.
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t.auth.providerUnavailable;
+      console.error("Google login error:", message);
+      setError(message);
+      setBusy(false);
+    }
+  };
+
   const handleKakaoLogin = async () => {
     setBusy(true);
     setError(null);
     try {
-      const next = pendingPlanId ? "/pricing" : "/generate";
+      const next = resolveAuthNext();
       const { error: oauthError } = await signInWithKakao(next);
       if (oauthError) {
-        console.error("카카오 로그인 에러:", oauthError.message);
-        setError(oauthError.message);
+        const message = formatOAuthError(oauthError.message);
+        console.error("카카오 로그인 에러:", message);
+        setError(message);
         setBusy(false);
         return;
       }
       // Browser navigates to Kakao; keep busy state.
     } catch (err) {
-      const message = err instanceof Error ? err.message : t.auth.providerUnavailable;
+      const message = formatOAuthError(
+        err instanceof Error ? err.message : t.auth.providerUnavailable
+      );
       console.error("카카오 로그인 에러:", message);
       setError(message);
       setBusy(false);
@@ -196,7 +357,7 @@ export default function AuthModal() {
     setBusy(true);
     setError(null);
     try {
-      const next = pendingPlanId ? "/pricing" : "/generate";
+      const next = resolveAuthNext();
       const { error: oauthError } = await signInWithNaver(next);
       if (oauthError) {
         console.error("로그인 에러:", oauthError.message);
@@ -214,8 +375,16 @@ export default function AuthModal() {
   };
 
   const handleSocial = async (provider: SocialProviderId) => {
+    if (provider === "google") {
+      await handleGoogleLogin();
+      return;
+    }
     if (provider === "microsoft") {
       await handleMicrosoftLogin();
+      return;
+    }
+    if (provider === "facebook" || provider === "instagram") {
+      await handleMetaLogin();
       return;
     }
     if (provider === "kakao") {
@@ -230,13 +399,12 @@ export default function AuthModal() {
     setBusy(true);
     setError(null);
 
-    // Primary path: Supabase OAuth for every social button when configured.
+    // Primary path: Supabase OAuth when configured.
     if (isSupabaseConfigured()) {
       try {
-        const next = pendingPlanId ? "/pricing" : "/generate";
+        const next = resolveAuthNext();
         const { error: oauthError } = await signInWithSupabaseOAuth(provider, next);
         if (oauthError) throw oauthError;
-        // Browser navigates to the provider; keep busy state.
         return;
       } catch (err) {
         const message = err instanceof Error ? err.message : t.auth.providerUnavailable;
@@ -247,30 +415,13 @@ export default function AuthModal() {
       }
     }
 
-    // Local-only Google mock when Supabase is not wired.
-    if (provider === "google" && localGoogleMock) {
-      try {
-        const result = await signIn("google-mock", {
-          email: "test@gmail.com",
-          redirect: false,
-        });
-        if (result?.error) throw new Error(result.error);
-        await afterAuth();
-      } catch {
-        setError(t.auth.mockLoginHint);
-      } finally {
-        setBusy(false);
-      }
-      return;
-    }
-
     // Legacy Auth.js providers (env-based) when Supabase is absent.
     if (!socialProviders.includes(provider)) {
       setError(t.auth.providerUnavailable);
       setBusy(false);
       return;
     }
-    const callbackUrl = pendingPlanId ? "/pricing" : "/generate";
+    const callbackUrl = resolveAuthNext();
     await signIn(provider, { callbackUrl });
   };
 
@@ -278,32 +429,111 @@ export default function AuthModal() {
     e.preventDefault();
     setBusy(true);
     setError(null);
-    if (mode === "signup" && !agreed) {
-      setError(t.auth.termsRequired);
+
+    const trimmedEmail = email.trim();
+    const trimmedName = name.trim();
+
+    if (!trimmedEmail) {
+      setError(t.auth.emailRequired);
       setBusy(false);
       return;
     }
-    if (mode === "signup" && !name.trim()) {
-      setError(t.auth.namePlaceholder);
+    if (!isValidEmailFormat(trimmedEmail)) {
+      setError(t.auth.emailInvalid);
       setBusy(false);
       return;
     }
+    if (!password) {
+      setError(t.auth.passwordRequired);
+      setBusy(false);
+      return;
+    }
+    if (password.length < 8) {
+      setError(t.auth.passwordTooShort);
+      setBusy(false);
+      return;
+    }
+    if (!validatePasswordStrength(password)) {
+      setError(t.auth.passwordWeak);
+      setBusy(false);
+      return;
+    }
+
+    if (mode === "signup") {
+      if (!trimmedName) {
+        setError(t.auth.nameRequired);
+        setBusy(false);
+        return;
+      }
+      if (!agreed) {
+        setError(t.auth.termsRequired);
+        setBusy(false);
+        return;
+      }
+    }
+
     try {
+      // Primary path: Supabase Auth email/password → app session bridge
+      if (isSupabaseConfigured()) {
+          if (mode === "signup") {
+          const result = await signUpWithEmailPassword({
+            email: trimmedEmail,
+            password,
+            name: trimmedName,
+          });
+          if (!result.ok) {
+            setError(
+              mapEmailAuthError(
+                result.code,
+                result.message || t.auth.signupFailed
+              )
+            );
+            return;
+          }
+          if ("accessToken" in result) {
+            await completeWithAccessToken(result.accessToken, {
+              finalizeTerms: true,
+            });
+          }
+          return;
+        }
+
+        const result = await signInWithEmailPassword({
+          email: trimmedEmail,
+          password,
+        });
+        if (!result.ok) {
+          setError(
+            mapEmailAuthError(result.code, result.message || t.auth.loginFailed)
+          );
+          return;
+        }
+        if ("accessToken" in result) {
+          await completeWithAccessToken(result.accessToken, {
+            finalizeTerms: false,
+          });
+        }
+        return;
+      }
+
+      // Dev / demo fallback when Supabase is not configured
       const res = await signIn("credentials", {
-        email,
+        email: trimmedEmail,
         password,
-        name: name.trim(),
+        name: trimmedName,
         redirect: false,
       });
       if (res?.error) {
-        grantFreeCredits();
-        await afterAuth();
+        setError(
+          getSupabaseConfigError() ||
+            (mode === "signup" ? t.auth.signupFailed : t.auth.loginFailed)
+        );
         return;
       }
-      await afterAuth();
-    } catch {
-      grantFreeCredits();
-      await afterAuth();
+      await afterAuthSoft();
+    } catch (err) {
+      console.error("[AuthModal] email auth failed:", err);
+      setError(t.auth.networkError);
     } finally {
       setBusy(false);
     }
@@ -315,34 +545,39 @@ export default function AuthModal() {
   > = {
     google: {
       label: t.auth.continueWithGoogle,
-      className: "border border-slate-300 bg-white text-slate-900 hover:bg-slate-50",
-      icon: <GoogleLogo className="h-5 w-5 shrink-0" />,
+      className:
+        "gap-3.5 border-0 bg-[linear-gradient(90deg,#F29100_0%,#FFC107_32%,#9CCC65_68%,#2E7D32_100%)] text-[18px] !font-bold leading-none tracking-tight text-[#0056B3] shadow-sm hover:brightness-105 hover:shadow sm:text-[19px]",
+      icon: <GoogleLogo className="h-7 w-7 shrink-0 text-white sm:h-8 sm:w-8" />,
     },
     microsoft: {
       label: t.auth.continueWithMicrosoft,
-      className: "border border-slate-300 bg-white text-slate-900 hover:bg-slate-50",
-      icon: <MicrosoftLogo className="h-5 w-5 shrink-0" />,
+      className:
+        "gap-3.5 border border-slate-300 bg-white text-[18px] !font-bold leading-none tracking-tight text-slate-900 hover:bg-slate-50 sm:text-[19px]",
+      icon: <MicrosoftLogo className="h-7 w-7 shrink-0 sm:h-8 sm:w-8" />,
     },
     facebook: {
       label: t.auth.continueWithFacebook,
-      className: "border border-[#1877F2]/30 bg-[#1877F2] text-white hover:bg-[#166fe5]",
-      icon: <FacebookLogo className="h-5 w-5 shrink-0 text-white" />,
+      className:
+        "gap-3.5 border border-[#1877F2]/40 bg-[#1877F2] text-[18px] !font-bold leading-none tracking-tight text-white shadow-sm hover:bg-[#166fe5] hover:shadow sm:text-[19px]",
+      icon: <FacebookLogo className="h-7 w-7 shrink-0 text-white sm:h-8 sm:w-8" />,
     },
     instagram: {
       label: t.auth.continueWithInstagram,
       className:
-        "border border-pink-200/80 bg-white text-slate-900 hover:bg-slate-50",
-      icon: <InstagramLogo className="h-5 w-5 shrink-0" />,
+        "gap-3.5 border border-pink-200/80 bg-white text-[18px] !font-bold leading-none tracking-tight text-slate-900 hover:bg-slate-50 sm:text-[19px]",
+      icon: <InstagramLogo className="h-7 w-7 shrink-0 sm:h-8 sm:w-8" />,
     },
     kakao: {
       label: t.auth.continueWithKakao,
-      className: "bg-[#FEE500] text-[#191919] hover:bg-[#f5dc00]",
-      icon: <KakaoLogo className="h-5 w-5 shrink-0" />,
+      className:
+        "gap-3.5 bg-[#FEE500] text-[18px] !font-bold leading-none tracking-tight text-[#191919] hover:bg-[#f5dc00] sm:text-[19px]",
+      icon: <KakaoLogo className="h-7 w-7 shrink-0 sm:h-8 sm:w-8" />,
     },
     naver: {
       label: t.auth.continueWithNaver,
-      className: "bg-[#03C75A] text-white hover:bg-[#02b350]",
-      icon: <NaverLogo className="h-5 w-5 shrink-0" />,
+      className:
+        "gap-3.5 bg-[#03C75A] text-[18px] !font-bold leading-none tracking-tight text-white hover:bg-[#02b350] sm:text-[19px]",
+      icon: <NaverLogo className="h-7 w-7 shrink-0 sm:h-8 sm:w-8" />,
     },
   };
 
@@ -389,6 +624,10 @@ export default function AuthModal() {
                       void handleMicrosoftLogin();
                       return;
                     }
+                    if (id === "facebook" || id === "instagram") {
+                      void handleMetaLogin();
+                      return;
+                    }
                     if (id === "kakao") {
                       void handleKakaoLogin();
                       return;
@@ -399,10 +638,10 @@ export default function AuthModal() {
                     }
                     void handleSocial(id);
                   }}
-                  className={`flex w-full items-center justify-center gap-3 rounded-xl px-4 py-3.5 text-[15px] font-semibold transition disabled:opacity-50 sm:py-3.5 ${cfg.className}`}
+                  className={`flex w-full items-center justify-center rounded-xl px-4 py-3.5 font-semibold transition disabled:opacity-50 sm:py-3.5 ${cfg.className}`}
                 >
                   {cfg.icon}
-                  <span>{cfg.label}</span>
+                  <span className="leading-none">{cfg.label}</span>
                 </button>
               );
             })}
@@ -444,7 +683,7 @@ export default function AuthModal() {
             <input
               type="password"
               required
-              minLength={6}
+              minLength={8}
               autoComplete={mode === "signup" ? "new-password" : "current-password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}

@@ -29,7 +29,7 @@ export default function Step2Layout({
         </div>
         <div
           data-wizard-form
-          className="relative z-[500] isolate min-h-0 pointer-events-auto lg:h-full lg:overflow-hidden"
+          className="relative z-[500] min-h-0 pointer-events-auto lg:h-full lg:overflow-visible"
         >
           {form}
         </div>

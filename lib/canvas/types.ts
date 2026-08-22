@@ -105,20 +105,26 @@ export function isUserImageLayer(obj: CanvasObject): boolean {
   return obj.type === "photo" || obj.type === "sticker";
 }
 
-/** Fit an image into a fraction of the stage (contain). */
+/** Fit an image into the stage with contain (Center & Fit). */
 export function fitImageInStage(
   srcW: number,
   srcH: number,
   stageW: number,
   stageH: number,
-  maxFraction = 0.55
+  maxFraction = 1
 ): { x: number; y: number; width: number; height: number } {
-  const boxW = Math.max(40, stageW * maxFraction);
-  const boxH = Math.max(40, stageH * maxFraction);
+  const frac = Math.max(0.05, Math.min(1, maxFraction));
+  const boxW = Math.max(40, stageW * frac);
+  const boxH = Math.max(40, stageH * frac);
   if (srcW < 1 || srcH < 1) {
-    return { x: stageW * 0.2, y: stageH * 0.2, width: boxW, height: boxH };
+    return {
+      x: (stageW - boxW) / 2,
+      y: (stageH - boxH) / 2,
+      width: boxW,
+      height: boxH,
+    };
   }
-  const scale = Math.min(boxW / srcW, boxH / srcH, 1);
+  const scale = Math.min(boxW / srcW, boxH / srcH);
   const width = Math.max(24, srcW * scale);
   const height = Math.max(24, srcH * scale);
   return {

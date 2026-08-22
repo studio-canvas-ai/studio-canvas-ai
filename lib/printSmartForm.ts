@@ -1,5 +1,5 @@
 /**
- * Admin-only “AI 1분 인쇄물 뚝딱 생성기” entry.
+ * Public “AI 1분 인쇄물 뚝딱 생성기” entry.
  * Keep this module client-safe (no Node APIs).
  */
 
@@ -7,7 +7,7 @@ export const PRINT_SMART_FORM_PATH = "/print-smart-form";
 /** Step 3 — wide multi studio (wired from Step 2 CTA). */
 export const PRINT_SMART_FORM_STUDIO_PATH = "/print-smart-form/studio";
 
-/** Signed-in accounts that may see / open the print smart-form tool. */
+/** Legacy allow-list (no longer gates public access). */
 export const PRINT_SMART_FORM_ADMIN_EMAILS = [
   "studiocanvas.cs@gmail.com",
   "scd77777@naver.com",

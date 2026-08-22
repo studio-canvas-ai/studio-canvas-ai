@@ -13,35 +13,47 @@ import {
   FIELD_CATEGORIES,
   type BgPresetId,
 } from "@/lib/printWizardTypes";
+import type { WizardProductId } from "@/lib/wizard/wizardProduct";
+import { photoInpaintUi } from "@/lib/photoInpaintCopy";
 
 export type AiBackgroundPromptBarProps = {
   value: string;
   generating?: boolean;
   bgPresetId?: BgPresetId | null;
-  /** Hint under the field, e.g. A4 · 팸플릿 · 4면 */
-  contextHint?: string;
+  specTags?: { label: string; value: string }[];
+  canGenerate?: boolean;
   onChange: (value: string) => void;
   onPresetPick: (id: BgPresetId) => void;
   onGenerate: () => void;
   /** Optional order prompt shown when expanded. */
   expandedContent?: ReactNode;
+  /** Photo lookbook uses subject-transform (inpaint) copy + hides field mood. */
+  productId?: WizardProductId;
 };
 
 /**
- * Compact Adobe-inspired toolbar + full-width 「AI 배경 생성」 prompt.
+ * Compact Adobe-inspired toolbar + full-width AI prompt (bg or inpaint).
  */
 export default function AiBackgroundPromptBar({
   value,
   generating = false,
   bgPresetId = null,
-  contextHint = "",
+  specTags = [],
+  canGenerate = false,
   onChange,
   onPresetPick,
   onGenerate,
   expandedContent,
+  productId = "print",
 }: AiBackgroundPromptBarProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const cs = t.canvasStudio;
+  const isPhoto = productId === "photo";
+  const photoUi = isPhoto ? photoInpaintUi(locale) : null;
+  const title = photoUi?.title ?? cs.bgGenerateTitle;
+  const generateLabel = photoUi?.generate ?? cs.bgGenerate;
+  const generatingLabel = photoUi?.generating ?? cs.bgGenerating;
+  const placeholder = photoUi?.placeholder ?? cs.bgPlaceholder;
   const [orderOpen, setOrderOpen] = useState(false);
   const [moodOpen, setMoodOpen] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
@@ -70,7 +82,7 @@ export default function AiBackgroundPromptBar({
     };
   }, [moodOpen, optionsOpen]);
 
-  const canSend = !generating;
+  const canSend = !generating && canGenerate;
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key !== "Enter" || e.shiftKey) return;
@@ -89,54 +101,60 @@ export default function AiBackgroundPromptBar({
     <div ref={rootRef} className="relative w-full shrink-0 space-y-2">
       {/* Compact tool strip — petite, not dominant */}
       <div className="flex w-full items-center gap-1.5">
-        <div className="relative flex items-center gap-1">
-          <button
-            type="button"
-            aria-label="배경 분위기 프리셋"
-            aria-expanded={moodOpen}
-            onClick={() => {
-              setMoodOpen((v) => !v);
-              setOptionsOpen(false);
-            }}
-            className={toolBtn(moodOpen)}
-          >
-            <Wand2 className="h-3.5 w-3.5" aria-hidden />
-          </button>
+        {!isPhoto ? (
+          <div className="relative flex items-center gap-1">
+            <button
+              type="button"
+              aria-label="배경 분위기 프리셋"
+              aria-expanded={moodOpen}
+              onClick={() => {
+                setMoodOpen((v) => !v);
+                setOptionsOpen(false);
+              }}
+              className={toolBtn(moodOpen)}
+            >
+              <Wand2 className="h-3.5 w-3.5" aria-hidden />
+            </button>
 
-          {moodOpen ? (
-            <div className="absolute top-[calc(100%+6px)] left-0 z-30 w-[min(18rem,calc(100vw-2rem))] rounded-xl border border-slate-700/80 bg-[#121824] p-2 shadow-[0_12px_32px_rgba(0,0,0,0.5)]">
-              <p className="mb-1.5 px-1 text-[10px] font-semibold tracking-wide text-slate-500 uppercase">
-                배경 분위기
-              </p>
-              <div className="flex flex-wrap gap-1">
-                {FIELD_CATEGORIES.map((group) => {
-                  const first = group.items[0]!;
-                  const on = Boolean(
-                    bgPresetId &&
-                      group.items.some((item) => item.id === bgPresetId)
-                  );
-                  return (
-                    <button
-                      key={group.id}
-                      type="button"
-                      onClick={() => {
-                        onPresetPick(first.id);
-                        setMoodOpen(false);
-                      }}
-                      className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold [word-break:keep-all] transition ${
-                        on
-                          ? "border-indigo-400/50 bg-indigo-500/20 text-indigo-100"
-                          : "border-slate-700 bg-[#0E1420] text-slate-400 hover:border-slate-600 hover:text-slate-200"
-                      }`}
-                    >
-                      {cs.fieldGroups[group.id]}
-                    </button>
-                  );
-                })}
+            {moodOpen ? (
+              <div className="absolute top-[calc(100%+6px)] left-0 z-30 w-[min(18rem,calc(100vw-2rem))] rounded-xl border border-slate-700/80 bg-[#121824] p-2 shadow-[0_12px_32px_rgba(0,0,0,0.5)]">
+                <p className="mb-1.5 px-1 text-[10px] font-semibold tracking-wide text-slate-500 uppercase">
+                  배경 분위기
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {FIELD_CATEGORIES.map((group) => {
+                    const first = group.items[0]!;
+                    const on = Boolean(
+                      bgPresetId &&
+                        group.items.some((item) => item.id === bgPresetId)
+                    );
+                    return (
+                      <button
+                        key={group.id}
+                        type="button"
+                        onClick={() => {
+                          onPresetPick(first.id);
+                          setMoodOpen(false);
+                        }}
+                        className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold [word-break:keep-all] transition ${
+                          on
+                            ? "border-indigo-400/50 bg-indigo-500/20 text-indigo-100"
+                            : "border-slate-700 bg-[#0E1420] text-slate-400 hover:border-slate-600 hover:text-slate-200"
+                        }`}
+                      >
+                        {cs.fieldGroups[group.id]}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ) : null}
-        </div>
+            ) : null}
+          </div>
+        ) : (
+          <p className="max-w-[min(100%,28rem)] text-[10px] leading-snug text-slate-500 [word-break:keep-all]">
+            {photoUi?.hint}
+          </p>
+        )}
 
         <div className="ml-auto flex items-center gap-1">
           <span className="rounded bg-indigo-500/15 px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-indigo-300">
@@ -196,41 +214,54 @@ export default function AiBackgroundPromptBar({
         </div>
       </div>
 
-      {/* Full-width core: AI 배경 생성 */}
+      {/* Full-width core: AI prompt */}
       <div className="w-full rounded-xl border border-slate-700 bg-[#0E1420] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
         <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 px-3 py-1.5">
           <p className="text-[12px] font-semibold text-slate-100 [word-break:keep-all]">
-            {cs.bgGenerateTitle}
+            {title}
           </p>
-          {contextHint ? (
-            <p className="truncate text-[10px] text-slate-500">{contextHint}</p>
-          ) : null}
         </div>
 
-        <div className="flex items-end gap-2 p-2.5 sm:p-3">
+        <div className="relative p-2.5 sm:p-3">
           <textarea
             ref={textareaRef}
             value={value}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={onKeyDown}
-            aria-label={cs.bgGenerateTitle}
+            aria-label={title}
             rows={3}
             readOnly={false}
             spellCheck={false}
-            placeholder={cs.bgPlaceholder}
-            className="min-h-[4.75rem] w-full flex-1 resize-none bg-transparent text-sm leading-relaxed text-slate-100 outline-none placeholder:text-slate-400"
+            aria-describedby="print-bg-guide"
+            className="min-h-[4.75rem] w-full resize-none bg-transparent pb-6 text-sm leading-relaxed text-slate-100 outline-none"
           />
+          <p
+            id="print-bg-guide"
+            className="pointer-events-none absolute inset-x-2.5 bottom-2 bg-gradient-to-t from-[#0E1420] from-60% to-transparent pt-3 text-[13px] font-medium leading-none text-slate-400 sm:inset-x-3 sm:text-[14px]"
+          >
+            {placeholder}
+          </p>
         </div>
-        <p className="border-t border-slate-800/80 px-3 py-1.5 text-[10px] leading-snug text-slate-500">
-          {cs.bgHint}
-        </p>
+        {specTags.length ? (
+          <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-800/80 px-3 py-2">
+            {specTags.map((tag) => (
+              <span
+                key={tag.label}
+                className="inline-flex max-w-full items-center gap-1 rounded-full border border-pink-400/40 bg-pink-500/10 px-2.5 py-1 text-[11px] font-semibold text-pink-300 [word-break:keep-all]"
+              >
+                <span className="text-pink-400/80">{tag.label}</span>
+                <span className="truncate text-pink-200">{tag.value}</span>
+              </span>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       <button
         type="button"
         disabled={!canSend}
         onClick={onGenerate}
-        className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-indigo-500 px-3 py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(99,102,241,0.28)] transition hover:bg-indigo-400 disabled:opacity-45"
+        className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-indigo-500 px-3 py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(99,102,241,0.28)] transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-45"
       >
         {generating ? (
           <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
@@ -238,7 +269,7 @@ export default function AiBackgroundPromptBar({
           <Sparkles className="h-4 w-4 shrink-0" aria-hidden />
         )}
         <span className="[word-break:keep-all]">
-          {generating ? cs.bgGenerating : cs.bgGenerate}
+          {generating ? generatingLabel : generateLabel}
         </span>
       </button>
 
