@@ -23,10 +23,7 @@ import {
   boxToLayerPatch,
   canvasTextScale,
   clampBoxAllowOverflow,
-  clampUserFontSize,
   layerToBox,
-  PRINT_USER_FONT_SIZE_MAX,
-  PRINT_USER_FONT_SIZE_MIN,
   removeTextLayer,
   stripLayerPlaceholderPrefix,
 } from "@/lib/printWizardTextLayers";
@@ -539,7 +536,7 @@ export default function PreviewTextOverlay({
             }}
           >
             {showChrome ? (
-              <div className="absolute -top-5 left-0 right-0 z-[8] flex items-center justify-between gap-1">
+              <div className="absolute -top-3.5 left-0 right-0 z-[8] flex items-center justify-between gap-0.5">
                 <div className="flex shrink-0 items-center gap-0.5">
                   <button
                     type="button"
@@ -550,9 +547,9 @@ export default function PreviewTextOverlay({
                       e.stopPropagation();
                       handleAddAfter(index);
                     }}
-                    className="inline-flex h-4 w-4 items-center justify-center rounded-[3px] border border-white/25 bg-black/80 text-white/90 shadow-sm hover:bg-black"
+                    className="inline-flex h-3 w-3 items-center justify-center rounded-[2px] border border-white/20 bg-black/70 text-white/85 shadow-sm hover:bg-black/90"
                   >
-                    <Plus className="h-2.5 w-2.5" strokeWidth={2.8} />
+                    <Plus className="h-2 w-2" strokeWidth={2.5} />
                   </button>
                   <button
                     type="button"
@@ -563,37 +560,11 @@ export default function PreviewTextOverlay({
                       e.stopPropagation();
                       void handleCopy(layer);
                     }}
-                    className="inline-flex h-4 w-4 items-center justify-center rounded-[3px] border border-white/25 bg-black/80 text-white/90 shadow-sm hover:bg-black"
+                    className="inline-flex h-3 w-3 items-center justify-center rounded-[2px] border border-white/20 bg-black/70 text-white/85 shadow-sm hover:bg-black/90"
                   >
-                    <ClipboardCopy className="h-2.5 w-2.5" strokeWidth={2.4} />
+                    <ClipboardCopy className="h-2 w-2" strokeWidth={2.2} />
                   </button>
                 </div>
-                <label
-                  className="flex min-w-0 flex-1 items-center gap-1 rounded-[3px] border border-white/20 bg-black/80 px-1 py-0.5"
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <span className="shrink-0 text-[9px] font-semibold tabular-nums text-white/80">
-                    {clampUserFontSize(layer.fontSize)}px
-                  </span>
-                  <input
-                    type="range"
-                    min={PRINT_USER_FONT_SIZE_MIN}
-                    max={PRINT_USER_FONT_SIZE_MAX}
-                    value={clampUserFontSize(layer.fontSize)}
-                    onChange={(e) => {
-                      const fontSize = clampUserFontSize(Number(e.target.value));
-                      onLayersChange(
-                        layersRef.current.map((l) =>
-                          l.id === layer.id
-                            ? { ...l, fontSize, layoutLocked: true }
-                            : l
-                        )
-                      );
-                    }}
-                    className="min-w-0 flex-1 accent-indigo-400"
-                  />
-                </label>
                 <button
                   type="button"
                   title={cs.delete}
@@ -603,22 +574,22 @@ export default function PreviewTextOverlay({
                     e.stopPropagation();
                     handleDelete(layer.id);
                   }}
-                  className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] border border-white/25 bg-black/80 text-white/90 shadow-sm hover:bg-rose-950 hover:text-rose-200"
+                  className="inline-flex h-3 w-3 shrink-0 items-center justify-center rounded-[2px] border border-white/20 bg-black/70 text-white/85 shadow-sm hover:bg-rose-950/80 hover:text-rose-200"
                 >
-                  <Trash2 className="h-2.5 w-2.5" />
+                  <Trash2 className="h-2 w-2" strokeWidth={2.2} />
                 </button>
               </div>
             ) : null}
 
             <div
-              className={`relative h-full w-full rounded-[3px] ${
+              className={`relative h-full w-full rounded-[2px] ${
                 showChrome
-                  ? "bg-violet-500/10 shadow-[0_0_0_1.5px_#818cf8]"
+                  ? "bg-violet-500/5 shadow-[0_0_0_1px_#818cf8]"
                   : "bg-transparent"
               }`}
               style={
                 showChrome
-                  ? { outline: "1.5px dashed #6366f1", outlineOffset: 0 }
+                  ? { outline: "1px dashed #6366f1", outlineOffset: 0 }
                   : undefined
               }
             >
@@ -684,7 +655,7 @@ export default function PreviewTextOverlay({
                       onPointerDown={(e) =>
                         handlePointerDown(e, layer.id, "resize", h.id)
                       }
-                      className={`absolute z-[9] h-1.5 w-1.5 touch-none rounded-[1px] border border-indigo-500 bg-white shadow pointer-coarse:h-2.5 pointer-coarse:w-2.5 ${h.className}`}
+                      className={`absolute z-[9] h-1 w-1 touch-none rounded-full border border-indigo-400/90 bg-white/95 shadow-sm pointer-coarse:h-1.5 pointer-coarse:w-1.5 ${h.className}`}
                       style={{ cursor: h.cursor }}
                     />
                   ))
