@@ -22,6 +22,7 @@ import PromotionCodeModal from "@/components/PromotionCodeModal";
 import GoogleFontsLoader from "@/components/GoogleFontsLoader";
 import ScreenBadge from "@/components/ScreenBadge";
 import ScreenBadgeAuth from "@/components/ScreenBadgeAuth";
+import SessionLockGuard from "@/components/SessionLockGuard";
 import { PRODUCTION_SITE_URL } from "@/lib/site";
 
 const inter = Inter({
@@ -87,6 +88,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
         <CreditsProvider>
           <SupabaseAuthBootstrap />
           <StudioStoreRecoveryBootstrap />
+          <SessionLockGuard />
           {children}
           <ScreenBadge />
           <AuthModal />

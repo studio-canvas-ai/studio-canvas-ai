@@ -1633,7 +1633,6 @@ export default function PrintWizardStep2({
 
   const formPanel = (
     <div className="flex h-full min-h-0 flex-col gap-2">
-      {step1TextLayerList}
       <div className="min-h-0 flex-1 overflow-y-auto">
         <SmartInputForm
           key={workspaceEpoch}

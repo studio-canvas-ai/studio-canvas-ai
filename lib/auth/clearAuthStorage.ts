@@ -18,6 +18,7 @@ function isAuthLocalOrSessionKey(key: string): boolean {
   if (k.startsWith("supabase.auth")) return true;
   if (k.includes("authjs") || k.includes("next-auth")) return true;
   if (k === "sca_auth_next" || k === "sca_auth_error") return true;
+  if (k === "sca_active_session_id") return true;
   return false;
 }
 

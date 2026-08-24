@@ -40,6 +40,7 @@ import {
 import { shouldApplyBrandWatermark } from "@/lib/watermarkPolicy";
 import { stashAuthErrorForModal } from "@/lib/supabase/oauthErrors";
 import { clearAuthStorageOnly } from "@/lib/auth/clearAuthStorage";
+import { SESSION_LOCK_STORAGE_KEY } from "@/lib/auth/sessionLockShared";
 import type { PlanUsageSnapshot } from "@/lib/planQuotas";
 
 export type { PlanId } from "@/lib/faceProfiles";
@@ -381,6 +382,11 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
     }
 
     clearBrowserAuthResidue();
+    try {
+      localStorage.removeItem(SESSION_LOCK_STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
     setIsAuthenticated(false);
     setAuthUser(null);
     setIsAdmin(false);

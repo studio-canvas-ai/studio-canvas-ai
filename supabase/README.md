@@ -17,7 +17,8 @@ Flow: `signInWithOAuth` → `/auth/callback` → `/auth/bridge` → if `terms_ag
 3. Paste and run: [`migrations/20260803_profiles_terms_agreed.sql`](./migrations/20260803_profiles_terms_agreed.sql)
 4. Paste and run: [`migrations/20260822_studio_user_stores.sql`](./migrations/20260822_studio_user_stores.sql) (recent files / upload vault / trained vault durable store)
 5. Paste and run: [`migrations/20260822_studio_user_store_snapshots.sql`](./migrations/20260822_studio_user_store_snapshots.sql) (admin rollback snapshots)
-6. Confirm **Table Editor** shows `public.profiles` with `terms_agreed` / `terms_agreed_at`
+6. Paste and run: [`migrations/20260824_profiles_active_session.sql`](./migrations/20260824_profiles_active_session.sql) (single-device session lock: `active_session_id`)
+7. Confirm **Table Editor** shows `public.profiles` with `terms_agreed` / `terms_agreed_at` (and `active_session_id` after step 6)
 
 `auth.users` is created automatically by Supabase — do not recreate it.
 
