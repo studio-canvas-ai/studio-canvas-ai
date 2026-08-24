@@ -20,6 +20,8 @@ import CreditTopUpModal from "@/components/CreditTopUpModal";
 import ReturnUserModal from "@/components/ReturnUserModal";
 import PromotionCodeModal from "@/components/PromotionCodeModal";
 import GoogleFontsLoader from "@/components/GoogleFontsLoader";
+import ScreenBadge from "@/components/ScreenBadge";
+import ScreenBadgeAuth from "@/components/ScreenBadgeAuth";
 import { PRODUCTION_SITE_URL } from "@/lib/site";
 
 const inter = Inter({
@@ -86,6 +88,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
           <SupabaseAuthBootstrap />
           <StudioStoreRecoveryBootstrap />
           {children}
+          <ScreenBadge />
           <AuthModal />
           <CreditDepletionModal />
           <PaymentModal />
@@ -100,7 +103,12 @@ function AppShell({ children }: { children: React.ReactNode }) {
 
 /** Lightweight shell for /auth/* — avoids Session/Credits providers hanging SSR. */
 function AuthShell({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return (
+    <AuthSessionProvider>
+      {children}
+      <ScreenBadgeAuth />
+    </AuthSessionProvider>
+  );
 }
 
 export default async function RootLayout({
