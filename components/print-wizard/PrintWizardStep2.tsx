@@ -188,6 +188,9 @@ export default function PrintWizardStep2({
   /** After recent-file restore, skip one-shot session remount auto-layout. */
   const skipAutoLayoutOnceRef = useRef(false);
 
+  /** True once session hydrate finished — blocks remount/layout from wiping user data. */
+  const sessionHydratedRef = useRef(false);
+
   const textLayersByPage = useMemo(() => {
     return resizeIndependentPages(
       state.textLayersByPage,
@@ -212,14 +215,44 @@ export default function PrintWizardStep2({
   const editorPageLayers = textLayersByPage[editorPageIndex] ?? [];
 
   useEffect(() => {
-    const saved = readSession();
+    // Recent/.sca restore already wrote state — do not re-seed or force step 1.
     if (skipAutoLayoutOnceRef.current) {
       skipAutoLayoutOnceRef.current = false;
+      sessionHydratedRef.current = true;
       return;
     }
+    if (sessionHydratedRef.current) return;
+    sessionHydratedRef.current = true;
+
+    const saved = readSession();
+    const hasUserContent = (s: PrintWizardState) =>
+      Boolean(
+        s.textLayersByPage?.some((page) =>
+          page.some((l) => l.layoutLocked || Boolean(l.text?.trim()))
+        )
+      ) ||
+      Object.values(s.inputs ?? {}).some((v) =>
+        Boolean(String(v ?? "").trim())
+      );
+
     if (saved) {
+      // Never force wizardStep:1 — that kicked Screen 24 back to draft and
+      // re-ran layout over restored textLayersByPage / inputs.
+      if (hasUserContent(saved) || saved.wizardStep === 2) {
+        const next = {
+          ...saved,
+          textLayersByPage: resizeIndependentPages(
+            saved.textLayersByPage,
+            editorSlotCount(saved.pageCount)
+          ),
+        };
+        saveSession(next);
+        setState(next);
+        return;
+      }
+
       const next = applyAutoLayoutState(
-        { ...saved, wizardStep: 1 as const },
+        { ...saved },
         { bgPresetId: saved.bgPresetId }
       );
       const photoLocked =
@@ -245,7 +278,6 @@ export default function PrintWizardStep2({
         merged.textLayersByPage,
         editorSlotCount(merged.pageCount)
       );
-      // Preserve user/manual layouts — only seed semantic layout on empty/default pages.
       const withPages = {
         ...merged,
         textLayersByPage: resized.map((page, i) => {
@@ -259,7 +291,9 @@ export default function PrintWizardStep2({
       setState(withPages);
       return;
     }
+
     setState((prev) => {
+      if (hasUserContent(prev)) return prev;
       const next = {
         ...prev,
         textLayersByPage: resizeIndependentPages(
@@ -295,9 +329,9 @@ export default function PrintWizardStep2({
             ? layersOrUpdater(current)
             : layersOrUpdater;
         const normalizedLayers =
-          options?.applyLayout === false
-            ? incoming
-            : applySemanticPageLayout(incoming, pageIndexToUpdate);
+          options?.applyLayout === true
+            ? applySemanticPageLayout(incoming, pageIndexToUpdate)
+            : incoming;
         const nextPages = pages.map((pageLayers, idx) =>
           idx === pageIndexToUpdate ? normalizedLayers : pageLayers
         );
@@ -1413,6 +1447,7 @@ export default function PrintWizardStep2({
       if (isPhotoLookbookSnapshot(project.lookbook)) {
         const { wizard } = applyPhotoLookbookSnapshot(project.lookbook);
         skipAutoLayoutOnceRef.current = true;
+        sessionHydratedRef.current = true;
 
         if (productId === "photo") {
           const next = {
@@ -1482,6 +1517,7 @@ export default function PrintWizardStep2({
 
       // Legacy .sca without wizard snapshot: map flat overlayLayers onto current page.
       skipAutoLayoutOnceRef.current = true;
+      sessionHydratedRef.current = true;
       const pageIndex = Math.max(0, currentPage - 1);
       const layers = (project.studio.overlayLayers || []).map((l) => ({
         ...l,

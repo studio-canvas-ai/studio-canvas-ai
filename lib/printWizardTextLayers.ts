@@ -1015,14 +1015,23 @@ export function mergeRestoredTextLayersByPage(opts: {
       i === opts.overlayPageIndex ? opts.overlayLayers! : page
     );
   }
-  return base.map((_, pageIndex) =>
-    resolvePageTextLayersForExport(
+  // Keep pages that already have real text (geometry + copy). Only fill
+  // empty/placeholder pages from inputs — never re-export over user data.
+  return base.map((page, pageIndex) => {
+    if (pageLayersHaveVisibleText(page)) {
+      return page.map((l) => ({
+        ...l,
+        fontSize: Math.max(10, Math.round(l.fontSize || PAGE_TEXT_SIZE)),
+      }));
+    }
+    if (pageIndex >= pageCount) return page;
+    return resolvePageTextLayersForExport(
       base,
       pageIndex,
       opts.inputs,
       pageCount
-    )
-  );
+    );
+  });
 }
 
 /**
