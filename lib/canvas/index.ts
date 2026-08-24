@@ -56,8 +56,8 @@ export {
 export {
   loadCloudRecentFiles,
   saveCloudRecentFiles,
-  useCloudRecentFiles,
 } from "@/lib/canvas/cloudRecentFiles";
+export { useCloudRecentFiles } from "@/lib/canvas/useCloudRecentFiles";
 export {
   downloadImageAndRememberRecent,
   openRecentProjectInEditor,
