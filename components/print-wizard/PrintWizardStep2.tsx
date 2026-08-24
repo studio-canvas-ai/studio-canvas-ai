@@ -49,10 +49,7 @@ import {
 import type { WizardDraftStorage } from "@/lib/wizard/wizardDraftStorage";
 import { useCanvasStore } from "@/lib/canvas/canvasStore";
 import { usePrintWizardExport } from "@/lib/canvas/usePrintWizardExport";
-import {
-  stashPendingStudioProject,
-  type StudioCanvasProjectV1,
-} from "@/lib/canvas/projectFile";
+import type { StudioCanvasProjectV1 } from "@/lib/canvas/projectFile";
 import {
   applyPhotoLookbookSnapshot,
   capturePhotoLookbookSnapshot,
@@ -1430,7 +1427,8 @@ export default function PrintWizardStep2({
           photoLayersByPage: wizard.photoLayersByPage,
           backgroundUrls: wizard.backgroundUrls,
           backgroundPansByPage: wizard.backgroundPansByPage,
-          wizardStep: 1 as const,
+          // Keep current step — never bounce to a sub-studio route.
+          wizardStep: (state.wizardStep ?? 1) as 1 | 2,
         };
         saveSession(next);
         setState(next);
@@ -1446,23 +1444,63 @@ export default function PrintWizardStep2({
         );
         return;
       }
-      stashPendingStudioProject(project, pendingProjectKey);
+
+      // Print (and photo without lookbook): apply onto current wizard canvas.
+      skipAutoLayoutOnceRef.current = true;
+      const pageIndex = Math.max(0, currentPage - 1);
+      const layers = (project.studio.overlayLayers || []).map((l) => ({
+        ...l,
+        ranges: l.ranges?.map((r) => ({ ...r })) ?? [],
+      }));
+      const slots = editorSlotCount(state.pageCount);
+      const textPages = resizeIndependentPages(
+        state.textLayersByPage,
+        slots
+      );
+      if (layers.length) {
+        textPages[pageIndex] = layers;
+      }
+      const bg = project.studio.backgroundUrl;
+      const backgroundUrls = [
+        ...(state.backgroundUrls?.length
+          ? state.backgroundUrls
+          : Array.from({ length: state.pageCount }, () => "")),
+      ];
+      while (backgroundUrls.length < state.pageCount) backgroundUrls.push("");
+      if (bg) backgroundUrls[pageIndex] = bg;
+
+      const next = {
+        ...state,
+        backgroundUrl: bg || state.backgroundUrl,
+        backgroundUrls,
+        textLayersByPage: textPages,
+        visualStyle: project.studio.visualStyle ?? state.visualStyle,
+        customSize: project.studio.customPrint
+          ? {
+              unit: project.studio.customPrint.unit,
+              width: project.studio.customPrint.width,
+              height: project.studio.customPrint.height,
+            }
+          : state.customSize,
+        formatId: project.studio.customPrint
+          ? ("free" as const)
+          : state.formatId,
+        wizardStep: (state.wizardStep ?? 1) as 1 | 2,
+      };
+      saveSession(next);
+      setState(next);
+      setWorkspaceEpoch((n) => n + 1);
       showToast(
-        "최근 수정파일을 불러왔습니다. 스튜디오로 이동합니다.",
+        "최근 수정파일을 불러와 편집 상태를 복원했습니다.",
         "success"
       );
-      // studio navigation handled by PreviewCanvas fallback when no handler —
-      // keep local navigate via product studio path
-      if (typeof window !== "undefined") {
-        window.location.assign(studioPath);
-      }
     },
     [
-      pendingProjectKey,
+      currentPage,
       productId,
       saveSession,
       showToast,
-      studioPath,
+      state,
     ]
   );
 
@@ -1507,6 +1545,7 @@ export default function PrintWizardStep2({
           recentNamespace={recentNamespace}
           panelTitle={panelTitle}
           isPhotoLookbook={productId === "photo"}
+          onOpenRecentProject={onOpenRecentProject}
         />
       </div>
     );
@@ -1702,9 +1741,7 @@ export default function PrintWizardStep2({
           pendingProjectKey={pendingProjectKey}
           recentNamespace={recentNamespace}
           panelTitle={panelTitle}
-          onOpenRecentProject={
-            isPhotoLayout ? onOpenRecentProject : undefined
-          }
+          onOpenRecentProject={onOpenRecentProject}
           datePreview={state.inputs.date}
           titlePreview={state.inputs.title}
           subtitlePreview={state.inputs.subtitle}

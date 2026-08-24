@@ -42,7 +42,11 @@ export type PrintWizardEditStageProps = {
   currentPage: number;
   onCurrentPageChange: (page: number) => void;
   textLayersByPage: TextLayer[][];
-  onTextLayersChange: (pageIndex: number, layers: TextLayer[]) => void;
+  onTextLayersChange: (
+    pageIndex: number,
+    layers: TextLayer[],
+    options?: { applyLayout?: boolean }
+  ) => void;
   photoLayersByPage?: PrintPhotoLayer[][];
   onPhotoLayersChange?: (pageIndex: number, layers: PrintPhotoLayer[]) => void;
   decoLayersByPage?: PrintDecoLayer[][];
@@ -66,6 +70,8 @@ export type PrintWizardEditStageProps = {
   recentNamespace?: RecentProjectNamespace;
   /** When true, .sca embeds lookbook vault + wizard snapshot. */
   isPhotoLookbook?: boolean;
+  /** Apply recent project on this wizard (no sub-studio redirect). */
+  onOpenRecentProject?: (project: import("@/lib/canvas/projectFile").StudioCanvasProjectV1) => void;
 };
 
 /**
@@ -99,6 +105,7 @@ export default function PrintWizardEditStage({
   panelTitle,
   recentNamespace,
   isPhotoLookbook = false,
+  onOpenRecentProject,
 }: PrintWizardEditStageProps) {
   const aspect = resolvePrintAspect(state.formatId, state.customSize);
   const typographyStage = useMemo(
@@ -149,6 +156,7 @@ export default function PrintWizardEditStage({
     pendingProjectKey,
     recentNamespace,
     overlayLayers,
+    onApplyRecentProject: onOpenRecentProject,
     resolveExportImage: async (quality) => {
       const exportState: PrintWizardState = {
         ...state,
@@ -260,7 +268,8 @@ export default function PrintWizardEditStage({
                         typographyStage.w,
                         typographyStage.h
                       )
-                    )
+                    ),
+                    { applyLayout: false }
                   )
                 }
                 controlledActiveLayerId={activeTextLayerId}

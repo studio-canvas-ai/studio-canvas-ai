@@ -113,10 +113,17 @@ import {
 import { wrapParagraph } from "@/lib/printWizardTextDraw";
 import {
   buildStudioProject,
+  cloneOverlayLayers,
   readProjectFile,
+  resolveProjectPrintAspect,
   takePendingStudioProject,
   type StudioCanvasProjectV1,
+  type StudioProjectCustomPrint,
 } from "@/lib/canvas/projectFile";
+import {
+  referencePrintStageSize,
+  stageFontSizeToDesign,
+} from "@/lib/printWizardTextLayers";
 
 const StudioKonvaStage = dynamic(
   () =>
@@ -643,6 +650,8 @@ function dispersedPlacement(index: number): {
 function makeDefaultLayer(index = 0): TextLayer {
   const place = dispersedPlacement(index);
   return createLayer({
+    // `-layer-` keeps empty rows through print wizard zone prune.
+    id: `add-layer-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     text: "",
     color: "softIvory",
     fontPreset: "variety",
@@ -668,6 +677,11 @@ const FONT_KEYS = [
   "poster",
   "pretendard",
   "gmarket",
+  "scoreDream",
+  "kccAhnjunggeun",
+  "cafe24Dangdanghae",
+  "cafe24Ohsquare",
+  "ridiBatang",
   "jua",
   "jalnan",
   "calligraphy",
@@ -737,6 +751,12 @@ export type AiTemplateStudioProps = {
   formFields?: Record<string, string> | null;
   /** Seed style / mood selection (print wizard → agent). */
   initialVisualStyle?: VisualStyleSelection | null;
+  /** Print wizard Step-1 aspect (SCREEN-008 → SCREEN-009 parity). */
+  initialPrintAspect?: number;
+  /** Reference stage natural size from print wizard preview. */
+  initialNaturalSize?: { w: number; h: number } | null;
+  /** Custom print size from wizard session. */
+  initialCustomPrint?: { unit: "cm" | "inch"; width: number; height: number } | null;
   /** Hide home chrome when embedded in print wizard studio. */
   embedded?: boolean;
   /** print-wizard-step2 = 2-column canvas + edit panel (Step 2 wizard). */
@@ -771,6 +791,9 @@ export default function AiTemplateStudio({
   onControlledActiveLayerChange,
   formFields = null,
   initialVisualStyle = null,
+  initialPrintAspect,
+  initialNaturalSize = null,
+  initialCustomPrint = null,
   embedded = false,
   layout = "default",
   panelOnly = false,
@@ -782,7 +805,7 @@ export default function AiTemplateStudio({
   onCanvasSymbolPick,
   heading,
   pendingProjectKey,
-  recentNamespace = "shared",
+  recentNamespace = "screen_007",
 }: AiTemplateStudioProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -810,6 +833,8 @@ export default function AiTemplateStudio({
   const hydrateCanvasObjectsRef = useRef<CanvasObject[] | null>(null);
   /** Stage size the hydrated objects were authored against. */
   const hydrateCanvasMetaRef = useRef<{ w: number; h: number } | null>(null);
+  /** Defer canvas restore until stageBounds yields a measurable viewSize. */
+  const pendingRestoreRef = useRef<StudioCanvasProjectV1 | null>(null);
   const projectFileInputRef = useRef<HTMLInputElement>(null);
   const loadedImageRef = useRef<HTMLImageElement | null>(null);
   const loadedBgImageRef = useRef<HTMLImageElement | null>(null);
@@ -847,14 +872,27 @@ export default function AiTemplateStudio({
   const [backgroundImage, setBackgroundImage] = useState<string | null>(
     () => initialBackgroundUrl
   );
-  const [aspectRatio, setAspectRatio] = useState<AspectRatioKey>("1:1");
+  const [aspectRatio, setAspectRatio] = useState<AspectRatioKey>(() =>
+    mode === "agent" && (initialPrintAspect || initialCustomPrint)
+      ? "original"
+      : "1:1"
+  );
   const [pan, setPan] = useState<ImagePan>(normalizeImagePan({ x: 0, y: 0, scale: 1 }));
   const [zoomPct, setZoomPct] = useState(100);
-  const [naturalSize, setNaturalSize] = useState({ w: 1080, h: 1350 });
+  const [naturalSize, setNaturalSize] = useState(() => {
+    if (initialNaturalSize?.w && initialNaturalSize?.h) {
+      return { w: initialNaturalSize.w, h: initialNaturalSize.h };
+    }
+    if (mode === "agent" && initialPrintAspect) {
+      const ref = referencePrintStageSize(initialPrintAspect);
+      return { w: ref.w, h: ref.h };
+    }
+    return { w: 1080, h: 1350 };
+  });
   /** OverlayLayers — text / stickers (never cleared by bg commands). */
   const [internalOverlayLayers, setInternalOverlayLayers] = useState<TextLayer[]>(() =>
     initialOverlayLayers?.length
-      ? initialOverlayLayers.map((l) => ({ ...l }))
+      ? cloneOverlayLayers(initialOverlayLayers)
       : [makeDefaultLayer(0)]
   );
   const isOverlayControlled =
@@ -924,7 +962,9 @@ export default function AiTemplateStudio({
   const [customUnit, setCustomUnit] = useState<PrintUnit>("cm");
   const [customWidthInput, setCustomWidthInput] = useState("21");
   const [customHeightInput, setCustomHeightInput] = useState("29.7");
-  const [customPrint, setCustomPrint] = useState<CustomPrintSize | null>(null);
+  const [customPrint, setCustomPrint] = useState<CustomPrintSize | null>(
+    () => initialCustomPrint ?? null
+  );
   const [dragging, setDragging] = useState(false);
   const [dragKind, setDragKind] = useState<"layer" | "pan" | null>(null);
   const [snapGuides, setSnapGuides] = useState<SnapGuides>({
@@ -965,17 +1005,32 @@ export default function AiTemplateStudio({
       ? { ...activeLayerBase, ...styleDraft }
       : activeLayerBase
     : null;
+  /** SCREEN-024: keep style tools live even when canvas selection is cleared. */
+  const stylePanelLayer =
+    activeLayer ?? (panelOnly ? overlayLayers[0] ?? null : null);
 
   useEffect(() => {
-    // Controlled selection is owned by the preview canvas — don't auto-pick.
+    if (!overlayLayers[0]) return;
+    const stillValid =
+      Boolean(activeLayerId) &&
+      overlayLayers.some((l) => l.id === activeLayerId);
+    if (stillValid) return;
+    if (panelOnly) {
+      // Always keep a style target so the right panel never goes empty.
+      selectionClearedRef.current = false;
+      setActiveLayerId(overlayLayers[0].id);
+      return;
+    }
+    // Uncontrolled studios: auto-pick unless user explicitly cleared selection.
     if (isActiveLayerControlled) return;
-    if (!activeLayerId && overlayLayers[0] && !selectionClearedRef.current) {
+    if (!selectionClearedRef.current) {
       setActiveLayerId(overlayLayers[0].id);
     }
   }, [
     activeLayerId,
     isActiveLayerControlled,
     overlayLayers,
+    panelOnly,
     setActiveLayerId,
   ]);
 
@@ -1063,6 +1118,9 @@ export default function AiTemplateStudio({
     return aspectRatioValue(aspectRatio);
   }, [aspectRatio, customPrint, naturalSize.h, naturalSize.w]);
 
+  const isPrintAgentCanvas =
+    mode === "agent" && (embedded || layout === "print-wizard-step2");
+
   const exportSize = useMemo(() => {
     if (customPrint) {
       const px = physicalToPixels(
@@ -1091,10 +1149,13 @@ export default function AiTemplateStudio({
     return { width: 1080, height: Math.round(1080 / aspect) };
   }, [aspect, aspectRatio, customPrint, naturalSize.h, naturalSize.w]);
 
-  const canvasSize = useMemo(
-    () => scaleToPreview(exportSize.width, exportSize.height),
-    [exportSize.height, exportSize.width]
-  );
+  const canvasSize = useMemo(() => {
+    if (isPrintAgentCanvas) {
+      const ref = referencePrintStageSize(aspect);
+      return { width: ref.w, height: ref.h };
+    }
+    return scaleToPreview(exportSize.width, exportSize.height);
+  }, [aspect, exportSize.height, exportSize.width, isPrintAgentCanvas]);
 
   /** CSS layout size for the canvas group — always matches canvasSize aspect. */
   const viewSize = useMemo(
@@ -1174,6 +1235,7 @@ export default function AiTemplateStudio({
       subjectNatural: naturalSize,
       overlayLayers,
       previous,
+      printTextLayout: mode === "agent",
     });
     useCanvasStore.getState().setObjects(next);
   }, [
@@ -2226,10 +2288,15 @@ export default function AiTemplateStudio({
   };
 
   const updateActive = (patch: Partial<TextLayer>) => {
-    const id = activeLayerId;
+    const id =
+      activeLayerId ?? (panelOnly ? overlayLayers[0]?.id ?? null : null);
     if (!id) {
       showToast("먼저 텍스트 레이어를 선택해 주세요.", "info");
       return;
+    }
+    if (!activeLayerId && panelOnly) {
+      selectionClearedRef.current = false;
+      setActiveLayerId(id);
     }
     setOverlayLayers((prev) =>
       prev.map((l) => (l.id === id ? { ...l, ...patch } : l))
@@ -2242,10 +2309,15 @@ export default function AiTemplateStudio({
 
   /** Patch Konva text node immediately; commit TextLayer once on pointer-up. */
   const patchActiveStyleLive = (patch: Partial<TextLayer>) => {
-    const id = activeLayerId;
+    const id =
+      activeLayerId ?? (panelOnly ? overlayLayers[0]?.id ?? null : null);
     if (!id) {
       showToast("먼저 텍스트 레이어를 선택해 주세요.", "info");
       return;
+    }
+    if (!activeLayerId && panelOnly) {
+      selectionClearedRef.current = false;
+      setActiveLayerId(id);
     }
     styleDragActiveRef.current = true;
     const nextDraft = { ...(styleDraftRef.current || {}), ...patch };
@@ -2292,9 +2364,27 @@ export default function AiTemplateStudio({
     }
   };
 
-  const addLayer = () => {
+  /** Insert a new text layer immediately below the given row. */
+  const addLayerAfter = (afterId: string) => {
     const next = makeDefaultLayer(overlayLayers.length);
-    setOverlayLayers((prev) => [...prev, next]);
+    setOverlayLayers((prev) => {
+      const idx = prev.findIndex((l) => l.id === afterId);
+      const source = idx >= 0 ? prev[idx] : null;
+      const placed: TextLayer = {
+        ...next,
+        pos: source?.pos ?? next.pos,
+        offsetX: source?.offsetX ?? next.offsetX,
+        offsetY: (source?.offsetY ?? next.offsetY) + 0.075,
+        color: source?.color ?? next.color,
+        fontPreset: source?.fontPreset ?? next.fontPreset,
+        fontSize: source?.fontSize ?? next.fontSize,
+        fontWeight: source?.fontWeight ?? next.fontWeight,
+      };
+      if (idx < 0) return [...prev, placed];
+      const copy = prev.slice();
+      copy.splice(idx + 1, 0, placed);
+      return copy;
+    });
     selectionClearedRef.current = false;
     setActiveLayerId(next.id);
   };
@@ -2796,52 +2886,53 @@ export default function AiTemplateStudio({
       setEntrySource("default");
       setSubjectLayer(project.studio.subjectUrl || "");
       setBackgroundImage(project.studio.backgroundUrl);
-      setNaturalSize(project.studio.naturalSize);
+
+      const resolved = resolveProjectPrintAspect(project);
+      if (resolved.customPrint) {
+        setCustomPrint(resolved.customPrint);
+        setNaturalSize(project.studio.naturalSize);
+      } else {
+        setCustomPrint(null);
+        if (resolved.aspectKey) {
+          setAspectRatio(resolved.aspectKey);
+          setNaturalSize(project.studio.naturalSize);
+        } else {
+          const ref = referencePrintStageSize(resolved.aspect);
+          setAspectRatio("original");
+          setNaturalSize(ref);
+        }
+      }
+
       const nextLayers =
         project.studio.overlayLayers.length > 0
-          ? project.studio.overlayLayers.map((l) => ({
-              ...l,
-              ranges: l.ranges?.map((r) => ({ ...r })) ?? [],
-            }))
+          ? cloneOverlayLayers(project.studio.overlayLayers)
           : [makeDefaultLayer(0)];
       setOverlayLayers(nextLayers);
       selectionClearedRef.current = false;
       setActiveLayerId(nextLayers[0]!.id);
-      if (project.studio.customPrint) {
-        setCustomPrint(project.studio.customPrint);
-      } else {
-        setCustomPrint(null);
-        const ar = project.studio.aspectRatio as AspectRatioKey;
-        if (
-          ar === "original" ||
-          (ASPECT_TABS as readonly string[]).includes(ar)
-        ) {
-          setAspectRatio(ar);
-        }
-      }
       if (project.studio.visualStyle) {
         setVisualStyle(project.studio.visualStyle);
       }
       const stageW = Math.round(viewSize.w);
       const stageH = Math.round(viewSize.h);
-      if (stageW >= 16 && stageH >= 16) {
-        const scaled = scaleCanvasObjectsToStage(
-          project.canvas.objects,
-          project.canvas.meta.width,
-          project.canvas.meta.height,
-          stageW,
-          stageH
-        );
-        useCanvasStore.getState().setMeta({
-          ...project.canvas.meta,
-          width: stageW,
-          height: stageH,
-        });
-        useCanvasStore.getState().setObjects(scaled);
-      } else {
-        useCanvasStore.getState().setMeta(project.canvas.meta);
-        useCanvasStore.getState().setObjects(project.canvas.objects);
+      if (stageW < 16 || stageH < 16) {
+        pendingRestoreRef.current = project;
+        return;
       }
+      pendingRestoreRef.current = null;
+      const scaled = scaleCanvasObjectsToStage(
+        project.canvas.objects,
+        project.canvas.meta.width,
+        project.canvas.meta.height,
+        stageW,
+        stageH
+      );
+      useCanvasStore.getState().setMeta({
+        ...project.canvas.meta,
+        width: stageW,
+        height: stageH,
+      });
+      useCanvasStore.getState().setObjects(scaled);
       useCanvasStore.getState().select(project.canvas.selectedId);
       resetViewportCenterFit();
       requestAnimationFrame(() => paintRef.current());
@@ -2872,6 +2963,16 @@ export default function AiTemplateStudio({
     applyStudioProject(pending);
     showToast("최근 수정파일을 복원했습니다.", "success");
   }, [applyStudioProject, pendingProjectKey, showToast]);
+
+  // Finish deferred restore once the preview host reports a real viewSize.
+  useEffect(() => {
+    const pending = pendingRestoreRef.current;
+    if (!pending) return;
+    const stageW = Math.round(viewSize.w);
+    const stageH = Math.round(viewSize.h);
+    if (stageW < 16 || stageH < 16) return;
+    applyStudioProject(pending);
+  }, [applyStudioProject, viewSize.h, viewSize.w]);
 
   const shareImage = async () => {
     if (!requireSubscription()) return;
@@ -2933,7 +3034,7 @@ export default function AiTemplateStudio({
       title={label}
       onClick={() => updateActive({ align: value })}
       className={`flex flex-1 items-center justify-center gap-1 py-2 text-xs transition ${
-        activeLayer?.align === value
+        stylePanelLayer?.align === value
           ? "bg-white/15 text-white"
           : "text-white/45 hover:bg-white/5 hover:text-white/80"
       }`}
@@ -2960,14 +3061,6 @@ export default function AiTemplateStudio({
         <p className="shrink-0 text-sm font-medium whitespace-nowrap text-white/70">
           {cs.textLayers}
         </p>
-        <button
-          type="button"
-          onClick={addLayer}
-          className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-emerald-400/35 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-500/20"
-        >
-          <Plus className="h-3.5 w-3.5 shrink-0" />
-          {cs.addTextLayer}
-        </button>
       </div>
       <div className="flex flex-col gap-1.5">
         {overlayLayers.map((layer, idx) => (
@@ -3011,6 +3104,18 @@ export default function AiTemplateStudio({
             />
             <button
               type="button"
+              aria-label={cs.addTextLayer}
+              title={cs.addTextLayer}
+              onClick={(e) => {
+                e.stopPropagation();
+                addLayerAfter(layer.id);
+              }}
+              className="shrink-0 rounded-md p-1 text-emerald-300/90 hover:bg-emerald-500/15"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
               aria-label="Delete layer"
               onClick={(e) => {
                 e.stopPropagation();
@@ -3028,14 +3133,6 @@ export default function AiTemplateStudio({
     <div>
       <div className="mb-2 flex items-center justify-between gap-2">
         <p className="text-sm font-medium text-white/70">{cs.textLayers}</p>
-        <button
-          type="button"
-          onClick={addLayer}
-          className="inline-flex items-center gap-1 rounded-lg border border-emerald-400/35 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-500/20"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          {cs.addTextLayer}
-        </button>
       </div>
       <div className="space-y-2">
         {overlayLayers.map((layer, idx) => (
@@ -3055,17 +3152,31 @@ export default function AiTemplateStudio({
               <span className="rounded-md bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-200">
                 {fillCanvas(cs.layerN, { n: idx + 1 })}
               </span>
-              <button
-                type="button"
-                aria-label="Delete layer"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  removeLayer(layer.id);
-                }}
-                className="rounded-md p-1 text-red-300/80 hover:bg-red-500/10"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
+              <div className="flex items-center gap-0.5">
+                <button
+                  type="button"
+                  aria-label={cs.addTextLayer}
+                  title={cs.addTextLayer}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    addLayerAfter(layer.id);
+                  }}
+                  className="rounded-md p-1 text-emerald-300/90 hover:bg-emerald-500/15"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Delete layer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeLayer(layer.id);
+                  }}
+                  className="rounded-md p-1 text-red-300/80 hover:bg-red-500/10"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
             <textarea
               ref={(node) => {
@@ -3298,10 +3409,20 @@ export default function AiTemplateStudio({
                       }}
                       onTextStyleChange={(id, patch) => {
                         if (typeof patch.fontSize !== "number") return;
+                        const stageW = Math.round(viewSize.w);
+                        const stageH = Math.round(viewSize.h);
+                        const designSize =
+                          mode === "agent" && stageW >= 16 && stageH >= 16
+                            ? stageFontSizeToDesign(
+                                patch.fontSize,
+                                stageW,
+                                stageH
+                              )
+                            : patch.fontSize;
                         setOverlayLayers((prev) =>
                           prev.map((l) =>
                             l.id === id
-                              ? { ...l, fontSize: patch.fontSize! }
+                              ? { ...l, fontSize: designSize }
                               : l
                           )
                         );
@@ -3877,7 +3998,7 @@ export default function AiTemplateStudio({
 
         {/* Column 3 — Style & download */}
         <section className={panelSectionClass}>
-          {activeLayer ? (
+          {stylePanelLayer ? (
             <>
               <div>
                 <p className="mb-2 text-xs font-medium text-white/60">
@@ -3904,7 +4025,7 @@ export default function AiTemplateStudio({
               <div className="relative z-10">
                 <StickerMoreDropdown
                   label={t.thumbnail.stickers}
-                  selectedId={activeLayer.stickerId}
+                  selectedId={stylePanelLayer.stickerId}
                   onPick={insertSticker}
                 />
               </div>
@@ -3924,7 +4045,7 @@ export default function AiTemplateStudio({
                       type="button"
                       onClick={() => updateActive({ fontPreset: fp })}
                       className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition ${
-                        activeLayer.fontPreset === fp
+                        stylePanelLayer.fontPreset === fp
                           ? "bg-white text-black"
                           : "bg-black/25 text-white/45 hover:text-white/80"
                       }`}
@@ -3943,7 +4064,7 @@ export default function AiTemplateStudio({
                 <div className="mb-1.5 flex items-center justify-between text-xs text-white/60">
                   <span>{t.thumbnail.sizeLabel}</span>
                   <span className="tabular-nums text-white/80">
-                    {activeLayer.fontSize}px
+                    {stylePanelLayer.fontSize}px
                   </span>
                 </div>
                 <input
@@ -3952,7 +4073,7 @@ export default function AiTemplateStudio({
                   max={FONT_SIZE_MAX}
                   value={Math.min(
                     FONT_SIZE_MAX,
-                    Math.max(FONT_SIZE_MIN, activeLayer.fontSize)
+                    Math.max(FONT_SIZE_MIN, stylePanelLayer.fontSize)
                   )}
                   onChange={(e) =>
                     patchActiveStyleLive({ fontSize: Number(e.target.value) })
@@ -3968,7 +4089,7 @@ export default function AiTemplateStudio({
                   <span>{t.thumbnail.fontWeightLabel}</span>
                   <span className="tabular-nums text-white/80">
                     {clampFontWeight(
-                      activeLayer.fontWeight ?? SHORTS_FONT_WEIGHT_DEFAULT
+                      stylePanelLayer.fontWeight ?? SHORTS_FONT_WEIGHT_DEFAULT
                     )}
                   </span>
                 </div>
@@ -3978,7 +4099,7 @@ export default function AiTemplateStudio({
                   max={SHORTS_FONT_WEIGHT_MAX}
                   step={SHORTS_FONT_WEIGHT_STEP}
                   value={clampFontWeight(
-                    activeLayer.fontWeight ?? SHORTS_FONT_WEIGHT_DEFAULT
+                    stylePanelLayer.fontWeight ?? SHORTS_FONT_WEIGHT_DEFAULT
                   )}
                   onChange={(e) =>
                     patchActiveStyleLive({
@@ -3995,14 +4116,14 @@ export default function AiTemplateStudio({
                 <div className="mb-1.5 flex items-center justify-between text-xs text-white/60">
                   <span>{t.thumbnail.letterSpacingLabel}</span>
                   <span className="tabular-nums text-white/80">
-                    {layerLetterSpacing(activeLayer)}px
+                    {layerLetterSpacing(stylePanelLayer)}px
                   </span>
                 </div>
                 <input
                   type="range"
                   min={LETTER_SPACING_MIN}
                   max={LETTER_SPACING_MAX}
-                  value={layerLetterSpacing(activeLayer)}
+                  value={layerLetterSpacing(stylePanelLayer)}
                   onChange={(e) =>
                     patchActiveStyleLive({
                       letterSpacing: clampLetterSpacing(Number(e.target.value)),
@@ -4018,7 +4139,7 @@ export default function AiTemplateStudio({
                 <div className="mb-1.5 flex items-center justify-between text-xs text-white/60">
                   <span>{t.thumbnail.lineHeightLabel}</span>
                   <span className="tabular-nums text-white/80">
-                    {layerLineHeight(activeLayer).toFixed(2)}
+                    {layerLineHeight(stylePanelLayer).toFixed(2)}
                   </span>
                 </div>
                 <input
@@ -4026,7 +4147,7 @@ export default function AiTemplateStudio({
                   min={LINE_HEIGHT_MIN}
                   max={LINE_HEIGHT_MAX}
                   step={LINE_HEIGHT_STEP}
-                  value={layerLineHeight(activeLayer)}
+                  value={layerLineHeight(stylePanelLayer)}
                   onChange={(e) =>
                     patchActiveStyleLive({
                       lineHeight: clampLineHeight(Number(e.target.value)),
@@ -4055,7 +4176,7 @@ export default function AiTemplateStudio({
                 </p>
                 <div className="grid grid-cols-6 gap-2 sm:grid-cols-6">
                   {TEMPLATE_STUDIO_COLOR_ORDER.map((c: ColorPreset) => {
-                    const selected = activeLayer.color === c;
+                    const selected = stylePanelLayer.color === c;
                     const fill = colorPresetFill(c);
                     return (
                       <button
@@ -4091,7 +4212,7 @@ export default function AiTemplateStudio({
                   <label className="inline-flex cursor-pointer items-center gap-2 text-[11px] text-white/70">
                     <input
                       type="checkbox"
-                      checked={Boolean(activeLayer.showBox)}
+                      checked={Boolean(stylePanelLayer.showBox)}
                       onChange={(e) =>
                         updateActive({ showBox: e.target.checked })
                       }
@@ -4101,7 +4222,7 @@ export default function AiTemplateStudio({
                   </label>
                   <BgColorDropdown
                     label={t.thumbnail.bgColorLabel}
-                    value={activeLayer.boxColor || "#000000"}
+                    value={stylePanelLayer.boxColor || "#000000"}
                     onChange={(hex) =>
                       updateActive({
                         boxColor: hex,

@@ -31,6 +31,26 @@ export function canvasTextScale(stageW: number, stageH: number): number {
   return short / PRINT_TEXT_REF_WIDTH;
 }
 
+/** Design-space fontSize (1080 short-edge ref) → stage pixel size. */
+export function designFontSizeToStage(
+  fontSize: number,
+  stageW: number,
+  stageH: number
+): number {
+  return Math.max(10, Math.round(fontSize * canvasTextScale(stageW, stageH)));
+}
+
+/** Stage pixel fontSize → design-space fontSize for store / serialization. */
+export function stageFontSizeToDesign(
+  stageFontSize: number,
+  stageW: number,
+  stageH: number
+): number {
+  const scale = canvasTextScale(stageW, stageH);
+  if (scale < 0.001) return stageFontSize;
+  return clampUserFontSize(Math.round(stageFontSize / scale));
+}
+
 /** Keep glyphs inside the print safe area (green dotted line + ink overflow). */
 export function printSafeInsetPx(stageW: number, stageH: number): number {
   const short = Math.max(1, Math.min(stageW, stageH));
@@ -439,9 +459,9 @@ function sanitizePrintFormLayer(layer: TextLayer): TextLayer {
   const base: TextLayer = {
     ...layer,
     text,
-    showBox: false,
-    showBoxBorder: false,
-    ranges: [],
+    showBox: layer.showBox ?? false,
+    showBoxBorder: layer.showBoxBorder ?? false,
+    ranges: layer.ranges?.map((r) => ({ ...r })) ?? [],
   };
   if (layer.layoutLocked) return base;
   return {
@@ -489,7 +509,6 @@ export function mergeInputTextIntoLayers(
         sanitizePrintFormLayer({
           ...prev,
           text,
-          color: next.color,
         })
       );
       byId.delete(next.id);
@@ -826,13 +845,9 @@ export function resizeIndependentPages(
     const page = prev?.[i];
     const source = page && page.length > 0 ? page : createDefaultPageLayers(i);
     out.push(
-      source.map((layer) => {
-        const nextSize =
-          layer.fontSize === 40 ? { ...layer, fontSize: PAGE_TEXT_SIZE } : layer;
-        return nextSize.color === "white"
-          ? { ...nextSize, color: "inkBlack" }
-          : nextSize;
-      })
+      source.map((layer) =>
+        layer.fontSize === 40 ? { ...layer, fontSize: PAGE_TEXT_SIZE } : layer
+      )
     );
   }
   return out;
@@ -933,9 +948,34 @@ export function sanitizeTextLayersByPage(raw: unknown): TextLayer[][] | undefine
       layers.push(
         sanitizePrintFormLayer(
           createLayer({
-            ...obj,
             id: obj.id,
             text: obj.text,
+            color: obj.color ?? "inkBlack",
+            fontPreset: obj.fontPreset ?? "pretendard",
+            fontSize:
+              typeof obj.fontSize === "number"
+                ? clampUserFontSize(obj.fontSize)
+                : PAGE_TEXT_SIZE,
+            fontWeight: obj.fontWeight,
+            align: obj.align ?? "center",
+            pos: obj.pos ?? "bottom",
+            offsetX: obj.offsetX ?? 0,
+            offsetY: obj.offsetY ?? 0,
+            letterSpacing: obj.letterSpacing ?? 0,
+            lineHeight: obj.lineHeight ?? 1.25,
+            maxWidth: obj.maxWidth ?? 0.88,
+            layoutLocked: obj.layoutLocked,
+            manualX: obj.manualX,
+            manualY: obj.manualY,
+            boxW: obj.boxW,
+            boxH: obj.boxH,
+            boxManual: obj.boxManual,
+            ranges: obj.ranges?.map((r) => ({ ...r })) ?? [],
+            stickerId: obj.stickerId ?? null,
+            showBox: obj.showBox,
+            showBoxBorder: obj.showBoxBorder,
+            boxOpacity: obj.boxOpacity,
+            boxColor: obj.boxColor,
           })
         )
       );

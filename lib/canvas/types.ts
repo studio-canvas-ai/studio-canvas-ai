@@ -43,6 +43,11 @@ export type CanvasTextObject = CanvasObjectBase & {
   align: "left" | "center" | "right";
   lineHeight: number;
   letterSpacing: number;
+  /** Background pill behind glyphs (Template Studio / print editor). */
+  showBox?: boolean;
+  boxColor?: string;
+  boxOpacity?: number;
+  showBoxBorder?: boolean;
 };
 
 export type CanvasObject = CanvasImageObject | CanvasTextObject;
@@ -160,5 +165,9 @@ export function defaultTextObject(
     align: partial.align ?? "center",
     lineHeight: partial.lineHeight ?? 1.25,
     letterSpacing: partial.letterSpacing ?? 0,
+    showBox: partial.showBox,
+    boxColor: partial.boxColor,
+    boxOpacity: partial.boxOpacity,
+    showBoxBorder: partial.showBoxBorder,
   };
 }

@@ -7,5 +7,5 @@ export const metadata = {
 };
 
 export default function TemplateStudioPage() {
-  return <AiTemplateStudio />;
+  return <AiTemplateStudio recentNamespace="screen_007" />;
 }

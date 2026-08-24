@@ -15,12 +15,13 @@ import {
   useState,
   type CSSProperties,
 } from "react";
-import { Stage, Layer, Image as KonvaImage, Text, Transformer, Rect } from "react-konva";
+import { Stage, Layer, Image as KonvaImage, Text, Transformer, Rect, Group } from "react-konva";
 import type Konva from "konva";
 import { useCanvasStore } from "@/lib/canvas/canvasStore";
 import type { CanvasObject, CanvasTextObject } from "@/lib/canvas/types";
 import { sortByZIndex } from "@/lib/canvas/types";
 import { EMOJI_FONT } from "@/lib/thumbnailStyles";
+import { hexToRgba } from "@/lib/shortsCaptions";
 
 const CHECKER: CSSProperties = {
   backgroundColor: "#1a1d27",
@@ -125,11 +126,11 @@ function TextNode({
     ? obj.fontFamily
     : `${obj.fontFamily}, ${EMOJI_FONT}`;
   const fontSize = Math.max(8, Math.round(obj.fontSize || 48));
+  const boxOpacity = Math.max(0.15, Math.min(0.9, obj.boxOpacity ?? 0.55));
 
   return (
-    <Text
+    <Group
       id={obj.id}
-      text={obj.text || " "}
       x={obj.x}
       y={obj.y}
       width={obj.width}
@@ -139,15 +140,6 @@ function TextNode({
       scaleY={obj.scaleY}
       opacity={obj.opacity}
       visible={obj.visible}
-      fontSize={fontSize}
-      fontFamily={fontFamily}
-      fontStyle={obj.fontWeight >= 600 ? "bold" : "normal"}
-      fill={obj.fill}
-      align={obj.align}
-      verticalAlign="middle"
-      lineHeight={obj.lineHeight}
-      letterSpacing={obj.letterSpacing}
-      wrap="word"
       draggable={!obj.locked}
       onClick={onSelect}
       onTap={onSelect}
@@ -157,12 +149,11 @@ function TextNode({
         onChange({ x: e.target.x(), y: e.target.y() });
       }}
       onTransformEnd={(e) => {
-        const node = e.target as Konva.Text;
+        const node = e.target;
         const scaleX = node.scaleX();
         const scaleY = node.scaleY();
-        const nextW = Math.max(40, node.width() * scaleX);
-        const nextH = Math.max(24, node.height() * scaleY);
-        // Scale font with box height for responsive typography.
+        const nextW = Math.max(40, (obj.width || 40) * scaleX);
+        const nextH = Math.max(24, (obj.height || 24) * scaleY);
         const nextFont = Math.max(
           10,
           Math.round(fontSize * ((scaleX + scaleY) / 2))
@@ -180,7 +171,38 @@ function TextNode({
         node.scaleX(1);
         node.scaleY(1);
       }}
-    />
+    >
+      {obj.showBox ? (
+        <Rect
+          x={0}
+          y={0}
+          width={obj.width}
+          height={obj.height}
+          fill={hexToRgba(obj.boxColor || "#000000", boxOpacity)}
+          cornerRadius={Math.min(14, fontSize * 0.28)}
+          stroke={obj.showBoxBorder ? "rgba(255,255,255,0.35)" : undefined}
+          strokeWidth={obj.showBoxBorder ? Math.max(1, fontSize * 0.04) : 0}
+          listening={false}
+        />
+      ) : null}
+      <Text
+        text={obj.text || " "}
+        x={0}
+        y={0}
+        width={obj.width}
+        height={obj.height}
+        fontSize={fontSize}
+        fontFamily={fontFamily}
+        fontStyle={obj.fontWeight >= 600 ? "bold" : "normal"}
+        fill={obj.fill}
+        align={obj.align}
+        verticalAlign="middle"
+        lineHeight={obj.lineHeight}
+        letterSpacing={obj.letterSpacing}
+        wrap="word"
+        listening={false}
+      />
+    </Group>
   );
 }
 

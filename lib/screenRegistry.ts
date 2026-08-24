@@ -11,6 +11,11 @@ export type ScreenRegistryEntry = {
   path: string;
   /** Human label for docs / audits (not shown on badge). */
   label: string;
+  /**
+   * Internal step when one URL hosts multiple screens (e.g. wizard draft vs editor).
+   * Omit or `1` for the default/first step on that path.
+   */
+  step?: number;
 };
 
 /**
@@ -25,7 +30,12 @@ export const SCREEN_REGISTRY: readonly ScreenRegistryEntry[] = [
   { id: "SCREEN-005", path: "/styles", label: "Styles Collection" },
   { id: "SCREEN-006", path: "/style", label: "Style (alias)" },
   { id: "SCREEN-007", path: "/template-studio", label: "AI Template Studio" },
-  { id: "SCREEN-008", path: "/print-smart-form", label: "Print Smart Form Wizard" },
+  {
+    id: "SCREEN-008",
+    path: "/print-smart-form",
+    label: "Print Smart Form — Draft (Step 1)",
+    step: 1,
+  },
   {
     id: "SCREEN-009",
     path: "/print-smart-form/studio",
@@ -34,7 +44,8 @@ export const SCREEN_REGISTRY: readonly ScreenRegistryEntry[] = [
   {
     id: "SCREEN-010",
     path: "/ai-photo-generator",
-    label: "AI Photo Generator / Lookbook Wizard",
+    label: "AI Photo Generator — Draft (Step 1)",
+    step: 1,
   },
   {
     id: "SCREEN-011",
@@ -53,10 +64,32 @@ export const SCREEN_REGISTRY: readonly ScreenRegistryEntry[] = [
   { id: "SCREEN-021", path: "/auth/bridge", label: "Auth Bridge" },
   { id: "SCREEN-022", path: "/admin", label: "Admin Dashboard" },
   { id: "SCREEN-023", path: "/admin/promotions", label: "Admin Promotions" },
+  {
+    id: "SCREEN-024",
+    path: "/print-smart-form",
+    label: "Print Smart Form — Editor / Complete (Step 2)",
+    step: 2,
+  },
+  {
+    id: "SCREEN-025",
+    path: "/ai-photo-generator",
+    label: "AI Photo Generator — Editor / Complete (Step 2)",
+    step: 2,
+  },
 ] as const;
 
 /** Next ID to assign when adding a screen (do not recycle). */
-export const NEXT_SCREEN_ID_NUMBER = 24;
+export const NEXT_SCREEN_ID_NUMBER = 26;
+
+/** Paths that share one URL across internal wizard steps. */
+const STEPPED_PATH_SESSION_KEYS: Readonly<Record<string, readonly string[]>> = {
+  "/print-smart-form": [
+    "sca_print_wizard_v5",
+    "sca_print_wizard_v4",
+    "sca_print_wizard_v3",
+  ],
+  "/ai-photo-generator": ["sca_photo_wizard_v1"],
+};
 
 function normalizePathname(pathname: string): string {
   if (!pathname || pathname === "/") return "/";
@@ -67,15 +100,58 @@ function normalizePathname(pathname: string): string {
   return trimmed || "/";
 }
 
-/**
- * Resolve permanent Screen ID for a pathname.
- * Exact match wins; otherwise longest registered prefix (for future nested routes).
- */
-export function resolveScreenId(pathname: string): string {
-  const path = normalizePathname(pathname);
+function entryStep(entry: ScreenRegistryEntry): number {
+  return entry.step ?? 1;
+}
 
-  const exact = SCREEN_REGISTRY.find((e) => e.path === path);
-  if (exact) return exact.id;
+/**
+ * Read internal wizard step from sessionStorage for stepped home paths.
+ * Returns `undefined` when the path is not stepped or no session exists.
+ */
+export function readInternalScreenStep(pathname: string): number | undefined {
+  if (typeof window === "undefined") return undefined;
+  const path = normalizePathname(pathname);
+  const keys = STEPPED_PATH_SESSION_KEYS[path];
+  if (!keys) return undefined;
+  try {
+    for (const key of keys) {
+      const raw = sessionStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw) as { wizardStep?: unknown };
+      if (parsed.wizardStep === 2) return 2;
+      if (parsed.wizardStep === 1) return 1;
+      return 1;
+    }
+  } catch {
+    /* ignore */
+  }
+  return 1;
+}
+
+export type ResolveScreenIdOptions = {
+  /** Internal step (1 = draft, 2 = editor/complete). Defaults via session or 1. */
+  step?: number;
+};
+
+/**
+ * Resolve permanent Screen ID for a pathname (+ optional internal step).
+ * Exact path+step match wins; otherwise longest registered prefix.
+ */
+export function resolveScreenId(
+  pathname: string,
+  options?: ResolveScreenIdOptions
+): string {
+  const path = normalizePathname(pathname);
+  const step = Math.max(1, Math.floor(options?.step ?? 1));
+
+  const pathMatches = SCREEN_REGISTRY.filter((e) => e.path === path);
+  if (pathMatches.length) {
+    const stepped = pathMatches.find((e) => entryStep(e) === step);
+    if (stepped) return stepped.id;
+    const fallback =
+      pathMatches.find((e) => entryStep(e) === 1) ?? pathMatches[0];
+    return fallback!.id;
+  }
 
   let best: ScreenRegistryEntry | null = null;
   for (const entry of SCREEN_REGISTRY) {
@@ -90,8 +166,9 @@ export function resolveScreenId(pathname: string): string {
 }
 
 export function getScreenEntry(
-  pathname: string
+  pathname: string,
+  options?: ResolveScreenIdOptions
 ): ScreenRegistryEntry | undefined {
-  const id = resolveScreenId(pathname);
+  const id = resolveScreenId(pathname, options);
   return SCREEN_REGISTRY.find((e) => e.id === id);
 }

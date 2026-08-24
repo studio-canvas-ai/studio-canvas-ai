@@ -89,7 +89,7 @@ export default function PhotoStudioPageClient() {
         embedded
         layout="print-wizard-step2"
         heading="화보 뚝딱생성기"
-        recentNamespace="photo"
+        recentNamespace="screen_010"
         initialBackgroundUrl={backgroundUrl}
         initialOverlayLayers={overlayLayers}
         formFields={formFields}

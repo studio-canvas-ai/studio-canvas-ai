@@ -576,12 +576,27 @@ export interface Translations {
       deepPink: string;
       darkTeal: string;
       slateGray: string;
+      coralSunset: string;
+      mintFresh: string;
+      lavenderMist: string;
+      steelBlue: string;
+      warmSand: string;
+      cherryBlossom: string;
+      oliveDrab: string;
+      iceCyan: string;
+      copperRust: string;
+      grapePurple: string;
     };
     fontLabel: string;
     fonts: {
       pretendard: string;
       variety: string;
       gmarket: string;
+      scoreDream: string;
+      kccAhnjunggeun: string;
+      cafe24Dangdanghae: string;
+      cafe24Ohsquare: string;
+      ridiBatang: string;
       jua: string;
       jalnan: string;
       maple: string;

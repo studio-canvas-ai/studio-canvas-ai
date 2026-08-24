@@ -33,12 +33,28 @@ export type ColorPreset =
   | "ceruleanSky"
   | "deepPink"
   | "darkTeal"
-  | "slateGray";
+  | "slateGray"
+  /** Extra Template Studio / print editor chips (SCREEN-024+) */
+  | "coralSunset"
+  | "mintFresh"
+  | "lavenderMist"
+  | "steelBlue"
+  | "warmSand"
+  | "cherryBlossom"
+  | "oliveDrab"
+  | "iceCyan"
+  | "copperRust"
+  | "grapePurple";
 
 export type FontPreset =
   | "pretendard"
   | "variety"
   | "gmarket"
+  | "scoreDream"
+  | "kccAhnjunggeun"
+  | "cafe24Dangdanghae"
+  | "cafe24Ohsquare"
+  | "ridiBatang"
   | "jua"
   | "jalnan"
   | "maple"
@@ -204,6 +220,16 @@ export const COLOR_PRESETS: Record<
   deepPink: { fill: "#BE185D", stroke: "#FFFFFF", shadow: "rgba(190,24,93,0.45)" },
   darkTeal: { fill: "#0D9488", stroke: "#0F172A", shadow: "rgba(13,148,136,0.45)" },
   slateGray: { fill: "#475569", stroke: "#FFFFFF", shadow: "rgba(0,0,0,0.5)" },
+  coralSunset: { fill: "#FF6B4A", stroke: "#FFFFFF", shadow: "rgba(255,107,74,0.45)" },
+  mintFresh: { fill: "#5EEAD4", stroke: "#0F172A", shadow: "rgba(94,234,212,0.4)" },
+  lavenderMist: { fill: "#C4B5FD", stroke: "#4C1D95", shadow: "rgba(196,181,253,0.4)" },
+  steelBlue: { fill: "#64748B", stroke: "#FFFFFF", shadow: "rgba(0,0,0,0.45)" },
+  warmSand: { fill: "#E7C59A", stroke: "#5C4033", shadow: "rgba(0,0,0,0.4)" },
+  cherryBlossom: { fill: "#F9A8D4", stroke: "#9D174D", shadow: "rgba(249,168,212,0.4)" },
+  oliveDrab: { fill: "#6B8E23", stroke: "#FFFFFF", shadow: "rgba(107,142,35,0.45)" },
+  iceCyan: { fill: "#67E8F9", stroke: "#0E7490", shadow: "rgba(103,232,249,0.4)" },
+  copperRust: { fill: "#B87333", stroke: "#FFFFFF", shadow: "rgba(184,115,51,0.45)" },
+  grapePurple: { fill: "#7E22CE", stroke: "#FFFFFF", shadow: "rgba(126,34,206,0.45)" },
 };
 
 /** Classic thumbnail chips (8) */
@@ -251,9 +277,24 @@ export const SHORTS_COLOR_PRESET_ORDER: ColorPreset[] = [
   ...EDITORIAL_TEXT_COLOR_ORDER,
 ];
 
-/** AI Template Studio — same chip order as Shorts (classic 11 + editorial 11). */
+/** Extra 10 chips for Template Studio / print editor text palette. */
+export const TEMPLATE_STUDIO_EXTRA_COLOR_ORDER: ColorPreset[] = [
+  "coralSunset",
+  "mintFresh",
+  "lavenderMist",
+  "steelBlue",
+  "warmSand",
+  "cherryBlossom",
+  "oliveDrab",
+  "iceCyan",
+  "copperRust",
+  "grapePurple",
+];
+
+/** AI Template Studio — Shorts palette + 10 extra print-editor chips. */
 export const TEMPLATE_STUDIO_COLOR_ORDER: ColorPreset[] = [
   ...SHORTS_COLOR_PRESET_ORDER,
+  ...TEMPLATE_STUDIO_EXTRA_COLOR_ORDER,
 ];
 
 export const EMOJI_QUICK = [
@@ -445,6 +486,16 @@ const FONT_STACK: Record<FontPreset, string> = {
     '"Black Han Sans", "Noto Sans KR", "Noto Sans JP", "Noto Sans SC", "Noto Sans TC", "Noto Sans Devanagari", "Noto Sans", system-ui, sans-serif',
   gmarket:
     '"Gmarket Sans", "GmarketSans", "Noto Sans KR", "Noto Sans JP", "Noto Sans", system-ui, sans-serif',
+  scoreDream:
+    '"S-Core Dream", "Noto Sans KR", "Noto Sans JP", "Noto Sans", system-ui, sans-serif',
+  kccAhnjunggeun:
+    '"KCC Ahn Jung-geun", "KccAnjunggeun", "Noto Serif KR", "Noto Sans KR", serif',
+  cafe24Dangdanghae:
+    '"Cafe24 Dangdanghae", "Cafe24Dangdanghae", "Noto Sans KR", "Noto Sans", system-ui, sans-serif',
+  cafe24Ohsquare:
+    '"Cafe24 Ohsquare", "Cafe24Ohsquare", "Noto Sans KR", "Noto Sans", system-ui, sans-serif',
+  ridiBatang:
+    '"RIDI Batang", "Ridibatang", "Noto Serif KR", "Noto Serif", Georgia, serif',
   jua: '"Jua", "Juache", "Noto Sans KR", "Noto Sans", system-ui, sans-serif',
   jalnan:
     '"YeogiOttaeJalnan", "Noto Sans KR", "Noto Sans", system-ui, sans-serif',
@@ -482,6 +533,11 @@ export const FONT_PRESET_PRIMARY: Record<FontPreset, string> = {
   pretendard: "Pretendard",
   variety: "Black Han Sans",
   gmarket: "Gmarket Sans",
+  scoreDream: "S-Core Dream",
+  kccAhnjunggeun: "KCC Ahn Jung-geun",
+  cafe24Dangdanghae: "Cafe24 Dangdanghae",
+  cafe24Ohsquare: "Cafe24 Ohsquare",
+  ridiBatang: "RIDI Batang",
   jua: "Jua",
   jalnan: "YeogiOttaeJalnan",
   maple: "NexonMaplestory",
@@ -505,6 +561,13 @@ export const SHORTS_WEBFONT_FAMILIES = [
   "Pretendard",
   "Gmarket Sans",
   "GmarketSans",
+  "S-Core Dream",
+  "KCC Ahn Jung-geun",
+  "KccAnjunggeun",
+  "Cafe24 Dangdanghae",
+  "Cafe24Ohsquare",
+  "RIDI Batang",
+  "Ridibatang",
   "Jua",
   "Juache",
   "YeogiOttaeJalnan",

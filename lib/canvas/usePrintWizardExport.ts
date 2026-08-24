@@ -1,13 +1,11 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useFeedback } from "@/components/FeedbackProvider";
 import { useCanvasStore } from "@/lib/canvas/canvasStore";
 import {
   buildStudioProject,
   readProjectFile,
-  stashPendingStudioProject,
   type StudioCanvasProjectV1,
 } from "@/lib/canvas/projectFile";
 import { createLayer, type TextLayer } from "@/lib/thumbnailStyles";
@@ -16,10 +14,7 @@ import type { PrintCustomSize } from "@/lib/printWizardTypes";
 import { useExportGate } from "@/lib/useExportGate";
 import { useDownloadQuota } from "@/lib/useDownloadQuota";
 import { projectStorageErrorMessage } from "@/lib/projectStorage";
-import {
-  studioPathForProject,
-  useProjectStorage,
-} from "@/lib/canvas/useProjectStorage";
+import { useProjectStorage } from "@/lib/canvas/useProjectStorage";
 import type { RecentProjectNamespace } from "@/lib/canvas/recentProjects";
 import type { PhotoLookbookSnapshot } from "@/lib/photoLookbookProject";
 
@@ -37,6 +32,8 @@ export type UsePrintWizardExportArgs = {
   resolveExportImage?: (quality: "standard" | "high") => Promise<Blob>;
   /** Embed wizard + vaults into .sca for recent restore. */
   buildLookbookSnapshot?: () => PhotoLookbookSnapshot | null;
+  /** Apply recent/.sca on the current wizard canvas (no studio redirect). */
+  onApplyRecentProject?: (project: StudioCanvasProjectV1) => void;
 };
 
 export function usePrintWizardExport({
@@ -50,8 +47,8 @@ export function usePrintWizardExport({
   overlayLayers = [],
   resolveExportImage,
   buildLookbookSnapshot,
+  onApplyRecentProject,
 }: UsePrintWizardExportArgs) {
-  const router = useRouter();
   const { showToast } = useFeedback();
   const { requireSubscription, premiumModal } = useExportGate();
   const { spendForQuality, quotaEmptyMessage } = useDownloadQuota();
@@ -62,7 +59,7 @@ export function usePrintWizardExport({
   });
   const projectFileInputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
-  const isPhoto = recentNamespace === "photo";
+  const isPhoto = recentNamespace === "screen_010";
 
   const buildStep2Project = () => {
     const snapshot = useCanvasStore.getState().getExportSnapshot();
@@ -202,10 +199,18 @@ export function usePrintWizardExport({
     if (!requireSubscription()) return;
     setBusy(true);
     try {
-      const path = studioPathForProject(project);
-      stashPendingStudioProject(project, pendingProjectKey);
-      showToast("수정파일을 불러왔습니다. 스튜디오로 이동합니다.", "success");
-      router.push(studioPath || path);
+      if (onApplyRecentProject) {
+        onApplyRecentProject(project);
+        showToast(
+          "최근 수정파일을 불러와 편집 상태를 복원했습니다.",
+          "success"
+        );
+        return;
+      }
+      showToast(
+        "이 화면의 캔버스에 바로 적용할 수 없습니다. 다시 시도해 주세요.",
+        "info"
+      );
     } finally {
       setBusy(false);
     }

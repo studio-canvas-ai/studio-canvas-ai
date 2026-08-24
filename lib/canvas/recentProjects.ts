@@ -15,21 +15,41 @@ export type { RecentDrawerEntry };
 export type RecentProjectMeta = import("@/lib/studioStore/types").RecentProjectMeta;
 
 export const RECENT_PROJECTS_MAX = 10;
-export type RecentProjectNamespace = "shared" | "photo";
+
+/**
+ * Per-screen recent drawers (SCREEN-007 / 008 / 010) — never share lists.
+ * localStorage keys match product naming exactly.
+ */
+export type RecentProjectNamespace =
+  | "screen_007"
+  | "screen_008"
+  | "screen_010";
 
 /** Fired on window after drawer mutations (same-tab UI refresh). */
 export const RECENT_PROJECTS_CHANGED_EVENT = "sca:recent-projects-changed";
 
-/** Single drawer key — list + project payloads live together in localStorage. */
-const SHARED_DRAWER_KEY = "sca_recent_projects_drawer_v2";
-const PHOTO_DRAWER_KEY = "sca_photo_recent_projects_drawer_v1";
-/** Legacy keys (migrate once, then ignore). */
+const DRAWER_KEYS: Record<RecentProjectNamespace, string> = {
+  screen_007: "recent_files_screen_007",
+  screen_008: "recent_files_screen_008",
+  screen_010: "recent_files_screen_010",
+};
+
+/** Legacy keys (one-shot migrate into the matching screen drawer). */
+const LEGACY_SHARED_DRAWER_KEY = "sca_recent_projects_drawer_v2";
+const LEGACY_PHOTO_DRAWER_KEY = "sca_photo_recent_projects_drawer_v1";
 const LEGACY_META_KEY = "sca_recent_project_ids_v1";
 const LEGACY_DB_NAME = "sca_recent_projects_v1";
 const LEGACY_STORE = "projects";
 
 function drawerKey(namespace: RecentProjectNamespace): string {
-  return namespace === "photo" ? PHOTO_DRAWER_KEY : SHARED_DRAWER_KEY;
+  return DRAWER_KEYS[namespace];
+}
+
+function idbRecentKind(
+  namespace: RecentProjectNamespace
+): "recent_shared" | "recent_photo" {
+  // Cloud/IDB still has two buckets: map 007→shared, 010→photo; 008 stays local-LS for IDB shared isolation.
+  return namespace === "screen_010" ? "recent_photo" : "recent_shared";
 }
 
 function projectLabel(project: StudioCanvasProjectV1): string {
@@ -121,7 +141,9 @@ function shrinkProjectForStorage(
   return next;
 }
 
-function readDrawer(namespace: RecentProjectNamespace = "shared"): RecentDrawerEntry[] {
+function readDrawer(
+  namespace: RecentProjectNamespace = "screen_007"
+): RecentDrawerEntry[] {
   if (typeof localStorage === "undefined") return [];
   try {
     const raw = localStorage.getItem(drawerKey(namespace));
@@ -151,7 +173,7 @@ function readDrawer(namespace: RecentProjectNamespace = "shared"): RecentDrawerE
 
 function writeDrawer(
   entries: RecentDrawerEntry[],
-  namespace: RecentProjectNamespace = "shared"
+  namespace: RecentProjectNamespace = "screen_007"
 ): void {
   if (typeof localStorage === "undefined") {
     throw new Error("localstorage_unavailable");
@@ -178,9 +200,11 @@ function writeDrawer(
     }));
     localStorage.setItem(drawerKey(namespace), JSON.stringify(shrunk));
   }
-  const kind = namespace === "photo" ? "recent_photo" : "recent_shared";
-  void idbPutRecent(kind, trimmed);
-  scheduleStudioStoreSync();
+  // Only sync IDB for 007/010 so print (008) never mixes into shared cloud bucket.
+  if (namespace !== "screen_008") {
+    void idbPutRecent(idbRecentKind(namespace), trimmed);
+    scheduleStudioStoreSync();
+  }
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event(RECENT_PROJECTS_CHANGED_EVENT));
   }
@@ -188,12 +212,51 @@ function writeDrawer(
 
 /** One-shot migrate from IndexedDB + legacy id list into localStorage drawer. */
 async function migrateLegacyIfNeeded(
-  namespace: RecentProjectNamespace = "shared"
+  namespace: RecentProjectNamespace = "screen_007"
 ): Promise<void> {
   if (typeof localStorage === "undefined") return;
-  if (namespace !== "shared") return;
-  // Empty `[]` used to skip migration because getItem("[]") is truthy.
   if (readDrawer(namespace).length > 0) return;
+
+  // Copy old drawer keys into the matching screen bucket (once).
+  const legacyLsKey =
+    namespace === "screen_010"
+      ? LEGACY_PHOTO_DRAWER_KEY
+      : namespace === "screen_007"
+        ? LEGACY_SHARED_DRAWER_KEY
+        : null;
+  if (legacyLsKey) {
+    try {
+      const raw = localStorage.getItem(legacyLsKey);
+      if (raw) {
+        const parsed = JSON.parse(raw) as unknown;
+        if (Array.isArray(parsed) && parsed.length) {
+          const entries: RecentDrawerEntry[] = [];
+          for (const row of parsed) {
+            if (!row || typeof row !== "object") continue;
+            const r = row as Record<string, unknown>;
+            if (typeof r.id !== "string" || !r.meta || !r.project) continue;
+            try {
+              entries.push({
+                id: r.id,
+                meta: r.meta as RecentProjectMeta,
+                project: parseStudioProject(r.project),
+              });
+            } catch {
+              /* skip */
+            }
+          }
+          if (entries.length) {
+            writeDrawer(entries.slice(0, RECENT_PROJECTS_MAX), namespace);
+            return;
+          }
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  if (namespace !== "screen_007") return;
   if (typeof indexedDB === "undefined") return;
 
   const idsRaw = localStorage.getItem(LEGACY_META_KEY);
@@ -266,20 +329,15 @@ async function migrateLegacyIfNeeded(
   }
 }
 
-let migratePromise: Promise<void> | null = null;
 const migratePromises = new Map<RecentProjectNamespace, Promise<void>>();
 function ensureMigrated(
-  namespace: RecentProjectNamespace = "shared"
+  namespace: RecentProjectNamespace = "screen_007"
 ): Promise<void> {
   const cached = migratePromises.get(namespace);
   if (cached) return cached;
-  const next =
-    namespace === "shared"
-      ? (migratePromise ??= migrateLegacyIfNeeded(namespace))
-      : migrateLegacyIfNeeded(namespace);
-  const withIdb = next.then(async () => {
-    const kind = namespace === "photo" ? "recent_photo" : "recent_shared";
-    const fromIdb = await idbGetRecent(kind);
+  const next = migrateLegacyIfNeeded(namespace).then(async () => {
+    if (namespace === "screen_008") return;
+    const fromIdb = await idbGetRecent(idbRecentKind(namespace));
     if (!fromIdb.length) return;
     const merged = mergeRecentEntries(fromIdb, readDrawer(namespace));
     const current = readDrawer(namespace);
@@ -287,12 +345,12 @@ function ensureMigrated(
       writeDrawer(merged, namespace);
     }
   });
-  migratePromises.set(namespace, withIdb);
-  return withIdb;
+  migratePromises.set(namespace, next);
+  return next;
 }
 
 export async function listRecentProjects(
-  namespace: RecentProjectNamespace = "shared"
+  namespace: RecentProjectNamespace = "screen_007"
 ): Promise<RecentProjectMeta[]> {
   await ensureMigrated(namespace);
   return readDrawer(namespace).map((e) => e.meta);
@@ -300,7 +358,7 @@ export async function listRecentProjects(
 
 export async function getRecentProject(
   id: string,
-  namespace: RecentProjectNamespace = "shared"
+  namespace: RecentProjectNamespace = "screen_007"
 ): Promise<StudioCanvasProjectV1 | null> {
   await ensureMigrated(namespace);
   const hit = readDrawer(namespace).find((e) => e.id === id);
@@ -311,8 +369,10 @@ export async function getRecentProject(
       /* fall through to IDB */
     }
   }
-  const kind = namespace === "photo" ? "recent_photo" : "recent_shared";
-  const fromIdb = (await idbGetRecent(kind)).find((e) => e.id === id);
+  if (namespace === "screen_008") return null;
+  const fromIdb = (await idbGetRecent(idbRecentKind(namespace))).find(
+    (e) => e.id === id
+  );
   if (!fromIdb) return null;
   try {
     return parseStudioProject(fromIdb.project);
@@ -324,7 +384,7 @@ export async function getRecentProject(
 /** Push newest project into the drawer; drop oldest beyond max (FIFO). */
 export async function pushRecentProject(
   project: StudioCanvasProjectV1,
-  namespace: RecentProjectNamespace = "shared"
+  namespace: RecentProjectNamespace = "screen_007"
 ): Promise<RecentProjectMeta> {
   await ensureMigrated(namespace);
   const id = `rp_${Date.now().toString(36)}_${Math.random()
@@ -352,14 +412,14 @@ export async function pushRecentProject(
 /** Replace the drawer (recovery / cloud hydrate). */
 export function replaceRecentDrawer(
   entries: RecentDrawerEntry[],
-  namespace: RecentProjectNamespace = "shared"
+  namespace: RecentProjectNamespace = "screen_007"
 ): void {
   writeDrawer(entries.slice(0, RECENT_PROJECTS_MAX), namespace);
 }
 
 export async function removeRecentProject(
   id: string,
-  namespace: RecentProjectNamespace = "shared"
+  namespace: RecentProjectNamespace = "screen_007"
 ): Promise<void> {
   await ensureMigrated(namespace);
   writeDrawer(
@@ -370,7 +430,7 @@ export async function removeRecentProject(
 
 /** Debug / tests: wipe the drawer. */
 export async function clearRecentProjects(
-  namespace: RecentProjectNamespace = "shared"
+  namespace: RecentProjectNamespace = "screen_007"
 ): Promise<void> {
   if (typeof localStorage === "undefined") return;
   localStorage.removeItem(drawerKey(namespace));

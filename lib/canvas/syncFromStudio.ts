@@ -8,6 +8,11 @@ import {
   fontForText,
 } from "@/lib/thumbnailStyles";
 import {
+  canvasTextScale,
+  designFontSizeToStage,
+  layerToBox,
+} from "@/lib/printWizardTextLayers";
+import {
   defaultImageObject,
   defaultTextObject,
   isUserImageLayer,
@@ -67,6 +72,8 @@ export type StudioPlaneSyncInput = {
   overlayLayers: TextLayer[];
   /** Preserve transforms for existing ids when content unchanged. */
   previous?: CanvasObject[];
+  /** Use print wizard preview typography (SCREEN-008 ↔ SCREEN-009 parity). */
+  printTextLayout?: boolean;
 };
 
 function findPrev(previous: CanvasObject[] | undefined, id: string) {
@@ -108,6 +115,7 @@ export function buildObjectsFromStudioPlanes(
     backgroundNatural,
     overlayLayers,
     previous,
+    printTextLayout = false,
   } = input;
   const out: CanvasObject[] = [];
 
@@ -193,10 +201,50 @@ export function buildObjectsFromStudioPlanes(
   overlayLayers.forEach((layer, index) => {
     const id = layer.id || `text-${index}`;
     const prev = findPrev(previous, id);
+    const fontPreset = (layer.fontPreset || "pretendard") as FontPreset;
+    const text = layer.text || "";
+    const fontFamily = fontForText(fontPreset, text || "가A");
+    const sameText =
+      prev && prev.type === "text" && prev.text === text && prev.id === id;
+
+    if (printTextLayout) {
+      const box = layerToBox(layer, stageW, stageH);
+      const scale = canvasTextScale(stageW, stageH);
+      const fontSize = designFontSizeToStage(layer.fontSize || 48, stageW, stageH);
+      const lineHeightMul = layer.lineHeight ?? 1.25;
+
+      out.push(
+        defaultTextObject({
+          id,
+          text,
+          fontFamily,
+          fontWeight: layer.fontWeight ?? 700,
+          fill: colorPresetFill(layer.color),
+          align: layer.align || "center",
+          lineHeight: lineHeightMul,
+          letterSpacing: (layer.letterSpacing ?? 0) * scale,
+          fontSize,
+          showBox: Boolean(layer.showBox),
+          boxColor: layer.boxColor || "#000000",
+          boxOpacity: layer.boxOpacity ?? 0.55,
+          showBoxBorder: Boolean(layer.showBoxBorder),
+          zIndex:
+            sameText && prev?.type === "text" ? prev.zIndex : 50 + index,
+          x: box.x,
+          y: box.y,
+          width: box.width,
+          height: box.height,
+          rotation: sameText && prev?.type === "text" ? prev.rotation : 0,
+          scaleX: sameText && prev?.type === "text" ? prev.scaleX : 1,
+          scaleY: sameText && prev?.type === "text" ? prev.scaleY : 1,
+        })
+      );
+      return;
+    }
+
     const fontSize = Math.max(10, Math.round(layer.fontSize || 48));
     const lineHeightMul = layer.lineHeight ?? 1.25;
     const maxW = Math.max(80, stageW * (layer.maxWidth ?? 0.88));
-    const text = layer.text || "";
     const lineCount = Math.max(1, text.split("\n").length);
     const height = Math.max(
       fontSize * lineHeightMul * lineCount,
@@ -217,16 +265,6 @@ export function buildObjectsFromStudioPlanes(
         ? Math.max(fontSize * 1.4, layer.boxH * stageH)
         : height;
 
-    const sameText =
-      prev && prev.type === "text" && prev.text === text && prev.id === id;
-
-    // Always take live style from TextLayer so font slider / preset clicks apply
-    // to Konva (incl. emoji/special glyphs via fontForText → EMOJI_FONT).
-    const fontPreset = (layer.fontPreset || "variety") as FontPreset;
-    const fontFamily = fontForText(fontPreset, text || "가A");
-
-    // Keep drag/resize pose when text content is unchanged, but never freeze
-    // fontSize/fontFamily — that caused the “slider dead / emoji bomb” bugs.
     let geom: {
       x: number;
       y: number;
@@ -250,7 +288,7 @@ export function buildObjectsFromStudioPlanes(
         scaleX: sameText && prev?.type === "text" ? prev.scaleX : 1,
         scaleY: sameText && prev?.type === "text" ? prev.scaleY : 1,
       };
-    } else if (sameText && prev.type === "text") {
+    } else if (sameText && prev?.type === "text") {
       const prevFs = Math.max(1, prev.fontSize || fontSize);
       const scaledH = Math.max(
         height,
@@ -288,8 +326,12 @@ export function buildObjectsFromStudioPlanes(
         lineHeight: lineHeightMul,
         letterSpacing: layer.letterSpacing ?? 0,
         fontSize,
+        showBox: Boolean(layer.showBox),
+        boxColor: layer.boxColor || "#000000",
+        boxOpacity: layer.boxOpacity ?? 0.55,
+        showBoxBorder: Boolean(layer.showBoxBorder),
         zIndex:
-          sameText && prev.type === "text" ? prev.zIndex : 50 + index,
+          sameText && prev?.type === "text" ? prev.zIndex : 50 + index,
         ...geom,
       })
     );
@@ -304,7 +346,8 @@ export function scaleCanvasObjectsToStage(
   fromW: number,
   fromH: number,
   toW: number,
-  toH: number
+  toH: number,
+  opts?: { scaleText?: boolean }
 ): CanvasObject[] {
   if (fromW < 8 || fromH < 8 || toW < 8 || toH < 8) return objects;
   if (Math.abs(fromW - toW) < 0.5 && Math.abs(fromH - toH) < 0.5) {
@@ -313,6 +356,7 @@ export function scaleCanvasObjectsToStage(
   const sx = toW / fromW;
   const sy = toH / fromH;
   const fontScale = (sx + sy) / 2;
+  const scaleText = opts?.scaleText !== false;
   return objects.map((o) => {
     const next = {
       ...o,
@@ -321,10 +365,11 @@ export function scaleCanvasObjectsToStage(
       width: o.width * sx,
       height: o.height * sy,
     };
-    if (o.type === "text") {
+    if (o.type === "text" && scaleText) {
       return {
         ...next,
         fontSize: Math.max(10, Math.round((o.fontSize || 48) * fontScale)),
+        letterSpacing: (o.letterSpacing ?? 0) * fontScale,
       };
     }
     return next;

@@ -51,8 +51,10 @@ let lastResult: StudioStoreRecoverResult | null = null;
 async function readLocalRecent(
   namespace: RecentProjectNamespace
 ): Promise<RecentDrawerEntry[]> {
-  const kind = namespace === "photo" ? "recent_photo" : "recent_shared";
-  const fromIdb = await idbGetRecent(kind);
+  const kind =
+    namespace === "screen_010" ? "recent_photo" : "recent_shared";
+  const fromIdb =
+    namespace === "screen_008" ? [] : await idbGetRecent(kind);
   const metas = await listRecentProjects(namespace);
   const fromLs: RecentDrawerEntry[] = [];
   for (const meta of metas) {
@@ -96,10 +98,10 @@ async function hydrateScaGallery(): Promise<RecentDrawerEntry[]> {
 function applyBundle(bundle: StudioStoreBundle): void {
   withoutStudioStoreSync(() => {
     if (bundle.recentShared.length) {
-      replaceRecentDrawer(bundle.recentShared, "shared");
+      replaceRecentDrawer(bundle.recentShared, "screen_007");
     }
     if (bundle.recentPhoto.length) {
-      replaceRecentDrawer(bundle.recentPhoto, "photo");
+      replaceRecentDrawer(bundle.recentPhoto, "screen_010");
     }
     if (bundle.uploadVault.length) {
       replaceUploadVault(bundle.uploadVault);
@@ -138,8 +140,8 @@ function applyBundle(bundle: StudioStoreBundle): void {
 
 async function snapshotLocal(): Promise<StudioStoreBundle> {
   const [recentShared, recentPhoto, idbUpload, idbTrained] = await Promise.all([
-    readLocalRecent("shared"),
-    readLocalRecent("photo"),
+    readLocalRecent("screen_007"),
+    readLocalRecent("screen_010"),
     idbGetVault("upload_vault"),
     idbGetVault("trained_vault"),
   ]);

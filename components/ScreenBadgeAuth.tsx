@@ -5,14 +5,26 @@
  * Uses NextAuth session email against the privileged admin allow-list.
  */
 
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { isPrivilegedAdminEmail } from "@/lib/unlimitedAccount";
-import { resolveScreenId } from "@/lib/screenRegistry";
+import {
+  readInternalScreenStep,
+  resolveScreenId,
+} from "@/lib/screenRegistry";
 
 export default function ScreenBadgeAuth() {
   const pathname = usePathname() || "/";
   const { data: session, status } = useSession();
+  const [step, setStep] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    const sync = () => setStep(readInternalScreenStep(pathname));
+    sync();
+    const id = window.setInterval(sync, 400);
+    return () => window.clearInterval(id);
+  }, [pathname]);
 
   if (status !== "authenticated") return null;
 
@@ -20,7 +32,9 @@ export default function ScreenBadgeAuth() {
     typeof session?.user?.email === "string" ? session.user.email : null;
   if (!isPrivilegedAdminEmail(email)) return null;
 
-  const screenId = resolveScreenId(pathname);
+  const screenId = resolveScreenId(pathname, {
+    step: step ?? 1,
+  });
 
   return (
     <div

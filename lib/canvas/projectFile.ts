@@ -4,7 +4,7 @@
  */
 
 import type { TextLayer } from "@/lib/thumbnailStyles";
-import type { AspectRatioKey } from "@/lib/downloadImage";
+import { aspectRatioValue, type AspectRatioKey } from "@/lib/downloadImage";
 import type { VisualStyleSelection } from "@/lib/ai/visualStylePresets";
 import type {
   CanvasExportSnapshot,
@@ -200,8 +200,94 @@ export async function readProjectFile(file: File): Promise<StudioCanvasProjectV1
   }
 }
 
+const KNOWN_ASPECT_KEYS: AspectRatioKey[] = [
+  "original",
+  "16:9",
+  "1:1",
+  "4:3",
+  "9:16",
+  "id",
+  "a4",
+  "a2",
+  "a3",
+  "3:1",
+  "4:1",
+  "4:5",
+];
+
+/** Resolve print-wizard aspect saved as tab key, numeric ratio, or canvas meta. */
+export function resolveProjectPrintAspect(project: StudioCanvasProjectV1): {
+  aspect: number;
+  customPrint: StudioProjectCustomPrint | null;
+  aspectKey: AspectRatioKey | null;
+} {
+  const customPrint = project.studio.customPrint;
+  if (customPrint && customPrint.width > 0 && customPrint.height > 0) {
+    return {
+      aspect: customPrint.width / Math.max(customPrint.height, 0.0001),
+      customPrint,
+      aspectKey: null,
+    };
+  }
+
+  const raw = project.studio.aspectRatio;
+  if (
+    typeof raw === "string" &&
+    (KNOWN_ASPECT_KEYS as readonly string[]).includes(raw)
+  ) {
+    const key = raw as AspectRatioKey;
+    if (key === "original") {
+      const ns = project.studio.naturalSize;
+      const aspect =
+        ns.w > 0 && ns.h > 0
+          ? ns.w / ns.h
+          : project.canvas.meta.width / Math.max(project.canvas.meta.height, 1);
+      return { aspect, customPrint: null, aspectKey: key };
+    }
+    return {
+      aspect: aspectRatioValue(key),
+      customPrint: null,
+      aspectKey: key,
+    };
+  }
+
+  const numeric =
+    typeof raw === "string" ? parseFloat(raw) : Number(raw);
+  if (Number.isFinite(numeric) && numeric > 0.05) {
+    return { aspect: numeric, customPrint: null, aspectKey: null };
+  }
+
+  const w = project.canvas.meta.width;
+  const h = project.canvas.meta.height;
+  if (w > 0 && h > 0) {
+    return { aspect: w / h, customPrint: null, aspectKey: null };
+  }
+  return { aspect: 1, customPrint: null, aspectKey: null };
+}
+
+/** Deep-copy overlay layers preserving color / typography fields. */
+export function cloneOverlayLayers(layers: TextLayer[]): TextLayer[] {
+  return layers.map((l) => ({
+    ...l,
+    ranges: l.ranges?.map((r) => ({ ...r })) ?? [],
+  }));
+}
+
 /** Hand-off from wizard Step-2 → studio (session only). */
 export const PENDING_STUDIO_PROJECT_KEY = "sca_pending_studio_project_v1";
+
+export function peekPendingStudioProject(
+  key: string = PENDING_STUDIO_PROJECT_KEY
+): StudioCanvasProjectV1 | null {
+  if (typeof sessionStorage === "undefined") return null;
+  const raw = sessionStorage.getItem(key);
+  if (!raw) return null;
+  try {
+    return parseStudioProject(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
 
 export function stashPendingStudioProject(
   project: StudioCanvasProjectV1,

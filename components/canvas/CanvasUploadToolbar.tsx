@@ -92,7 +92,7 @@ export default function CanvasUploadToolbar({
   actions = "full",
   extraDeletable = null,
   showFormatHint = true,
-  recentNamespace = "shared",
+  recentNamespace = "screen_007",
   roomy = false,
 }: CanvasUploadToolbarProps) {
   const { showToast } = useFeedback();

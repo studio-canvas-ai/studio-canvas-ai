@@ -14,6 +14,7 @@ import {
   fontForText,
   type TextLayer,
 } from "@/lib/thumbnailStyles";
+import { hexToRgba } from "@/lib/shortsCaptions";
 
 const PLACEHOLDER_PREFIX_RE = /^\s*(상단문구:|중간문구:|하단문구:)\s*/;
 
@@ -119,9 +120,29 @@ export function drawPrintLayerInBox(
 
   ctx.save();
   ctx.textBaseline = "top";
-  ctx.fillStyle = fill;
   ctx.shadowBlur = 0;
   ctx.shadowColor = "transparent";
+
+  const opacity = Math.max(0.15, Math.min(0.9, layer.boxOpacity ?? 0.55));
+  if (layer.showBox) {
+    ctx.fillStyle = hexToRgba(layer.boxColor || "#000000", opacity);
+    const r = Math.min(14, fontSize * 0.28);
+    ctx.beginPath();
+    ctx.moveTo(r, 0);
+    ctx.arcTo(boxW, 0, boxW, boxH, r);
+    ctx.arcTo(boxW, boxH, 0, boxH, r);
+    ctx.arcTo(0, boxH, 0, 0, r);
+    ctx.arcTo(0, 0, boxW, 0, r);
+    ctx.closePath();
+    ctx.fill();
+    if (layer.showBoxBorder) {
+      ctx.strokeStyle = hexToRgba("#ffffff", 0.35);
+      ctx.lineWidth = Math.max(1, fontSize * 0.04);
+      ctx.stroke();
+    }
+  }
+
+  ctx.fillStyle = fill;
 
   const innerW = Math.max(8, boxW - padX * 2);
 

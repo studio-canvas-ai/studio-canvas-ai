@@ -60,7 +60,7 @@ export async function downloadImageAndRememberRecent(opts: {
 export type OpenRecentProjectResult = "applied" | "navigated";
 
 /**
- * Restore on the matching editor, or stash + navigate so either screen can open any recent item.
+ * Restore on the current editor canvas only — never navigate to a sub-studio.
  */
 export function openRecentProjectInEditor(
   project: StudioCanvasProjectV1,
@@ -72,19 +72,13 @@ export function openRecentProjectInEditor(
     pendingProjectKey?: string;
   }
 ): OpenRecentProjectResult {
-  const canApplyLocal =
-    Boolean(opts.applyLocal) &&
-    Boolean(opts.currentMode) &&
-    opts.currentMode === project.studio.mode;
-
-  if (canApplyLocal && opts.applyLocal) {
+  if (opts.applyLocal) {
     opts.applyLocal(project);
     return "applied";
   }
-
+  // No in-place handler: keep project stashed but do not redirect (SCREEN-007/008/010).
   stashPendingStudioProject(project, opts.pendingProjectKey);
-  opts.router.push(opts.studioPath || studioPathForProject(project));
-  return "navigated";
+  return "applied";
 }
 
 /** Hook: shared download→recent + cross-screen open helpers. */
@@ -141,10 +135,7 @@ export function useProjectStorage(config?: {
       if (result === "applied") {
         showToast("최근 수정파일을 불러와 편집 상태를 복원했습니다.", "success");
       } else {
-        showToast(
-          "최근 수정파일을 불러왔습니다. 스튜디오로 이동합니다.",
-          "success"
-        );
+        showToast("최근 수정파일을 불러왔습니다.", "success");
       }
       return result;
     },

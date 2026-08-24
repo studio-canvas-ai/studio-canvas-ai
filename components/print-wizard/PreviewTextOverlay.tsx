@@ -406,7 +406,7 @@ export default function PreviewTextOverlay({
   };
 
   useEffect(() => {
-    if (!backgroundSrc || !size.w || !size.h || !layers.length) return;
+    if (!backgroundSrc || !size.w || !size.h || !layers.length || interactive) return;
     let cancelled = false;
     const image = new Image();
     image.crossOrigin = "anonymous";
@@ -426,7 +426,7 @@ export default function PreviewTextOverlay({
         ctx.drawImage(image, 0, 0, sampleW, sampleH);
 
         const nextLayers = layersRef.current.map((layer) => {
-          if (!layer.text.trim()) return layer;
+          if (!layer.text.trim() || layer.layoutLocked) return layer;
           const box = layerToBox(layer, size.w, size.h);
           const sx = Math.max(0, Math.min(sampleW - 1, Math.round(((box.x + box.width / 2) / size.w) * sampleW)));
           const sy = Math.max(0, Math.min(sampleH - 1, Math.round(((box.y + box.height / 2) / size.h) * sampleH)));
@@ -454,7 +454,7 @@ export default function PreviewTextOverlay({
     return () => {
       cancelled = true;
     };
-  }, [backgroundSrc, size.h, size.w]);
+  }, [backgroundSrc, interactive, size.h, size.w]);
 
   if (!layers.length) return null;
 

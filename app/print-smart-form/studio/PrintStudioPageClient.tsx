@@ -10,7 +10,13 @@ import { PRINT_PENDING_PROJECT_KEY } from "@/lib/wizard/wizardProduct";
 import { PRINT_SMART_FORM_PATH } from "@/lib/printSmartForm";
 import { readPrintWizardSession } from "@/lib/printWizardSession";
 import type { PrintWizardState } from "@/lib/printWizardTypes";
+import { resolvePrintAspect } from "@/lib/printWizardTypes";
 import { smartInputsToTextLayers } from "@/lib/ai/formToDesign";
+import {
+  referencePrintStageSize,
+  resolvePageTextLayersForExport,
+} from "@/lib/printWizardTextLayers";
+import { peekPendingStudioProject } from "@/lib/canvas/projectFile";
 import { toDisplayImageSrc } from "@/lib/resultSession";
 
 const AiTemplateStudio = dynamic(
@@ -20,8 +26,8 @@ const AiTemplateStudio = dynamic(
 
 /**
  * Step 3 — Print Agent studio.
- * Seeds shared core engine (agent mode) with Form-to-Design text layers
- * and Step-2 backgrounds. Text stays on overlay planes; AI visuals stay separate.
+ * Seeds shared core engine (agent mode) with saved Step-2 text layers
+ * and backgrounds. Text stays on overlay planes; AI visuals stay separate.
  */
 export default function PrintStudioPageClient() {
   const router = useRouter();
@@ -33,10 +39,43 @@ export default function PrintStudioPageClient() {
     setReady(true);
   }, []);
 
-  const overlayLayers = useMemo(
-    () => (session ? smartInputsToTextLayers(session.inputs) : []),
+  const printAspect = useMemo(
+    () =>
+      session
+        ? resolvePrintAspect(session.formatId, session.customSize)
+        : 1,
     [session]
   );
+
+  const referenceStage = useMemo(
+    () => referencePrintStageSize(printAspect),
+    [printAspect]
+  );
+
+  const overlayLayers = useMemo(() => {
+    const pending = peekPendingStudioProject(PRINT_PENDING_PROJECT_KEY);
+    if (pending?.studio.overlayLayers?.length) {
+      return pending.studio.overlayLayers.map((layer) => ({
+        ...layer,
+        ranges: layer.ranges?.map((range) => ({ ...range })) ?? [],
+      }));
+    }
+    if (!session) return [];
+    const pages = session.textLayersByPage;
+    const pageIndex = 0;
+    if (pages?.some((page) => page?.length)) {
+      return resolvePageTextLayersForExport(
+        pages,
+        pageIndex,
+        session.inputs,
+        session.pageCount
+      ).map((layer) => ({
+        ...layer,
+        ranges: layer.ranges?.map((range) => ({ ...range })) ?? [],
+      }));
+    }
+    return smartInputsToTextLayers(session.inputs);
+  }, [session]);
 
   const backgroundUrl = useMemo(() => {
     if (!session) return null;
@@ -49,6 +88,15 @@ export default function PrintStudioPageClient() {
     if (!session) return null;
     return { ...session.inputs };
   }, [session]);
+
+  const initialCustomPrint = useMemo(() => {
+    if (!session?.customSize) return null;
+    return {
+      unit: session.customSize.unit,
+      width: session.customSize.width,
+      height: session.customSize.height,
+    };
+  }, [session?.customSize]);
 
   if (!ready) {
     return (
@@ -95,9 +143,15 @@ export default function PrintStudioPageClient() {
         embedded
         layout="print-wizard-step2"
         heading="AI 1분 인쇄물 에이전트"
-        recentNamespace="shared"
+        recentNamespace="screen_008"
         initialBackgroundUrl={backgroundUrl}
         initialOverlayLayers={overlayLayers}
+        initialPrintAspect={printAspect}
+        initialNaturalSize={{
+          w: referenceStage.w,
+          h: referenceStage.h,
+        }}
+        initialCustomPrint={initialCustomPrint}
         formFields={formFields}
         initialVisualStyle={session.visualStyle}
         pendingProjectKey={PRINT_PENDING_PROJECT_KEY}

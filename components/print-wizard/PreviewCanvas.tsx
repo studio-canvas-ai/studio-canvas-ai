@@ -12,7 +12,6 @@ import PreviewDecoOverlay from "@/components/print-wizard/PreviewDecoOverlay";
 import { useFeedback } from "@/components/FeedbackProvider";
 import { useCanvasStore } from "@/lib/canvas/canvasStore";
 import type { PhotoKind } from "@/lib/canvas/addPhotoLayer";
-import { stashPendingStudioProject } from "@/lib/canvas/projectFile";
 import type { RecentProjectNamespace } from "@/lib/canvas/recentProjects";
 import {
   PRINT_PENDING_PROJECT_KEY,
@@ -226,7 +225,7 @@ export default function PreviewCanvas({
   studioPath = PRINT_WIZARD_STUDIO_PATH,
   pendingProjectKey = PRINT_PENDING_PROJECT_KEY,
   panelTitle,
-  recentNamespace = "shared",
+  recentNamespace = "screen_008",
   backgroundFit = "cover",
   contentEpoch = 0,
 }: PreviewCanvasProps) {
@@ -594,12 +593,10 @@ export default function PreviewCanvas({
                       onOpenRecentProject(project);
                       return;
                     }
-                    stashPendingStudioProject(project, pendingProjectKey);
                     showToast(
-                      "최근 수정파일을 불러왔습니다. 스튜디오로 이동합니다.",
-                      "success"
+                      "최근 수정파일을 불러와 현재 화면 캔버스에 적용할 수 없습니다.",
+                      "info"
                     );
-                    router.push(studioPath);
                   }
             }
             recentNamespace={recentNamespace}
