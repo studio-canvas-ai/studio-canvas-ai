@@ -10,7 +10,7 @@ import {
   stashPendingStudioProject,
   type StudioCanvasProjectV1,
 } from "@/lib/canvas/projectFile";
-import { createLayer } from "@/lib/thumbnailStyles";
+import { createLayer, type TextLayer } from "@/lib/thumbnailStyles";
 import { shareWithFallback } from "@/lib/webShare";
 import type { PrintCustomSize } from "@/lib/printWizardTypes";
 import { useExportGate } from "@/lib/useExportGate";
@@ -30,7 +30,9 @@ export type UsePrintWizardExportArgs = {
   studioPath?: string;
   pendingProjectKey?: string;
   recentNamespace?: RecentProjectNamespace;
-  /** Photo lookbook: build image when bg plate and/or layers exist. */
+  /** Real text layers for the active page (serialized into .sca). */
+  overlayLayers?: TextLayer[];
+  /** Photo lookbook / print: build image when bg plate and/or layers exist. */
   resolveExportImage?: (quality: "standard" | "high") => Promise<Blob>;
   /** Embed wizard + vaults into .sca for recent restore. */
   buildLookbookSnapshot?: () => PhotoLookbookSnapshot | null;
@@ -44,6 +46,7 @@ export function usePrintWizardExport({
   studioPath,
   pendingProjectKey,
   recentNamespace,
+  overlayLayers = [],
   resolveExportImage,
   buildLookbookSnapshot,
 }: UsePrintWizardExportArgs) {
@@ -65,12 +68,19 @@ export function usePrintWizardExport({
       text: titlePreview || "",
       pos: "center",
     });
+    const layers =
+      overlayLayers.length > 0
+        ? overlayLayers.map((l) => ({
+            ...l,
+            ranges: l.ranges?.map((r) => ({ ...r })) ?? [],
+          }))
+        : [titleLayer];
     const lookbook = buildLookbookSnapshot?.() ?? undefined;
     return buildStudioProject({
       mode: "agent",
       subjectUrl: "",
       backgroundUrl: activeBg,
-      overlayLayers: [titleLayer],
+      overlayLayers: layers,
       aspectRatio: `${aspect}`,
       customPrint: customSize
         ? {
@@ -96,8 +106,21 @@ export function usePrintWizardExport({
       if (resolveExportImage) {
         try {
           imageBlob = await resolveExportImage(quality);
-        } catch {
-          imageBlob = null;
+        } catch (err) {
+          if (
+            err instanceof Error &&
+            err.message === "nothing_to_export"
+          ) {
+            showToast(
+              isPhoto
+                ? "먼저 학습/등록으로 캔버스에 사진을 올리거나 AI 변형을 완료해 주세요."
+                : "먼저 AI 배경을 생성하거나 이미지를 업로드해 주세요.",
+              "info"
+            );
+            return;
+          }
+          showToast("이미지 합성에 실패했습니다.", "error");
+          return;
         }
       }
       if (!imageBlob) {
@@ -183,14 +206,24 @@ export function usePrintWizardExport({
 
   const sharePreview = async () => {
     if (!requireSubscription()) return;
-    if (!activeBg) {
-      showToast("공유할 이미지가 없습니다.", "info");
-      return;
-    }
     setBusy(true);
     try {
-      const res = await fetch(activeBg, { cache: "no-store" });
-      const blob = await res.blob();
+      let blob: Blob | null = null;
+      if (resolveExportImage) {
+        try {
+          blob = await resolveExportImage("high");
+        } catch {
+          blob = null;
+        }
+      }
+      if (!blob) {
+        if (!activeBg) {
+          showToast("공유할 이미지가 없습니다.", "info");
+          return;
+        }
+        const res = await fetch(activeBg, { cache: "no-store" });
+        blob = await res.blob();
+      }
       const file = new File([blob], "print-smart-form.png", {
         type: blob.type || "image/png",
       });

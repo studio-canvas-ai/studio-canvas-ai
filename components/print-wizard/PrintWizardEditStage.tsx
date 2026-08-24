@@ -6,9 +6,15 @@ import StudioExportButtonGroup from "@/components/canvas/StudioExportButtonGroup
 import PreviewCanvas from "@/components/print-wizard/PreviewCanvas";
 import PrintWizardStep2Layout from "@/components/print-wizard/PrintWizardStep2Layout";
 import { usePrintWizardExport } from "@/lib/canvas/usePrintWizardExport";
-import { resolvePrintAspect, type PrintBackgroundPan, type PrintDecoLayer, type PrintPhotoLayer, type PrintWizardState } from "@/lib/printWizardTypes";
 import {
-  reconcileLayersTypographyBox,
+  resolvePrintAspect,
+  type PrintBackgroundPan,
+  type PrintDecoLayer,
+  type PrintPhotoLayer,
+  type PrintWizardState,
+} from "@/lib/printWizardTypes";
+import {
+  reconcileLayerTypographyBox,
   referencePrintStageSize,
 } from "@/lib/printWizardTextLayers";
 import { toDisplayImageSrc } from "@/lib/resultSession";
@@ -16,6 +22,15 @@ import { pageBackgroundUrl } from "@/lib/printWizardBg";
 import type { TextLayer } from "@/lib/thumbnailStyles";
 import type { PhotoKind } from "@/lib/canvas/addPhotoLayer";
 import type { RecentProjectNamespace } from "@/lib/canvas/recentProjects";
+import {
+  capturePhotoLookbookSnapshot,
+  compositePhotoLookbookBlob,
+  photoLookbookHasExportableFrame,
+} from "@/lib/photoLookbookProject";
+import {
+  compositePrintWizardPageBlob,
+  printWizardHasExportableFrame,
+} from "@/lib/printWizardComposite";
 
 const AiTemplateStudio = dynamic(
   () => import("@/components/AiTemplateStudio"),
@@ -49,10 +64,12 @@ export type PrintWizardEditStageProps = {
   pendingProjectKey?: string;
   panelTitle?: string;
   recentNamespace?: RecentProjectNamespace;
+  /** When true, .sca embeds lookbook vault + wizard snapshot. */
+  isPhotoLookbook?: boolean;
 };
 
 /**
- * Step 2 ??Print wizard preview (left) + Template Studio edit panel (right).
+ * Step 2 — Print wizard preview (left) + Template Studio edit panel (right).
  */
 export default function PrintWizardEditStage({
   state,
@@ -81,6 +98,7 @@ export default function PrintWizardEditStage({
   pendingProjectKey,
   panelTitle,
   recentNamespace,
+  isPhotoLookbook = false,
 }: PrintWizardEditStageProps) {
   const aspect = resolvePrintAspect(state.formatId, state.customSize);
   const typographyStage = useMemo(
@@ -130,6 +148,42 @@ export default function PrintWizardEditStage({
     studioPath,
     pendingProjectKey,
     recentNamespace,
+    overlayLayers,
+    resolveExportImage: async (quality) => {
+      const exportState: PrintWizardState = {
+        ...state,
+        textLayersByPage,
+        photoLayersByPage: photoLayersByPage ?? state.photoLayersByPage,
+        decoLayersByPage: decoLayersByPage ?? state.decoLayersByPage,
+      };
+      if (isPhotoLookbook) {
+        if (!photoLookbookHasExportableFrame(exportState)) {
+          throw new Error("nothing_to_export");
+        }
+        return compositePhotoLookbookBlob({
+          state: exportState,
+          pageIndex,
+          quality,
+        });
+      }
+      if (!printWizardHasExportableFrame(exportState)) {
+        throw new Error("nothing_to_export");
+      }
+      return compositePrintWizardPageBlob({
+        state: exportState,
+        pageIndex,
+        quality,
+      });
+    },
+    buildLookbookSnapshot: isPhotoLookbook
+      ? () =>
+          capturePhotoLookbookSnapshot({
+            ...state,
+            textLayersByPage,
+            photoLayersByPage: photoLayersByPage ?? state.photoLayersByPage,
+            decoLayersByPage: decoLayersByPage ?? state.decoLayersByPage,
+          })
+      : undefined,
   });
 
   return (
@@ -200,13 +254,17 @@ export default function PrintWizardEditStage({
                 onControlledOverlayLayersChange={(layers) =>
                   onTextLayersChange(
                     pageIndex,
-                    reconcileLayersTypographyBox(
-                      layers,
-                      typographyStage.w,
-                      typographyStage.h
+                    layers.map((layer) =>
+                      reconcileLayerTypographyBox(
+                        layer,
+                        typographyStage.w,
+                        typographyStage.h
+                      )
                     )
                   )
                 }
+                controlledActiveLayerId={activeTextLayerId}
+                onControlledActiveLayerChange={onActiveTextLayerChange}
                 formFields={formFields}
                 initialVisualStyle={state.visualStyle}
                 onDecoCatalogPick={onDecoCatalogPick}

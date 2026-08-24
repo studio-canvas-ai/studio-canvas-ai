@@ -1310,6 +1310,7 @@ export default function PrintWizardStep2({
     studioPath,
     pendingProjectKey,
     recentNamespace,
+    overlayLayers: textLayersByPage[Math.max(0, currentPage - 1)] ?? [],
     resolveExportImage:
       productId === "photo"
         ? async (quality) => {
@@ -1333,11 +1334,17 @@ export default function PrintWizardStep2({
     (project: StudioCanvasProjectV1) => {
       if (productId === "photo" && isPhotoLookbookSnapshot(project.lookbook)) {
         const { wizard } = applyPhotoLookbookSnapshot(project.lookbook);
+        // Preserve saved page geometry; photo product still clamps to single page.
         const next = {
           ...wizard,
           pageCount: 1 as const,
           formatId: coercePhotoFormatId(wizard.formatId),
           useId: coercePhotoUseId(wizard.useId),
+          // Keep restored layer arrays verbatim — do not re-run auto-layout.
+          textLayersByPage: wizard.textLayersByPage,
+          photoLayersByPage: wizard.photoLayersByPage,
+          backgroundUrls: wizard.backgroundUrls,
+          backgroundPansByPage: wizard.backgroundPansByPage,
           wizardStep: 1 as const,
         };
         saveSession(next);
@@ -1414,6 +1421,7 @@ export default function PrintWizardStep2({
           pendingProjectKey={pendingProjectKey}
           recentNamespace={recentNamespace}
           panelTitle={panelTitle}
+          isPhotoLookbook={productId === "photo"}
         />
       </div>
     );

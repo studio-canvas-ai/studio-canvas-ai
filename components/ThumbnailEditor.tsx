@@ -1444,9 +1444,9 @@ export default function ThumbnailEditor({
             </div>
             <input
               type="range"
-              min={24}
+              min={10}
               max={120}
-              value={activeLayer.fontSize}
+              value={Math.min(120, Math.max(10, activeLayer.fontSize))}
               onChange={(e) => updateActive({ fontSize: Number(e.target.value) })}
               className="w-full accent-emerald-400"
             />

@@ -193,7 +193,7 @@ export function buildObjectsFromStudioPlanes(
   overlayLayers.forEach((layer, index) => {
     const id = layer.id || `text-${index}`;
     const prev = findPrev(previous, id);
-    const fontSize = Math.max(12, Math.round(layer.fontSize || 48));
+    const fontSize = Math.max(10, Math.round(layer.fontSize || 48));
     const lineHeightMul = layer.lineHeight ?? 1.25;
     const maxW = Math.max(80, stageW * (layer.maxWidth ?? 0.88));
     const text = layer.text || "";
@@ -296,4 +296,37 @@ export function buildObjectsFromStudioPlanes(
   });
 
   return out;
+}
+
+/** Remap absolute object geometry when the live stage size differs from the saved meta. */
+export function scaleCanvasObjectsToStage(
+  objects: CanvasObject[],
+  fromW: number,
+  fromH: number,
+  toW: number,
+  toH: number
+): CanvasObject[] {
+  if (fromW < 8 || fromH < 8 || toW < 8 || toH < 8) return objects;
+  if (Math.abs(fromW - toW) < 0.5 && Math.abs(fromH - toH) < 0.5) {
+    return objects;
+  }
+  const sx = toW / fromW;
+  const sy = toH / fromH;
+  const fontScale = (sx + sy) / 2;
+  return objects.map((o) => {
+    const next = {
+      ...o,
+      x: o.x * sx,
+      y: o.y * sy,
+      width: o.width * sx,
+      height: o.height * sy,
+    };
+    if (o.type === "text") {
+      return {
+        ...next,
+        fontSize: Math.max(10, Math.round((o.fontSize || 48) * fontScale)),
+      };
+    }
+    return next;
+  });
 }

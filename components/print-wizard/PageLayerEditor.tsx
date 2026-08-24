@@ -163,9 +163,9 @@ export default function PageLayerEditor({
         key={layer.id}
         data-layer-id={layer.id}
         className={`rounded-xl border p-2 ${
-          focusId === layer.id
+          active
             ? "border-indigo-400 bg-indigo-500/10 ring-2 ring-indigo-400/40"
-            : active
+            : focusId === layer.id
               ? "border-indigo-400/40 bg-indigo-500/5"
               : "border-slate-800 bg-[#0B0F19]/80"
         }`}

@@ -89,7 +89,7 @@ import {
   readFileAsDataUrl,
   type PhotoKind,
 } from "@/lib/canvas/addPhotoLayer";
-import { buildObjectsFromStudioPlanes } from "@/lib/canvas/syncFromStudio";
+import { buildObjectsFromStudioPlanes, scaleCanvasObjectsToStage } from "@/lib/canvas/syncFromStudio";
 import {
   exportKonvaPrintDataUrl,
 } from "@/lib/canvas/printExportFromStore";
@@ -384,7 +384,7 @@ type LayerHitBox = {
 const PLACEHOLDER_TEXT = "텍스트를 입력하세요";
 /** Compact single-line default; grows with content via scrollHeight. */
 const LAYER_TEXTAREA_MIN_PX = 44;
-const FONT_SIZE_MIN = 24;
+const FONT_SIZE_MIN = 10;
 const FONT_SIZE_MAX = 360;
 const LETTER_SPACING_MIN = -8;
 const LETTER_SPACING_MAX = 80;
@@ -729,6 +729,9 @@ export type AiTemplateStudioProps = {
   /** Controlled overlay layers (print wizard preview sync). */
   controlledOverlayLayers?: TextLayer[];
   onControlledOverlayLayersChange?: (layers: TextLayer[]) => void;
+  /** Controlled active text layer (canvas ↔ side-list highlight sync). */
+  controlledActiveLayerId?: string | null;
+  onControlledActiveLayerChange?: (id: string | null) => void;
   /** Overlay-only form copy (never sent to Flux as burn-in). */
   formFields?: Record<string, string> | null;
   /** Seed style / mood selection (print wizard → agent). */
@@ -763,6 +766,8 @@ export default function AiTemplateStudio({
   initialOverlayLayers,
   controlledOverlayLayers,
   onControlledOverlayLayersChange,
+  controlledActiveLayerId,
+  onControlledActiveLayerChange,
   formFields = null,
   initialVisualStyle = null,
   embedded = false,
@@ -801,6 +806,8 @@ export default function AiTemplateStudio({
   const forcePlaneRefitRef = useRef(true);
   /** One-shot: preserve imported object transforms across the next plane sync. */
   const hydrateCanvasObjectsRef = useRef<CanvasObject[] | null>(null);
+  /** Stage size the hydrated objects were authored against. */
+  const hydrateCanvasMetaRef = useRef<{ w: number; h: number } | null>(null);
   const projectFileInputRef = useRef<HTMLInputElement>(null);
   const loadedImageRef = useRef<HTMLImageElement | null>(null);
   const loadedBgImageRef = useRef<HTMLImageElement | null>(null);
@@ -871,7 +878,29 @@ export default function AiTemplateStudio({
       onControlledOverlayLayersChange,
     ]
   );
-  const [activeLayerId, setActiveLayerId] = useState<string | null>(null);
+  const [internalActiveLayerId, setInternalActiveLayerId] = useState<
+    string | null
+  >(null);
+  const isActiveLayerControlled =
+    onControlledActiveLayerChange != null;
+  const activeLayerId = isActiveLayerControlled
+    ? (controlledActiveLayerId ?? null)
+    : internalActiveLayerId;
+  const setActiveLayerId = useCallback(
+    (id: string | null) => {
+      if (isActiveLayerControlled) {
+        onControlledActiveLayerChange?.(id);
+        return;
+      }
+      setInternalActiveLayerId(id);
+    },
+    [isActiveLayerControlled, onControlledActiveLayerChange]
+  );
+  /** Live style draft while dragging range sliders (avoids full plane rebuilds). */
+  const [styleDraft, setStyleDraft] = useState<Partial<TextLayer> | null>(null);
+  const styleDragActiveRef = useRef(false);
+  const styleDraftRef = useRef<Partial<TextLayer> | null>(null);
+  const styleCommitRafRef = useRef<number | null>(null);
   const [commandInput, setCommandInput] = useState("");
   const [commandBusy, setCommandBusy] = useState(false);
   const [commandLog, setCommandLog] = useState<
@@ -926,15 +955,27 @@ export default function AiTemplateStudio({
 
   overlayLayersRef.current = overlayLayers;
 
-  const activeLayer = activeLayerId
+  const activeLayerBase = activeLayerId
     ? (overlayLayers.find((l) => l.id === activeLayerId) ?? null)
+    : null;
+  const activeLayer = activeLayerBase
+    ? styleDraft
+      ? { ...activeLayerBase, ...styleDraft }
+      : activeLayerBase
     : null;
 
   useEffect(() => {
+    // Controlled selection is owned by the preview canvas — don't auto-pick.
+    if (isActiveLayerControlled) return;
     if (!activeLayerId && overlayLayers[0] && !selectionClearedRef.current) {
       setActiveLayerId(overlayLayers[0].id);
     }
-  }, [activeLayerId, overlayLayers]);
+  }, [
+    activeLayerId,
+    isActiveLayerControlled,
+    overlayLayers,
+    setActiveLayerId,
+  ]);
 
   useEffect(() => {
     const source = searchParams.get("source");
@@ -1066,7 +1107,9 @@ export default function AiTemplateStudio({
   );
 
   // Sync Template Studio planes → shared Konva canvas store (utility + agent).
+  // panelOnly embeds PreviewCanvas instead of Konva — skip expensive store rebuilds.
   useEffect(() => {
+    if (panelOnly) return;
     // Wait for the real host box. Fitting against canvasSize (1080) then
     // keeping those coords on a ~400px stage is what left-shifts the hero.
     const stageW = Math.round(viewSize.w);
@@ -1082,12 +1125,24 @@ export default function AiTemplateStudio({
     const forceRefit = forcePlaneRefitRef.current;
     if (forceRefit) forcePlaneRefitRef.current = false;
     const hydrated = hydrateCanvasObjectsRef.current;
-    if (hydrated) hydrateCanvasObjectsRef.current = null;
+    const hydrateMeta = hydrateCanvasMetaRef.current;
+    if (hydrated) {
+      hydrateCanvasObjectsRef.current = null;
+      hydrateCanvasMetaRef.current = null;
+    }
     // Fresh image fit: ignore prior image/photo transforms (keep text only).
     // Import restore: use hydrated objects so transforms survive plane sync.
     let previous = forceRefit
       ? prev.filter((o) => o.type === "text")
-      : hydrated || prev;
+      : hydrated
+        ? scaleCanvasObjectsToStage(
+            hydrated,
+            hydrateMeta?.w ?? stageW,
+            hydrateMeta?.h ?? stageH,
+            stageW,
+            stageH
+          )
+        : prev;
     // Real image metrics arrived after a placeholder 1080×1350 fit — Center & Fit again.
     if (
       !hydrated &&
@@ -1125,6 +1180,7 @@ export default function AiTemplateStudio({
     naturalSize.h,
     naturalSize.w,
     overlayLayers,
+    panelOnly,
     subjectLayer,
     viewSize.h,
     viewSize.w,
@@ -1132,15 +1188,23 @@ export default function AiTemplateStudio({
 
   // Bidirectional selection: side-panel active layer ↔ Konva selection
   useEffect(() => {
+    if (panelOnly) return;
     if (activeLayerId) {
       useCanvasStore.getState().select(activeLayerId);
+    } else {
+      useCanvasStore.getState().clearSelection();
     }
-  }, [activeLayerId]);
+  }, [activeLayerId, panelOnly]);
 
   useEffect(() => {
+    if (panelOnly) return;
     const unsub = useCanvasStore.subscribe((s, prev) => {
       if (s.selectedId === prev.selectedId) return;
-      if (!s.selectedId) return;
+      if (!s.selectedId) {
+        selectionClearedRef.current = true;
+        setActiveLayerId(null);
+        return;
+      }
       if (s.selectedId.startsWith("plane-")) return;
       if (s.selectedId.startsWith("photo_")) return;
       const isTextLayer = overlayLayersRef.current.some(
@@ -1151,7 +1215,18 @@ export default function AiTemplateStudio({
       setActiveLayerId(s.selectedId);
     });
     return unsub;
-  }, []);
+  }, [panelOnly, setActiveLayerId]);
+
+  useEffect(() => {
+    // Drop in-progress slider draft when the selected layer changes.
+    styleDragActiveRef.current = false;
+    styleDraftRef.current = null;
+    setStyleDraft(null);
+    if (styleCommitRafRef.current != null) {
+      cancelAnimationFrame(styleCommitRafRef.current);
+      styleCommitRafRef.current = null;
+    }
+  }, [activeLayerId]);
 
   const canvasAspectCss = `${canvasSize.width} / ${Math.max(canvasSize.height, 1)}`;
 
@@ -2158,7 +2233,61 @@ export default function AiTemplateStudio({
       prev.map((l) => (l.id === id ? { ...l, ...patch } : l))
     );
     // Keep Konva selection on the edited text layer.
-    useCanvasStore.getState().select(id);
+    if (!panelOnly) {
+      useCanvasStore.getState().select(id);
+    }
+  };
+
+  /** Patch Konva text node immediately; commit TextLayer once on pointer-up. */
+  const patchActiveStyleLive = (patch: Partial<TextLayer>) => {
+    const id = activeLayerId;
+    if (!id) {
+      showToast("먼저 텍스트 레이어를 선택해 주세요.", "info");
+      return;
+    }
+    styleDragActiveRef.current = true;
+    const nextDraft = { ...(styleDraftRef.current || {}), ...patch };
+    styleDraftRef.current = nextDraft;
+    setStyleDraft(nextDraft);
+    if (!panelOnly) {
+      const storePatch: Record<string, unknown> = {};
+      if (patch.fontSize != null) storePatch.fontSize = patch.fontSize;
+      if (patch.fontWeight != null) storePatch.fontWeight = patch.fontWeight;
+      if (patch.letterSpacing != null)
+        storePatch.letterSpacing = patch.letterSpacing;
+      if (patch.lineHeight != null) storePatch.lineHeight = patch.lineHeight;
+      if (Object.keys(storePatch).length) {
+        useCanvasStore.getState().updateObject(id, storePatch);
+      }
+      useCanvasStore.getState().select(id);
+      return;
+    }
+    // PreviewCanvas reads overlay layers — rAF-batch commits while dragging.
+    if (styleCommitRafRef.current != null) return;
+    styleCommitRafRef.current = requestAnimationFrame(() => {
+      styleCommitRafRef.current = null;
+      const draft = styleDraftRef.current;
+      const layerId = activeLayerId;
+      if (!draft || !layerId) return;
+      setOverlayLayers((prev) =>
+        prev.map((l) => (l.id === layerId ? { ...l, ...draft } : l))
+      );
+    });
+  };
+
+  const commitActiveStyleDrag = () => {
+    if (!styleDragActiveRef.current) return;
+    styleDragActiveRef.current = false;
+    const draft = styleDraftRef.current;
+    styleDraftRef.current = null;
+    setStyleDraft(null);
+    if (styleCommitRafRef.current != null) {
+      cancelAnimationFrame(styleCommitRafRef.current);
+      styleCommitRafRef.current = null;
+    }
+    if (draft && Object.keys(draft).length) {
+      updateActive(draft);
+    }
   };
 
   const addLayer = () => {
@@ -2651,6 +2780,10 @@ export default function AiTemplateStudio({
     (project: StudioCanvasProjectV1) => {
       forcePlaneRefitRef.current = false;
       hydrateCanvasObjectsRef.current = project.canvas.objects;
+      hydrateCanvasMetaRef.current = {
+        w: project.canvas.meta.width,
+        h: project.canvas.meta.height,
+      };
       loadedImageRef.current = null;
       loadedBgImageRef.current = null;
       setEntrySource("default");
@@ -2665,6 +2798,7 @@ export default function AiTemplateStudio({
             }))
           : [makeDefaultLayer(0)];
       setOverlayLayers(nextLayers);
+      selectionClearedRef.current = false;
       setActiveLayerId(nextLayers[0]!.id);
       if (project.studio.customPrint) {
         setCustomPrint(project.studio.customPrint);
@@ -2681,13 +2815,31 @@ export default function AiTemplateStudio({
       if (project.studio.visualStyle) {
         setVisualStyle(project.studio.visualStyle);
       }
-      useCanvasStore.getState().setMeta(project.canvas.meta);
-      useCanvasStore.getState().setObjects(project.canvas.objects);
+      const stageW = Math.round(viewSize.w);
+      const stageH = Math.round(viewSize.h);
+      if (stageW >= 16 && stageH >= 16) {
+        const scaled = scaleCanvasObjectsToStage(
+          project.canvas.objects,
+          project.canvas.meta.width,
+          project.canvas.meta.height,
+          stageW,
+          stageH
+        );
+        useCanvasStore.getState().setMeta({
+          ...project.canvas.meta,
+          width: stageW,
+          height: stageH,
+        });
+        useCanvasStore.getState().setObjects(scaled);
+      } else {
+        useCanvasStore.getState().setMeta(project.canvas.meta);
+        useCanvasStore.getState().setObjects(project.canvas.objects);
+      }
       useCanvasStore.getState().select(project.canvas.selectedId);
       resetViewportCenterFit();
       requestAnimationFrame(() => paintRef.current());
     },
-    [resetViewportCenterFit]
+    [resetViewportCenterFit, setActiveLayerId, viewSize.h, viewSize.w]
   );
 
   const loadProjectFromFile = async (file: File | null) => {
@@ -3796,8 +3948,10 @@ export default function AiTemplateStudio({
                     Math.max(FONT_SIZE_MIN, activeLayer.fontSize)
                   )}
                   onChange={(e) =>
-                    updateActive({ fontSize: Number(e.target.value) })
+                    patchActiveStyleLive({ fontSize: Number(e.target.value) })
                   }
+                  onPointerUp={commitActiveStyleDrag}
+                  onPointerCancel={commitActiveStyleDrag}
                   className="w-full accent-emerald-400"
                 />
               </div>
@@ -3820,10 +3974,12 @@ export default function AiTemplateStudio({
                     activeLayer.fontWeight ?? SHORTS_FONT_WEIGHT_DEFAULT
                   )}
                   onChange={(e) =>
-                    updateActive({
+                    patchActiveStyleLive({
                       fontWeight: clampFontWeight(Number(e.target.value)),
                     })
                   }
+                  onPointerUp={commitActiveStyleDrag}
+                  onPointerCancel={commitActiveStyleDrag}
                   className="w-full accent-emerald-400"
                 />
               </div>
@@ -3841,10 +3997,12 @@ export default function AiTemplateStudio({
                   max={LETTER_SPACING_MAX}
                   value={layerLetterSpacing(activeLayer)}
                   onChange={(e) =>
-                    updateActive({
+                    patchActiveStyleLive({
                       letterSpacing: clampLetterSpacing(Number(e.target.value)),
                     })
                   }
+                  onPointerUp={commitActiveStyleDrag}
+                  onPointerCancel={commitActiveStyleDrag}
                   className="w-full accent-emerald-400"
                 />
               </div>
@@ -3863,10 +4021,12 @@ export default function AiTemplateStudio({
                   step={LINE_HEIGHT_STEP}
                   value={layerLineHeight(activeLayer)}
                   onChange={(e) =>
-                    updateActive({
+                    patchActiveStyleLive({
                       lineHeight: clampLineHeight(Number(e.target.value)),
                     })
                   }
+                  onPointerUp={commitActiveStyleDrag}
+                  onPointerCancel={commitActiveStyleDrag}
                   className="w-full accent-emerald-400"
                 />
               </div>
