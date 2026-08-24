@@ -101,6 +101,7 @@ import type { RecentProjectNamespace } from "@/lib/canvas/recentProjects";
 import { fillCanvas } from "@/lib/i18n";
 import { shareWithFallback } from "@/lib/webShare";
 import { useExportGate } from "@/lib/useExportGate";
+import { useDownloadQuota } from "@/lib/useDownloadQuota";
 import { projectStorageErrorMessage } from "@/lib/projectStorage";
 import { useProjectStorage } from "@/lib/canvas/useProjectStorage";
 import { PRINT_SMART_FORM_PATH } from "@/lib/printSmartForm";
@@ -789,6 +790,7 @@ export default function AiTemplateStudio({
   const cs = t.canvasStudio;
   const { showToast } = useFeedback();
   const { requireSubscription, premiumModal } = useExportGate();
+  const { spendForQuality, quotaEmptyMessage } = useDownloadQuota();
   const { downloadAndRemember, openRecent } = useProjectStorage({
     pendingProjectKey,
     recentNamespace,
@@ -2744,6 +2746,11 @@ export default function AiTemplateStudio({
     if (!requireSubscription()) return;
     setBusy(true);
     try {
+      const spent = await spendForQuality(quality);
+      if (!spent.ok) {
+        showToast(quotaEmptyMessage, "error");
+        return;
+      }
       const targetW =
         quality === "high"
           ? exportSize.width

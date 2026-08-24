@@ -32,6 +32,7 @@ import {
 import { clearResultSession } from "@/lib/resultSession";
 import { isUnlimitedAccountEmail } from "@/lib/unlimitedAccount";
 import { getPlanUsageLimits } from "@/lib/planQuotas";
+import { useDownloadQuota } from "@/lib/useDownloadQuota";
 
 type TabId = "works" | "models" | "photos";
 
@@ -45,26 +46,25 @@ export default function MyGalleryTabs() {
   const { t } = useI18n();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { planId, isFreePlan, authUser, planUsage, billingInterval } =
+    useCredits();
   const {
-    planId,
-    billingInterval,
-    isFreePlan,
-    authUser,
-    planUsage,
-    consumeDownloadQuota,
-  } = useCredits();
+    fhdRemaining,
+    uhd4kRemaining,
+    standardLabel,
+    highLabel,
+    spendForQuality,
+    quotaEmptyMessage,
+  } = useDownloadQuota();
   const { confirm, showToast } = useFeedback();
   const [tab, setTab] = useState<TabId>(() => parseTab(searchParams.get("tab")));
   const [works, setWorks] = useState<GalleryHistoryItem[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const limits = useMemo(
-    () => getPlanUsageLimits(planId, billingInterval),
-    [planId, billingInterval]
-  );
-  const fhdRemaining = planUsage?.fhdRemaining ?? limits.fhd;
-  const uhd4kRemaining = planUsage?.uhd4kRemaining ?? limits.uhd4k;
-  const galleryLimit = planUsage?.galleryLimit ?? limits.gallery;
+  const galleryLimit = useMemo(() => {
+    if (planUsage?.galleryLimit != null) return planUsage.galleryLimit;
+    return getPlanUsageLimits(planId, billingInterval).gallery;
+  }, [billingInterval, planId, planUsage?.galleryLimit]);
 
   const canAccessAiModels =
     !isFreePlan || isUnlimitedAccountEmail(authUser?.email);
@@ -138,17 +138,16 @@ export default function MyGalleryTabs() {
     item: GalleryHistoryItem,
     quality: GalleryDownloadQuality
   ) => {
-    const kind = quality === "high" ? "uhd4k" : "fhd";
-    const remaining = kind === "uhd4k" ? uhd4kRemaining : fhdRemaining;
+    const remaining = quality === "high" ? uhd4kRemaining : fhdRemaining;
     if (remaining < 1) {
-      showToast(t.gallery.worksDownloadQuotaEmpty, "error");
+      showToast(quotaEmptyMessage, "error");
       return;
     }
     setBusyId(item.id);
     try {
-      const spent = await consumeDownloadQuota(kind);
+      const spent = await spendForQuality(quality);
       if (!spent.ok) {
-        showToast(t.gallery.worksDownloadQuotaEmpty, "error");
+        showToast(quotaEmptyMessage, "error");
         return;
       }
       await downloadGalleryWorkLocally(item, quality);
@@ -407,10 +406,7 @@ export default function MyGalleryTabs() {
                         >
                           <Download className="h-3.5 w-3.5 shrink-0" />
                           <span className="min-w-0 [word-break:keep-all]">
-                            {t.gallery.worksDownloadStandardCount.replace(
-                              "{n}",
-                              String(fhdRemaining)
-                            )}
+                            {standardLabel}
                           </span>
                         </button>
                         <button
@@ -421,10 +417,7 @@ export default function MyGalleryTabs() {
                         >
                           <Download className="h-3.5 w-3.5 shrink-0" />
                           <span className="min-w-0 [word-break:keep-all]">
-                            {t.gallery.worksDownloadHighCount.replace(
-                              "{n}",
-                              String(uhd4kRemaining)
-                            )}
+                            {highLabel}
                           </span>
                         </button>
                       </div>

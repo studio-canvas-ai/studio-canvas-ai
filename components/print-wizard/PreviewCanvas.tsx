@@ -847,11 +847,11 @@ export default function PreviewCanvas({
                   ) : null}
 
                   {/* Form-to-Design: draggable text boxes over pure visual bg. */}
-                  {overlayLayersByPage?.[index]?.length &&
+                  {(overlayLayersByPage?.[index]?.length ?? 0) > 0 &&
                   onOverlayLayersChange ? (
                     <div data-text-overlay className="pointer-events-none absolute inset-0 z-[2] overflow-visible">
                       <PreviewTextOverlay
-                        layers={overlayLayersByPage[index]}
+                        layers={overlayLayersByPage![index]!}
                         onLayersChange={(layers) =>
                           onOverlayLayersChange(index, layers)
                         }
@@ -1135,14 +1135,14 @@ export default function PreviewCanvas({
                     }}
                   />
                 ) : null}
-                {overlayLayersByPage?.[lightbox.pageNum - 1]?.length &&
-                onOverlayLayersChange ? (
+                {(overlayLayersByPage?.[lightbox.pageNum - 1]?.length ?? 0) >
+                  0 && onOverlayLayersChange ? (
                   <div
                     data-text-overlay
                     className="pointer-events-none absolute inset-0 z-[2] overflow-visible"
                   >
                     <PreviewTextOverlay
-                      layers={overlayLayersByPage[lightbox.pageNum - 1]}
+                      layers={overlayLayersByPage![lightbox.pageNum - 1]!}
                       onLayersChange={(layers) =>
                         onOverlayLayersChange(lightbox.pageNum - 1, layers)
                       }

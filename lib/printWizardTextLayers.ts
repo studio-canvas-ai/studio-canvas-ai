@@ -708,12 +708,17 @@ const ZONE_STACK_GAP = 0.075;
 
 function applyReadableType(layer: TextLayer): TextLayer {
   if (layer.layoutLocked) return layer;
+  // Never snap user-chosen font sizes back to PAGE_TEXT_SIZE.
+  const fontSize =
+    typeof layer.fontSize === "number" && layer.fontSize >= 10
+      ? layer.fontSize
+      : PAGE_TEXT_SIZE;
   return {
     ...layer,
-    fontSize: PAGE_TEXT_SIZE,
+    fontSize,
     fontWeight:
       layer.fontWeight && layer.fontWeight >= 600 ? layer.fontWeight : 700,
-    align: "center",
+    align: layer.align || "center",
   };
 }
 
@@ -938,4 +943,49 @@ export function sanitizeTextLayersByPage(raw: unknown): TextLayer[][] | undefine
     pages.push(layers);
   }
   return pages.length ? pages : undefined;
+}
+
+/**
+ * Same layers PreviewCanvas paints — fill from smart inputs when page text is empty
+ * so export never drops visible title/date fallbacks.
+ */
+export function resolvePageTextLayersForExport(
+  pages: TextLayer[][] | undefined,
+  pageIndex: number,
+  inputs: SmartInputValues,
+  pageCount: number
+): TextLayer[] {
+  const resized = resizeIndependentPages(
+    pages,
+    Math.max(1, pageCount || 1)
+  );
+  const page = resized[Math.max(0, pageIndex)] ?? [];
+  if (page.some((l) => Boolean(l.text?.trim()))) {
+    return page.map((l) => ({
+      ...l,
+      fontSize: Math.max(10, Math.round(l.fontSize || PAGE_TEXT_SIZE)),
+    }));
+  }
+  const merged = mergeInputTextIntoLayers(
+    page.length ? page : createDefaultPageLayers(pageIndex),
+    inputs
+  );
+  if (merged.some((l) => Boolean(l.text?.trim()))) return merged;
+  // Last resort: build fresh form layers from inputs.
+  const fresh = smartInputsToTextLayers(inputs).filter((l) =>
+    Boolean(l.text?.trim())
+  );
+  return fresh.length ? fresh : merged;
+}
+
+/** Clamp user font size for Step-1 typography controls. */
+export const PRINT_USER_FONT_SIZE_MIN = 10;
+export const PRINT_USER_FONT_SIZE_MAX = 360;
+
+export function clampUserFontSize(n: number): number {
+  if (!Number.isFinite(n)) return PAGE_TEXT_SIZE;
+  return Math.min(
+    PRINT_USER_FONT_SIZE_MAX,
+    Math.max(PRINT_USER_FONT_SIZE_MIN, Math.round(n))
+  );
 }

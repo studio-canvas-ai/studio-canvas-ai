@@ -9,6 +9,7 @@ import { drawPrintLayerInBox } from "@/lib/printWizardTextDraw";
 import {
   canvasTextScale,
   layerToBox,
+  resolvePageTextLayersForExport,
 } from "@/lib/printWizardTextLayers";
 import {
   resolvePrintAspect,
@@ -126,7 +127,12 @@ export async function compositePrintWizardPageBlob(opts: {
   }
 
   const textScale = canvasTextScale(stageW, stageH);
-  const textLayers = opts.state.textLayersByPage?.[pageIndex] ?? [];
+  const textLayers = resolvePageTextLayersForExport(
+    opts.state.textLayersByPage,
+    pageIndex,
+    opts.state.inputs,
+    opts.state.pageCount || 1
+  );
   for (const layer of textLayers) {
     if (!layer?.text?.trim()) continue;
     const box = layerToBox(layer, stageW, stageH);
@@ -168,7 +174,12 @@ export function printWizardHasExportableFrame(state: PrintWizardState): boolean 
     pageIndex
   );
   const photos = state.photoLayersByPage?.[pageIndex] ?? [];
-  const texts = state.textLayersByPage?.[pageIndex] ?? [];
+  const texts = resolvePageTextLayersForExport(
+    state.textLayersByPage,
+    pageIndex,
+    state.inputs,
+    state.pageCount || 1
+  );
   const decos = state.decoLayersByPage?.[pageIndex] ?? [];
   return (
     Boolean(bg) ||

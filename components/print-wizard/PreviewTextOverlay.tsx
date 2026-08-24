@@ -23,7 +23,10 @@ import {
   boxToLayerPatch,
   canvasTextScale,
   clampBoxAllowOverflow,
+  clampUserFontSize,
   layerToBox,
+  PRINT_USER_FONT_SIZE_MAX,
+  PRINT_USER_FONT_SIZE_MIN,
   removeTextLayer,
   stripLayerPlaceholderPrefix,
 } from "@/lib/printWizardTextLayers";
@@ -536,8 +539,8 @@ export default function PreviewTextOverlay({
             }}
           >
             {showChrome ? (
-              <div className="absolute -top-5 left-0 right-0 z-[8] flex items-center justify-between">
-                <div className="flex items-center gap-0.5">
+              <div className="absolute -top-5 left-0 right-0 z-[8] flex items-center justify-between gap-1">
+                <div className="flex shrink-0 items-center gap-0.5">
                   <button
                     type="button"
                     title={cs.addPageLayer}
@@ -565,6 +568,32 @@ export default function PreviewTextOverlay({
                     <ClipboardCopy className="h-2.5 w-2.5" strokeWidth={2.4} />
                   </button>
                 </div>
+                <label
+                  className="flex min-w-0 flex-1 items-center gap-1 rounded-[3px] border border-white/20 bg-black/80 px-1 py-0.5"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <span className="shrink-0 text-[9px] font-semibold tabular-nums text-white/80">
+                    {clampUserFontSize(layer.fontSize)}px
+                  </span>
+                  <input
+                    type="range"
+                    min={PRINT_USER_FONT_SIZE_MIN}
+                    max={PRINT_USER_FONT_SIZE_MAX}
+                    value={clampUserFontSize(layer.fontSize)}
+                    onChange={(e) => {
+                      const fontSize = clampUserFontSize(Number(e.target.value));
+                      onLayersChange(
+                        layersRef.current.map((l) =>
+                          l.id === layer.id
+                            ? { ...l, fontSize, layoutLocked: true }
+                            : l
+                        )
+                      );
+                    }}
+                    className="min-w-0 flex-1 accent-indigo-400"
+                  />
+                </label>
                 <button
                   type="button"
                   title={cs.delete}
@@ -574,7 +603,7 @@ export default function PreviewTextOverlay({
                     e.stopPropagation();
                     handleDelete(layer.id);
                   }}
-                  className="inline-flex h-4 w-4 items-center justify-center rounded-[3px] border border-white/25 bg-black/80 text-white/90 shadow-sm hover:bg-rose-950 hover:text-rose-200"
+                  className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] border border-white/25 bg-black/80 text-white/90 shadow-sm hover:bg-rose-950 hover:text-rose-200"
                 >
                   <Trash2 className="h-2.5 w-2.5" />
                 </button>

@@ -14,6 +14,7 @@ import { createLayer, type TextLayer } from "@/lib/thumbnailStyles";
 import { shareWithFallback } from "@/lib/webShare";
 import type { PrintCustomSize } from "@/lib/printWizardTypes";
 import { useExportGate } from "@/lib/useExportGate";
+import { useDownloadQuota } from "@/lib/useDownloadQuota";
 import { projectStorageErrorMessage } from "@/lib/projectStorage";
 import {
   studioPathForProject,
@@ -53,6 +54,7 @@ export function usePrintWizardExport({
   const router = useRouter();
   const { showToast } = useFeedback();
   const { requireSubscription, premiumModal } = useExportGate();
+  const { spendForQuality, quotaEmptyMessage } = useDownloadQuota();
   const { downloadAndRemember, openRecent } = useProjectStorage({
     studioPath,
     pendingProjectKey,
@@ -102,6 +104,11 @@ export function usePrintWizardExport({
     if (!requireSubscription()) return;
     setBusy(true);
     try {
+      const spent = await spendForQuality(quality);
+      if (!spent.ok) {
+        showToast(quotaEmptyMessage, "error");
+        return;
+      }
       let imageBlob: Blob | null = null;
       if (resolveExportImage) {
         try {

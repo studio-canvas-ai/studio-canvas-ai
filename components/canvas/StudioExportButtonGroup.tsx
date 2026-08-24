@@ -5,6 +5,7 @@ import { Download, FolderOpen, Share2 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import ScaGalleryLoadButton from "@/components/canvas/ScaGalleryLoadButton";
 import type { StudioCanvasProjectV1 } from "@/lib/canvas/projectFile";
+import { useDownloadQuota } from "@/lib/useDownloadQuota";
 
 export type StudioExportButtonGroupProps = {
   busy?: boolean;
@@ -24,6 +25,7 @@ export type StudioExportButtonGroupProps = {
 
 /**
  * Download / load / share stack used by Template Studio and print-smart-form.
+ * Download labels always show live FHD / 4K remaining (same as My Gallery).
  */
 export default function StudioExportButtonGroup({
   busy = false,
@@ -40,6 +42,8 @@ export default function StudioExportButtonGroup({
 }: StudioExportButtonGroupProps) {
   const { t } = useI18n();
   const cs = t.canvasStudio;
+  const { standardLabel, highLabel, canDownloadStandard, canDownloadHigh } =
+    useDownloadQuota();
   const compact = variant === "compact";
 
   const downloadClass = compact
@@ -54,6 +58,9 @@ export default function StudioExportButtonGroup({
   const hintClass = compact
     ? "px-0.5 text-center text-[10px] leading-snug text-slate-400"
     : "text-center text-xs leading-snug text-white/45";
+  const labelClass = compact
+    ? "min-w-0 text-center text-[10px] font-semibold leading-tight [word-break:keep-all]"
+    : "min-w-0 text-center text-[12px] font-semibold leading-tight [word-break:keep-all] sm:text-sm";
 
   return (
     <div
@@ -67,25 +74,28 @@ export default function StudioExportButtonGroup({
         <button
           type="button"
           onClick={onDownloadStandard}
-          disabled={busy}
+          disabled={busy || !canDownloadStandard}
           className={`${downloadClass} bg-gradient-to-r from-teal-600 to-emerald-500`}
         >
           <Download className={iconClass} />
-          {cs.downloadStandard}
+          <span className={labelClass}>{standardLabel}</span>
         </button>
         <button
           type="button"
           onClick={onDownloadHigh}
-          disabled={busy}
+          disabled={busy || !canDownloadHigh}
           className={`${downloadClass} bg-gradient-to-r from-purple-600 to-indigo-500`}
         >
           <Download className={iconClass} />
-          {cs.downloadHigh}
+          <span className={labelClass}>{highLabel}</span>
         </button>
       </div>
-      <p className={hintClass}>
-        (다운로드시 완성본과 보안 수정파일(.sca)이 함께 저장되며, 수정용파일은 나중에 수정시 필요하니, 꼭 따로 저장바랍니다)
-      </p>
+      {showHint ? (
+        <p className={hintClass}>
+          (다운로드시 완성본과 보안 수정파일(.sca)이 함께 저장되며, 수정용파일은
+          나중에 수정시 필요하니, 꼭 따로 저장바랍니다)
+        </p>
+      ) : null}
       <div className="grid grid-cols-2 gap-1.5">
         <button
           type="button"

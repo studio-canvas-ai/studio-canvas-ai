@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { Loader2, Download } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { useFeedback } from "@/components/FeedbackProvider";
+import { useDownloadQuota } from "@/lib/useDownloadQuota";
 import Step2Layout from "@/components/print-wizard/Step2Layout";
 import PreviewCanvas from "@/components/print-wizard/PreviewCanvas";
 import SpecSettingsPanel from "@/components/print-wizard/SpecSettingsPanel";
@@ -64,8 +65,10 @@ import {
   editorSlotCount,
   EDITOR_PAGE_SLOTS,
   patchGlobalInputsFromPage,
+  referencePrintStageSize,
   removeTextLayer,
   resizeIndependentPages,
+  resolvePageTextLayersForExport,
 } from "@/lib/printWizardTextLayers";
 import { mergeInvitationBlueprint } from "@/lib/printWizardBlueprint";
 import {
@@ -84,9 +87,6 @@ import {
   refitPhotoLayersByPageForAspect,
   resizePhotoPages,
 } from "@/lib/printWizardPhotoLayers";
-import {
-  referencePrintStageSize,
-} from "@/lib/printWizardTextLayers";
 import { readFileAsDataUrl, type PhotoKind } from "@/lib/canvas/addPhotoLayer";
 import {
   processSubjectViaApi,
@@ -155,6 +155,12 @@ export default function PrintWizardStep2({
   const recentNamespace = product.recentNamespace;
   const { t, locale } = useI18n();
   const cs = t.canvasStudio;
+  const {
+    standardLabel,
+    highLabel,
+    canDownloadStandard,
+    canDownloadHigh,
+  } = useDownloadQuota();
   const panelTitle = productId === "photo" ? cs.photoTitle : undefined;
   const [state, setState] = useState<PrintWizardState>(createDefaultState);
   const [generating, setGenerating] = useState(false);
@@ -180,6 +186,8 @@ export default function PrintWizardStep2({
   const [lookbookPlateEpoch, setLookbookPlateEpoch] = useState(0);
   const stateRef = useRef(state);
   stateRef.current = state;
+  /** After recent-file restore, skip one-shot session remount auto-layout. */
+  const skipAutoLayoutOnceRef = useRef(false);
 
   const textLayersByPage = useMemo(() => {
     return resizeIndependentPages(
@@ -206,6 +214,10 @@ export default function PrintWizardStep2({
 
   useEffect(() => {
     const saved = readSession();
+    if (skipAutoLayoutOnceRef.current) {
+      skipAutoLayoutOnceRef.current = false;
+      return;
+    }
     if (saved) {
       const next = applyAutoLayoutState(
         { ...saved, wizardStep: 1 as const },
@@ -230,12 +242,19 @@ export default function PrintWizardStep2({
             }
           : null;
       const merged = { ...next, ...photoLocked };
+      const resized = resizeIndependentPages(
+        merged.textLayersByPage,
+        editorSlotCount(merged.pageCount)
+      );
+      // Preserve user/manual layouts — only seed semantic layout on empty/default pages.
       const withPages = {
         ...merged,
-        textLayersByPage: resizeIndependentPages(
-          merged.textLayersByPage,
-          editorSlotCount(merged.pageCount)
-        ).map((page, i) => applySemanticPageLayout(page, i)),
+        textLayersByPage: resized.map((page, i) => {
+          const hasUserLayout = page.some(
+            (l) => l.layoutLocked || Boolean(l.text?.trim())
+          );
+          return hasUserLayout ? page : applySemanticPageLayout(page, i);
+        }),
       };
       saveSession(withPages);
       setState(withPages);
@@ -293,6 +312,16 @@ export default function PrintWizardStep2({
       });
     },
     []
+  );
+
+  /** PreviewCanvas / overlay edits — never restack via semantic layout. */
+  const onPreviewTextLayersChange = useCallback(
+    (pageIndexToUpdate: number, layers: TextLayer[]) => {
+      updateTextLayersForPage(pageIndexToUpdate, layers, {
+        applyLayout: false,
+      });
+    },
+    [updateTextLayersForPage]
   );
 
   const updatePhotoLayersForPage = useCallback(
@@ -509,10 +538,13 @@ export default function PrintWizardStep2({
 
   const onLayerTextChange = useCallback(
     (layerId: string, text: string) => {
-      updateTextLayersForPage(editorPageIndex, (current) =>
-        current.map((layer) =>
-          layer.id === layerId ? { ...layer, text } : layer
-        )
+      updateTextLayersForPage(
+        editorPageIndex,
+        (current) =>
+          current.map((layer) =>
+            layer.id === layerId ? { ...layer, text } : layer
+          ),
+        { applyLayout: false }
       );
     },
     [editorPageIndex, updateTextLayersForPage]
@@ -520,15 +552,19 @@ export default function PrintWizardStep2({
 
   const onAddLayerAfter = useCallback(
     (nextLayers: TextLayer[]) => {
-      updateTextLayersForPage(editorPageIndex, () => nextLayers);
+      updateTextLayersForPage(editorPageIndex, () => nextLayers, {
+        applyLayout: false,
+      });
     },
     [editorPageIndex, updateTextLayersForPage]
   );
 
   const onDeleteLayer = useCallback(
     (layerId: string) => {
-      updateTextLayersForPage(editorPageIndex, (current) =>
-        removeTextLayer(current, layerId)
+      updateTextLayersForPage(
+        editorPageIndex,
+        (current) => removeTextLayer(current, layerId),
+        { applyLayout: false }
       );
       if (activeTextLayerId === layerId) setActiveTextLayerId(null);
     },
@@ -1310,23 +1346,69 @@ export default function PrintWizardStep2({
     studioPath,
     pendingProjectKey,
     recentNamespace,
-    overlayLayers: textLayersByPage[Math.max(0, currentPage - 1)] ?? [],
+    overlayLayers: (() => {
+      const pageIndex = Math.max(0, currentPage - 1);
+      return resolvePageTextLayersForExport(
+        textLayersByPage,
+        pageIndex,
+        state.inputs,
+        state.pageCount
+      );
+    })(),
     resolveExportImage:
       productId === "photo"
         ? async (quality) => {
-            if (!photoLookbookHasExportableFrame(state)) {
+            const pageIndex = Math.max(0, currentPage - 1);
+            const exportState = {
+              ...state,
+              textLayersByPage: textLayersByPage.map((page, i) =>
+                resolvePageTextLayersForExport(
+                  textLayersByPage,
+                  i,
+                  state.inputs,
+                  state.pageCount
+                )
+              ),
+            };
+            if (!photoLookbookHasExportableFrame(exportState)) {
               throw new Error("nothing_to_export");
             }
             return compositePhotoLookbookBlob({
-              state,
-              pageIndex: Math.max(0, currentPage - 1),
+              state: exportState,
+              pageIndex,
               quality,
             });
           }
-        : undefined,
+        : async (quality) => {
+            // Print Step-1 downloads (when present) — same live layers as PreviewCanvas.
+            const pageIndex = Math.max(0, currentPage - 1);
+            const exportState = {
+              ...state,
+              textLayersByPage: textLayersByPage.map((_, i) =>
+                resolvePageTextLayersForExport(
+                  textLayersByPage,
+                  i,
+                  state.inputs,
+                  state.pageCount
+                )
+              ),
+            };
+            if (!photoLookbookHasExportableFrame(exportState)) {
+              throw new Error("nothing_to_export");
+            }
+            return compositePhotoLookbookBlob({
+              state: exportState,
+              pageIndex,
+              quality,
+            });
+          },
     buildLookbookSnapshot:
       productId === "photo"
-        ? () => capturePhotoLookbookSnapshot(state)
+        ? () =>
+            capturePhotoLookbookSnapshot({
+              ...state,
+              textLayersByPage,
+            })
         : undefined,
   });
 
@@ -1334,14 +1416,17 @@ export default function PrintWizardStep2({
     (project: StudioCanvasProjectV1) => {
       if (productId === "photo" && isPhotoLookbookSnapshot(project.lookbook)) {
         const { wizard } = applyPhotoLookbookSnapshot(project.lookbook);
-        // Preserve saved page geometry; photo product still clamps to single page.
+        skipAutoLayoutOnceRef.current = true;
+        // Preserve saved geometry verbatim — no applySemanticPageLayout.
         const next = {
           ...wizard,
           pageCount: 1 as const,
           formatId: coercePhotoFormatId(wizard.formatId),
           useId: coercePhotoUseId(wizard.useId),
-          // Keep restored layer arrays verbatim — do not re-run auto-layout.
-          textLayersByPage: wizard.textLayersByPage,
+          textLayersByPage: resizeIndependentPages(
+            wizard.textLayersByPage,
+            editorSlotCount(1)
+          ),
           photoLayersByPage: wizard.photoLayersByPage,
           backgroundUrls: wizard.backgroundUrls,
           backgroundPansByPage: wizard.backgroundPansByPage,
@@ -1465,23 +1550,70 @@ export default function PrintWizardStep2({
     />
   );
 
+  const step1PageLayers =
+    textLayersByPage[Math.max(0, currentPage - 1)] ?? [];
+
+  const step1TextLayerList = (
+    <div className="rounded-xl border border-slate-800 bg-[#0B0F19]/80 p-2">
+      <p className="mb-1.5 px-0.5 text-[11px] font-semibold text-slate-400">
+        {cs.textLayers}
+      </p>
+      <div className="flex max-h-40 flex-col gap-1 overflow-y-auto">
+        {step1PageLayers.map((layer, idx) => {
+          const active = activeTextLayerId === layer.id;
+          return (
+            <button
+              key={layer.id}
+              type="button"
+              onClick={() => {
+                setActiveTextLayerId(layer.id);
+                setActivePhotoLayerId(null);
+                setActiveDecoLayerId(null);
+              }}
+              className={`flex min-w-0 items-center gap-2 rounded-lg border px-2 py-1.5 text-left transition ${
+                active
+                  ? "border-indigo-400 bg-indigo-500/15 ring-1 ring-indigo-400/40"
+                  : "border-slate-800 bg-[#121824] hover:border-slate-600"
+              }`}
+            >
+              <span className="shrink-0 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-200">
+                {idx + 1}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[11px] text-slate-200">
+                {layer.text.trim() || cs.layerPlaceholder}
+              </span>
+              <span className="shrink-0 tabular-nums text-[10px] text-slate-500">
+                {Math.round(layer.fontSize || 0)}px
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
   const formPanel = (
-    <SmartInputForm
-      key={workspaceEpoch}
-      currentPage={layerModalPage ?? currentPage}
-      onSelectPage={selectWizardPage}
-      wizardMode
-      draftBusy={draftBusy}
-      finishBusy={finishBusy}
-      draftReady={state.draftReady === true}
-      onGenerateDraft={() => void onGenerateDraft()}
-      onFinishStep={onFinishStep}
-      onRestoreDraft={onRestoreDraft}
-      listDrafts={(draftStorageProp ?? product.drafts).listDrafts}
-      loadDraft={(draftStorageProp ?? product.drafts).loadDraft}
-      draftsChangedEvent={draftChangedEvent}
-      showWizardFinishAction={!isPhotoLayout}
-    />
+    <div className="flex h-full min-h-0 flex-col gap-2">
+      {step1TextLayerList}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <SmartInputForm
+          key={workspaceEpoch}
+          currentPage={layerModalPage ?? currentPage}
+          onSelectPage={selectWizardPage}
+          wizardMode
+          draftBusy={draftBusy}
+          finishBusy={finishBusy}
+          draftReady={state.draftReady === true}
+          onGenerateDraft={() => void onGenerateDraft()}
+          onFinishStep={onFinishStep}
+          onRestoreDraft={onRestoreDraft}
+          listDrafts={(draftStorageProp ?? product.drafts).listDrafts}
+          loadDraft={(draftStorageProp ?? product.drafts).loadDraft}
+          draftsChangedEvent={draftChangedEvent}
+          showWizardFinishAction={!isPhotoLayout}
+        />
+      </div>
+    </div>
   );
 
   const photoMiddlePanel = (
@@ -1498,14 +1630,20 @@ export default function PrintWizardStep2({
       data-wizard-form
       className="relative z-[500] flex h-full min-h-0 flex-col gap-2 pointer-events-auto pb-4"
     >
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain">
         {specsPanel}
+        {step1TextLayerList}
       </div>
       <section className="shrink-0 rounded-2xl border border-slate-800 bg-[#121824] p-3 shadow-[0_8px_32px_rgba(0,0,0,0.35)] sm:p-3.5">
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
-            disabled={photoExportBusy || generating || draftBusy}
+            disabled={
+              photoExportBusy ||
+              generating ||
+              draftBusy ||
+              !canDownloadStandard
+            }
             onClick={() => void downloadWithProject("standard")}
             className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-500 px-3 py-2.5 text-[13px] font-bold text-white shadow-lg shadow-teal-900/25 transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -1514,11 +1652,15 @@ export default function PrintWizardStep2({
             ) : (
               <Download className="h-4 w-4 shrink-0" aria-hidden />
             )}
-            <span className="[word-break:keep-all]">{cs.downloadStandard}</span>
+            <span className="min-w-0 text-center text-[11px] font-bold leading-tight [word-break:keep-all] sm:text-[13px]">
+              {standardLabel}
+            </span>
           </button>
           <button
             type="button"
-            disabled={photoExportBusy || generating || draftBusy}
+            disabled={
+              photoExportBusy || generating || draftBusy || !canDownloadHigh
+            }
             onClick={() => void downloadWithProject("high")}
             className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-500 px-3 py-2.5 text-[13px] font-bold text-white shadow-lg shadow-indigo-900/25 transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -1527,7 +1669,9 @@ export default function PrintWizardStep2({
             ) : (
               <Download className="h-4 w-4 shrink-0" aria-hidden />
             )}
-            <span className="[word-break:keep-all]">{cs.downloadHigh}</span>
+            <span className="min-w-0 text-center text-[11px] font-bold leading-tight [word-break:keep-all] sm:text-[13px]">
+              {highLabel}
+            </span>
           </button>
         </div>
         <p className="mt-1.5 truncate px-0.5 text-center text-[11px] font-medium leading-none text-slate-300 [word-break:keep-all]">
@@ -1568,7 +1712,7 @@ export default function PrintWizardStep2({
           organizerPreview={state.inputs.organizer}
           programsPreview={state.inputs.programs}
           overlayLayersByPage={textLayersByPage.slice(0, state.pageCount)}
-          onOverlayLayersChange={updateTextLayersForPage}
+          onOverlayLayersChange={onPreviewTextLayersChange}
           photoLayersByPage={previewPhotoLayers}
           onPhotoLayersChange={previewOnPhotoLayersChange}
           activePhotoLayerId={activePhotoLayerId}
