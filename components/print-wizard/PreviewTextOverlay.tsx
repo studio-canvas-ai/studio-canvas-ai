@@ -24,6 +24,7 @@ import {
   canvasTextScale,
   clampBoxAllowOverflow,
   layerToBox,
+  pageLayersHaveVisibleText,
   removeTextLayer,
   stripLayerPlaceholderPrefix,
 } from "@/lib/printWizardTextLayers";
@@ -459,6 +460,7 @@ export default function PreviewTextOverlay({
   }, [backgroundSrc, interactive, size.h, size.w]);
 
   if (!layers.length) return null;
+  if (!pageLayersHaveVisibleText(layers) && !interactive) return null;
   // Interactive overlays measure the DOM / DPR — wait for mount so SSR markup matches.
   if (interactive && !isMounted) return null;
 

@@ -61,6 +61,8 @@ import {
   applySemanticPageLayout,
   editorSlotCount,
   EDITOR_PAGE_SLOTS,
+  layersToInputPatch,
+  mergeRestoredTextLayersByPage,
   patchGlobalInputsFromPage,
   referencePrintStageSize,
   removeTextLayer,
@@ -1443,20 +1445,22 @@ export default function PrintWizardStep2({
         }
 
         const pageCount = wizard.pageCount ?? state.pageCount;
+        const restoredInputs = wizard.inputs ?? state.inputs;
         const next = {
           ...wizard,
           pageCount,
-          textLayersByPage: resizeIndependentPages(
-            wizard.textLayersByPage,
-            editorSlotCount(pageCount)
-          ),
+          textLayersByPage: mergeRestoredTextLayersByPage({
+            pages: wizard.textLayersByPage,
+            inputs: restoredInputs,
+            pageCount,
+          }),
           photoLayersByPage:
             wizard.photoLayersByPage ?? state.photoLayersByPage,
           decoLayersByPage: wizard.decoLayersByPage ?? state.decoLayersByPage,
           backgroundUrls: wizard.backgroundUrls ?? state.backgroundUrls,
           backgroundPansByPage:
             wizard.backgroundPansByPage ?? state.backgroundPansByPage,
-          inputs: wizard.inputs ?? state.inputs,
+          inputs: restoredInputs,
           wizardStep: (state.wizardStep ?? 1) as 1 | 2,
         };
         saveSession(next);
@@ -1483,14 +1487,17 @@ export default function PrintWizardStep2({
         ...l,
         ranges: l.ranges?.map((r) => ({ ...r })) ?? [],
       }));
-      const slots = editorSlotCount(state.pageCount);
-      const textPages = resizeIndependentPages(
-        state.textLayersByPage,
-        slots
-      );
-      if (layers.length) {
-        textPages[pageIndex] = layers;
-      }
+      const restoredInputs = {
+        ...state.inputs,
+        ...layersToInputPatch(layers),
+      };
+      const textPages = mergeRestoredTextLayersByPage({
+        pages: state.textLayersByPage,
+        inputs: restoredInputs,
+        pageCount: state.pageCount,
+        overlayLayers: layers.length ? layers : undefined,
+        overlayPageIndex: layers.length ? pageIndex : undefined,
+      });
       const bg = project.studio.backgroundUrl;
       const backgroundUrls = [
         ...(state.backgroundUrls?.length
@@ -1505,6 +1512,7 @@ export default function PrintWizardStep2({
         backgroundUrl: bg || state.backgroundUrl,
         backgroundUrls,
         textLayersByPage: textPages,
+        inputs: restoredInputs,
         visualStyle: project.studio.visualStyle ?? state.visualStyle,
         customSize: project.studio.customPrint
           ? {

@@ -985,6 +985,46 @@ export function sanitizeTextLayersByPage(raw: unknown): TextLayer[][] | undefine
   return pages.length ? pages : undefined;
 }
 
+/** True when at least one layer has non-whitespace text (not placeholder-only). */
+export function pageLayersHaveVisibleText(
+  layers: TextLayer[] | undefined
+): boolean {
+  return Boolean(layers?.some((l) => Boolean(l.text?.trim())));
+}
+
+/**
+ * After .sca / recent restore — merge saved layers with inputs (same as export path)
+ * so preview and Screen 24 editor show text immediately.
+ */
+export function mergeRestoredTextLayersByPage(opts: {
+  pages: TextLayer[][] | undefined;
+  inputs: SmartInputValues;
+  pageCount: PrintPageCount | number;
+  overlayLayers?: TextLayer[];
+  overlayPageIndex?: number;
+}): TextLayer[][] {
+  const pageCount = Math.max(1, opts.pageCount || 1);
+  const slots = editorSlotCount(pageCount);
+  let base = resizeIndependentPages(opts.pages, slots);
+  if (
+    opts.overlayLayers?.length &&
+    opts.overlayPageIndex != null &&
+    opts.overlayPageIndex >= 0
+  ) {
+    base = base.map((page, i) =>
+      i === opts.overlayPageIndex ? opts.overlayLayers! : page
+    );
+  }
+  return base.map((_, pageIndex) =>
+    resolvePageTextLayersForExport(
+      base,
+      pageIndex,
+      opts.inputs,
+      pageCount
+    )
+  );
+}
+
 /**
  * Same layers PreviewCanvas paints — fill from smart inputs when page text is empty
  * so export never drops visible title/date fallbacks.

@@ -30,6 +30,7 @@ import {
   normalizeBgPan,
   pageBackgroundUrl,
 } from "@/lib/printWizardBg";
+import { pageLayersHaveVisibleText } from "@/lib/printWizardTextLayers";
 import {
   resolvePrintAspect,
   type PrintBackgroundPan,
@@ -849,7 +850,7 @@ export default function PreviewCanvas({
                   ) : null}
 
                   {/* Form-to-Design: draggable text boxes over pure visual bg. */}
-                  {(overlayLayersByPage?.[index]?.length ?? 0) > 0 &&
+                  {pageLayersHaveVisibleText(overlayLayersByPage?.[index]) &&
                   onOverlayLayersChange ? (
                     <div data-text-overlay className="pointer-events-none absolute inset-0 z-[2] overflow-visible">
                       <PreviewTextOverlay
@@ -1137,8 +1138,9 @@ export default function PreviewCanvas({
                     }}
                   />
                 ) : null}
-                {(overlayLayersByPage?.[lightbox.pageNum - 1]?.length ?? 0) >
-                  0 && onOverlayLayersChange ? (
+                {pageLayersHaveVisibleText(
+                  overlayLayersByPage?.[lightbox.pageNum - 1]
+                ) && onOverlayLayersChange ? (
                   <div
                     data-text-overlay
                     className="pointer-events-none absolute inset-0 z-[2] overflow-visible"
