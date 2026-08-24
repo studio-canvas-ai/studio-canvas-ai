@@ -1083,8 +1083,10 @@ export default function AiTemplateStudio({
       setZoomPct(100);
       setViewOffset({ x: 0, y: 0 });
       viewOffsetRef.current = { x: 0, y: 0 };
-      setOverlayLayers([layer]);
-      setActiveLayerId(layer.id);
+      if (!panelOnly) {
+        setOverlayLayers([layer]);
+        setActiveLayerId(layer.id);
+      }
       setCommandInput("");
       setPromoMenuOpen(false);
       setCustomSizeOpen(false);
@@ -1104,7 +1106,7 @@ export default function AiTemplateStudio({
     return () => {
       cancelled = true;
     };
-  }, [searchParams, showToast]);
+  }, [panelOnly, searchParams, showToast]);
 
   const aspect = useMemo(() => {
     if (customPrint) {
@@ -2903,13 +2905,16 @@ export default function AiTemplateStudio({
         }
       }
 
-      const nextLayers =
-        project.studio.overlayLayers.length > 0
-          ? cloneOverlayLayers(project.studio.overlayLayers)
-          : [makeDefaultLayer(0)];
-      setOverlayLayers(nextLayers);
-      selectionClearedRef.current = false;
-      setActiveLayerId(nextLayers[0]!.id);
+      // Controlled Screen 24: parent keeps textLayersByPage; do not clobber it.
+      if (!isOverlayControlled) {
+        const nextLayers =
+          project.studio.overlayLayers.length > 0
+            ? cloneOverlayLayers(project.studio.overlayLayers)
+            : [makeDefaultLayer(0)];
+        setOverlayLayers(nextLayers);
+        selectionClearedRef.current = false;
+        setActiveLayerId(nextLayers[0]!.id);
+      }
       if (project.studio.visualStyle) {
         setVisualStyle(project.studio.visualStyle);
       }
@@ -2937,7 +2942,7 @@ export default function AiTemplateStudio({
       resetViewportCenterFit();
       requestAnimationFrame(() => paintRef.current());
     },
-    [resetViewportCenterFit, setActiveLayerId, viewSize.h, viewSize.w]
+    [isOverlayControlled, resetViewportCenterFit, setActiveLayerId, viewSize.h, viewSize.w]
   );
 
   const loadProjectFromFile = async (file: File | null) => {
@@ -2957,22 +2962,41 @@ export default function AiTemplateStudio({
   };
 
   // Restore project handed off from print Step-2 recent-file picker.
+  // panelOnly / controlled mode: parent wizard owns textLayersByPage — never
+  // overwrite with studio.overlayLayers (that wiped Screen 24 preview text).
   useEffect(() => {
+    if (panelOnly || isOverlayControlled) return;
     const pending = takePendingStudioProject(pendingProjectKey);
     if (!pending) return;
     applyStudioProject(pending);
     showToast("최근 수정파일을 복원했습니다.", "success");
-  }, [applyStudioProject, pendingProjectKey, showToast]);
+  }, [
+    applyStudioProject,
+    isOverlayControlled,
+    panelOnly,
+    pendingProjectKey,
+    showToast,
+  ]);
 
   // Finish deferred restore once the preview host reports a real viewSize.
   useEffect(() => {
+    if (panelOnly || isOverlayControlled) {
+      pendingRestoreRef.current = null;
+      return;
+    }
     const pending = pendingRestoreRef.current;
     if (!pending) return;
     const stageW = Math.round(viewSize.w);
     const stageH = Math.round(viewSize.h);
     if (stageW < 16 || stageH < 16) return;
     applyStudioProject(pending);
-  }, [applyStudioProject, viewSize.h, viewSize.w]);
+  }, [
+    applyStudioProject,
+    isOverlayControlled,
+    panelOnly,
+    viewSize.h,
+    viewSize.w,
+  ]);
 
   const shareImage = async () => {
     if (!requireSubscription()) return;

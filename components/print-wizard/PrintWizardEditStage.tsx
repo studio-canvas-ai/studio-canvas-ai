@@ -224,7 +224,9 @@ export default function PrintWizardEditStage({
             organizerPreview={state.inputs.organizer}
             programsPreview={state.inputs.programs}
             overlayLayersByPage={textLayersByPage}
-            onOverlayLayersChange={onTextLayersChange}
+            onOverlayLayersChange={(pageIdx, layers) =>
+              onTextLayersChange(pageIdx, layers, { applyLayout: false })
+            }
             photoLayersByPage={photoLayersByPage}
             onPhotoLayersChange={onPhotoLayersChange}
             activePhotoLayerId={activePhotoLayerId}
