@@ -16,6 +16,7 @@ import {
 import {
   reconcileLayerTypographyBox,
   referencePrintStageSize,
+  resolvePageTextLayersForExport,
 } from "@/lib/printWizardTextLayers";
 import { toDisplayImageSrc } from "@/lib/resultSession";
 import { pageBackgroundUrl } from "@/lib/printWizardBg";
@@ -155,7 +156,12 @@ export default function PrintWizardEditStage({
     studioPath,
     pendingProjectKey,
     recentNamespace,
-    overlayLayers,
+    overlayLayers: resolvePageTextLayersForExport(
+      textLayersByPage,
+      pageIndex,
+      state.inputs,
+      state.pageCount
+    ),
     onApplyRecentProject: onOpenRecentProject,
     resolveExportImage: async (quality) => {
       const exportState: PrintWizardState = {
@@ -183,15 +189,13 @@ export default function PrintWizardEditStage({
         quality,
       });
     },
-    buildLookbookSnapshot: isPhotoLookbook
-      ? () =>
-          capturePhotoLookbookSnapshot({
-            ...state,
-            textLayersByPage,
-            photoLayersByPage: photoLayersByPage ?? state.photoLayersByPage,
-            decoLayersByPage: decoLayersByPage ?? state.decoLayersByPage,
-          })
-      : undefined,
+    buildLookbookSnapshot: () =>
+      capturePhotoLookbookSnapshot({
+        ...state,
+        textLayersByPage,
+        photoLayersByPage: photoLayersByPage ?? state.photoLayersByPage,
+        decoLayersByPage: decoLayersByPage ?? state.decoLayersByPage,
+      }),
   });
 
   return (

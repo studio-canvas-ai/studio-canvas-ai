@@ -1399,53 +1399,84 @@ export default function PrintWizardStep2({
               quality,
             });
           },
-    buildLookbookSnapshot:
-      productId === "photo"
-        ? () =>
-            capturePhotoLookbookSnapshot({
-              ...state,
-              textLayersByPage,
-            })
-        : undefined,
+    buildLookbookSnapshot: () =>
+      capturePhotoLookbookSnapshot({
+        ...state,
+        textLayersByPage,
+      }),
   });
 
   const onOpenRecentProject = useCallback(
     (project: StudioCanvasProjectV1) => {
-      if (productId === "photo" && isPhotoLookbookSnapshot(project.lookbook)) {
+      if (isPhotoLookbookSnapshot(project.lookbook)) {
         const { wizard } = applyPhotoLookbookSnapshot(project.lookbook);
         skipAutoLayoutOnceRef.current = true;
-        // Preserve saved geometry verbatim — no applySemanticPageLayout.
+
+        if (productId === "photo") {
+          const next = {
+            ...wizard,
+            pageCount: 1 as const,
+            formatId: coercePhotoFormatId(wizard.formatId),
+            useId: coercePhotoUseId(wizard.useId),
+            textLayersByPage: resizeIndependentPages(
+              wizard.textLayersByPage,
+              editorSlotCount(1)
+            ),
+            photoLayersByPage: wizard.photoLayersByPage,
+            backgroundUrls: wizard.backgroundUrls,
+            backgroundPansByPage: wizard.backgroundPansByPage,
+            wizardStep: (state.wizardStep ?? 1) as 1 | 2,
+          };
+          saveSession(next);
+          setState(next);
+          setCurrentPage(1);
+          setActiveTextLayerId(null);
+          setActivePhotoLayerId(null);
+          setActiveDecoLayerId(null);
+          setLayerModalPage(null);
+          setWorkspaceEpoch((n) => n + 1);
+          showToast(
+            "최근 파일을 불러와 캔버스·업로드·학습 저장소를 복구했습니다.",
+            "success"
+          );
+          return;
+        }
+
+        const pageCount = wizard.pageCount ?? state.pageCount;
         const next = {
           ...wizard,
-          pageCount: 1 as const,
-          formatId: coercePhotoFormatId(wizard.formatId),
-          useId: coercePhotoUseId(wizard.useId),
+          pageCount,
           textLayersByPage: resizeIndependentPages(
             wizard.textLayersByPage,
-            editorSlotCount(1)
+            editorSlotCount(pageCount)
           ),
-          photoLayersByPage: wizard.photoLayersByPage,
-          backgroundUrls: wizard.backgroundUrls,
-          backgroundPansByPage: wizard.backgroundPansByPage,
-          // Keep current step — never bounce to a sub-studio route.
+          photoLayersByPage:
+            wizard.photoLayersByPage ?? state.photoLayersByPage,
+          decoLayersByPage: wizard.decoLayersByPage ?? state.decoLayersByPage,
+          backgroundUrls: wizard.backgroundUrls ?? state.backgroundUrls,
+          backgroundPansByPage:
+            wizard.backgroundPansByPage ?? state.backgroundPansByPage,
+          inputs: wizard.inputs ?? state.inputs,
           wizardStep: (state.wizardStep ?? 1) as 1 | 2,
         };
         saveSession(next);
         setState(next);
-        setCurrentPage(1);
+        setCurrentPage((page) =>
+          Math.min(Math.max(1, page), pageCount)
+        );
         setActiveTextLayerId(null);
         setActivePhotoLayerId(null);
         setActiveDecoLayerId(null);
         setLayerModalPage(null);
         setWorkspaceEpoch((n) => n + 1);
         showToast(
-          "최근 파일을 불러와 캔버스·업로드·학습 저장소를 복구했습니다.",
+          "최근 수정파일을 불러와 편집 상태를 복원했습니다.",
           "success"
         );
         return;
       }
 
-      // Print (and photo without lookbook): apply onto current wizard canvas.
+      // Legacy .sca without wizard snapshot: map flat overlayLayers onto current page.
       skipAutoLayoutOnceRef.current = true;
       const pageIndex = Math.max(0, currentPage - 1);
       const layers = (project.studio.overlayLayers || []).map((l) => ({
