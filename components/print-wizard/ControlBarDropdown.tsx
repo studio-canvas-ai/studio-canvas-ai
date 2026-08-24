@@ -109,6 +109,7 @@ export default function ControlBarDropdown({
 }: ControlBarDropdownProps) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const [isMounted, setIsMounted] = useState(false);
   const menuStyle = useFixedBelowMenu(
     open,
     triggerRef,
@@ -116,6 +117,10 @@ export default function ControlBarDropdown({
     menuMaxWidth,
     menuAnchorSelector
   );
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -188,7 +193,7 @@ export default function ControlBarDropdown({
         />
       </button>
 
-      {open && typeof document !== "undefined"
+      {open && isMounted
         ? createPortal(
             <div
               ref={menuRef}

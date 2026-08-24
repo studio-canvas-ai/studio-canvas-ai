@@ -18,20 +18,27 @@ import {
 export default function ScreenBadge() {
   const pathname = usePathname() || "/";
   const { isAdmin, authUser } = useCredits();
+  const [isMounted, setIsMounted] = useState(false);
   const [step, setStep] = useState<number | undefined>(undefined);
 
   useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isMounted) return;
     const sync = () => setStep(readInternalScreenStep(pathname));
     sync();
     const id = window.setInterval(sync, 400);
     return () => window.clearInterval(id);
-  }, [pathname]);
+  }, [pathname, isMounted]);
 
   const email = authUser?.email ?? null;
   const allowed =
     isAdmin || isPrivilegedAdminEmail(email);
 
-  if (!allowed) return null;
+  // sessionStorage step + auth-gated UI — render only after mount to avoid hydration mismatch.
+  if (!isMounted || !allowed) return null;
 
   const screenId = resolveScreenId(pathname, {
     step: step ?? 1,

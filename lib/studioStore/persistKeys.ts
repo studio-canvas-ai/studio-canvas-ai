@@ -5,6 +5,7 @@
 
 export const STUDIO_PERSIST_KEY_PREFIXES = [
   "studio_canvas_",
+  "recent_files_screen_",
   "sca_photo",
   "sca_recent",
   "sca_print_wizard",

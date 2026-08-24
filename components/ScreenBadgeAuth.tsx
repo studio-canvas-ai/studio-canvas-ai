@@ -17,16 +17,23 @@ import {
 export default function ScreenBadgeAuth() {
   const pathname = usePathname() || "/";
   const { data: session, status } = useSession();
+  const [isMounted, setIsMounted] = useState(false);
   const [step, setStep] = useState<number | undefined>(undefined);
 
   useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isMounted) return;
     const sync = () => setStep(readInternalScreenStep(pathname));
     sync();
     const id = window.setInterval(sync, 400);
     return () => window.clearInterval(id);
-  }, [pathname]);
+  }, [pathname, isMounted]);
 
-  if (status !== "authenticated") return null;
+  // Session + sessionStorage step — wait for mount so SSR/client markup matches.
+  if (!isMounted || status !== "authenticated") return null;
 
   const email =
     typeof session?.user?.email === "string" ? session.user.email : null;

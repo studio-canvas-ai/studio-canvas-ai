@@ -40,12 +40,17 @@ export default function ScaGalleryLoadButton({
   const [coords, setCoords] = useState<{ top: number; left: number; width: number } | null>(
     null
   );
+  const [isMounted, setIsMounted] = useState(false);
 
   const btnClass = compact
     ? "inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-[#0E1420] px-3 py-2 text-[11px] font-medium text-slate-200 hover:bg-slate-800/60 disabled:opacity-50"
     : "inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-white/85 hover:bg-white/10 disabled:opacity-50";
 
   const iconClass = compact ? "h-3.5 w-3.5" : "h-4 w-4 shrink-0";
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -92,7 +97,7 @@ export default function ScaGalleryLoadButton({
   };
 
   const menu =
-    open && coords && typeof document !== "undefined"
+    open && coords && isMounted
       ? createPortal(
           <>
             <button

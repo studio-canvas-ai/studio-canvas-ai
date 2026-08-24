@@ -172,10 +172,15 @@ export default function PreviewTextOverlay({
     box: { x: number; y: number; width: number; height: number };
   } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
   const lastTapRef = useRef<{ id: string; t: number } | null>(null);
 
   layersRef.current = layers;
   onLayersChangeRef.current = onLayersChange;
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const measureStage = () => {
     const rect = hostRef.current?.getBoundingClientRect();
@@ -454,6 +459,8 @@ export default function PreviewTextOverlay({
   }, [backgroundSrc, interactive, size.h, size.w]);
 
   if (!layers.length) return null;
+  // Interactive overlays measure the DOM / DPR — wait for mount so SSR markup matches.
+  if (interactive && !isMounted) return null;
 
   return (
     <div

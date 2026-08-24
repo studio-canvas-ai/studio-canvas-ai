@@ -54,6 +54,11 @@ export {
   RECENT_PROJECTS_MAX,
 } from "@/lib/canvas/recentProjects";
 export {
+  loadCloudRecentFiles,
+  saveCloudRecentFiles,
+  useCloudRecentFiles,
+} from "@/lib/canvas/cloudRecentFiles";
+export {
   downloadImageAndRememberRecent,
   openRecentProjectInEditor,
   studioPathForProject,

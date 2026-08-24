@@ -1,11 +1,15 @@
 /**
  * Recent project drawer — FIFO max 10.
  * Dual cache: localStorage (index + shrunk JSON) + IndexedDB (full payloads).
- * Cloud durable copy lives in Supabase / R2 via studioStore sync.
+ * Account cloud: `public.user_saved_forms` via /api/recent-files (any social login).
  */
 
 import type { StudioCanvasProjectV1 } from "@/lib/canvas/projectFile";
 import { parseStudioProject } from "@/lib/canvas/projectFile";
+import {
+  loadCloudRecentFiles,
+  saveCloudRecentFiles,
+} from "@/lib/canvas/cloudRecentFiles";
 import { idbGetRecent, idbPutRecent } from "@/lib/studioStore/idbCache";
 import { mergeRecentEntries } from "@/lib/studioStore/merge";
 import { scheduleStudioStoreSync } from "@/lib/studioStore/syncScheduler";
@@ -173,7 +177,8 @@ function readDrawer(
 
 function writeDrawer(
   entries: RecentDrawerEntry[],
-  namespace: RecentProjectNamespace = "screen_007"
+  namespace: RecentProjectNamespace = "screen_007",
+  opts?: { persistCloud?: boolean }
 ): void {
   if (typeof localStorage === "undefined") {
     throw new Error("localstorage_unavailable");
@@ -201,9 +206,13 @@ function writeDrawer(
     localStorage.setItem(drawerKey(namespace), JSON.stringify(shrunk));
   }
   // Only sync IDB for 007/010 so print (008) never mixes into shared cloud bucket.
+  // Account cloud (`user_saved_forms`) syncs all three screens.
   if (namespace !== "screen_008") {
     void idbPutRecent(idbRecentKind(namespace), trimmed);
     scheduleStudioStoreSync();
+  }
+  if (opts?.persistCloud !== false) {
+    void saveCloudRecentFiles(namespace, trimmed);
   }
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event(RECENT_PROJECTS_CHANGED_EVENT));
@@ -330,6 +339,8 @@ async function migrateLegacyIfNeeded(
 }
 
 const migratePromises = new Map<RecentProjectNamespace, Promise<void>>();
+const cloudHydratePromises = new Map<RecentProjectNamespace, Promise<void>>();
+
 function ensureMigrated(
   namespace: RecentProjectNamespace = "screen_007"
 ): Promise<void> {
@@ -342,10 +353,49 @@ function ensureMigrated(
     const merged = mergeRecentEntries(fromIdb, readDrawer(namespace));
     const current = readDrawer(namespace);
     if (merged.length > current.length) {
-      writeDrawer(merged, namespace);
+      writeDrawer(merged, namespace, { persistCloud: false });
     }
   });
   migratePromises.set(namespace, next);
+  return next;
+}
+
+function drawerSignature(entries: RecentDrawerEntry[]): string {
+  return entries
+    .map((e) => `${e.id}:${e.meta.savedAt || 0}`)
+    .join("|");
+}
+
+/** Merge signed-in account drawer into the local cache (any device / social login). */
+function ensureCloudHydrated(
+  namespace: RecentProjectNamespace
+): Promise<void> {
+  if (typeof window === "undefined") return Promise.resolve();
+  const cached = cloudHydratePromises.get(namespace);
+  if (cached) return cached;
+  const next = (async () => {
+    const cloud = await loadCloudRecentFiles(namespace);
+    if (!cloud.authenticated) {
+      cloudHydratePromises.delete(namespace);
+      return;
+    }
+    const local = readDrawer(namespace);
+    if (!cloud.entries.length && local.length) {
+      void saveCloudRecentFiles(namespace, local);
+      return;
+    }
+    if (!cloud.entries.length) return;
+    const merged = mergeRecentEntries(cloud.entries, local);
+    if (drawerSignature(merged) !== drawerSignature(local)) {
+      const localHadExtra = local.some(
+        (row) => !cloud.entries.some((c) => c.id === row.id)
+      );
+      writeDrawer(merged, namespace, { persistCloud: localHadExtra });
+    }
+  })().catch((err) => {
+    console.warn("[recentProjects] cloud hydrate skipped", err);
+  });
+  cloudHydratePromises.set(namespace, next);
   return next;
 }
 
@@ -353,6 +403,7 @@ export async function listRecentProjects(
   namespace: RecentProjectNamespace = "screen_007"
 ): Promise<RecentProjectMeta[]> {
   await ensureMigrated(namespace);
+  await ensureCloudHydrated(namespace);
   return readDrawer(namespace).map((e) => e.meta);
 }
 
@@ -361,6 +412,7 @@ export async function getRecentProject(
   namespace: RecentProjectNamespace = "screen_007"
 ): Promise<StudioCanvasProjectV1 | null> {
   await ensureMigrated(namespace);
+  await ensureCloudHydrated(namespace);
   const hit = readDrawer(namespace).find((e) => e.id === id);
   if (hit) {
     try {
@@ -387,6 +439,7 @@ export async function pushRecentProject(
   namespace: RecentProjectNamespace = "screen_007"
 ): Promise<RecentProjectMeta> {
   await ensureMigrated(namespace);
+  await ensureCloudHydrated(namespace);
   const id = `rp_${Date.now().toString(36)}_${Math.random()
     .toString(36)
     .slice(2, 8)}`;
@@ -422,6 +475,7 @@ export async function removeRecentProject(
   namespace: RecentProjectNamespace = "screen_007"
 ): Promise<void> {
   await ensureMigrated(namespace);
+  await ensureCloudHydrated(namespace);
   writeDrawer(
     readDrawer(namespace).filter((e) => e.id !== id),
     namespace

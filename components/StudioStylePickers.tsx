@@ -81,6 +81,11 @@ export function PortalMenu({
   children: ReactNode;
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -102,7 +107,7 @@ export function PortalMenu({
     };
   }, [open, onClose, triggerRef]);
 
-  if (!open || typeof document === "undefined") return null;
+  if (!open || !isMounted) return null;
 
   return createPortal(
     <div

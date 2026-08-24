@@ -121,8 +121,13 @@ export default function PreviewPhotoOverlay({
     id: string;
     box: PrintPhotoBox;
   } | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
 
   layersRef.current = layers;
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const measureStage = () => {
     const rect = hostRef.current?.getBoundingClientRect();
@@ -263,6 +268,7 @@ export default function PreviewPhotoOverlay({
   }, [pointerActive, commitBox]);
 
   if (!layers.length) return null;
+  if (interactive && !isMounted) return null;
 
   return (
     <div

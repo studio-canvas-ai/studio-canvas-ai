@@ -264,6 +264,11 @@ export default function PreviewCanvas({
   const [floatPos, setFloatPos] = useState({ x: EDGE_GAP, y: 72 });
   const [dragging, setDragging] = useState(false);
   const [bgPanning, setBgPanning] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // Seed canvas meta so Step-2 uploads land at print aspect before studio opens.
   useEffect(() => {
@@ -999,7 +1004,7 @@ export default function PreviewCanvas({
         </div>
       </div>
 
-      {lightbox && typeof document !== "undefined"
+      {lightbox && isMounted
         ? createPortal(
             <div
               data-preview-lightbox-root
