@@ -1,6 +1,7 @@
 import type { Translations } from "../types";
 import en from "./en";
 import { canvasStudioFr } from "../canvasStudio";
+import { pricingPeriodFr } from "../pricingPeriod";
 
 const fr: Translations = {
   ...en,
@@ -94,8 +95,7 @@ const fr: Translations = {
   },
   pricing: {
     ...en.pricing,
-    title: "Formules d’abonnement",
-    subtitle: "Choisissez la formule adaptée et découvrez un studio IA premium",
+    ...pricingPeriodFr,
     annualBilling: "Pass annuel prépayé (paiement unique)",
     monthlyBilling: "💳 Paiement mensuel",
     annualSubscription: "Pass annuel prépayé",
@@ -111,8 +111,6 @@ const fr: Translations = {
     permanentBenefit: "Stockage permanent illimité",
     watermarkBenefit: "Suppression totale du filigrane",
     annualPrepaid: "${total} payés d’avance · sans renouvellement automatique",
-    upgradeNotice:
-      "La mise à niveau facture uniquement la différence au prorata, conserve tous les crédits et redémarre le cycle au paiement.",
   },
 };
 export default fr;

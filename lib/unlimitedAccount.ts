@@ -8,8 +8,9 @@
 
 /** Admin / QA accounts (Naver + Google + Hanmail). */
 export const PRIVILEGED_ADMIN_EMAILS = [
-  "scd77777@naver.com",
   "studiocanvas.cs@gmail.com",
+  "agapet1004@gmail.com",
+  "scd77777@naver.com",
   "hercd@hanmail.net",
   "scd777@naver.com",
 ] as const;
@@ -17,8 +18,8 @@ export const PRIVILEGED_ADMIN_EMAILS = [
 /** @deprecated Prefer PRIVILEGED_ADMIN_EMAILS — kept for existing imports. */
 export const UNLIMITED_ACCOUNT_EMAILS = PRIVILEGED_ADMIN_EMAILS;
 
-/** Starting / refill balance for privileged admin accounts (not Infinity). */
-export const ADMIN_TEST_CREDITS = 999;
+/** Starting / refill balance for privileged admin accounts (disabled — wallet is 0). */
+export const ADMIN_TEST_CREDITS = 0;
 
 /** Practical upper bound for profile slots when privileged. */
 export const UNLIMITED_PROFILE_SLOTS = 999;
@@ -39,9 +40,8 @@ export function isUnlimitedAccountEmail(
 }
 
 /**
- * Infinite credit bypass is disabled — admins use a normal 999 wallet
- * with auto-refill only when the balance hits 0 (for spend-flow testing).
- * Debits always apply for generate / train / regenerate / downloads.
+ * Infinite credit bypass is disabled. Wallet stays at 0 until credit vouchers.
+ * Generation/download quotas are period N-times, not credits.
  */
 export function hasUnlimitedCredits(
   _email: string | null | undefined
@@ -55,9 +55,9 @@ export function hasUnlimitedProfileSlots(
   return isPrivilegedAdminEmail(email);
 }
 
-/** Returns ADMIN_TEST_CREDITS for privileged admins; otherwise null (caller uses FREE_CREDITS). */
+/** Legacy credit wallet is retired — always 0 until voucher products ship. */
 export function adminTestCreditsOrNull(
-  email: string | null | undefined
+  _email: string | null | undefined
 ): number | null {
-  return isPrivilegedAdminEmail(email) ? ADMIN_TEST_CREDITS : null;
+  return 0;
 }

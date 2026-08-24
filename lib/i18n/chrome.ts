@@ -21,6 +21,7 @@ export const CHROME: Record<Exclude<Locale, "en" | "kr">, ChromeCopy> = {
       topup: "+ チャージ",
       promoCode: "[コード入力]",
       promoBalance: "コード残高",
+      creditsBadge: "{n} クレジット",
     },
     hero: {
       badge: "AIポートレートスタジオ",
@@ -121,6 +122,7 @@ export const CHROME: Record<Exclude<Locale, "en" | "kr">, ChromeCopy> = {
       topup: "+ 充值",
       promoCode: "[输入代码]",
       promoBalance: "代码余额",
+      creditsBadge: "{n} 积分",
     },
     hero: {
       badge: "AI 肖像工作室",
@@ -220,6 +222,7 @@ export const CHROME: Record<Exclude<Locale, "en" | "kr">, ChromeCopy> = {
       topup: "+ Recargar",
       promoCode: "[Introducir código]",
       promoBalance: "Saldo del código",
+      creditsBadge: "{n} créditos",
     },
     hero: {
       badge: "Estudio de retratos con IA",
@@ -320,6 +323,7 @@ export const CHROME: Record<Exclude<Locale, "en" | "kr">, ChromeCopy> = {
       topup: "+ Recharger",
       promoCode: "[Saisir le code]",
       promoBalance: "Solde du code",
+      creditsBadge: "{n} crédits",
     },
     hero: {
       badge: "Studio de portraits IA",
@@ -420,6 +424,7 @@ export const CHROME: Record<Exclude<Locale, "en" | "kr">, ChromeCopy> = {
       topup: "+ Aufladen",
       promoCode: "[Code eingeben]",
       promoBalance: "Code-Guthaben",
+      creditsBadge: "{n} Credits",
     },
     hero: {
       badge: "KI-Porträtstudio",
@@ -520,6 +525,7 @@ export const CHROME: Record<Exclude<Locale, "en" | "kr">, ChromeCopy> = {
       topup: "+ Ricarica",
       promoCode: "[Inserisci codice]",
       promoBalance: "Saldo codice",
+      creditsBadge: "{n} crediti",
     },
     hero: {
       badge: "Studio ritratti con IA",
@@ -620,6 +626,7 @@ export const CHROME: Record<Exclude<Locale, "en" | "kr">, ChromeCopy> = {
       topup: "+ Nạp",
       promoCode: "[Nhập mã]",
       promoBalance: "Số dư mã",
+      creditsBadge: "{n} tín dụng",
     },
     hero: {
       badge: "Studio chân dung AI",
@@ -720,6 +727,7 @@ export const CHROME: Record<Exclude<Locale, "en" | "kr">, ChromeCopy> = {
       topup: "+ टॉप अप",
       promoCode: "[कोड दर्ज करें]",
       promoBalance: "कोड शेष",
+      creditsBadge: "{n} क्रेडिट",
     },
     hero: {
       badge: "AI पोर्ट्रेट स्टूडियो",

@@ -7,6 +7,7 @@ import {
   upsertUserScaProject,
 } from "@/lib/db/scaProjects";
 import { resolveAppUser } from "@/lib/resolveAppUser";
+import { collectUserStorageAliases } from "@/lib/studioStore/userAliases";
 
 export const runtime = "nodejs";
 
@@ -22,14 +23,42 @@ export async function GET(req: Request) {
 
   const id = new URL(req.url).searchParams.get("id")?.trim();
   if (id) {
-    const project = await getUserScaProject(resolved.user.id, id);
+    const aliases = await collectUserStorageAliases(req, resolved.user);
+    let project = await getUserScaProject(resolved.user.id, id);
+    if (!project) {
+      for (const alias of aliases) {
+        if (alias === resolved.user.id) continue;
+        project = await getUserScaProject(alias, id);
+        if (project) break;
+      }
+    }
     if (!project) {
       return NextResponse.json({ error: "not_found" }, { status: 404 });
     }
     return NextResponse.json({ ok: true, project });
   }
 
-  const projects = await listUserScaProjects(resolved.user.id);
+  const aliases = await collectUserStorageAliases(req, resolved.user);
+  const byId = new Map<
+    string,
+    Awaited<ReturnType<typeof listUserScaProjects>>[number]
+  >();
+  for (const alias of aliases) {
+    const list = await listUserScaProjects(alias, {
+      allowEmptyR2Fallback: true,
+      relaxOwnerFilter: true,
+    });
+    for (const p of list) {
+      const prev = byId.get(p.id);
+      if (!prev || p.createdAt > prev.createdAt) {
+        byId.set(p.id, { ...p, userId: resolved.user.id });
+      }
+    }
+  }
+  const projects = [...byId.values()]
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, SCA_PROJECTS_MAX);
+
   return NextResponse.json({
     ok: true,
     max: SCA_PROJECTS_MAX,

@@ -13,6 +13,7 @@ import { CreditsProvider } from "@/components/CreditsProvider";
 import AuthSessionProvider from "@/components/AuthSessionProvider";
 import AuthModal from "@/components/AuthModal";
 import SupabaseAuthBootstrap from "@/components/SupabaseAuthBootstrap";
+import StudioStoreRecoveryBootstrap from "@/components/StudioStoreRecoveryBootstrap";
 import CreditDepletionModal from "@/components/CreditDepletionModal";
 import PaymentModal from "@/components/PaymentModal";
 import CreditTopUpModal from "@/components/CreditTopUpModal";
@@ -83,6 +84,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
       <FeedbackProvider>
         <CreditsProvider>
           <SupabaseAuthBootstrap />
+          <StudioStoreRecoveryBootstrap />
           {children}
           <AuthModal />
           <CreditDepletionModal />

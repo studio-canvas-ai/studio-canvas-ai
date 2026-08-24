@@ -51,7 +51,6 @@ async function loadR2Manifest(userId: string): Promise<ScaProjectRecord[] | null
       (p) =>
         typeof p?.id === "string" &&
         typeof p?.sealedContent === "string" &&
-        p.userId === userId &&
         p.sealedContent.includes("SCAENC1")
     );
   } catch {
@@ -63,17 +62,31 @@ function sortProjects(projects: ScaProjectRecord[]) {
   return [...projects].sort((a, b) => b.createdAt - a.createdAt);
 }
 
-export async function listUserScaProjects(userId: string): Promise<ScaProjectRecord[]> {
+export type ListUserStoreOptions = {
+  /** Do not treat an empty R2 manifest as canonical if memory still has rows. */
+  allowEmptyR2Fallback?: boolean;
+  /** Kept for call-site compatibility — owner id is no longer required on rows. */
+  relaxOwnerFilter?: boolean;
+};
+
+export async function listUserScaProjects(
+  userId: string,
+  options: ListUserStoreOptions = {}
+): Promise<ScaProjectRecord[]> {
+  const mem = getDb().scaProjects[userId] ?? [];
   if (isR2Configured()) {
     const fromR2 = await loadR2Manifest(userId);
     if (fromR2 !== null) {
+      if (fromR2.length === 0 && options.allowEmptyR2Fallback && mem.length > 0) {
+        return sortProjects(mem).slice(0, SCA_PROJECTS_MAX);
+      }
+      const rekeyed = fromR2.map((p) => ({ ...p, userId }));
       await withDbLock((db) => {
-        db.scaProjects[userId] = fromR2;
+        db.scaProjects[userId] = rekeyed;
       });
-      return sortProjects(fromR2).slice(0, SCA_PROJECTS_MAX);
+      return sortProjects(rekeyed).slice(0, SCA_PROJECTS_MAX);
     }
   }
-  const mem = getDb().scaProjects[userId] ?? [];
   return sortProjects(mem).slice(0, SCA_PROJECTS_MAX);
 }
 

@@ -5,7 +5,6 @@ import {
   getDomesticMonthlyPriceKrw,
   getDomesticQuarterlyPriceKrw,
   getPlanOffer,
-  billingPeriodDays,
   isPrepaidPass,
   pricingPlanIds,
 } from "@/lib/data";
@@ -15,6 +14,8 @@ import { resolveCheckoutRegion } from "@/lib/paymentRouting";
 import { getDb, newId, withDbLock } from "@/lib/db/store";
 import type { PaymentOrder, PaymentProviderId, UserRecord } from "@/lib/db/types";
 import { activateSubscription } from "@/lib/subscriptionLifecycle";
+import { subscriptionPeriodEndMs } from "@/lib/subscriptionPeriod";
+import { ensurePlanUsage } from "@/lib/db/planUsage";
 import {
   createStripeCheckoutSession,
   stripeConfigured,
@@ -214,8 +215,10 @@ export async function markOrderPaid(params: {
       o.stripePaymentIntentId = params.externalPaymentKey;
     }
 
-    user.credits = Math.round((user.credits + o.credits) * 10) / 10;
-    user.maxCredits = Math.max(user.maxCredits, user.credits);
+    if (o.kind !== "subscription") {
+      user.credits = Math.round((user.credits + o.credits) * 10) / 10;
+      user.maxCredits = Math.max(user.maxCredits, user.credits);
+    }
     user.updatedAt = now;
     activateSubscription(user);
 
@@ -238,7 +241,12 @@ export async function markOrderPaid(params: {
         delete user.scheduledCancelAt;
       }
       user.currentPeriodStart = now;
-      user.currentPeriodEnd = now + billingPeriodDays(interval) * 24 * 60 * 60 * 1000;
+      user.currentPeriodEnd = subscriptionPeriodEndMs(now, interval);
+      user.autoRenew = !isPrepaidPass(interval);
+      user.quotaPeriodStart = now;
+      user.fhdRemaining = undefined;
+      user.uhd4kRemaining = undefined;
+      ensurePlanUsage(user);
       user.lastPlanAmountKrw = o.baseAmountKrw ?? o.amountKrw;
       user.lastPlanAmountUsd = o.amountUsd;
       db.ledger.push({

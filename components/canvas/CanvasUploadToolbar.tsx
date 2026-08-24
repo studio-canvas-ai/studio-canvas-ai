@@ -40,6 +40,7 @@ import {
   type RecentProjectNamespace,
   type RecentProjectMeta,
 } from "@/lib/canvas/recentProjects";
+import { recoverStudioStores } from "@/lib/studioStore/clientRecovery";
 
 export type CanvasUploadToolbarProps = {
   className?: string;
@@ -144,6 +145,9 @@ export default function CanvasUploadToolbar({
   }, [recentNamespace]);
 
   useEffect(() => {
+    void recoverStudioStores().then(() => {
+      void refreshRecent();
+    });
     void refreshRecent();
     const onChanged = () => {
       void refreshRecent();
@@ -154,7 +158,7 @@ export default function CanvasUploadToolbar({
       window.removeEventListener(RECENT_PROJECTS_CHANGED_EVENT, onChanged);
       window.removeEventListener("storage", onChanged);
     };
-  }, []);
+  }, [recentNamespace]);
 
   useEffect(() => {
     if (!menuOpen) return;

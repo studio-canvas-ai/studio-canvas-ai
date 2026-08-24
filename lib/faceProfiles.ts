@@ -94,8 +94,8 @@ export async function fetchFaceProfilesFromServer(): Promise<FaceProfile[]> {
       }
     }
 
-    saveFaceProfiles(remote);
-    return remote;
+    saveFaceProfiles(remote.length ? remote : local);
+    return remote.length ? remote : local;
   } catch {
     return local;
   }

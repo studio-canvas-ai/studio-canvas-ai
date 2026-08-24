@@ -25,6 +25,7 @@ import {
   upsertFaceProfileAndSync,
   type FaceProfile,
 } from "@/lib/faceProfiles";
+import { STUDIO_STORE_RECOVERED_EVENT } from "@/lib/studioStore/clientRecovery";
 import { TRAIN_CREDIT_COST } from "@/lib/data";
 import { processUploadFiles, urlToCompressedDataUrl } from "@/lib/processUpload";
 import {
@@ -137,9 +138,11 @@ export default function FaceProfilePanel({ compact, onSelect, selectedId }: Prop
       setProfiles(sanitizeFaceProfilePhotos(listFaceProfiles()));
     };
     window.addEventListener(FACE_PROFILES_UPDATED_EVENT, onUpdate);
+    window.addEventListener(STUDIO_STORE_RECOVERED_EVENT, onUpdate);
     return () => {
       cancelled = true;
       window.removeEventListener(FACE_PROFILES_UPDATED_EVENT, onUpdate);
+      window.removeEventListener(STUDIO_STORE_RECOVERED_EVENT, onUpdate);
     };
   }, [isAuthenticated]);
 

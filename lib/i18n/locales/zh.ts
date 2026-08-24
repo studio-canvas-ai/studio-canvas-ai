@@ -1,6 +1,7 @@
 import type { Translations } from "../types";
 import en from "./en";
 import { canvasStudioZh } from "../canvasStudio";
+import { pricingPeriodZh } from "../pricingPeriod";
 
 /** Simplified Chinese — overrides for new/changed surfaces */
 const zh: Translations = {
@@ -233,8 +234,7 @@ const zh: Translations = {
   },
   pricing: {
     ...en.pricing,
-    title: "订阅方案",
-    subtitle: "选择适合需求的方案，体验高级 AI 工作室",
+    ...pricingPeriodZh,
     annualBilling: "年度预付通行证（一次性付款）",
     monthlyBilling: "💳 月付",
     annualSubscription: "年度预付通行证",
@@ -250,39 +250,47 @@ const zh: Translations = {
     permanentBenefit: "无限永久保存",
     watermarkBenefit: "完整去除水印",
     annualPrepaid: "一次性预付 ${total} · 不自动续费",
-    upgradeNotice: "升级时仅支付按比例计算的差额，全部剩余积分结转，并从付款日开始新的周期。",
     plans: {
       starter: {
         name: "Starter",
         description: "适合刚开始使用 AI 肖像的用户",
         features: [
-          "每月 30 张 AI 写真与缩略图（30 积分）",
-          "可注册面部档案 1 个",
-          "FHD（1080p）画质",
-          "完整去除水印",
+          "FHD 生成 200 次以内 ↓",
+          "4K 超高清生成 15 次以内 ↓",
+          "AI 模型／人脸训练 1 个名额以内 ↓",
+          "成品图库（.sca/json）100 件以内 ↓",
+          "训练照片库 100 张以内 ↓",
+          "普通照片库 200 张以内 ↓",
+          "编辑文件（.sca）下载：不限次数",
+          "边距水印／个人许可",
         ],
       },
       standard: {
         name: "Standard",
         description: "需要更多生成量的创作者",
         features: [
-          "每月 80 张 AI 写真与缩略图（80 积分）",
-          "可注册面部档案 5 个",
-          "4K 超高清",
-          "无等待快速生成",
-          "完整去除水印",
+          "FHD 生成 600 次以内 ↓",
+          "4K 超高清生成 50 次以内 ↓",
+          "AI 模型／人脸训练 5 个名额以内 ↓",
+          "成品图库（.sca/json）500 件以内 ↓",
+          "训练照片库 500 张以内 ↓",
+          "普通照片库 1,000 张以内 ↓",
+          "编辑文件（.sca）下载：不限次数",
+          "完全去水印／可商用",
         ],
       },
       pro: {
         name: "Pro",
         description: "商用与大批量生成的高级方案",
         features: [
-          "每月 200 张 AI 写真与缩略图（200 积分）",
-          "可注册面部档案 10 个",
-          "4K 超高清",
-          "允许商业使用",
-          "专属快速生成通道",
-          "完整去除水印",
+          "FHD 生成 2,000 次以内 ↓",
+          "4K 超高清生成 200 次以内 ↓",
+          "AI 模型／人脸训练 10 个名额以内 ↓",
+          "成品图库（.sca/json）2,000 件以上 ↓",
+          "训练照片库 2,000 张以上 ↓",
+          "普通照片库 5,000 张以上 ↓",
+          "编辑文件（.sca）下载：不限次数",
+          "完全去水印／商用完全保障",
         ],
       },
     },

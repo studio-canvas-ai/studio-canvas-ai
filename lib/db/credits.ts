@@ -1,4 +1,4 @@
-import { FREE_CREDITS, REGENERATE_CREDIT_COST } from "@/lib/data";
+import { REGENERATE_CREDIT_COST } from "@/lib/data";
 import { getDb, identityKey, newId, stableUserId, withDbLock } from "@/lib/db/store";
 import type {
   AuthProviderId,
@@ -13,89 +13,51 @@ import {
   serializeConsumptionsMeta,
 } from "@/lib/payments/orderCredits";
 import {
-  ADMIN_TEST_CREDITS,
-  adminTestCreditsOrNull,
   isPrivilegedAdminEmail,
 } from "@/lib/unlimitedAccount";
+import { applyTestAccountSubscription } from "@/lib/testAccounts";
+import { ensurePlanUsage } from "@/lib/db/planUsage";
 import { writeWalletCookie, readWalletCookie } from "@/lib/walletCookie";
 
-function startingCreditsForEmail(email: string | null | undefined): number {
-  return adminTestCreditsOrNull(email) ?? FREE_CREDITS;
+function startingCreditsForEmail(_email: string | null | undefined): number {
+  return 0;
 }
 
 function normalizeCreditsHint(value: number | null | undefined): number | null {
-  if (typeof value !== "number" || !Number.isFinite(value)) return null;
-  return Math.round(Math.max(0, value) * 10) / 10;
-}
-
-/** Resolve starting balance; privileged admins refill only when hint is empty/zero. */
-function resolveProvisionCredits(
-  email: string | null | undefined,
-  creditsHint?: number | null
-): number {
-  const hint = normalizeCreditsHint(creditsHint ?? null);
-  if (isPrivilegedAdminEmail(email)) {
-    if (hint == null) return ADMIN_TEST_CREDITS;
-    return hint <= 0 ? ADMIN_TEST_CREDITS : hint;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.round(Math.max(0, value) * 10) / 10;
   }
-  if (hint != null) return hint;
-  return FREE_CREDITS;
+  return null;
 }
 
-/**
- * One-time migration: free-tier seed (≤ FREE_CREDITS) → 999 admin wallet.
- * Empty wallet refill is handled only via refillPrivilegedAdminIfEmpty after spend.
- */
-function applyPrivilegedAdminWallet(
-  db: ReturnType<typeof getDb>,
-  user: UserRecord,
-  reason: "signup_bonus" | "admin_adjust"
-): void {
-  if (!isPrivilegedAdminEmail(user.email)) return;
-  const needsSeed =
-    user.credits <= 0 ||
-    (user.maxCredits <= FREE_CREDITS && user.credits < ADMIN_TEST_CREDITS);
-  if (!needsSeed) return;
+/** Legacy credit wallets are forced to 0 (gift-card credits ship later). */
+function wipeLegacyCredits(user: UserRecord): void {
+  user.credits = 0;
+  user.maxCredits = 0;
+  user.legacyCreditsWiped = true;
+}
 
-  const before = user.credits;
-  user.credits = ADMIN_TEST_CREDITS;
-  user.maxCredits = Math.max(user.maxCredits, ADMIN_TEST_CREDITS);
-  user.updatedAt = Date.now();
-  db.ledger.push({
-    id: newId("ldg"),
-    userId: user.id,
-    delta: Math.round((ADMIN_TEST_CREDITS - before) * 10) / 10,
-    balanceAfter: user.credits,
-    reason,
-    meta: {
-      adminTestWallet: true,
-      refillTo: ADMIN_TEST_CREDITS,
-    },
-    createdAt: Date.now(),
-  });
+/** Resolve starting balance — always 0 after the N-times quota cutover. */
+function resolveProvisionCredits(
+  _email: string | null | undefined,
+  _creditsHint?: number | null
+): number {
+  return 0;
+}
+
+function applyPrivilegedAdminWallet(
+  _db: ReturnType<typeof getDb>,
+  user: UserRecord,
+  _reason: "signup_bonus" | "admin_adjust"
+): void {
+  wipeLegacyCredits(user);
 }
 
 function refillPrivilegedAdminIfEmpty(
-  db: ReturnType<typeof getDb>,
+  _db: ReturnType<typeof getDb>,
   user: UserRecord
 ): void {
-  if (!isPrivilegedAdminEmail(user.email)) return;
-  if (user.credits > 0) return;
-  user.credits = ADMIN_TEST_CREDITS;
-  user.maxCredits = Math.max(user.maxCredits, ADMIN_TEST_CREDITS);
-  user.updatedAt = Date.now();
-  db.ledger.push({
-    id: newId("ldg"),
-    userId: user.id,
-    delta: ADMIN_TEST_CREDITS,
-    balanceAfter: user.credits,
-    reason: "admin_adjust",
-    meta: {
-      adminAutoRefill: true,
-      refillTo: ADMIN_TEST_CREDITS,
-    },
-    createdAt: Date.now(),
-  });
+  wipeLegacyCredits(user);
 }
 
 /**
@@ -113,11 +75,10 @@ export async function reconcileUserWithWalletCookie(
     const row = db.users[user.id];
     if (!row) return user;
     if (wallet.updatedAt < row.updatedAt) return row;
-    row.credits = wallet.credits;
-    row.updatedAt = Math.max(row.updatedAt, wallet.updatedAt);
-    if (row.credits <= 0) {
-      refillPrivilegedAdminIfEmpty(db, row);
-    }
+    row.credits = 0;
+    row.maxCredits = 0;
+    row.legacyCreditsWiped = true;
+    row.updatedAt = Math.max(row.updatedAt, wallet.updatedAt, Date.now());
     return row;
   });
   await writeWalletCookie(current.id, current.credits);
@@ -149,8 +110,10 @@ export async function findOrCreateOAuthUser(input: {
       user.name = input.name ?? user.name;
       user.image = input.image ?? user.image;
       user.updatedAt = Date.now();
+      wipeLegacyCredits(user);
       db.identities[key] = existingId;
-      applyPrivilegedAdminWallet(db, user, "admin_adjust");
+      applyTestAccountSubscription(user);
+      ensurePlanUsage(user);
       return { user, isNew: false };
     }
 
@@ -187,6 +150,8 @@ export async function findOrCreateOAuthUser(input: {
       },
       createdAt: now,
     });
+    applyTestAccountSubscription(user);
+    ensurePlanUsage(user);
     return { user, isNew: true };
   });
   await writeWalletCookie(result.user.id, result.user.credits);
@@ -227,7 +192,9 @@ export async function ensureUserRecord(input: {
       if (input.name != null) existing.name = input.name;
       if (input.image != null) existing.image = input.image;
       existing.updatedAt = Date.now();
-      applyPrivilegedAdminWallet(db, existing, "admin_adjust");
+      wipeLegacyCredits(existing);
+      applyTestAccountSubscription(existing);
+      ensurePlanUsage(existing);
       return existing;
     }
 
@@ -271,10 +238,27 @@ export async function ensureUserRecord(input: {
       },
       createdAt: now,
     });
+    applyTestAccountSubscription(created);
+    ensurePlanUsage(created);
     return created;
   });
   await writeWalletCookie(user.id, user.credits);
   return user;
+}
+
+export async function syncTestAccountSubscription(
+  user: UserRecord
+): Promise<UserRecord> {
+  const updated = await withDbLock((db) => {
+    const row = db.users[user.id];
+    if (!row) return user;
+    wipeLegacyCredits(row);
+    applyTestAccountSubscription(row);
+    ensurePlanUsage(row);
+    return row;
+  });
+  await writeWalletCookie(updated.id, 0);
+  return updated;
 }
 
 /** Admin directory listing — newest signups first. */
@@ -342,15 +326,30 @@ export async function debitCredits(params: {
     if (!user) return { ok: false as const, reason: "not_found" as const };
 
     if (user.credits + 1e-9 < amount) {
-      // Empty privileged wallet → refill then retry once in the same lock.
-      refillPrivilegedAdminIfEmpty(db, user);
-      if (user.credits + 1e-9 < amount) {
-        return {
-          ok: false as const,
-          reason: "insufficient" as const,
-          credits: user.credits,
+      const skipLegacy =
+        (params.reason === "generate" || params.reason === "regenerate") &&
+        user.planId !== "free";
+      if (skipLegacy) {
+        const entry: CreditLedgerEntry = {
+          id: newId("ldg"),
+          userId: user.id,
+          delta: 0,
+          balanceAfter: user.credits,
+          reason: params.reason,
+          meta: {
+            ...params.meta,
+            skippedLegacyCredit: true,
+          },
+          createdAt: Date.now(),
         };
+        db.ledger.push(entry);
+        return { ok: true as const, user, entry };
       }
+      return {
+        ok: false as const,
+        reason: "insufficient" as const,
+        credits: user.credits,
+      };
     }
     user.credits = Math.round((user.credits - amount) * 10) / 10;
     user.updatedAt = Date.now();
@@ -370,12 +369,6 @@ export async function debitCredits(params: {
       createdAt: Date.now(),
     };
     db.ledger.push(entry);
-
-    // After a spend that empties the wallet, refill admins to 999 for QA loops.
-    if (user.credits <= 0) {
-      refillPrivilegedAdminIfEmpty(db, user);
-      entry.balanceAfter = user.credits;
-    }
 
     return { ok: true as const, user, entry };
   });

@@ -5,6 +5,7 @@ import {
   upsertUserFaceProfile,
 } from "@/lib/db/faceProfiles";
 import { resolveAppUser } from "@/lib/resolveAppUser";
+import { collectUserStorageAliases } from "@/lib/studioStore/userAliases";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -22,7 +23,27 @@ export async function GET(req: Request) {
     );
   }
 
-  const profiles = await listUserFaceProfiles(resolved.user.id);
+  const aliases = await collectUserStorageAliases(req, resolved.user);
+  const byId = new Map<
+    string,
+    Awaited<ReturnType<typeof listUserFaceProfiles>>[number]
+  >();
+  for (const alias of aliases) {
+    const list = await listUserFaceProfiles(alias, {
+      allowEmptyR2Fallback: true,
+      relaxOwnerFilter: true,
+    });
+    for (const p of list) {
+      const prev = byId.get(p.id);
+      if (!prev || p.updatedAt > prev.updatedAt) {
+        byId.set(p.id, { ...p, userId: resolved.user.id });
+      }
+    }
+  }
+  const profiles = [...byId.values()].sort(
+    (a, b) => a.slot - b.slot || b.updatedAt - a.updatedAt
+  );
+
   return NextResponse.json(
     {
       ok: true,

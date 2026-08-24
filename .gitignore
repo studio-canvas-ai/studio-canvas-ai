@@ -43,6 +43,7 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+.tools/
 
 # Supabase CLI local link cache
 supabase/.temp/

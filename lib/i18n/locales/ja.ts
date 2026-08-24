@@ -1,6 +1,7 @@
 import type { Translations } from "../types";
 import en from "./en";
 import { canvasStudioJa } from "../canvasStudio";
+import { pricingPeriodJa } from "../pricingPeriod";
 
 /** Japanese — full overrides for new/changed surfaces; rest inherits EN */
 const ja: Translations = {
@@ -239,8 +240,7 @@ const ja: Translations = {
   },
   pricing: {
     ...en.pricing,
-    title: "サブスクリプションプラン",
-    subtitle: "ニーズに合うプランを選び、プレミアムAIスタジオを体験してください",
+    ...pricingPeriodJa,
     annualBilling: "年間前払い利用券（1回払い）",
     monthlyBilling: "💳 月間払い",
     annualSubscription: "年間前払い利用券",
@@ -256,8 +256,6 @@ const ja: Translations = {
     permanentBenefit: "無制限の永久保存",
     watermarkBenefit: "ウォーターマーク完全除去",
     annualPrepaid: "年額${total}を一括前払い · 自動更新なし",
-    upgradeNotice:
-      "アップグレード時は日割り差額のみを請求し、残りのクレジットをすべて繰り越して支払日から新しい周期を開始します。",
     addonTitle: en.pricing.addonTitle,
     addonSubtitle: en.pricing.addonSubtitle,
     plans: {
@@ -265,33 +263,42 @@ const ja: Translations = {
         name: "Starter",
         description: "AIポートレートを始める方向け",
         features: [
-          "月30枚のAIポートレート＆サムネイル生成（30クレジット）",
-          "登録可能な顔プロフィール 1枠",
-          "FHD（1080p）画質",
-          "ウォーターマーク完全除去",
+          "FHD生成 200回以内 ↓",
+          "4K超高画質生成 15回以内 ↓",
+          "AIモデル／フェイス学習 1枠以内 ↓",
+          "完成作品ギャラリー（.sca/json） 100点以内 ↓",
+          "学習用写真保管 100枚以内 ↓",
+          "一般写真保管 200枚以内 ↓",
+          "編集用ファイル（.sca）ダウンロード：無制限",
+          "余白ウォーターマーク／個人ライセンス",
         ],
       },
       standard: {
         name: "Standard",
         description: "より多くの生成が必要なクリエイター向け",
         features: [
-          "月80枚のAIポートレート＆サムネイル生成（80クレジット）",
-          "登録可能な顔プロフィール 5枠",
-          "4K超高画質",
-          "待ち時間なしの高速生成",
-          "ウォーターマーク完全除去",
+          "FHD生成 600回以内 ↓",
+          "4K超高画質生成 50回以内 ↓",
+          "AIモデル／フェイス学習 5枠以内 ↓",
+          "完成作品ギャラリー（.sca/json） 500点以内 ↓",
+          "学習用写真保管 500枚以内 ↓",
+          "一般写真保管 1,000枚以内 ↓",
+          "編集用ファイル（.sca）ダウンロード：無制限",
+          "ウォーターマーク完全除去／商用利用可",
         ],
       },
       pro: {
         name: "Pro",
         description: "商用利用と大量生成向け上位プラン",
         features: [
-          "月200枚のAIポートレート＆サムネイル生成（200クレジット）",
-          "登録可能な顔プロフィール 10枠",
-          "4K超高画質",
-          "商用利用可能",
-          "専用高速生成レーン",
-          "ウォーターマーク完全除去",
+          "FHD生成 2,000回以内 ↓",
+          "4K超高画質生成 200回以内 ↓",
+          "AIモデル／フェイス学習 10枠以内 ↓",
+          "完成作品ギャラリー（.sca/json） 2,000点以上 ↓",
+          "学習用写真保管 2,000枚以上 ↓",
+          "一般写真保管 5,000枚以上 ↓",
+          "編集用ファイル（.sca）ダウンロード：無制限",
+          "ウォーターマーク完全除去／商用利用を完全保証",
         ],
       },
     },

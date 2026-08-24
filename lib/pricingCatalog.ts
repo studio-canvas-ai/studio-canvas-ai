@@ -7,6 +7,11 @@ import {
 } from "@/lib/data";
 import { formatKrw, formatUsd } from "@/lib/currency";
 import { getTranslations, type Locale, type Translations } from "@/lib/i18n";
+import {
+  getPlanQuotaDisplay,
+  type PlanLicense,
+  type QuotaCap,
+} from "@/lib/planQuotas";
 
 export function planDisplayName(offer: PlanOffer): string {
   if (offer.planId === "enterprise") return "Enterprise";
@@ -22,40 +27,84 @@ function fill(template: string, values: Record<string, string | number>) {
   );
 }
 
-function periodWord(interval: BillingInterval, locale: Locale): string {
-  if (locale === "kr") {
-    if (interval === "annual") return "연";
-    if (interval === "quarterly") return "3개월";
-    return "월";
-  }
-  if (interval === "annual") return "Annual";
-  if (interval === "quarterly") return "3-month";
-  return "Monthly";
-}
-
 function creditNumberLocale(locale: Locale): string {
-  return locale === "kr" ? "ko-KR" : "en-US";
+  switch (locale) {
+    case "kr":
+      return "ko-KR";
+    case "ja":
+      return "ja-JP";
+    case "zh":
+      return "zh-CN";
+    case "es":
+      return "es-ES";
+    case "fr":
+      return "fr-FR";
+    case "de":
+      return "de-DE";
+    case "it":
+      return "it-IT";
+    case "vi":
+      return "vi-VN";
+    case "hi":
+      return "hi-IN";
+    default:
+      return "en-US";
+  }
 }
 
-/** Feature lines follow the active UI locale (not hard-coded Korean). */
+function formatCap(cap: QuotaCap, locale: Locale): string {
+  return cap.n.toLocaleString(creditNumberLocale(locale));
+}
+
+function fillCap(
+  maxTpl: string,
+  plusTpl: string,
+  cap: QuotaCap,
+  locale: Locale
+): string {
+  return fill(cap.mode === "plus" ? plusTpl : maxTpl, {
+    n: formatCap(cap, locale),
+  });
+}
+
+function licenseLine(
+  license: PlanLicense,
+  copy: Translations["pricing"]
+): string {
+  if (license === "personal") return copy.quotaLicensePersonal;
+  if (license === "commercialFull") return copy.quotaLicenseCommercialFull;
+  return copy.quotaLicenseCommercial;
+}
+
+/** Feature lines follow the active UI locale (period N-times caps, not credits). */
 export function planFeatureLines(
   offer: PlanOffer,
   copy: Translations["pricing"],
   locale: Locale = "en"
 ): string[] {
-  const list = [
-    fill(copy.generationBenefit, {
-      period: periodWord(offer.interval, locale),
-      credits: offer.credits.toLocaleString(creditNumberLocale(locale)),
-    }),
-    fill(copy.photoBenefit, { count: offer.profileSlots }),
-    offer.resolution === "4K" ? copy.fourKBenefit : copy.fhdBenefit,
+  const q = getPlanQuotaDisplay(offer.planId, offer.interval);
+  return [
+    fillCap(copy.quotaFhd, copy.quotaFhdPlus, q.fhd, locale),
+    fillCap(copy.quota4k, copy.quota4kPlus, q.uhd4k, locale),
+    q.trainSlots.n === 1 && q.trainSlots.mode === "max"
+      ? copy.quotaTrainOne
+      : fillCap(copy.quotaTrain, copy.quotaTrainPlus, q.trainSlots, locale),
+    fillCap(copy.quotaGallery, copy.quotaGalleryPlus, q.gallery, locale),
+    fillCap(
+      copy.quotaTrainPhoto,
+      copy.quotaTrainPhotoPlus,
+      q.trainPhotos,
+      locale
+    ),
+    fillCap(
+      copy.quotaGeneralPhoto,
+      copy.quotaGeneralPhotoPlus,
+      q.generalPhotos,
+      locale
+    ),
+    copy.quotaSca,
+    licenseLine(q.license, copy),
   ];
-  if (offer.fastGeneration) list.push(copy.fastBenefit);
-  if (offer.commercialUse) list.push(copy.commercialBenefit);
-  if (offer.permanentStorage) list.push(copy.permanentBenefit);
-  list.push(copy.watermarkBenefit);
-  return list;
 }
 
 export type StaticPlanProduct = {
@@ -77,6 +126,7 @@ export type StaticPlanProduct = {
   features: string[];
   highlighted: boolean;
   ctaLabel: string;
+  quota: ReturnType<typeof getPlanQuotaDisplay>;
 };
 
 export type StaticCreditPack = {
@@ -150,6 +200,7 @@ export function buildStaticPlanProducts(locale: Locale = "kr"): {
       features: planFeatureLines(offer, copy, locale),
       highlighted: offer.highlighted,
       ctaLabel: offer.highlighted ? copy.getStarted : copy.selectPlan,
+      quota: getPlanQuotaDisplay(offer.planId, offer.interval),
     };
   };
 

@@ -9,6 +9,7 @@ import {
   replaceUploadVault,
   type PhotoVaultItem,
 } from "@/lib/photoVaultStorage";
+import { mergeVaultItems } from "@/lib/studioStore/merge";
 import { pageBackgroundUrl } from "@/lib/printWizardBg";
 import {
   photoToBox,
@@ -54,8 +55,10 @@ export function isPhotoLookbookSnapshot(
 export function applyPhotoLookbookSnapshot(snapshot: PhotoLookbookSnapshot): {
   wizard: PrintWizardState;
 } {
-  replaceUploadVault(snapshot.uploadVault);
-  replaceTrainedVault(snapshot.trainedVault);
+  const upload = mergeVaultItems(listUploadVault(), snapshot.uploadVault ?? []);
+  const trained = mergeVaultItems(listTrainedVault(), snapshot.trainedVault ?? []);
+  if (upload.length) replaceUploadVault(upload);
+  if (trained.length) replaceTrainedVault(trained);
   const wizard: PrintWizardState = {
     ...snapshot.wizard,
     wizardStep: 1,

@@ -1,6 +1,7 @@
 import type { Translations } from "../types";
 import en from "./en";
 import { canvasStudioDe } from "../canvasStudio";
+import { pricingPeriodDe } from "../pricingPeriod";
 
 const de: Translations = {
   ...en,
@@ -95,8 +96,7 @@ const de: Translations = {
   },
   pricing: {
     ...en.pricing,
-    title: "Abonnementpläne",
-    subtitle: "Wähle den passenden Plan und erlebe ein Premium-KI-Studio",
+    ...pricingPeriodDe,
     annualBilling: "Jahrespass im Voraus (Einmalzahlung)",
     monthlyBilling: "💳 Monatliche Zahlung",
     annualSubscription: "Jahrespass im Voraus",
@@ -112,8 +112,6 @@ const de: Translations = {
     permanentBenefit: "Unbegrenzte dauerhafte Speicherung",
     watermarkBenefit: "Wasserzeichen vollständig entfernt",
     annualPrepaid: "${total} einmal im Voraus · keine automatische Verlängerung",
-    upgradeNotice:
-      "Beim Upgrade zahlst du nur die anteilige Differenz, behältst alle Credits und der Zyklus startet am Zahlungstag neu.",
   },
 };
 export default de;

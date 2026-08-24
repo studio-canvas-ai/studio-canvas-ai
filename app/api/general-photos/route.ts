@@ -13,6 +13,7 @@ import {
 import { normalizeGeneralPhotoWebp } from "@/lib/imagePipeline";
 import { checkUploadRateLimit } from "@/lib/rateLimit";
 import { resolveAppUser } from "@/lib/resolveAppUser";
+import { collectUserStorageAliases } from "@/lib/studioStore/userAliases";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -41,7 +42,21 @@ export async function GET(req: Request) {
   }
 
   const user = resolved.user;
-  const photos = await listUserGeneralPhotos(user.id);
+  const aliases = await collectUserStorageAliases(req, user);
+  const byId = new Map<
+    string,
+    Awaited<ReturnType<typeof listUserGeneralPhotos>>[number]
+  >();
+  for (const alias of aliases) {
+    const list = await listUserGeneralPhotos(alias);
+    for (const p of list) {
+      const prev = byId.get(p.id);
+      if (!prev || p.createdAt > prev.createdAt) {
+        byId.set(p.id, { ...p, userId: user.id });
+      }
+    }
+  }
+  const photos = [...byId.values()].sort((a, b) => b.createdAt - a.createdAt);
   const limit = generalPhotoStorageLimit(user.planId, user.email);
   const downloadCount = await getGeneralPhotoDownloadCount(user.id);
   const freePlan = isFreeGeneralPhotoPlan(user.planId);

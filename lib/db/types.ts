@@ -35,6 +35,8 @@ export type UserRecord = {
   subscriptionStatus?: "active" | "past_due" | "cancelled";
   subscriptionLifecycle?: SubscriptionLifecycle;
   cancelAtPeriodEnd?: boolean;
+  /** Recurring renewal at period end (monthly KCP / test QA accounts). */
+  autoRenew?: boolean;
   cancelReason?: string;
   scheduledCancelAt?: number;
   stripeCustomerId?: string;
@@ -50,6 +52,14 @@ export type UserRecord = {
   signupBonusGranted: boolean;
   /** Lifetime general-photo downloads (free-tier quota). */
   generalPhotoDownloadCount?: number;
+  /** Remaining FHD downloads this billing period. */
+  fhdRemaining?: number;
+  /** Remaining 4K downloads this billing period. */
+  uhd4kRemaining?: number;
+  /** Billing window the remaining quotas belong to. */
+  quotaPeriodStart?: number;
+  /** One-time wipe of leftover credit-wallet balances. */
+  legacyCreditsWiped?: boolean;
 };
 
 export type GeneralPhotoRecord = {

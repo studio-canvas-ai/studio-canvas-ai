@@ -22,7 +22,7 @@ const PRIMARY_LINKS = [
   { href: "/styles", labelKey: "styles" as const, authRequired: false },
   { href: "/gallery/my", labelKey: "myGallery" as const, authRequired: true },
   { href: "/pricing", labelKey: "pricing" as const, authRequired: false },
-  { href: "/profile", labelKey: "myPage" as const, authRequired: true },
+  { href: "/mypage", labelKey: "myPage" as const, authRequired: true },
 ] as const;
 
 const SECONDARY_LINKS = [
@@ -144,7 +144,9 @@ export default function Navbar({ printWizardBack }: NavbarProps = {}) {
   const creditBadge = (
     <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[10px] tabular-nums text-amber-100 sm:px-2.5 sm:py-1 sm:text-[11px]">
       {promoWallet && !unlimitedCredits ? t.nav.promoBalance : "⚡"}{" "}
-      {unlimitedCredits ? creditsLabel : credits}
+      {unlimitedCredits
+        ? creditsLabel
+        : t.nav.creditsBadge.replace("{n}", String(credits))}
     </span>
   );
 
@@ -192,7 +194,7 @@ export default function Navbar({ printWizardBack }: NavbarProps = {}) {
             <LanguageSelector />
             {isAuthenticated ? (
               <Link
-                href="/profile"
+                href="/mypage"
                 className="rounded-full border border-white/15 p-0.5"
                 aria-label={t.nav.myPage}
               >
@@ -328,7 +330,7 @@ export default function Navbar({ printWizardBack }: NavbarProps = {}) {
                     </div>
                     <div className="p-1.5">
                       <Link
-                        href="/profile"
+                        href="/mypage"
                         role="menuitem"
                         onClick={() => setProfileOpen(false)}
                         className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm text-slate-100 transition hover:bg-slate-700/80"

@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useI18n } from "@/components/I18nProvider";
+import AdminStudioStorePanel from "@/components/AdminStudioStorePanel";
+import AdminGlobalRollbackPanel from "@/components/AdminGlobalRollbackPanel";
 import type { SupportTicket } from "@/lib/supportTickets";
 import type { AuthProviderId, PlanId } from "@/lib/db/types";
 
@@ -193,6 +195,19 @@ export default function AdminPageClient() {
                   >
                     <td className="max-w-[220px] truncate px-4 py-3 font-mono text-xs text-white/90">
                       {user.email || "—"}
+                      <button
+                        type="button"
+                        className="ml-2 text-[10px] text-white/40 underline underline-offset-2 hover:text-white/70"
+                        onClick={() => {
+                          window.dispatchEvent(
+                            new CustomEvent("sca:admin-inspect-store", {
+                              detail: user.email || user.id,
+                            })
+                          );
+                        }}
+                      >
+                        {t.admin.storeInspect}
+                      </button>
                     </td>
                     <td className="px-4 py-3">{user.name || "—"}</td>
                     <td className="px-4 py-3 capitalize">{user.provider}</td>
@@ -208,6 +223,8 @@ export default function AdminPageClient() {
           </div>
         )}
       </div>
+
+      <AdminStudioStorePanel />
 
       <div>
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
@@ -276,6 +293,8 @@ export default function AdminPageClient() {
           </div>
         )}
       </div>
+
+      <AdminGlobalRollbackPanel />
     </section>
   );
 }

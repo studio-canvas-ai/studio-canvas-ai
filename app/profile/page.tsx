@@ -19,6 +19,10 @@ import Navbar from "@/components/Navbar";
 import type { BillingInterval } from "@/lib/data";
 import { isPrepaidPass } from "@/lib/data";
 import { normalizeSubscriptionLifecycle } from "@/lib/subscriptionState";
+import {
+  formatSubscriptionEndDate,
+  remainingSubscriptionDays,
+} from "@/lib/subscriptionPeriod";
 
 type AccountSnapshot = {
   id: string;
@@ -28,6 +32,9 @@ type AccountSnapshot = {
   planId: string;
   billingInterval: BillingInterval | null;
   currentPeriodEnd: number | null;
+  expiryDate?: string | null;
+  remainingDays?: number | null;
+  autoRenew?: boolean;
   subscriptionLifecycle?: string;
   cancelAtPeriodEnd?: boolean;
   defaultPaymentMethodLabel?: string | null;
@@ -54,6 +61,39 @@ function planLabel(planId: string) {
   if (planId === "pro") return "Pro";
   if (planId === "starter") return "Starter";
   return "Free";
+}
+
+function intervalLabel(
+  interval: BillingInterval | null,
+  t: { monthly: string; quarterly: string; annual: string }
+) {
+  if (interval === "quarterly") return t.quarterly;
+  if (interval === "annual") return t.annual;
+  return t.monthly;
+}
+
+function fillTemplate(template: string, vars: Record<string, string | number>) {
+  let out = template;
+  for (const [key, value] of Object.entries(vars)) {
+    out = out.replaceAll(`{${key}}`, String(value));
+  }
+  return out;
+}
+
+function remainingDaysWithExpiryLabel(
+  account: AccountSnapshot,
+  template: string
+): string {
+  const expiry =
+    account.expiryDate ||
+    formatSubscriptionEndDate(account.currentPeriodEnd) ||
+    "—";
+  const days = Math.max(
+    0,
+    account.remainingDays ??
+      remainingSubscriptionDays(expiry === "—" ? new Date(0) : expiry)
+  );
+  return fillTemplate(template, { n: days, date: expiry });
 }
 
 function formatDate(ts: number | null | undefined, locale: string) {
@@ -319,15 +359,27 @@ export default function ProfilePage() {
             <div>
               <p className={labelClass}>{t.mypage.currentPlan}</p>
               <p className="mt-1 text-2xl font-semibold text-slate-50">
-                {account.planId === "free" ? t.mypage.freePlan : planLabel(account.planId)}
+                {account.planId === "free"
+                  ? t.mypage.freePlan
+                  : `${intervalLabel(account.billingInterval, t.mypage)} ${planLabel(account.planId)}`}
               </p>
               <p className={`mt-1 ${mutedClass}`}>
-                {t.mypage.creditsRemaining}: {account.credits}
+                {remainingDaysWithExpiryLabel(
+                  account,
+                  t.mypage.remainingDaysWithExpiry
+                )}
               </p>
             </div>
-            <span className="rounded-full border border-slate-400/40 bg-slate-600/60 px-3 py-1 text-xs text-slate-100">
-              {lifecycleLabel}
-            </span>
+            <div className="flex flex-col items-end gap-2">
+              <span className="rounded-full border border-slate-400/40 bg-slate-600/60 px-3 py-1 text-xs text-slate-100">
+                {lifecycleLabel}
+              </span>
+              {account.planId !== "free" && (
+                <span className="rounded-full border border-emerald-400/35 bg-emerald-500/15 px-3 py-1 text-xs text-emerald-100">
+                  {account.autoRenew ? t.mypage.autoRenewOn : t.mypage.autoRenewOff}
+                </span>
+              )}
+            </div>
           </div>
 
           {account.planId !== "free" && (
@@ -335,21 +387,15 @@ export default function ProfilePage() {
               <div className={insetClass}>
                 <p className={labelClass}>{t.mypage.billingInterval}</p>
                 <p className="mt-1 text-sm text-slate-50">
-                  {account.billingInterval === "quarterly"
-                    ? t.mypage.quarterly
-                    : account.billingInterval === "annual"
-                      ? t.mypage.annual
-                      : t.mypage.monthly}
+                  {intervalLabel(account.billingInterval, t.mypage)}
                 </p>
               </div>
               <div className={insetClass}>
-                <p className={labelClass}>
-                  {account.billingInterval && isPrepaidPass(account.billingInterval)
-                    ? t.mypage.expiryDate
-                    : t.mypage.nextBilling}
-                </p>
-                <p className="mt-1 text-sm text-slate-50">
-                  {formatDate(account.currentPeriodEnd, locale)}
+                <p className={labelClass}>{t.mypage.expiryDate}</p>
+                <p className="mt-1 font-mono text-sm text-slate-50">
+                  {account.expiryDate ||
+                    formatSubscriptionEndDate(account.currentPeriodEnd) ||
+                    "—"}
                 </p>
               </div>
               <div className={`${insetClass} sm:col-span-2`}>
@@ -365,7 +411,8 @@ export default function ProfilePage() {
 
           {account.planId !== "free" &&
             account.billingInterval &&
-            isPrepaidPass(account.billingInterval) && (
+            isPrepaidPass(account.billingInterval) &&
+            !account.autoRenew && (
               <p className="mt-4 rounded-xl border border-amber-300/35 bg-amber-400/15 px-4 py-3 text-sm text-amber-50">
                 {account.billingInterval === "quarterly"
                   ? t.mypage.quarterlyNoRenewNotice
@@ -418,6 +465,64 @@ export default function ProfilePage() {
               {t.nav.pricing}
             </Link>
           </div>
+        </section>
+
+        <section className={`${cardClass} mb-6`}>
+          <h2 className="text-lg font-semibold text-slate-50">{t.mypage.restoreTitle}</h2>
+          <p className={`mt-2 ${mutedClass}`}>{t.mypage.restoreSubtitle}</p>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              if (!window.confirm(t.mypage.restoreConfirm)) return;
+              void (async () => {
+                setBusy(true);
+                setMessage(null);
+                try {
+                  const res = await fetch("/api/studio-store/restore-self", {
+                    method: "POST",
+                    credentials: "same-origin",
+                  });
+                  const data = (await res.json().catch(() => ({}))) as {
+                    ok?: boolean;
+                    error?: string;
+                  };
+                  if (!res.ok || !data.ok) {
+                    const err = data.error;
+                    if (err === "healthy_data_exists") {
+                      throw new Error(t.mypage.restoreHealthy);
+                    }
+                    if (
+                      err === "credits_intact" ||
+                      err === "quota_or_days_intact"
+                    ) {
+                      throw new Error(t.mypage.restoreCreditsIntact);
+                    }
+                    if (err === "no_backup" || err === "snapshot_empty") {
+                      throw new Error(t.mypage.restoreNoBackup);
+                    }
+                    throw new Error(t.mypage.restoreFailed);
+                  }
+                  window.alert(t.mypage.restoreDone);
+                  window.location.reload();
+                } catch (err) {
+                  setMessage(
+                    err instanceof Error ? err.message : t.mypage.restoreFailed
+                  );
+                } finally {
+                  setBusy(false);
+                }
+              })();
+            }}
+            className="btn-secondary mt-4 inline-flex items-center gap-2 px-4 py-2 text-sm"
+          >
+            {busy ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+            {busy ? t.mypage.restoreBusy : t.mypage.restoreButton}
+          </button>
         </section>
 
         {showCancel && (

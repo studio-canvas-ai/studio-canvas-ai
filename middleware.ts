@@ -55,7 +55,7 @@ async function redirectIfProtectedPathUnauthed(
   request: NextRequest,
   pathname: string
 ): Promise<NextResponse | null> {
-  const protectedPrefixes = ["/gallery/my", "/profile"];
+  const protectedPrefixes = ["/gallery/my", "/profile", "/mypage"];
   if (!protectedPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
     return null;
   }

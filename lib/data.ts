@@ -300,8 +300,8 @@ export const PLAN_OFFERS: Record<BillingInterval, readonly PlanOffer[]> = {
     {
       planId: "starter",
       interval: "monthly",
-      monthlyUsd: 4.99,
-      totalUsd: 4.99,
+      monthlyUsd: 7.99,
+      totalUsd: 7.99,
       totalKrw: 7_900,
       credits: 30,
       profileSlots: 1,
@@ -315,8 +315,8 @@ export const PLAN_OFFERS: Record<BillingInterval, readonly PlanOffer[]> = {
     {
       planId: "standard",
       interval: "monthly",
-      monthlyUsd: 9.99,
-      totalUsd: 9.99,
+      monthlyUsd: 15.99,
+      totalUsd: 15.99,
       totalKrw: 15_900,
       credits: 80,
       profileSlots: 5,
@@ -330,8 +330,8 @@ export const PLAN_OFFERS: Record<BillingInterval, readonly PlanOffer[]> = {
     {
       planId: "pro",
       interval: "monthly",
-      monthlyUsd: 19.99,
-      totalUsd: 19.99,
+      monthlyUsd: 29.99,
+      totalUsd: 29.99,
       totalKrw: 29_900,
       credits: 230,
       profileSlots: 10,
@@ -400,13 +400,14 @@ export function getDomesticQuarterlyPriceKrw(
 
 /** Legacy monthly maps retained for existing consumers. */
 export const pricingPrices: Record<PricingPlanId, number> = {
-  starter: 4.99,
-  standard: 9.99,
-  pro: 19.99,
+  starter: 7.99,
+  standard: 15.99,
+  pro: 29.99,
   enterprise: 199.99,
 };
 
-export const FREE_CREDITS = 2;
+/** Legacy credit wallet is retired (gift-card credits ship later). */
+export const FREE_CREDITS = 0;
 
 /** Monthly plan credit allotment (server + client) */
 export const PLAN_CREDITS: Record<PricingPlanId, number> = {

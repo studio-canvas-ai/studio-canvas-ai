@@ -53,10 +53,7 @@ async function loadR2Manifest(userId: string): Promise<GeneralPhotoRecord[] | nu
     const parsed = JSON.parse(raw.toString("utf8")) as UserManifest;
     if (!Array.isArray(parsed.photos)) return [];
     return parsed.photos.filter(
-      (p) =>
-        typeof p?.id === "string" &&
-        typeof p?.imageUrl === "string" &&
-        p.userId === userId
+      (p) => typeof p?.id === "string" && typeof p?.imageUrl === "string"
     );
   } catch {
     return null;
@@ -74,17 +71,21 @@ function sortPhotos(photos: GeneralPhotoRecord[]) {
 export async function listUserGeneralPhotos(
   userId: string
 ): Promise<GeneralPhotoRecord[]> {
+  const mem = getDb().generalPhotos[userId] ?? [];
   if (isR2Configured()) {
     const fromR2 = await loadR2Manifest(userId);
     if (fromR2 !== null) {
+      if (fromR2.length === 0 && mem.length > 0) {
+        return sortPhotos(mem);
+      }
+      const rekeyed = fromR2.map((p) => ({ ...p, userId }));
       await withDbLock((db) => {
-        db.generalPhotos[userId] = fromR2;
+        db.generalPhotos[userId] = rekeyed;
       });
-      return sortPhotos(fromR2);
+      return sortPhotos(rekeyed);
     }
   }
 
-  const mem = getDb().generalPhotos[userId] ?? [];
   return sortPhotos(mem);
 }
 

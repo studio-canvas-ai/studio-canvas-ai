@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { auth, listSocialProviders, authConfigured } from "@/lib/auth";
 import { isSupabaseConfigured, getSupabaseConfigError } from "@/lib/supabase/config";
-import { findOrCreateOAuthUser, getUserById, ensureUserRecord, reconcileUserWithWalletCookie } from "@/lib/db/credits";
+import { findOrCreateOAuthUser, getUserById, ensureUserRecord, reconcileUserWithWalletCookie, syncTestAccountSubscription } from "@/lib/db/credits";
 import type { AuthProviderId } from "@/lib/db/types";
 import { FREE_CREDITS } from "@/lib/data";
 import { getPaymentProvider } from "@/lib/payments";
@@ -17,6 +17,8 @@ import {
 import { requireAuthSecret } from "@/lib/authSecret";
 import { hasUnlimitedCredits, isUnlimitedAccountEmail } from "@/lib/unlimitedAccount";
 import { isAdminEmail } from "@/lib/adminAuth";
+import { remainingSubscriptionDays, formatSubscriptionEndDate } from "@/lib/subscriptionPeriod";
+import { hydrateUserPlanUsage, snapshotPlanUsage } from "@/lib/db/planUsage";
 import { readWalletCookie } from "@/lib/walletCookie";
 
 export const runtime = "nodejs";
@@ -28,6 +30,7 @@ export async function GET(request: NextRequest) {
   let user = userId ? await getUserById(userId) : null;
   if (user) {
     user = await reconcileUserWithWalletCookie(user);
+    user = await syncTestAccountSubscription(user);
   }
 
   // Vercel memory DB can be empty after a cold start even with a valid JWT.
@@ -116,6 +119,26 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  if (user) {
+    user = await syncTestAccountSubscription(user);
+    user = await hydrateUserPlanUsage(user);
+  }
+
+  const expiryDate = user
+    ? formatSubscriptionEndDate(user.currentPeriodEnd ?? null)
+    : null;
+  const remainingDays =
+    user && expiryDate && user.planId !== "free"
+      ? Math.max(0, remainingSubscriptionDays(expiryDate))
+      : null;
+  const autoRenew = Boolean(
+    user &&
+      user.planId !== "free" &&
+      !user.cancelAtPeriodEnd &&
+      (user.autoRenew === true || user.billingInterval === "monthly")
+  );
+  const usage = user ? snapshotPlanUsage(user) : null;
+
   return NextResponse.json({
     authenticated: Boolean(user),
     user: user
@@ -124,8 +147,8 @@ export async function GET(request: NextRequest) {
           email: user.email,
           name: user.name,
           image: user.image,
-          credits: user.credits,
-          maxCredits: user.maxCredits,
+          credits: 0,
+          maxCredits: 0,
           unlimitedCredits: hasUnlimitedCredits(user.email),
           isAdmin: Boolean(
             user.email &&
@@ -135,6 +158,10 @@ export async function GET(request: NextRequest) {
           billingInterval: user.billingInterval ?? null,
           currentPeriodStart: user.currentPeriodStart ?? null,
           currentPeriodEnd: user.currentPeriodEnd ?? null,
+          expiryDate,
+          remainingDays,
+          autoRenew,
+          usage,
           subscriptionLifecycle: normalizeSubscriptionLifecycle(user),
           cancelAtPeriodEnd: user.cancelAtPeriodEnd ?? false,
           defaultPaymentMethodLabel: user.defaultPaymentMethodLabel ?? null,

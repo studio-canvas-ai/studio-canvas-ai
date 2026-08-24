@@ -25,7 +25,7 @@ const TAB_ITEMS = [
   },
   { href: "/gallery/my", labelKey: "myGallery" as const, Icon: Images, authRequired: true },
   { href: "/pricing", labelKey: "pricing" as const, Icon: CreditCard, authRequired: false },
-  { href: "/profile", labelKey: "myPage" as const, Icon: UserRound, authRequired: true },
+  { href: "/mypage", labelKey: "myPage" as const, Icon: UserRound, authRequired: true },
 ];
 
 function isTabActive(pathname: string, href: string) {

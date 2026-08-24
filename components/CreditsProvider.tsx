@@ -14,7 +14,6 @@ import {
   CREDIT_PACKS,
   type BillingInterval,
   FREE_CREDITS,
-  getPlanOffer,
   RETOUCH_FREE_PER_CYCLE,
   pricingPlanIds,
 } from "@/lib/data";
@@ -37,11 +36,11 @@ import {
 import { isGuestCheckoutAllowedClient } from "@/lib/checkoutPolicy";
 import {
   hasUnlimitedCredits,
-  ADMIN_TEST_CREDITS,
-  isPrivilegedAdminEmail,
 } from "@/lib/unlimitedAccount";
 import { shouldApplyBrandWatermark } from "@/lib/watermarkPolicy";
 import { stashAuthErrorForModal } from "@/lib/supabase/oauthErrors";
+import { clearAuthStorageOnly } from "@/lib/auth/clearAuthStorage";
+import type { PlanUsageSnapshot } from "@/lib/planQuotas";
 
 export type { PlanId } from "@/lib/faceProfiles";
 
@@ -105,6 +104,10 @@ type CreditsContextValue = {
   consumeCredit: (amount?: number) => boolean;
   /** Apply authoritative balance from API (generate / download / me). */
   applyServerCredits: (balance: number) => void;
+  planUsage: PlanUsageSnapshot | null;
+  consumeDownloadQuota: (
+    kind: "fhd" | "uhd4k"
+  ) => Promise<{ ok: boolean; remaining: number; usage: PlanUsageSnapshot | null }>;
   topUpCredits: (amount?: number) => void;
   purchaseCreditPack: (packId: (typeof CREDIT_PACKS)[number]["id"]) => Promise<void>;
   grantFreeCredits: () => void;
@@ -129,32 +132,9 @@ type CreditsContextValue = {
 const CreditsContext = createContext<CreditsContextValue | null>(null);
 
 function clearBrowserAuthResidue() {
-  if (typeof window === "undefined") return;
-
-  // Clears local UI caches only. Cloud-backed face profiles, general photos,
-  // and finished works live on R2/server manifests and reload after the next sign-in.
-  try {
-    localStorage.clear();
-  } catch {
-    /* ignore */
-  }
-
-  try {
-    sessionStorage.clear();
-  } catch {
-    /* ignore */
-  }
-
-  try {
-    for (const raw of document.cookie.split(";")) {
-      const name = raw.split("=")[0]?.trim();
-      if (!name) continue;
-      document.cookie = `${name}=; Max-Age=0; path=/; SameSite=Lax`;
-      document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`;
-    }
-  } catch {
-    /* ignore */
-  }
+  // Auth/session keys only. Never Storage.clear() — studio vaults and recent
+  // files must survive logout in the same browser.
+  clearAuthStorageOnly();
 }
 
 function todayKey() {
@@ -202,6 +182,7 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
     useState<BillingInterval>("annual");
   const [socialProviders, setSocialProviders] = useState<SocialProviderId[]>([]);
   const [socialProvidersLoaded, setSocialProvidersLoaded] = useState(false);
+  const [planUsage, setPlanUsage] = useState<PlanUsageSnapshot | null>(null);
   const [portraits, setPortraits] = useState<Record<string, PortraitRetouchState>>({});
   const [dailyRetouchCount, setDailyRetouchCount] = useState(0);
   const [dailyKey, setDailyKey] = useState(todayKey);
@@ -223,15 +204,8 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
     if (meta.planId && meta.planId !== "free") {
       setPlanId(meta.planId);
       if (meta.planId === "enterprise") setBillingInterval("annual");
-      const creditCount =
-        meta.planId === "enterprise"
-          ? getPlanOffer("enterprise", "annual").credits
-          : getPlanOffer(
-              meta.planId,
-              meta.planId === "standard" ? "monthly" : "monthly"
-            ).credits;
-      setCredits(creditCount);
-      setMaxCredits(creditCount);
+      setCredits(0);
+      setMaxCredits(0);
       setIsAuthenticated(true);
     } else if (meta.planId === "free") {
       setPlanId("free");
@@ -304,6 +278,7 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
           planId: PlanId;
           billingInterval?: BillingInterval | null;
           isAdmin?: boolean;
+          usage?: PlanUsageSnapshot | null;
         } | null;
       };
       if (Array.isArray(data.providers)) {
@@ -319,10 +294,11 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
           image: data.user.image ?? null,
         });
         setIsAdmin(Boolean(data.user.isAdmin));
-        setCredits(data.user.credits);
-        setMaxCredits(data.user.maxCredits);
+        setCredits(0);
+        setMaxCredits(0);
         setPlanId(data.user.planId);
         setBillingInterval(data.user.billingInterval ?? "monthly");
+        if (data.user.usage) setPlanUsage(data.user.usage);
         patchAccountMeta({
           lastLoginAt: Date.now(),
           planId: data.user.planId,
@@ -410,6 +386,7 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
     setIsAdmin(false);
     setCredits(FREE_CREDITS);
     setMaxCredits(FREE_CREDITS);
+    setPlanUsage(null);
     setPlanId("free");
     setBillingInterval("monthly");
     setPromoWallet(null);
@@ -522,43 +499,54 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
   const consumeCredit = useCallback(
     (amount = 1) => {
       if (credits < amount) {
-        if (isPrivilegedAdminEmail(authUser?.email)) {
-          // Mirror server auto-refill so QA can keep spending after 0.
-          setCredits(Math.max(0, ADMIN_TEST_CREDITS - amount));
-          setMaxCredits((m) => Math.max(m, ADMIN_TEST_CREDITS));
-          return true;
-        }
         setShowCreditModal(true);
         return false;
       }
-      setCredits((c) => {
-        const next = Math.max(0, Math.round((c - amount) * 10) / 10);
-        if (next <= 0 && isPrivilegedAdminEmail(authUser?.email)) {
-          setMaxCredits((m) => Math.max(m, ADMIN_TEST_CREDITS));
-          return ADMIN_TEST_CREDITS;
-        }
-        return next;
-      });
+      setCredits((c) => Math.max(0, Math.round((c - amount) * 10) / 10));
       return true;
     },
-    [authUser?.email, credits]
+    [credits]
   );
 
-  const applyServerCredits = useCallback(
-    (balance: number) => {
-      if (!Number.isFinite(balance)) return;
-      let next = Math.round(Math.max(0, balance) * 10) / 10;
-      if (next <= 0 && isPrivilegedAdminEmail(authUser?.email)) {
-        next = ADMIN_TEST_CREDITS;
-        setMaxCredits((m) => Math.max(m, ADMIN_TEST_CREDITS));
-      } else if (isPrivilegedAdminEmail(authUser?.email)) {
-        setMaxCredits((m) => Math.max(m, ADMIN_TEST_CREDITS, next));
-      } else {
-        setMaxCredits((m) => Math.max(m, next));
+  const applyServerCredits = useCallback((balance: number) => {
+    if (!Number.isFinite(balance)) return;
+    const next = Math.round(Math.max(0, balance) * 10) / 10;
+    setCredits(next);
+    setMaxCredits((m) => Math.max(m, next));
+  }, []);
+
+  const consumeDownloadQuota = useCallback(
+    async (kind: "fhd" | "uhd4k") => {
+      try {
+        const res = await fetch("/api/quota/download", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ kind }),
+        });
+        const data = (await res.json()) as {
+          ok?: boolean;
+          remaining?: number;
+          usage?: PlanUsageSnapshot | null;
+        };
+        if (data.usage) setPlanUsage(data.usage);
+        if (!res.ok || !data.ok) {
+          return {
+            ok: false,
+            remaining: data.remaining ?? 0,
+            usage: data.usage ?? planUsage,
+          };
+        }
+        return {
+          ok: true,
+          remaining: data.remaining ?? 0,
+          usage: data.usage ?? planUsage,
+        };
+      } catch {
+        return { ok: false, remaining: 0, usage: planUsage };
       }
-      setCredits(next);
     },
-    [authUser?.email]
+    [planUsage]
   );
 
   const topUpCredits = useCallback((amount = 50) => {
@@ -701,14 +689,7 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
         !opts?.skipCredit &&
         !hasUnlimitedCredits(authUser?.email)
       ) {
-        setCredits((c) => {
-          const next = Math.max(0, Math.round((c - result.cost) * 10) / 10);
-          if (next <= 0 && isPrivilegedAdminEmail(authUser?.email)) {
-            setMaxCredits((m) => Math.max(m, ADMIN_TEST_CREDITS));
-            return ADMIN_TEST_CREDITS;
-          }
-          return next;
-        });
+        setCredits((c) => Math.max(0, Math.round((c - result.cost) * 10) / 10));
       }
       setPortraits((prev) => ({ ...prev, [portraitId]: result.state }));
       setDailyRetouchCount((n) => n + 1);
@@ -750,6 +731,8 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
       openAuthModal,
       consumeCredit,
       applyServerCredits,
+      planUsage,
+      consumeDownloadQuota,
       topUpCredits,
       purchaseCreditPack,
       grantFreeCredits,
@@ -789,6 +772,8 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
       openAuthModal,
       consumeCredit,
       applyServerCredits,
+      planUsage,
+      consumeDownloadQuota,
       topUpCredits,
       purchaseCreditPack,
       grantFreeCredits,

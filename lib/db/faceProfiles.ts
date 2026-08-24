@@ -58,7 +58,6 @@ async function loadR2Manifest(userId: string): Promise<FaceProfileRecord[] | nul
         typeof p?.id === "string" &&
         typeof p?.name === "string" &&
         Array.isArray(p.photoUrls) &&
-        p.userId === userId &&
         p.photoUrls.length > 0
     );
   } catch {
@@ -106,19 +105,30 @@ async function uploadDataUrlToR2(
   return publicObjectUrl(config, key);
 }
 
+export type ListUserFaceOptions = {
+  allowEmptyR2Fallback?: boolean;
+  relaxOwnerFilter?: boolean;
+};
+
 export async function listUserFaceProfiles(
-  userId: string
+  userId: string,
+  options: ListUserFaceOptions = {}
 ): Promise<FaceProfileRecord[]> {
+  const mem = getDb().faceProfiles[userId] ?? [];
   if (isR2Configured()) {
     const fromR2 = await loadR2Manifest(userId);
     if (fromR2 !== null) {
+      if (fromR2.length === 0 && options.allowEmptyR2Fallback && mem.length > 0) {
+        return sortProfiles(mem);
+      }
+      const rekeyed = fromR2.map((p) => ({ ...p, userId }));
       await withDbLock((db) => {
-        db.faceProfiles[userId] = fromR2;
+        db.faceProfiles[userId] = rekeyed;
       });
-      return sortProfiles(fromR2);
+      return sortProfiles(rekeyed);
     }
   }
-  return sortProfiles(getDb().faceProfiles[userId] ?? []);
+  return sortProfiles(mem);
 }
 
 export async function upsertUserFaceProfile(

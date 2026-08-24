@@ -1,6 +1,7 @@
 import type { Translations } from "../types";
 import en from "./en";
 import { canvasStudioEs } from "../canvasStudio";
+import { pricingPeriodEs } from "../pricingPeriod";
 
 const es: Translations = {
   ...en,
@@ -94,8 +95,7 @@ const es: Translations = {
   },
   pricing: {
     ...en.pricing,
-    title: "Planes de suscripción",
-    subtitle: "Elige el plan que necesitas y disfruta de un estudio de IA premium",
+    ...pricingPeriodEs,
     annualBilling: "Pase anual prepago (pago único)",
     monthlyBilling: "💳 Pago mensual",
     annualSubscription: "Pase anual prepago",
@@ -111,8 +111,6 @@ const es: Translations = {
     permanentBenefit: "Almacenamiento permanente ilimitado",
     watermarkBenefit: "Sin marca de agua",
     annualPrepaid: "${total} por adelantado · sin renovación automática",
-    upgradeNotice:
-      "Al actualizar solo pagas la diferencia prorrateada, conservas todos los créditos y el ciclo se reinicia desde el pago.",
   },
 };
 export default es;

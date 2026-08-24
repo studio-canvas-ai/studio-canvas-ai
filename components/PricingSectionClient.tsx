@@ -55,7 +55,7 @@ function PlanCard({
       <div className="absolute left-1/2 top-0 z-10 flex w-max max-w-[calc(100%-0.75rem)] -translate-x-1/2 -translate-y-1/2 items-center justify-center gap-1">
         <span
           className={`inline-flex items-center rounded-full border font-semibold tracking-wide text-white shadow-md backdrop-blur-md ${
-            compact ? "px-2.5 py-0.5 text-[11px]" : "px-4 py-1.5 text-sm"
+            compact ? "px-2.5 py-0.5 text-[11px] sm:px-3 sm:text-xs" : "px-4 py-1.5 text-sm"
           } ${
             isPro
               ? "border-fuchsia-300/45 bg-gradient-to-r from-violet-600/90 via-fuchsia-600/80 to-emerald-600/85 ring-1 ring-white/20"
@@ -68,7 +68,7 @@ function PlanCard({
           <span
             className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-gradient-to-r from-glow-purple to-glow-emerald font-semibold text-white shadow-glow-sm ring-1 ring-white/25 ${
               compact
-                ? "px-2 py-0.5 text-[10px]"
+                ? "px-2 py-0.5 text-[10px] sm:text-[11px]"
                 : "-rotate-2 px-3.5 py-1 text-xs"
             }`}
           >
@@ -84,7 +84,7 @@ function PlanCard({
       <div
         className={`flex min-h-0 flex-1 flex-col rounded-2xl text-center ${
           compact
-            ? "px-3 pb-3 pt-5 sm:px-4 sm:pb-3.5 sm:pt-5"
+            ? "px-3.5 pb-3.5 pt-6 sm:px-5 sm:pb-4 sm:pt-6"
             : "px-5 pb-5 pt-7 sm:px-8 sm:pb-8 sm:pt-9"
         } ${
           isPro
@@ -94,10 +94,10 @@ function PlanCard({
               : "bg-white/[0.07] backdrop-blur-xl"
         }`}
       >
-        <div className={compact ? "mb-1.5" : "mb-5"}>
+        <div className={compact ? "mb-2" : "mb-5"}>
           <h3
             className={`font-semibold text-white ${
-              compact ? "text-sm sm:text-base" : "text-2xl sm:text-[1.65rem]"
+              compact ? "text-base sm:text-lg" : "text-2xl sm:text-[1.65rem]"
             }`}
             itemProp="name"
           >
@@ -107,7 +107,7 @@ function PlanCard({
         </div>
 
         <div
-          className={compact ? "mb-2" : "mb-7"}
+          className={compact ? "mb-3" : "mb-7"}
           itemProp="offers"
           itemScope
           itemType="https://schema.org/Offer"
@@ -117,7 +117,7 @@ function PlanCard({
           <div className="flex items-baseline justify-center gap-1">
             <span
               className={`font-bold tracking-tight ${
-                compact ? "text-2xl sm:text-[1.75rem]" : "text-5xl"
+                compact ? "text-3xl sm:text-[2.15rem]" : "text-5xl"
               } ${
                 isPro
                   ? "bg-gradient-to-r from-violet-200 via-white to-emerald-200 bg-clip-text text-transparent"
@@ -128,35 +128,45 @@ function PlanCard({
             </span>
             <span
               className={`whitespace-nowrap text-white/50 ${
-                compact ? "text-[11px] sm:text-xs" : "text-base"
+                compact ? "text-xs sm:text-sm" : "text-base"
               }`}
             >
               {product.perMonthLabel}
             </span>
           </div>
-          {product.annualPrepaid && !compact && (
-            <p className="mt-2 text-sm text-white/45">{product.annualPrepaid}</p>
+          {product.annualPrepaid && (
+            <p
+              className={`mt-1.5 text-white/45 ${
+                compact ? "text-[10px] leading-snug sm:text-[11px]" : "mt-2 text-sm"
+              }`}
+            >
+              {product.annualPrepaid}
+            </p>
           )}
-          {!compact && (
-            <p className="mt-1.5 text-xs text-white/40">{product.vatNotice}</p>
-          )}
+          <p
+            className={`text-white/40 ${
+              compact ? "mt-1 text-[10px] leading-snug sm:text-[11px]" : "mt-1.5 text-xs"
+            }`}
+          >
+            {product.vatNotice}
+          </p>
         </div>
 
         <ul
-          className={`min-h-0 flex-1 ${
-            compact ? "mb-2.5 space-y-1" : "mb-8 space-y-3.5"
+          className={`min-h-0 flex-1 text-left ${
+            compact ? "mb-3 space-y-1.5" : "mb-8 space-y-3.5"
           }`}
         >
           {product.features.map((feature) => (
             <li
               key={feature}
-              className={`flex items-center justify-center text-center ${
-                compact ? "gap-1.5" : "gap-2.5"
+              className={`flex items-start text-left ${
+                compact ? "gap-2" : "gap-2.5"
               }`}
             >
               <div
-                className={`flex shrink-0 items-center justify-center rounded-full ${
-                  compact ? "h-3.5 w-3.5" : "h-5 w-5"
+                className={`mt-0.5 flex shrink-0 items-center justify-center rounded-full ${
+                  compact ? "h-4 w-4" : "h-5 w-5"
                 } ${
                   isPro
                     ? "bg-gradient-to-br from-violet-400/35 to-emerald-400/30"
@@ -166,7 +176,7 @@ function PlanCard({
                 }`}
               >
                 <Check
-                  className={`${compact ? "h-2 w-2" : "h-3 w-3"} ${
+                  className={`${compact ? "h-2.5 w-2.5" : "h-3 w-3"} ${
                     isPro
                       ? "text-emerald-300"
                       : highlighted
@@ -176,8 +186,8 @@ function PlanCard({
                 />
               </div>
               <span
-                className={`leading-tight text-slate-100 ${
-                  compact ? "text-[11px] sm:text-xs" : "text-[15px] leading-snug"
+                className={`text-left leading-tight text-slate-100 ${
+                  compact ? "text-xs leading-snug sm:text-[13px]" : "text-[15px] leading-snug"
                 }`}
               >
                 {feature}
@@ -190,7 +200,7 @@ function PlanCard({
           type="button"
           onClick={() => onSubscribe(product.planId, product.interval)}
           className={`btn-primary mt-auto inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-xl text-center font-semibold transition-all duration-300 ${
-            compact ? "py-2 text-sm" : "py-3.5 text-base"
+            compact ? "py-2.5 text-sm" : "py-3.5 text-base"
           } ${
             isPro
               ? "shadow-[0_4px_24px_rgba(167,139,250,0.42)] hover:shadow-[0_6px_32px_rgba(167,139,250,0.52)]"
@@ -252,7 +262,7 @@ export default function PricingSectionClient({
 
   const isPage = layout === "page";
   const gridClass = isPage
-    ? "grid items-stretch gap-3 pt-3 sm:gap-4 sm:pt-3.5 lg:grid-cols-3"
+    ? "grid min-h-0 flex-1 items-stretch gap-4 pt-3 sm:gap-5 lg:grid-cols-3"
     : "grid gap-6 pt-7 lg:grid-cols-3";
 
   if (!isReady) {
@@ -271,8 +281,8 @@ export default function PricingSectionClient({
       key={locale}
       className={
         isPage
-          ? // Match fixed navbar heights exactly (h-12 / h-14 / h-16) — no extra air.
-            "relative px-4 pb-2 pt-12 sm:px-6 sm:pb-3 md:pt-14 lg:px-8 lg:pt-16 lg:pb-3 xl:px-10"
+          ? // Fill the viewport under the fixed navbar so three cards read at a glance.
+            "relative flex min-h-svh flex-col px-4 pb-3 pt-12 sm:px-6 sm:pb-4 md:pt-14 lg:px-8 lg:pt-16 lg:pb-4 xl:px-10"
           : "section-padding relative"
       }
       aria-labelledby="pricing-title"
@@ -282,7 +292,11 @@ export default function PricingSectionClient({
     >
       <div className="ambient-glow bottom-0 left-1/2 h-96 w-96 -translate-x-1/2 bg-glow-purple/10" />
 
-      <div className={`relative mx-auto max-w-6xl ${isPage ? "pt-0" : "pt-3 sm:pt-4"}`}>
+      <div
+        className={`relative mx-auto flex w-full max-w-6xl flex-1 flex-col ${
+          isPage ? "pt-0" : "pt-3 sm:pt-4"
+        }`}
+      >
         {staticHeading}
 
         <div className={`text-center ${isPage ? "mb-2.5 sm:mb-3" : "mb-6"}`}>
@@ -386,7 +400,7 @@ export default function PricingSectionClient({
         </div>
 
         <div
-          className={`space-y-1.5 text-center ${isPage ? "mt-2 sm:mt-2.5" : "mt-8 space-y-2"}`}
+          className={`shrink-0 space-y-1.5 text-center ${isPage ? "mt-3 sm:mt-4" : "mt-8 space-y-2"}`}
         >
           {interval === "monthly" ? (
             <>
@@ -433,7 +447,11 @@ export default function PricingSectionClient({
           )}
         </div>
         {!hideCreditPacks && (
-          <div className="mt-14 rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-center sm:p-8">
+          <div
+            className={`rounded-2xl border border-white/10 bg-white/[0.03] text-center ${
+              isPage ? "mt-6 p-4 sm:p-5" : "mt-14 p-6 sm:p-8"
+            }`}
+          >
             <h3 className="text-lg font-semibold text-white">{t.pricing.addonTitle}</h3>
             <p className="mx-auto mt-2 max-w-lg text-sm text-white/45">
               {t.pricing.addonSubtitle}

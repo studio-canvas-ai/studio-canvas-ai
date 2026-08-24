@@ -339,3 +339,64 @@ async function mapAdminRows(rows: ProfileRow[]): Promise<AdminRegisteredUser[]> 
   mapped.sort((a, b) => b.createdAt - a.createdAt);
   return mapped;
 }
+
+/** Lookup one member by email, Supabase UUID, or app_user_id. */
+export async function findRegisteredProfileForAdmin(
+  query: string
+): Promise<AdminRegisteredUser | null> {
+  const q = query.trim();
+  if (!q) return null;
+  const admin = createSupabaseServiceClient();
+  if (!admin) {
+    throw new Error(
+      "SUPABASE_SERVICE_ROLE_KEY is required to look up registered users"
+    );
+  }
+
+  const tryRows = async (rows: ProfileRow[] | null | undefined) => {
+    if (!rows?.length) return null;
+    const mapped = await mapAdminRows(rows);
+    return mapped[0] ?? null;
+  };
+
+  if (q.includes("@")) {
+    const { data } = await admin
+      .from("profiles")
+      .select(PROFILE_ADMIN_SELECT)
+      .ilike("email", q)
+      .limit(3);
+    const hit = await tryRows(data as ProfileRow[] | null);
+    if (hit) return hit;
+  }
+
+  if (/^[0-9a-f-]{36}$/i.test(q)) {
+    const { data } = await admin
+      .from("profiles")
+      .select(PROFILE_ADMIN_SELECT)
+      .eq("id", q)
+      .limit(1);
+    const hit = await tryRows(data as ProfileRow[] | null);
+    if (hit) return hit;
+  }
+
+  const { data: byApp } = await admin
+    .from("profiles")
+    .select(PROFILE_ADMIN_SELECT)
+    .eq("app_user_id", q)
+    .limit(1);
+  const byAppHit = await tryRows(byApp as ProfileRow[] | null);
+  if (byAppHit) return byAppHit;
+
+  const all = await listRegisteredProfilesForAdmin();
+  const lower = q.toLowerCase();
+  return (
+    all.find(
+      (u) =>
+        u.email?.toLowerCase() === lower ||
+        u.email?.toLowerCase().includes(lower) ||
+        u.id === q ||
+        u.supabaseUserId === q ||
+        u.appUserId === q
+    ) ?? null
+  );
+}

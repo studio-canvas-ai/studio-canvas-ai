@@ -23,6 +23,7 @@ import {
   setActiveTrainedVaultId,
   type PhotoVaultItem,
 } from "@/lib/photoVaultStorage";
+import { recoverStudioStores } from "@/lib/studioStore/clientRecovery";
 
 export type FaceVaultPanelProps = {
   onTrainedReady: (item: PhotoVaultItem) => void | Promise<void>;
@@ -157,6 +158,12 @@ export default function FaceVaultPanel({
   const refreshTrained = () => setTrained(listTrainedVault());
 
   useEffect(() => {
+    void recoverStudioStores().then(() => {
+      refreshUploads();
+      refreshTrained();
+      const activeId = getActiveTrainedVaultId();
+      if (activeId) setSelectedTrainedId(activeId);
+    });
     refreshUploads();
     refreshTrained();
     const activeId = getActiveTrainedVaultId();

@@ -5,12 +5,13 @@ import {
   authCsrfCookieName,
   authSessionCookieName,
 } from "@/lib/authCookies";
+import { isAuthCookieName } from "@/lib/auth/clearAuthStorage";
 
 export const runtime = "nodejs";
 
 /**
- * Clears Auth.js, Supabase, locale, and other host cookies seen on the request.
- * Pair with client-side Supabase signOut() + storage purge.
+ * Clears Auth.js + Supabase session cookies only.
+ * Must not expire locale / wallet / studio-unrelated cookies wholesale.
  */
 export async function POST(request: NextRequest) {
   const response = NextResponse.json({ ok: true });
@@ -23,6 +24,7 @@ export async function POST(request: NextRequest) {
   });
 
   for (const cookie of request.cookies.getAll()) {
+    if (!isAuthCookieName(cookie.name)) continue;
     response.cookies.set(cookie.name, "", {
       ...cleared,
       httpOnly: false,

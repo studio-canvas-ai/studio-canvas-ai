@@ -12,6 +12,7 @@ const PUBLIC_PATHS = [
   "/template-studio",
   "/pricing",
   "/profile",
+  "/mypage",
   "/support",
   "/terms",
   "/privacy",

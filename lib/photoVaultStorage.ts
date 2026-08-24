@@ -4,6 +4,9 @@
  */
 
 import { loadJson, saveJson } from "@/lib/storage";
+import { idbGetVault, idbPutVault } from "@/lib/studioStore/idbCache";
+import { mergeVaultItems } from "@/lib/studioStore/merge";
+import { scheduleStudioStoreSync } from "@/lib/studioStore/syncScheduler";
 
 export const PHOTO_UPLOAD_VAULT_KEY = "studio_canvas_upload_vault";
 export const PHOTO_TRAINED_VAULT_KEY = "studio_canvas_trained_vault";
@@ -66,17 +69,67 @@ function writeVault(
   items: PhotoVaultItem[],
   eventName: string
 ): void {
-  saveJson(key, items.slice(0, PHOTO_VAULT_MAX));
+  const next = items.slice(0, PHOTO_VAULT_MAX);
+  saveJson(key, next);
+  const kind = key === PHOTO_TRAINED_VAULT_KEY ? "trained_vault" : "upload_vault";
+  void idbPutVault(
+    kind,
+    next,
+    kind === "trained_vault"
+      ? { activeTrainedId: getActiveTrainedVaultId() }
+      : undefined
+  );
+  scheduleStudioStoreSync();
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event(eventName));
   }
 }
 
+let vaultsHydratedFromIdb = false;
+function hydrateVaultsFromIdbOnce(): void {
+  if (vaultsHydratedFromIdb || typeof window === "undefined") return;
+  vaultsHydratedFromIdb = true;
+  void (async () => {
+    try {
+      const [up, tr] = await Promise.all([
+        idbGetVault("upload_vault"),
+        idbGetVault("trained_vault"),
+      ]);
+      const mergedUp = mergeVaultItems(readVault(PHOTO_UPLOAD_VAULT_KEY), up.items);
+      const mergedTr = mergeVaultItems(
+        readVault(PHOTO_TRAINED_VAULT_KEY),
+        tr.items
+      );
+      if (mergedUp.length > readVault(PHOTO_UPLOAD_VAULT_KEY).length) {
+        writeVault(
+          PHOTO_UPLOAD_VAULT_KEY,
+          mergedUp,
+          PHOTO_UPLOAD_VAULT_CHANGED_EVENT
+        );
+      }
+      if (mergedTr.length > readVault(PHOTO_TRAINED_VAULT_KEY).length) {
+        writeVault(
+          PHOTO_TRAINED_VAULT_KEY,
+          mergedTr,
+          PHOTO_TRAINED_VAULT_CHANGED_EVENT
+        );
+      }
+      if (tr.activeTrainedId && !getActiveTrainedVaultId()) {
+        setActiveTrainedVaultId(tr.activeTrainedId);
+      }
+    } catch (err) {
+      console.warn("[photoVault] idb hydrate failed", err);
+    }
+  })();
+}
+
 export function listUploadVault(): PhotoVaultItem[] {
+  hydrateVaultsFromIdbOnce();
   return readVault(PHOTO_UPLOAD_VAULT_KEY);
 }
 
 export function listTrainedVault(): PhotoVaultItem[] {
+  hydrateVaultsFromIdbOnce();
   return readVault(PHOTO_TRAINED_VAULT_KEY);
 }
 

@@ -1,10 +1,18 @@
 /**
- * Recent project drawer — FIFO max 10, browser localStorage (shared across
- * Template Studio + Print Smart Form).
+ * Recent project drawer — FIFO max 10.
+ * Dual cache: localStorage (index + shrunk JSON) + IndexedDB (full payloads).
+ * Cloud durable copy lives in Supabase / R2 via studioStore sync.
  */
 
 import type { StudioCanvasProjectV1 } from "@/lib/canvas/projectFile";
 import { parseStudioProject } from "@/lib/canvas/projectFile";
+import { idbGetRecent, idbPutRecent } from "@/lib/studioStore/idbCache";
+import { mergeRecentEntries } from "@/lib/studioStore/merge";
+import { scheduleStudioStoreSync } from "@/lib/studioStore/syncScheduler";
+import type { RecentDrawerEntry } from "@/lib/studioStore/types";
+
+export type { RecentDrawerEntry };
+export type RecentProjectMeta = import("@/lib/studioStore/types").RecentProjectMeta;
 
 export const RECENT_PROJECTS_MAX = 10;
 export type RecentProjectNamespace = "shared" | "photo";
@@ -19,20 +27,6 @@ const PHOTO_DRAWER_KEY = "sca_photo_recent_projects_drawer_v1";
 const LEGACY_META_KEY = "sca_recent_project_ids_v1";
 const LEGACY_DB_NAME = "sca_recent_projects_v1";
 const LEGACY_STORE = "projects";
-
-export type RecentProjectMeta = {
-  id: string;
-  savedAt: number;
-  label: string;
-  mode: "utility" | "agent";
-  thumbSrc: string | null;
-};
-
-type RecentDrawerEntry = {
-  id: string;
-  meta: RecentProjectMeta;
-  project: StudioCanvasProjectV1;
-};
 
 function drawerKey(namespace: RecentProjectNamespace): string {
   return namespace === "photo" ? PHOTO_DRAWER_KEY : SHARED_DRAWER_KEY;
@@ -184,6 +178,9 @@ function writeDrawer(
     }));
     localStorage.setItem(drawerKey(namespace), JSON.stringify(shrunk));
   }
+  const kind = namespace === "photo" ? "recent_photo" : "recent_shared";
+  void idbPutRecent(kind, trimmed);
+  scheduleStudioStoreSync();
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event(RECENT_PROJECTS_CHANGED_EVENT));
   }
@@ -195,7 +192,8 @@ async function migrateLegacyIfNeeded(
 ): Promise<void> {
   if (typeof localStorage === "undefined") return;
   if (namespace !== "shared") return;
-  if (localStorage.getItem(drawerKey(namespace))) return;
+  // Empty `[]` used to skip migration because getItem("[]") is truthy.
+  if (readDrawer(namespace).length > 0) return;
   if (typeof indexedDB === "undefined") return;
 
   const idsRaw = localStorage.getItem(LEGACY_META_KEY);
@@ -279,8 +277,18 @@ function ensureMigrated(
     namespace === "shared"
       ? (migratePromise ??= migrateLegacyIfNeeded(namespace))
       : migrateLegacyIfNeeded(namespace);
-  migratePromises.set(namespace, next);
-  return next;
+  const withIdb = next.then(async () => {
+    const kind = namespace === "photo" ? "recent_photo" : "recent_shared";
+    const fromIdb = await idbGetRecent(kind);
+    if (!fromIdb.length) return;
+    const merged = mergeRecentEntries(fromIdb, readDrawer(namespace));
+    const current = readDrawer(namespace);
+    if (merged.length > current.length) {
+      writeDrawer(merged, namespace);
+    }
+  });
+  migratePromises.set(namespace, withIdb);
+  return withIdb;
 }
 
 export async function listRecentProjects(
@@ -296,9 +304,18 @@ export async function getRecentProject(
 ): Promise<StudioCanvasProjectV1 | null> {
   await ensureMigrated(namespace);
   const hit = readDrawer(namespace).find((e) => e.id === id);
-  if (!hit) return null;
+  if (hit) {
+    try {
+      return parseStudioProject(hit.project);
+    } catch {
+      /* fall through to IDB */
+    }
+  }
+  const kind = namespace === "photo" ? "recent_photo" : "recent_shared";
+  const fromIdb = (await idbGetRecent(kind)).find((e) => e.id === id);
+  if (!fromIdb) return null;
   try {
-    return parseStudioProject(hit.project);
+    return parseStudioProject(fromIdb.project);
   } catch {
     return null;
   }
@@ -313,8 +330,8 @@ export async function pushRecentProject(
   const id = `rp_${Date.now().toString(36)}_${Math.random()
     .toString(36)
     .slice(2, 8)}`;
-  const frozen = shrinkProjectForStorage(
-    parseStudioProject(JSON.parse(JSON.stringify(project)) as StudioCanvasProjectV1)
+  const frozen = parseStudioProject(
+    JSON.parse(JSON.stringify(project)) as StudioCanvasProjectV1
   );
   const meta: RecentProjectMeta = {
     id,
@@ -330,6 +347,14 @@ export async function pushRecentProject(
   ].slice(0, RECENT_PROJECTS_MAX);
   writeDrawer(next, namespace);
   return meta;
+}
+
+/** Replace the drawer (recovery / cloud hydrate). */
+export function replaceRecentDrawer(
+  entries: RecentDrawerEntry[],
+  namespace: RecentProjectNamespace = "shared"
+): void {
+  writeDrawer(entries.slice(0, RECENT_PROJECTS_MAX), namespace);
 }
 
 export async function removeRecentProject(

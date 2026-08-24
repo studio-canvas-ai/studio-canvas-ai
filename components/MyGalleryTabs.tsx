@@ -19,7 +19,6 @@ import {
 import { fetchOriginalAsset } from "@/lib/galleryUpload";
 import {
   downloadGalleryWorkLocally,
-  previewGalleryHdCreditPolicy,
   type GalleryDownloadQuality,
 } from "@/lib/galleryWorkDownload";
 import { KAKAO_REGISTERED_ORIGIN, shareImageViaKakao } from "@/lib/kakaoShare";
@@ -32,6 +31,7 @@ import {
 } from "@/lib/retentionPolicy";
 import { clearResultSession } from "@/lib/resultSession";
 import { isUnlimitedAccountEmail } from "@/lib/unlimitedAccount";
+import { getPlanUsageLimits } from "@/lib/planQuotas";
 
 type TabId = "works" | "models" | "photos";
 
@@ -45,11 +45,26 @@ export default function MyGalleryTabs() {
   const { t } = useI18n();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { planId, isFreePlan, authUser } = useCredits();
+  const {
+    planId,
+    billingInterval,
+    isFreePlan,
+    authUser,
+    planUsage,
+    consumeDownloadQuota,
+  } = useCredits();
   const { confirm, showToast } = useFeedback();
   const [tab, setTab] = useState<TabId>(() => parseTab(searchParams.get("tab")));
   const [works, setWorks] = useState<GalleryHistoryItem[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  const limits = useMemo(
+    () => getPlanUsageLimits(planId, billingInterval),
+    [planId, billingInterval]
+  );
+  const fhdRemaining = planUsage?.fhdRemaining ?? limits.fhd;
+  const uhd4kRemaining = planUsage?.uhd4kRemaining ?? limits.uhd4k;
+  const galleryLimit = planUsage?.galleryLimit ?? limits.gallery;
 
   const canAccessAiModels =
     !isFreePlan || isUnlimitedAccountEmail(authUser?.email);
@@ -123,10 +138,18 @@ export default function MyGalleryTabs() {
     item: GalleryHistoryItem,
     quality: GalleryDownloadQuality
   ) => {
+    const kind = quality === "high" ? "uhd4k" : "fhd";
+    const remaining = kind === "uhd4k" ? uhd4kRemaining : fhdRemaining;
+    if (remaining < 1) {
+      showToast(t.gallery.worksDownloadQuotaEmpty, "error");
+      return;
+    }
     setBusyId(item.id);
     try {
-      if (quality === "high") {
-        previewGalleryHdCreditPolicy();
+      const spent = await consumeDownloadQuota(kind);
+      if (!spent.ok) {
+        showToast(t.gallery.worksDownloadQuotaEmpty, "error");
+        return;
       }
       await downloadGalleryWorkLocally(item, quality);
       showToast(
@@ -268,6 +291,11 @@ export default function MyGalleryTabs() {
 
       {tab === "works" && (
         <div className="space-y-4">
+          <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-medium text-white/85">
+            {t.gallery.worksGalleryQuota
+              .replace("{used}", String(works.length))
+              .replace("{limit}", String(galleryLimit))}
+          </div>
           {showActiveBanner && (
             <div className="rounded-xl border border-glow-emerald/30 bg-glow-emerald/10 px-4 py-3 text-sm text-emerald-100/90">
               {t.gallery.retentionActiveBanner}
@@ -373,21 +401,31 @@ export default function MyGalleryTabs() {
                       <div className="grid w-full grid-cols-2 gap-1.5">
                         <button
                           type="button"
-                          disabled={busyId === item.id}
+                          disabled={busyId === item.id || fhdRemaining < 1}
                           onClick={() => void handleDownload(item, "standard")}
-                          className="inline-flex h-11 min-w-0 items-center justify-center gap-1 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-500 px-1.5 text-center text-[11px] font-semibold leading-tight text-white disabled:opacity-50"
+                          className="inline-flex h-11 min-w-0 items-center justify-center gap-1 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-500 px-1.5 text-center text-[10px] font-semibold leading-tight text-white disabled:opacity-50 sm:text-[11px]"
                         >
                           <Download className="h-3.5 w-3.5 shrink-0" />
-                          <span className="min-w-0">{t.gallery.worksDownloadStandard}</span>
+                          <span className="min-w-0 [word-break:keep-all]">
+                            {t.gallery.worksDownloadStandardCount.replace(
+                              "{n}",
+                              String(fhdRemaining)
+                            )}
+                          </span>
                         </button>
                         <button
                           type="button"
-                          disabled={busyId === item.id}
+                          disabled={busyId === item.id || uhd4kRemaining < 1}
                           onClick={() => void handleDownload(item, "high")}
-                          className="inline-flex h-11 min-w-0 items-center justify-center gap-1 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-500 px-1.5 text-center text-[11px] font-semibold leading-tight text-white disabled:opacity-50"
+                          className="inline-flex h-11 min-w-0 items-center justify-center gap-1 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-500 px-1.5 text-center text-[10px] font-semibold leading-tight text-white disabled:opacity-50 sm:text-[11px]"
                         >
                           <Download className="h-3.5 w-3.5 shrink-0" />
-                          <span className="min-w-0">{t.gallery.worksDownloadHigh}</span>
+                          <span className="min-w-0 [word-break:keep-all]">
+                            {t.gallery.worksDownloadHighCount.replace(
+                              "{n}",
+                              String(uhd4kRemaining)
+                            )}
+                          </span>
                         </button>
                       </div>
                     </div>
