@@ -678,11 +678,9 @@ export function layerZone(layer: TextLayer): SemanticZone {
 function makeZoneLayer(pageIndex: number, zone: SemanticZone): TextLayer {
   return createLayer({
     ...SEMANTIC_ZONE_STYLES[zone],
-    // Stable ids so local editor rows and parent preview stay in sync.
-    id: `page-${pageIndex}-zone-${zone}`,
+    id: `page-${pageIndex}-zone-${zone}-${Math.random().toString(36).slice(2, 7)}`,
     text: "",
-    // White reads on dark AI backgrounds; contrast sampler may refine later.
-    color: "white",
+    color: "inkBlack",
     maxWidth: 0.88,
     lineHeight: 1.25,
     letterSpacing: 0,
@@ -985,55 +983,6 @@ export function sanitizeTextLayersByPage(raw: unknown): TextLayer[][] | undefine
     pages.push(layers);
   }
   return pages.length ? pages : undefined;
-}
-
-/** True when at least one layer has non-whitespace text (not placeholder-only). */
-export function pageLayersHaveVisibleText(
-  layers: TextLayer[] | undefined
-): boolean {
-  return Boolean(layers?.some((l) => Boolean(l.text?.trim())));
-}
-
-/**
- * After .sca / recent restore — merge saved layers with inputs (same as export path)
- * so preview and Screen 24 editor show text immediately.
- */
-export function mergeRestoredTextLayersByPage(opts: {
-  pages: TextLayer[][] | undefined;
-  inputs: SmartInputValues;
-  pageCount: PrintPageCount | number;
-  overlayLayers?: TextLayer[];
-  overlayPageIndex?: number;
-}): TextLayer[][] {
-  const pageCount = Math.max(1, opts.pageCount || 1);
-  const slots = editorSlotCount(pageCount);
-  let base = resizeIndependentPages(opts.pages, slots);
-  if (
-    opts.overlayLayers?.length &&
-    opts.overlayPageIndex != null &&
-    opts.overlayPageIndex >= 0
-  ) {
-    base = base.map((page, i) =>
-      i === opts.overlayPageIndex ? opts.overlayLayers! : page
-    );
-  }
-  // Keep pages that already have real text (geometry + copy). Only fill
-  // empty/placeholder pages from inputs — never re-export over user data.
-  return base.map((page, pageIndex) => {
-    if (pageLayersHaveVisibleText(page)) {
-      return page.map((l) => ({
-        ...l,
-        fontSize: Math.max(10, Math.round(l.fontSize || PAGE_TEXT_SIZE)),
-      }));
-    }
-    if (pageIndex >= pageCount) return page;
-    return resolvePageTextLayersForExport(
-      base,
-      pageIndex,
-      opts.inputs,
-      pageCount
-    );
-  });
 }
 
 /**

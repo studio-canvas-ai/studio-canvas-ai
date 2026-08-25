@@ -269,13 +269,8 @@ export default function PreviewDecoOverlay({
     id: string;
     rotation: number;
   } | null>(null);
-  const [isMounted, setIsMounted] = useState(false);
 
   layersRef.current = layers;
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
 
   const measureStage = () => {
     const rect = hostRef.current?.getBoundingClientRect();
@@ -468,7 +463,6 @@ export default function PreviewDecoOverlay({
   }, [pointerActive, commitLayer]);
 
   if (!layers.length) return null;
-  if (interactive && !isMounted) return null;
 
   return (
     <div

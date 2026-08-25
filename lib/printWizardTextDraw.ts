@@ -142,18 +142,6 @@ export function drawPrintLayerInBox(
     }
   }
 
-  // Soft halo so inkBlack / light fills stay readable on busy AI backgrounds.
-  const fillLum =
-    fill.startsWith("#") && fill.length >= 7
-      ? (parseInt(fill.slice(1, 3), 16) * 0.299 +
-          parseInt(fill.slice(3, 5), 16) * 0.587 +
-          parseInt(fill.slice(5, 7), 16) * 0.114) /
-        255
-      : 0.2;
-  ctx.shadowBlur = Math.max(3, fontSize * 0.12);
-  ctx.shadowColor =
-    fillLum < 0.45 ? "rgba(255,255,255,0.75)" : "rgba(0,0,0,0.55)";
-
   ctx.fillStyle = fill;
 
   const innerW = Math.max(8, boxW - padX * 2);

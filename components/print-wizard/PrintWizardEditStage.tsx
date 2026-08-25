@@ -16,7 +16,6 @@ import {
 import {
   reconcileLayerTypographyBox,
   referencePrintStageSize,
-  resolvePageTextLayersForExport,
 } from "@/lib/printWizardTextLayers";
 import { toDisplayImageSrc } from "@/lib/resultSession";
 import { pageBackgroundUrl } from "@/lib/printWizardBg";
@@ -156,12 +155,7 @@ export default function PrintWizardEditStage({
     studioPath,
     pendingProjectKey,
     recentNamespace,
-    overlayLayers: resolvePageTextLayersForExport(
-      textLayersByPage,
-      pageIndex,
-      state.inputs,
-      state.pageCount
-    ),
+    overlayLayers,
     onApplyRecentProject: onOpenRecentProject,
     resolveExportImage: async (quality) => {
       const exportState: PrintWizardState = {
@@ -189,13 +183,15 @@ export default function PrintWizardEditStage({
         quality,
       });
     },
-    buildLookbookSnapshot: () =>
-      capturePhotoLookbookSnapshot({
-        ...state,
-        textLayersByPage,
-        photoLayersByPage: photoLayersByPage ?? state.photoLayersByPage,
-        decoLayersByPage: decoLayersByPage ?? state.decoLayersByPage,
-      }),
+    buildLookbookSnapshot: isPhotoLookbook
+      ? () =>
+          capturePhotoLookbookSnapshot({
+            ...state,
+            textLayersByPage,
+            photoLayersByPage: photoLayersByPage ?? state.photoLayersByPage,
+            decoLayersByPage: decoLayersByPage ?? state.decoLayersByPage,
+          })
+      : undefined,
   });
 
   return (
@@ -224,9 +220,7 @@ export default function PrintWizardEditStage({
             organizerPreview={state.inputs.organizer}
             programsPreview={state.inputs.programs}
             overlayLayersByPage={textLayersByPage}
-            onOverlayLayersChange={(pageIdx, layers) =>
-              onTextLayersChange(pageIdx, layers, { applyLayout: false })
-            }
+            onOverlayLayersChange={onTextLayersChange}
             photoLayersByPage={photoLayersByPage}
             onPhotoLayersChange={onPhotoLayersChange}
             activePhotoLayerId={activePhotoLayerId}

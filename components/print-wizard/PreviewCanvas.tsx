@@ -30,7 +30,6 @@ import {
   normalizeBgPan,
   pageBackgroundUrl,
 } from "@/lib/printWizardBg";
-import { pageLayersHaveVisibleText } from "@/lib/printWizardTextLayers";
 import {
   resolvePrintAspect,
   type PrintBackgroundPan,
@@ -265,11 +264,6 @@ export default function PreviewCanvas({
   const [floatPos, setFloatPos] = useState({ x: EDGE_GAP, y: 72 });
   const [dragging, setDragging] = useState(false);
   const [bgPanning, setBgPanning] = useState(false);
-  const [isMounted, setIsMounted] = useState(false);
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
 
   // Seed canvas meta so Step-2 uploads land at print aspect before studio opens.
   useEffect(() => {
@@ -850,7 +844,7 @@ export default function PreviewCanvas({
                   ) : null}
 
                   {/* Form-to-Design: draggable text boxes over pure visual bg. */}
-                  {pageLayersHaveVisibleText(overlayLayersByPage?.[index]) &&
+                  {(overlayLayersByPage?.[index]?.length ?? 0) > 0 &&
                   onOverlayLayersChange ? (
                     <div data-text-overlay className="pointer-events-none absolute inset-0 z-[2] overflow-visible">
                       <PreviewTextOverlay
@@ -1005,7 +999,7 @@ export default function PreviewCanvas({
         </div>
       </div>
 
-      {lightbox && isMounted
+      {lightbox && typeof document !== "undefined"
         ? createPortal(
             <div
               data-preview-lightbox-root
@@ -1138,9 +1132,8 @@ export default function PreviewCanvas({
                     }}
                   />
                 ) : null}
-                {pageLayersHaveVisibleText(
-                  overlayLayersByPage?.[lightbox.pageNum - 1]
-                ) && onOverlayLayersChange ? (
+                {(overlayLayersByPage?.[lightbox.pageNum - 1]?.length ?? 0) >
+                  0 && onOverlayLayersChange ? (
                   <div
                     data-text-overlay
                     className="pointer-events-none absolute inset-0 z-[2] overflow-visible"

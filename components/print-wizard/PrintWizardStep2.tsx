@@ -61,9 +61,6 @@ import {
   applySemanticPageLayout,
   editorSlotCount,
   EDITOR_PAGE_SLOTS,
-  ensurePageZoneLayers,
-  layersToInputPatch,
-  mergeRestoredTextLayersByPage,
   patchGlobalInputsFromPage,
   referencePrintStageSize,
   removeTextLayer,
@@ -189,9 +186,6 @@ export default function PrintWizardStep2({
   /** After recent-file restore, skip one-shot session remount auto-layout. */
   const skipAutoLayoutOnceRef = useRef(false);
 
-  /** True once session hydrate finished — blocks remount/layout from wiping user data. */
-  const sessionHydratedRef = useRef(false);
-
   const textLayersByPage = useMemo(() => {
     return resizeIndependentPages(
       state.textLayersByPage,
@@ -216,44 +210,14 @@ export default function PrintWizardStep2({
   const editorPageLayers = textLayersByPage[editorPageIndex] ?? [];
 
   useEffect(() => {
-    // Recent/.sca restore already wrote state — do not re-seed or force step 1.
+    const saved = readSession();
     if (skipAutoLayoutOnceRef.current) {
       skipAutoLayoutOnceRef.current = false;
-      sessionHydratedRef.current = true;
       return;
     }
-    if (sessionHydratedRef.current) return;
-    sessionHydratedRef.current = true;
-
-    const saved = readSession();
-    const hasUserContent = (s: PrintWizardState) =>
-      Boolean(
-        s.textLayersByPage?.some((page) =>
-          page.some((l) => l.layoutLocked || Boolean(l.text?.trim()))
-        )
-      ) ||
-      Object.values(s.inputs ?? {}).some((v) =>
-        Boolean(String(v ?? "").trim())
-      );
-
     if (saved) {
-      // Never force wizardStep:1 — that kicked Screen 24 back to draft and
-      // re-ran layout over restored textLayersByPage / inputs.
-      if (hasUserContent(saved) || saved.wizardStep === 2) {
-        const next = {
-          ...saved,
-          textLayersByPage: resizeIndependentPages(
-            saved.textLayersByPage,
-            editorSlotCount(saved.pageCount)
-          ),
-        };
-        saveSession(next);
-        setState(next);
-        return;
-      }
-
       const next = applyAutoLayoutState(
-        { ...saved },
+        { ...saved, wizardStep: 1 as const },
         { bgPresetId: saved.bgPresetId }
       );
       const photoLocked =
@@ -279,6 +243,7 @@ export default function PrintWizardStep2({
         merged.textLayersByPage,
         editorSlotCount(merged.pageCount)
       );
+      // Preserve user/manual layouts — only seed semantic layout on empty/default pages.
       const withPages = {
         ...merged,
         textLayersByPage: resized.map((page, i) => {
@@ -292,9 +257,7 @@ export default function PrintWizardStep2({
       setState(withPages);
       return;
     }
-
     setState((prev) => {
-      if (hasUserContent(prev)) return prev;
       const next = {
         ...prev,
         textLayersByPage: resizeIndependentPages(
@@ -330,9 +293,9 @@ export default function PrintWizardStep2({
             ? layersOrUpdater(current)
             : layersOrUpdater;
         const normalizedLayers =
-          options?.applyLayout === true
-            ? applySemanticPageLayout(incoming, pageIndexToUpdate)
-            : incoming;
+          options?.applyLayout === false
+            ? incoming
+            : applySemanticPageLayout(incoming, pageIndexToUpdate);
         const nextPages = pages.map((pageLayers, idx) =>
           idx === pageIndexToUpdate ? normalizedLayers : pageLayers
         );
@@ -586,14 +549,9 @@ export default function PrintWizardStep2({
 
   const onAddLayerAfter = useCallback(
     (nextLayers: TextLayer[]) => {
-      updateTextLayersForPage(
-        editorPageIndex,
-        () =>
-          editorPageIndex === 0
-            ? ensurePageZoneLayers(nextLayers, 0)
-            : nextLayers,
-        { applyLayout: false }
-      );
+      updateTextLayersForPage(editorPageIndex, () => nextLayers, {
+        applyLayout: false,
+      });
     },
     [editorPageIndex, updateTextLayersForPage]
   );
@@ -1441,105 +1399,67 @@ export default function PrintWizardStep2({
               quality,
             });
           },
-    buildLookbookSnapshot: () =>
-      capturePhotoLookbookSnapshot({
-        ...state,
-        textLayersByPage,
-      }),
+    buildLookbookSnapshot:
+      productId === "photo"
+        ? () =>
+            capturePhotoLookbookSnapshot({
+              ...state,
+              textLayersByPage,
+            })
+        : undefined,
   });
 
   const onOpenRecentProject = useCallback(
     (project: StudioCanvasProjectV1) => {
-      if (isPhotoLookbookSnapshot(project.lookbook)) {
+      if (productId === "photo" && isPhotoLookbookSnapshot(project.lookbook)) {
         const { wizard } = applyPhotoLookbookSnapshot(project.lookbook);
         skipAutoLayoutOnceRef.current = true;
-        sessionHydratedRef.current = true;
-
-        if (productId === "photo") {
-          const next = {
-            ...wizard,
-            pageCount: 1 as const,
-            formatId: coercePhotoFormatId(wizard.formatId),
-            useId: coercePhotoUseId(wizard.useId),
-            textLayersByPage: resizeIndependentPages(
-              wizard.textLayersByPage,
-              editorSlotCount(1)
-            ),
-            photoLayersByPage: wizard.photoLayersByPage,
-            backgroundUrls: wizard.backgroundUrls,
-            backgroundPansByPage: wizard.backgroundPansByPage,
-            wizardStep: (state.wizardStep ?? 1) as 1 | 2,
-          };
-          saveSession(next);
-          setState(next);
-          setCurrentPage(1);
-          setActiveTextLayerId(null);
-          setActivePhotoLayerId(null);
-          setActiveDecoLayerId(null);
-          setLayerModalPage(null);
-          setWorkspaceEpoch((n) => n + 1);
-          showToast(
-            "최근 파일을 불러와 캔버스·업로드·학습 저장소를 복구했습니다.",
-            "success"
-          );
-          return;
-        }
-
-        const pageCount = wizard.pageCount ?? state.pageCount;
-        const restoredInputs = wizard.inputs ?? state.inputs;
+        // Preserve saved geometry verbatim — no applySemanticPageLayout.
         const next = {
           ...wizard,
-          pageCount,
-          textLayersByPage: mergeRestoredTextLayersByPage({
-            pages: wizard.textLayersByPage,
-            inputs: restoredInputs,
-            pageCount,
-          }),
-          photoLayersByPage:
-            wizard.photoLayersByPage ?? state.photoLayersByPage,
-          decoLayersByPage: wizard.decoLayersByPage ?? state.decoLayersByPage,
-          backgroundUrls: wizard.backgroundUrls ?? state.backgroundUrls,
-          backgroundPansByPage:
-            wizard.backgroundPansByPage ?? state.backgroundPansByPage,
-          inputs: restoredInputs,
+          pageCount: 1 as const,
+          formatId: coercePhotoFormatId(wizard.formatId),
+          useId: coercePhotoUseId(wizard.useId),
+          textLayersByPage: resizeIndependentPages(
+            wizard.textLayersByPage,
+            editorSlotCount(1)
+          ),
+          photoLayersByPage: wizard.photoLayersByPage,
+          backgroundUrls: wizard.backgroundUrls,
+          backgroundPansByPage: wizard.backgroundPansByPage,
+          // Keep current step — never bounce to a sub-studio route.
           wizardStep: (state.wizardStep ?? 1) as 1 | 2,
         };
         saveSession(next);
         setState(next);
-        setCurrentPage((page) =>
-          Math.min(Math.max(1, page), pageCount)
-        );
+        setCurrentPage(1);
         setActiveTextLayerId(null);
         setActivePhotoLayerId(null);
         setActiveDecoLayerId(null);
         setLayerModalPage(null);
         setWorkspaceEpoch((n) => n + 1);
         showToast(
-          "최근 수정파일을 불러와 편집 상태를 복원했습니다.",
+          "최근 파일을 불러와 캔버스·업로드·학습 저장소를 복구했습니다.",
           "success"
         );
         return;
       }
 
-      // Legacy .sca without wizard snapshot: map flat overlayLayers onto current page.
+      // Print (and photo without lookbook): apply onto current wizard canvas.
       skipAutoLayoutOnceRef.current = true;
-      sessionHydratedRef.current = true;
       const pageIndex = Math.max(0, currentPage - 1);
       const layers = (project.studio.overlayLayers || []).map((l) => ({
         ...l,
         ranges: l.ranges?.map((r) => ({ ...r })) ?? [],
       }));
-      const restoredInputs = {
-        ...state.inputs,
-        ...layersToInputPatch(layers),
-      };
-      const textPages = mergeRestoredTextLayersByPage({
-        pages: state.textLayersByPage,
-        inputs: restoredInputs,
-        pageCount: state.pageCount,
-        overlayLayers: layers.length ? layers : undefined,
-        overlayPageIndex: layers.length ? pageIndex : undefined,
-      });
+      const slots = editorSlotCount(state.pageCount);
+      const textPages = resizeIndependentPages(
+        state.textLayersByPage,
+        slots
+      );
+      if (layers.length) {
+        textPages[pageIndex] = layers;
+      }
       const bg = project.studio.backgroundUrl;
       const backgroundUrls = [
         ...(state.backgroundUrls?.length
@@ -1554,7 +1474,6 @@ export default function PrintWizardStep2({
         backgroundUrl: bg || state.backgroundUrl,
         backgroundUrls,
         textLayersByPage: textPages,
-        inputs: restoredInputs,
         visualStyle: project.studio.visualStyle ?? state.visualStyle,
         customSize: project.studio.customPrint
           ? {
@@ -1714,6 +1633,7 @@ export default function PrintWizardStep2({
 
   const formPanel = (
     <div className="flex h-full min-h-0 flex-col gap-2">
+      {step1TextLayerList}
       <div className="min-h-0 flex-1 overflow-y-auto">
         <SmartInputForm
           key={workspaceEpoch}

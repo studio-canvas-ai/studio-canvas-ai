@@ -78,37 +78,14 @@ function AutoGrowTextarea({
   );
 }
 
-function normalizeRows(layers: TextLayer[], pageIndex: number): TextLayer[] {
-  return pageIndex === 0 ? ensurePageZoneLayers(layers, pageIndex) : layers;
-}
-
-function sameLayerIds(a: TextLayer[], b: TextLayer[]): boolean {
-  return (
-    a.length === b.length && a.every((layer, i) => layer.id === b[i]?.id)
-  );
-}
-
-/**
- * Sync parent → local, but never clobber in-progress typing with a stale
- * empty parent payload (that left the modal full and the canvas blank).
- */
-function mergeIncomingKeepTyped(
+function mergeIncomingKeepOrder(
   prev: TextLayer[],
   incoming: TextLayer[]
-): { rows: TextLayer[]; replay: TextLayer[] | null } {
-  if (prev.length === 0) return { rows: incoming, replay: null };
+): TextLayer[] {
+  if (prev.length === 0) return incoming;
   const byId = new Map(incoming.map((layer) => [layer.id, layer]));
   const prevIds = new Set(prev.map((layer) => layer.id));
-  let needsReplay = false;
-  const next = prev.map((row) => {
-    const parent = byId.get(row.id);
-    if (!parent) return row;
-    if (row.text.trim() && !parent.text.trim()) {
-      needsReplay = true;
-      return { ...parent, text: row.text };
-    }
-    return parent;
-  });
+  const next = prev.map((row) => byId.get(row.id) ?? row);
   incoming.forEach((layer, index) => {
     if (prevIds.has(layer.id)) return;
     let insertAt = next.length;
@@ -121,7 +98,11 @@ function mergeIncomingKeepTyped(
     }
     next.splice(insertAt, 0, layer);
   });
-  return { rows: next, replay: needsReplay ? next : null };
+  return next;
+}
+
+function normalizeRows(layers: TextLayer[], pageIndex: number): TextLayer[] {
+  return pageIndex === 0 ? ensurePageZoneLayers(layers, pageIndex) : layers;
 }
 
 export default function PageLayerEditor({
@@ -129,6 +110,7 @@ export default function PageLayerEditor({
   layers,
   activeLayerId = null,
   onActiveLayerChange,
+  onLayerTextChange,
   onAddAfter,
   onDelete,
 }: PageLayerEditorProps) {
@@ -141,12 +123,21 @@ export default function PageLayerEditor({
   );
   const [focusId, setFocusId] = useState<string | null>(null);
   const pageRef = useRef(page);
-  const onAddAfterRef = useRef(onAddAfter);
-  onAddAfterRef.current = onAddAfter;
-  const seededSigRef = useRef<string>("");
 
-  /** Whole-page commit — preview reads parent textLayersByPage, not local rows. */
-  const commitPage = (next: TextLayer[], focusAdded = false) => {
+  useEffect(() => {
+    const incoming = normalizeRows(layers, pageIndex);
+    if (pageRef.current !== page) {
+      pageRef.current = page;
+      setFocusId(null);
+      setRows(incoming);
+      return;
+    }
+    setRows((prev) =>
+      normalizeRows(mergeIncomingKeepOrder(prev, incoming), pageIndex)
+    );
+  }, [page, pageIndex, layers]);
+
+  const commit = (next: TextLayer[], focusAdded = false) => {
     const normalized = normalizeRows(next, pageIndex);
     if (focusAdded) {
       const prevIds = new Set(rows.map((layer) => layer.id));
@@ -157,56 +148,8 @@ export default function PageLayerEditor({
       }
     }
     setRows(normalized);
-    seededSigRef.current = normalized.map((l) => l.id).join("|");
-    onAddAfterRef.current(normalized);
+    onAddAfter(normalized);
   };
-
-  // Cover zones must exist in parent before the first keystroke.
-  useLayoutEffect(() => {
-    const normalized = normalizeRows(layers, pageIndex);
-    const sig = normalized.map((l) => l.id).join("|");
-    if (sameLayerIds(layers, normalized)) {
-      seededSigRef.current = sig;
-      return;
-    }
-    if (seededSigRef.current === sig) return;
-    seededSigRef.current = sig;
-    setRows(normalized);
-    onAddAfterRef.current(normalized);
-  }, [pageIndex, layers]);
-
-  useEffect(() => {
-    const incoming = normalizeRows(layers, pageIndex);
-    if (pageRef.current !== page) {
-      pageRef.current = page;
-      setFocusId(null);
-      setRows(incoming);
-      seededSigRef.current = incoming.map((l) => l.id).join("|");
-      if (!sameLayerIds(layers, incoming)) {
-        onAddAfterRef.current(incoming);
-      }
-      return;
-    }
-
-    if (!sameLayerIds(layers, incoming)) {
-      const sig = incoming.map((l) => l.id).join("|");
-      setRows(incoming);
-      if (seededSigRef.current !== sig) {
-        seededSigRef.current = sig;
-        onAddAfterRef.current(incoming);
-      }
-      return;
-    }
-
-    setRows((prev) => {
-      const { rows: merged, replay } = mergeIncomingKeepTyped(prev, incoming);
-      const normalized = normalizeRows(merged, pageIndex);
-      if (replay) {
-        queueMicrotask(() => onAddAfterRef.current(normalized));
-      }
-      return normalized;
-    });
-  }, [page, pageIndex, layers]);
 
   const renderRow = (
     layer: TextLayer,
@@ -239,7 +182,7 @@ export default function PageLayerEditor({
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              commitPage(addPageTextLayerAfter(rows, pageIndex, rowIndex), true);
+              commit(addPageTextLayerAfter(rows, pageIndex, rowIndex), true);
             }}
             className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-700 bg-[#121824] text-slate-300 transition hover:border-slate-500 hover:text-white"
           >
@@ -256,13 +199,8 @@ export default function PageLayerEditor({
               e.stopPropagation();
               if (!canDelete) return;
               const next = rows.filter((item) => item.id !== layer.id);
-              const normalized = normalizeRows(next, pageIndex);
-              setRows(normalized);
+              setRows(normalizeRows(next, pageIndex));
               onDelete(layer.id);
-              if (!sameLayerIds(next, normalized)) {
-                seededSigRef.current = normalized.map((l) => l.id).join("|");
-                onAddAfterRef.current(normalized);
-              }
             }}
             className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-700 bg-[#121824] text-slate-300 transition hover:border-rose-500/50 hover:bg-rose-950/40 hover:text-rose-200 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-slate-700 disabled:hover:bg-[#121824] disabled:hover:text-slate-300"
           >
@@ -279,11 +217,12 @@ export default function PageLayerEditor({
               /^\s*(상단문구:|중간문구:|하단문구:)\s*/,
               ""
             );
-            commitPage(
-              rows.map((item) =>
+            setRows((prev) =>
+              prev.map((item) =>
                 item.id === layer.id ? { ...item, text: nextText } : item
               )
             );
+            onLayerTextChange(layer.id, nextText);
           }}
         />
       </div>
