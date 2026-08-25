@@ -18,7 +18,7 @@ export function pageCountLabel(pageCount: number): string {
  * `{topic_keywords}` is replaced with the user's theme / keyword tags.
  */
 export const DOUBLE_SIDED_BACK_COVER_PROMPT_TEMPLATE =
-  "A professional double-sided print back cover background matching the theme: {topic_keywords}, elegant and clean layout. The color palette and hue of the background must naturally derive from the dominant color tone of the front page concept, rendered in a much softer, lighter, and desaturated pastel tint to ensure high text readability and contrast in the center. The outer borders and frame feature exquisite, sophisticated decorative elements and refined motifs matching the user's theme. High-end premium editorial design, minimalist center space, ornate borders, 8k resolution, photorealistic, masterpiece.";
+  "A professional double-sided print back cover background sharing the exact same theme and image composition as the front page: {topic_keywords}. The layout is divided into two distinct zones: The outer borders and frame remain rich and vivid, maintaining about 80% of the front page's depth and color intensity. The central rectangular text area features the exact same image content, but rendered in a very subtle, faint, low-opacity, and softly washed style so that text can be easily overlaid with high readability. High-end editorial design, professional layout, 8k resolution, masterpiece.";
 
 /** Theme keywords shared across front/back of a double-sided print. */
 export function topicKeywordsFromState(state: PrintWizardState): string {
@@ -67,7 +67,7 @@ export function pageFaceBrief(
     return `FRONT of a ${total}-page ${piece} (page 1 of ${total}): hero establishing shot of the same theme, inviting composition, extra open space in the upper third for a headline — unique to the cover, never reused on later pages`;
   }
   if (total === 2 && n === 2) {
-    return `BACK COVER of a double-sided ${piece}: light pastel center for text readability, ornate decorative borders matching the front theme — never a duplicate of page 1`;
+    return `BACK COVER of a double-sided ${piece}: same composition as the front, vivid outer borders (~80% intensity), faint washed central text area — not a copy of page 1`;
   }
   if (n === total) {
     return `BACK/closing of a ${total}-page ${piece} (page ${n} of ${total}): same world and color palette as the front but a clearly different camera angle, depth, and layout — complementary reverse side, never a duplicate of page 1`;
@@ -95,7 +95,7 @@ export function buildPagePrintAiContext(
   state: PrintWizardState,
   pageIndex: number
 ): string {
-  // 양면(2면) 뒷면 — dedicated light-center / ornate-border back-cover prompt.
+  // 양면(2면) 뒷면 — same composition as front, vivid borders, washed center.
   if (state.pageCount === 2 && pageIndex === 1) {
     const back = buildDoubleSidedBackCoverPrompt(
       topicKeywordsFromState(state)
