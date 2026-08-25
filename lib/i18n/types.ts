@@ -164,10 +164,14 @@ export interface Translations {
       upbeat: string;
       chill: string;
       cinematic: string;
+      vlog: string;
       upbeatMood: string;
       chillMood: string;
       cinematicMood: string;
+      vlogMood: string;
     };
+    bgmCategoryAll: string;
+    bgmDurationLabel: string;
     bgmUploadLabel: string;
     bgmUploadCta: string;
     bgmUploadHint: string;

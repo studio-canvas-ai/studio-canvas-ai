@@ -1,10 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Music2, Pause, Play, Upload } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import {
-  SHORTS_BGM_PRESETS,
+  BGM_CATEGORIES,
+  BGM_LIBRARY,
+  resolveBgmUrl,
+  type BgmCategory,
+} from "@/lib/bgmLibrary";
+import {
   SHORTS_BGM_VOLUME_MAX,
   SHORTS_BGM_VOLUME_MIN,
   clampBgmVolume,
@@ -18,18 +23,24 @@ type Props = {
 };
 
 /**
- * Accordion BGM selector — presets + local upload + volume.
+ * Accordion BGM selector — R2 library + local upload + volume.
  * Preview audio is panel-local; selection syncs to parent shorts studio state.
  */
 export default function BgmSelectorPanel({ value, onChange }: Props) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
+  const [category, setCategory] = useState<BgmCategory | "all">("all");
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const customObjectUrlRef = useRef<string | null>(null);
+
+  const tracks = useMemo(() => {
+    if (category === "all") return BGM_LIBRARY;
+    return BGM_LIBRARY.filter((item) => item.category === category);
+  }, [category]);
 
   const stopPreview = useCallback(() => {
     const audio = audioRef.current;
@@ -174,14 +185,40 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
             <p className="mb-2 text-xs font-medium text-white/60">
               {t.shorts.bgmPresetsLabel}
             </p>
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => setCategory("all")}
+                className={`rounded-full px-2.5 py-1 text-[10px] font-semibold transition ${
+                  category === "all"
+                    ? "bg-glow-emerald/20 text-glow-emerald"
+                    : "bg-white/5 text-white/55 hover:bg-white/10 hover:text-white/80"
+                }`}
+              >
+                {t.shorts.bgmCategoryAll}
+              </button>
+              {BGM_CATEGORIES.map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setCategory(cat)}
+                  className={`rounded-full px-2.5 py-1 text-[10px] font-semibold transition ${
+                    category === cat
+                      ? "bg-glow-emerald/20 text-glow-emerald"
+                      : "bg-white/5 text-white/55 hover:bg-white/10 hover:text-white/80"
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
             <ul className="space-y-2">
-              {SHORTS_BGM_PRESETS.map((preset) => {
-                const name = t.shorts.bgmPresets[preset.nameKey];
-                const mood = t.shorts.bgmPresets[preset.moodKey];
-                const selected = value.bgmUrl === preset.url;
-                const playing = previewId === preset.id;
+              {tracks.map((item) => {
+                const url = resolveBgmUrl(item);
+                const selected = value.bgmUrl === url;
+                const playing = previewId === item.id;
                 return (
-                  <li key={preset.id}>
+                  <li key={item.id}>
                     <div
                       className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 transition ${
                         selected
@@ -191,21 +228,23 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
                     >
                       <button
                         type="button"
-                        onClick={() => selectTrack(preset.url, name)}
+                        onClick={() => selectTrack(url, item.title)}
                         className="min-w-0 flex-1 text-left"
                       >
                         <p className="truncate text-sm font-medium text-white">
-                          {name}
+                          {item.title}
                         </p>
                         <p className="truncate text-[11px] text-white/40">
-                          {mood}
+                          {item.category} ·{" "}
+                          {t.shorts.bgmDurationLabel.replace(
+                            "{duration}",
+                            item.duration
+                          )}
                         </p>
                       </button>
                       <button
                         type="button"
-                        onClick={() =>
-                          void togglePreview(preset.id, preset.url)
-                        }
+                        onClick={() => void togglePreview(item.id, url)}
                         className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/15"
                         aria-label={
                           playing ? t.shorts.bgmPause : t.shorts.bgmPlay
