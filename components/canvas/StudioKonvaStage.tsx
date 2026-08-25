@@ -22,6 +22,7 @@ import type { CanvasObject, CanvasTextObject } from "@/lib/canvas/types";
 import { sortByZIndex } from "@/lib/canvas/types";
 import { EMOJI_FONT } from "@/lib/thumbnailStyles";
 import { hexToRgba } from "@/lib/shortsCaptions";
+import { toPlainLayerListText } from "@/lib/printWizardTextFormat";
 
 const CHECKER: CSSProperties = {
   backgroundColor: "#1a1d27",
@@ -127,14 +128,16 @@ function TextNode({
     : `${obj.fontFamily}, ${EMOJI_FONT}`;
   const fontSize = Math.max(8, Math.round(obj.fontSize || 48));
   const boxOpacity = Math.max(0.15, Math.min(0.9, obj.boxOpacity ?? 0.55));
+  const hitW = Math.max(8, obj.width || 8);
+  const hitH = Math.max(8, obj.height || 8);
 
   return (
     <Group
       id={obj.id}
       x={obj.x}
       y={obj.y}
-      width={obj.width}
-      height={obj.height}
+      width={hitW}
+      height={hitH}
       rotation={obj.rotation}
       scaleX={obj.scaleX}
       scaleY={obj.scaleY}
@@ -172,12 +175,21 @@ function TextNode({
         node.scaleY(1);
       }}
     >
+      {/* Hit target: Text/Rect use listening=false, so Group alone cannot receive drag. */}
+      <Rect
+        x={0}
+        y={0}
+        width={hitW}
+        height={hitH}
+        fill="rgba(0,0,0,0)"
+        listening={!obj.locked}
+      />
       {obj.showBox ? (
         <Rect
           x={0}
           y={0}
-          width={obj.width}
-          height={obj.height}
+          width={hitW}
+          height={hitH}
           fill={hexToRgba(obj.boxColor || "#000000", boxOpacity)}
           cornerRadius={Math.min(14, fontSize * 0.28)}
           stroke={obj.showBoxBorder ? "rgba(255,255,255,0.35)" : undefined}
@@ -189,8 +201,8 @@ function TextNode({
         text={obj.text || " "}
         x={0}
         y={0}
-        width={obj.width}
-        height={obj.height}
+        width={hitW}
+        height={hitH}
         fontSize={fontSize}
         fontFamily={fontFamily}
         fontStyle={obj.fontWeight >= 600 ? "bold" : "normal"}
@@ -217,6 +229,18 @@ export type StudioKonvaStageProps = {
     id: string,
     patch: { fontSize?: number; align?: CanvasTextObject["align"] }
   ) => void;
+  /**
+   * Persist Konva text box geometry back into TextLayer (manualX/Y, boxW/H).
+   * Required so plane rebuilds do not snap dragged text back to anchors.
+   * Optional fontSize is stage pixels (caller converts for agent mode).
+   */
+  onTextGeometryChange?: (
+    id: string,
+    box: { x: number; y: number; width: number; height: number },
+    fontSize?: number
+  ) => void;
+  /** Click/tap select (not drag) — focus side-panel field without stealing drag. */
+  onTextSelect?: (id: string) => void;
 };
 
 export type StudioKonvaStageHandle = {
@@ -228,7 +252,15 @@ export const StudioKonvaStage = forwardRef<
   StudioKonvaStageHandle,
   StudioKonvaStageProps
 >(function StudioKonvaStage(
-  { width, height, className, onTextContentChange, onTextStyleChange },
+  {
+    width,
+    height,
+    className,
+    onTextContentChange,
+    onTextStyleChange,
+    onTextGeometryChange,
+    onTextSelect,
+  },
   ref
 ) {
   const stageRef = useRef<Konva.Stage | null>(null);
@@ -295,15 +327,45 @@ export const StudioKonvaStage = forwardRef<
   const patchObject = useCallback(
     (id: string, patch: Partial<CanvasObject>) => {
       updateObject(id, patch);
-      if (
-        "fontSize" in patch &&
-        typeof patch.fontSize === "number" &&
-        onTextStyleChange
-      ) {
-        onTextStyleChange(id, { fontSize: patch.fontSize });
+      const obj = useCanvasStore.getState().objects.find((o) => o.id === id);
+      if (obj?.type !== "text") return;
+
+      const geomTouched =
+        "x" in patch ||
+        "y" in patch ||
+        "width" in patch ||
+        "height" in patch;
+      const fontTouched =
+        "fontSize" in patch && typeof patch.fontSize === "number";
+
+      // Prefer a single geometry commit (includes fontSize) so React state
+      // updates do not overwrite each other in the same event.
+      if (geomTouched && onTextGeometryChange) {
+        onTextGeometryChange(
+          id,
+          {
+            x: obj.x,
+            y: obj.y,
+            width: obj.width,
+            height: obj.height,
+          },
+          fontTouched ? obj.fontSize : undefined
+        );
+        return;
+      }
+      if (fontTouched && onTextStyleChange) {
+        onTextStyleChange(id, { fontSize: obj.fontSize });
       }
     },
-    [onTextStyleChange, updateObject]
+    [onTextGeometryChange, onTextStyleChange, updateObject]
+  );
+
+  const selectText = useCallback(
+    (id: string) => {
+      select(id);
+      onTextSelect?.(id);
+    },
+    [onTextSelect, select]
   );
 
   const editingObj = ordered.find(
@@ -360,7 +422,7 @@ export const StudioKonvaStage = forwardRef<
                 <TextNode
                   key={obj.id}
                   obj={obj}
-                  onSelect={() => select(obj.id)}
+                  onSelect={() => selectText(obj.id)}
                   onChange={(patch) => patchObject(obj.id, patch)}
                   onEdit={() => setEditingTextId(obj.id)}
                 />
@@ -409,9 +471,9 @@ export const StudioKonvaStage = forwardRef<
       {editingObj ? (
         <textarea
           autoFocus
-          value={editingObj.text}
+          value={toPlainLayerListText(editingObj.text)}
           onChange={(e) => {
-            const text = e.target.value;
+            const text = toPlainLayerListText(e.target.value);
             updateObject(editingObj.id, { text });
             onTextContentChange?.(editingObj.id, text);
           }}
@@ -419,7 +481,7 @@ export const StudioKonvaStage = forwardRef<
           onKeyDown={(e) => {
             if (e.key === "Escape") setEditingTextId(null);
           }}
-          className="absolute z-20 resize-none rounded-md border border-indigo-400/60 bg-black/80 px-2 py-1 text-sm text-white outline-none shadow-lg"
+          className="canvas-inline-text-edit absolute z-20 resize-none rounded-md border border-indigo-400/60 bg-black/80 px-2 py-1 text-sm text-white outline-none shadow-lg"
           style={{
             left: Math.max(0, editingObj.x),
             top: Math.max(0, editingObj.y),

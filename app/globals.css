@@ -275,6 +275,13 @@
   text-shadow: none !important;
 }
 
+/* Canvas inline edit: keep layer font, but never render ASCII digits as emoji keycaps. */
+.canvas-inline-text-edit {
+  font-variant-emoji: text !important;
+  font-variant-numeric: normal !important;
+  -webkit-text-stroke: 0 !important;
+}
+
 @keyframes sca-bridge-spin {
   to {
     transform: rotate(360deg);

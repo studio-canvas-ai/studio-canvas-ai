@@ -122,9 +122,11 @@ import {
   type StudioProjectCustomPrint,
 } from "@/lib/canvas/projectFile";
 import {
+  boxToLayerPatch,
   referencePrintStageSize,
   stageFontSizeToDesign,
 } from "@/lib/printWizardTextLayers";
+import { focusTextLayerField } from "@/lib/canvas/textLayerInteraction";
 
 const StudioKonvaStage = dynamic(
   () =>
@@ -2000,45 +2002,18 @@ export default function AiTemplateStudio({
     }
   }, [canvasSize, dragging, dragKind, snapGuides, paint, activeLayerId, layerHitBoxes]);
 
-  /** Click / tap on canvas text → matching layer textarea, cursor blinking. */
+  /** Click / tap on canvas text → matching layer textarea/input, cursor blinking. */
   const focusLayerTextarea = useCallback(
     (layerId: string, opts?: { canvasX?: number; selectAll?: boolean }) => {
       selectionClearedRef.current = false;
       setActiveLayerId(layerId);
-
-      const applyFocus = (attempt: number) => {
-        const node =
-          layerTextareaRefs.current[layerId] ??
-          (document.querySelector(
-            `textarea[data-layer-id="${layerId}"]`
-          ) as HTMLTextAreaElement | null);
-        if (!node) {
-          if (attempt < 12) {
-            window.setTimeout(() => applyFocus(attempt + 1), 20);
-          }
-          return;
-        }
-        node.scrollIntoView({ block: "nearest", behavior: "smooth" });
-        node.focus({ preventScroll: true });
-        const layer = overlayLayersRef.current.find((l) => l.id === layerId);
-        try {
-          if (opts?.selectAll && layer?.text) {
-            node.select();
-          } else {
-            const pos = layer?.text.length ?? 0;
-            node.setSelectionRange(pos, pos);
-          }
-        } catch {
-          /* ignore */
-        }
-      };
-
-      applyFocus(0);
-      window.requestAnimationFrame(() => applyFocus(1));
-      window.setTimeout(() => applyFocus(2), 40);
-      window.setTimeout(() => applyFocus(3), 120);
+      const layer = overlayLayersRef.current.find((l) => l.id === layerId);
+      focusTextLayerField(layerId, {
+        selectAll: opts?.selectAll,
+        textLength: layer?.text.length ?? 0,
+      });
     },
-    []
+    [setActiveLayerId]
   );
 
   const stageRect = () =>
@@ -3107,6 +3082,9 @@ export default function AiTemplateStudio({
             </span>
             <input
               type="text"
+              ref={(node) => {
+                layerTextareaRefs.current[layer.id] = node as unknown as HTMLTextAreaElement | null;
+              }}
               data-layer-id={layer.id}
               value={toPlainLayerListText(layer.text)}
               onFocus={() => {
@@ -3432,6 +3410,54 @@ export default function AiTemplateStudio({
                       width={Math.round(viewSize.w)}
                       height={Math.round(viewSize.h)}
                       className="block"
+                      onTextSelect={(id) => {
+                        selectionClearedRef.current = false;
+                        setActiveLayerId(id);
+                        // Defer panel focus so dblclick can open Konva inline
+                        // edit without the side field stealing the caret.
+                        window.setTimeout(() => {
+                          if (
+                            useCanvasStore.getState().editingTextId === id
+                          ) {
+                            return;
+                          }
+                          focusLayerTextarea(id);
+                        }, 220);
+                      }}
+                      onTextGeometryChange={(id, box, stageFontSize) => {
+                        const stageW = Math.round(viewSize.w);
+                        const stageH = Math.round(viewSize.h);
+                        if (stageW < 16 || stageH < 16) return;
+                        const designSize =
+                          typeof stageFontSize === "number"
+                            ? mode === "agent"
+                              ? stageFontSizeToDesign(
+                                  stageFontSize,
+                                  stageW,
+                                  stageH
+                                )
+                              : stageFontSize
+                            : undefined;
+                        setOverlayLayers((prev) =>
+                          prev.map((l) =>
+                            l.id === id
+                              ? {
+                                  ...l,
+                                  ...boxToLayerPatch(
+                                    l,
+                                    box,
+                                    stageW,
+                                    stageH,
+                                    "move"
+                                  ),
+                                  ...(designSize != null
+                                    ? { fontSize: designSize }
+                                    : null),
+                                }
+                              : l
+                          )
+                        );
+                      }}
                       onTextContentChange={(id, text) => {
                         setOverlayLayers((prev) =>
                           prev.map((l) => (l.id === id ? { ...l, text } : l))

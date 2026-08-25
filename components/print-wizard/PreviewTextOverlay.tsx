@@ -28,7 +28,8 @@ import {
   stripLayerPlaceholderPrefix,
 } from "@/lib/printWizardTextLayers";
 import { drawPrintLayerInBox } from "@/lib/printWizardTextDraw";
-import { colorPresetFill, type TextLayer } from "@/lib/thumbnailStyles";
+import { colorPresetFill, fontForText, type TextLayer } from "@/lib/thumbnailStyles";
+import { revealTextLayerField } from "@/lib/canvas/textLayerInteraction";
 
 export type PreviewTextOverlayProps = {
   layers: TextLayer[];
@@ -172,7 +173,6 @@ export default function PreviewTextOverlay({
     box: { x: number; y: number; width: number; height: number };
   } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const lastTapRef = useRef<{ id: string; t: number } | null>(null);
 
   layersRef.current = layers;
   onLayersChangeRef.current = onLayersChange;
@@ -339,15 +339,10 @@ export default function PreviewTextOverlay({
         const dy = drag.liveBox.y - drag.startBox.y;
         const moved = Math.hypot(dx, dy) > DRAG_THRESHOLD_PX;
         if (!moved && drag.kind === "move") {
-          const now = Date.now();
-          const prev = lastTapRef.current;
-          // Double-tap to edit; single tap only selects (keeps canvas paint stable).
-          if (prev && prev.id === drag.layerId && now - prev.t < 380) {
-            setEditingId(drag.layerId);
-            lastTapRef.current = null;
-          } else {
-            lastTapRef.current = { id: drag.layerId, t: now };
-          }
+          // Single tap: select (already) + enter plain-text inline edit.
+          // Panel field is revealed (not focused) so canvas caret stays active.
+          setEditingId(drag.layerId);
+          revealTextLayerField(drag.layerId);
         } else {
           commitBox(
             drag.layerId,
@@ -496,8 +491,16 @@ export default function PreviewTextOverlay({
           8,
           Math.round((layer.fontSize || 48) * scale)
         );
+        const fontFamily = fontForText(
+          layer.fontPreset || "pretendard",
+          layer.text
+        );
         const field = formFieldFromLayerId(layer.id);
         const alignClass = textAlignClass(layer.align);
+        const letterSpacing =
+          field === "date" || field === "programs"
+            ? 0
+            : (layer.letterSpacing ?? 0) * scale;
 
         return (
           <div
@@ -616,14 +619,15 @@ export default function PreviewTextOverlay({
                   onKeyDown={(e) => {
                     if (e.key === "Escape") setEditingId(null);
                   }}
-                  className={`layer-list-plain-text h-full w-full resize-none overflow-hidden border-0 bg-transparent p-0 outline-none ${alignClass}`}
+                  className={`canvas-inline-text-edit h-full w-full resize-none overflow-hidden border-0 bg-transparent p-0 outline-none ${alignClass}`}
                   style={{
                     color: colorPresetFill(layer.color),
+                    fontFamily,
                     fontSize,
                     fontWeight: layer.fontWeight ?? 700,
                     textAlign: layer.align || "center",
                     lineHeight: layer.lineHeight ?? 1.25,
-                    letterSpacing: 0,
+                    letterSpacing,
                     whiteSpace: "pre-wrap",
                     overflowWrap: "anywhere",
                     wordBreak: "break-word",
