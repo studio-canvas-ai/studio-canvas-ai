@@ -43,6 +43,7 @@ import {
 import {
   EMOJI_QUICK,
   FONT_PRESET_PRIMARY,
+  STICKER_BADGES,
   TEMPLATE_STUDIO_COLOR_ORDER,
   colorAtIndex,
   colorPresetFill,
@@ -2575,7 +2576,14 @@ export default function AiTemplateStudio({
     });
   };
 
+  /** Same insertion path as symbols: canvas object on Screen 24, else text-layer badge. */
   const insertSticker = (id: StickerBadgeId) => {
+    const badge = STICKER_BADGES[id];
+    const symbol = badge.emoji ? `${badge.emoji} ${badge.label}` : badge.label;
+    if (onCanvasSymbolPick) {
+      insertSymbol(symbol);
+      return;
+    }
     if (!activeLayer) return;
     updateActive({ stickerId: activeLayer.stickerId === id ? null : id });
   };
