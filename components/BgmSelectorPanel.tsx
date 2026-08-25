@@ -7,6 +7,7 @@ import {
   BGM_CATEGORIES,
   BGM_LIBRARY,
   resolveBgmUrl,
+  type BGMItem,
   type BgmCategory,
 } from "@/lib/bgmLibrary";
 import {
@@ -32,15 +33,41 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
   const [category, setCategory] = useState<BgmCategory | "all">("all");
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [libraryTracks, setLibraryTracks] = useState<BGMItem[]>(BGM_LIBRARY);
+  const [libraryLoading, setLibraryLoading] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const customObjectUrlRef = useRef<string | null>(null);
 
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setLibraryLoading(true);
+    void fetch("/api/bgm/tracks", { cache: "no-store" })
+      .then(async (res) => {
+        if (!res.ok) return null;
+        return (await res.json()) as { tracks?: BGMItem[] };
+      })
+      .then((data) => {
+        if (cancelled || !data?.tracks?.length) return;
+        setLibraryTracks(data.tracks);
+      })
+      .catch(() => {
+        /* keep static BGM_LIBRARY */
+      })
+      .finally(() => {
+        if (!cancelled) setLibraryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
   const tracks = useMemo(() => {
-    if (category === "all") return BGM_LIBRARY;
-    return BGM_LIBRARY.filter((item) => item.category === category);
-  }, [category]);
+    if (category === "all") return libraryTracks;
+    return libraryTracks.filter((item) => item.category === category);
+  }, [category, libraryTracks]);
 
   const stopPreview = useCallback(() => {
     const audio = audioRef.current;
@@ -212,6 +239,9 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
                 </button>
               ))}
             </div>
+            {libraryLoading && tracks.length === 0 && (
+              <p className="py-2 text-center text-[11px] text-white/40">…</p>
+            )}
             <ul className="space-y-2">
               {tracks.map((item) => {
                 const url = resolveBgmUrl(item);

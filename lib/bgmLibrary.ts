@@ -1,7 +1,10 @@
 /**
  * Screen 13 (Shorts Studio) curated BGM library.
- * Files live under `bgm/` on Cloudflare R2; public base from NEXT_PUBLIC_R2_PUBLIC_URL.
+ * Upbeat tracks live under `bgm/upbeat/` on Cloudflare R2.
  */
+
+import { buildUpbeatItemsFromFilenames } from "@/lib/bgm/buildUpbeatItems";
+import { UPBEAT_BGM_FILENAMES } from "@/lib/bgm/upbeatFilenames";
 
 export type BgmCategory = "업비트" | "칠" | "시네마틱" | "브이로그";
 
@@ -10,67 +13,52 @@ export interface BGMItem {
   title: string;
   category: BgmCategory;
   duration: string;
-  /** Object key under the R2 public base (e.g. bgm/upbeat_01.mp3). */
+  /** Object key under the R2 public base (e.g. bgm/upbeat/track-name.mp3). */
   objectKey: string;
   /** Optional hard-coded absolute URL override. */
   urlOverride?: string;
 }
 
-/** Demo loops used when R2 public URL is not configured yet. */
-const DEMO_FALLBACK_BY_ID: Record<string, string> = {
-  upbeat_01: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
-  chill_01: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
-  cinematic_01: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3",
-  vlog_01: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
-};
+/** Production R2 public base for Screen 13 BGM. */
+export const R2_BGM_PUBLIC_BASE =
+  "https://pub-bb48348c54c946a7b4a57af9900c473b.r2.dev";
 
 function r2PublicBase(): string {
   const raw =
     (typeof process !== "undefined" &&
       (process.env.NEXT_PUBLIC_R2_PUBLIC_URL ||
-        process.env.NEXT_PUBLIC_BGM_BASE_URL)) ||
+        process.env.NEXT_PUBLIC_BGM_BASE_URL ||
+        process.env.R2_PUBLIC_URL)) ||
     "";
-  return raw.trim().replace(/\/$/, "");
+  return (raw.trim() || R2_BGM_PUBLIC_BASE).replace(/\/$/, "");
 }
 
 /** Resolve playable URL for a library track. */
 export function resolveBgmUrl(item: BGMItem): string {
   if (item.urlOverride?.trim()) return item.urlOverride.trim();
   const base = r2PublicBase();
-  if (base) return `${base}/${item.objectKey.replace(/^\//, "")}`;
-  return DEMO_FALLBACK_BY_ID[item.id] || DEMO_FALLBACK_BY_ID.upbeat_01;
+  return `${base}/${item.objectKey.replace(/^\//, "")}`;
 }
 
-export const BGM_LIBRARY: BGMItem[] = [
-  {
-    id: "upbeat_01",
-    title: "업비트 에너지 01",
-    category: "업비트",
-    duration: "02:30",
-    objectKey: "bgm/upbeat_01.mp3",
-  },
-  {
-    id: "chill_01",
-    title: "칠 그루브 01",
-    category: "칠",
-    duration: "03:15",
-    objectKey: "bgm/chill_01.mp3",
-  },
-  {
-    id: "cinematic_01",
-    title: "시네마틱 펄스 01",
-    category: "시네마틱",
-    duration: "02:50",
-    objectKey: "bgm/cinematic_01.mp3",
-  },
-  {
-    id: "vlog_01",
-    title: "브이로그 하이라이트 01",
-    category: "브이로그",
-    duration: "02:10",
-    objectKey: "bgm/vlog_01.mp3",
-  },
-];
+/** Same-origin proxy URL for FFmpeg.wasm fetch (avoids R2 CORS on mix). */
+export function resolveBgmMixUrl(publicUrl: string): string {
+  const trimmed = publicUrl.trim();
+  if (!trimmed) return trimmed;
+  if (trimmed.startsWith("blob:") || trimmed.startsWith("/")) return trimmed;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.hostname === "pub-bb48348c54c946a7b4a57af9900c473b.r2.dev") {
+      return `/api/bgm/stream?src=${encodeURIComponent(trimmed)}`;
+    }
+  } catch {
+    /* keep original */
+  }
+  return trimmed;
+}
+
+const UPBEAT_LIBRARY = buildUpbeatItemsFromFilenames(UPBEAT_BGM_FILENAMES);
+
+export const BGM_LIBRARY: BGMItem[] = [...UPBEAT_LIBRARY];
 
 export const BGM_CATEGORIES: BgmCategory[] = [
   "업비트",

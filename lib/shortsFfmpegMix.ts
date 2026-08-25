@@ -9,6 +9,7 @@
 
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile, toBlobURL } from "@ffmpeg/util";
+import { resolveBgmMixUrl } from "@/lib/bgmLibrary";
 import { probeVideoDimensions } from "@/lib/shortsStudioExport";
 
 /** YouTube Shorts / KR shorts master canvas */
@@ -666,7 +667,8 @@ export async function mixShortsVideoWithBgm(params: {
   let bgmBytes: Uint8Array | null = null;
   if (hasBgm && bgmUrl) {
     onProgress?.({ ratio: 18, message: "loading_bgm" });
-    const bgmRes = await fetch(bgmUrl);
+    const bgmFetchUrl = resolveBgmMixUrl(bgmUrl);
+    const bgmRes = await fetch(bgmFetchUrl);
     if (!bgmRes.ok) {
       throw new Error(`bgm_fetch_${bgmRes.status}`);
     }
