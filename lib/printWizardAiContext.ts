@@ -13,6 +13,44 @@ export function pageCountLabel(pageCount: number): string {
   return `${pageCount}면`;
 }
 
+/**
+ * Screen 8 — dedicated back-cover prompt when 장수 = 양면(2면).
+ * `{topic_keywords}` is replaced with the user's theme / keyword tags.
+ */
+export const DOUBLE_SIDED_BACK_COVER_PROMPT_TEMPLATE =
+  "A professional double-sided print back cover background matching the theme: {topic_keywords}, elegant and clean layout. The center area is extremely light, faint soft off-white and pastel tones with a subtle texture to ensure high text readability and contrast. The outer borders and frame feature exquisite, sophisticated decorative elements and refined motifs matching the user's concept. High-end premium editorial design, minimalist center space, ornate borders, 8k resolution, photorealistic, masterpiece.";
+
+/** Theme keywords shared across front/back of a double-sided print. */
+export function topicKeywordsFromState(state: PrintWizardState): string {
+  const keywords = state.bgKeyword.trim();
+  if (keywords) return keywords;
+
+  const field = fieldById(state.bgPresetId);
+  if (field?.keyword?.trim()) return field.keyword.trim();
+
+  const example = SMART_PROMPT_PRESETS.find(
+    (p) => p.id === state.selectedPromptPresetId
+  );
+  const intent = (example?.prompt || state.mainPrompt).trim();
+  if (intent) {
+    return intent.length > 220
+      ? `${intent.slice(0, 217).trimEnd()}...`
+      : intent;
+  }
+
+  return "elegant print design";
+}
+
+export function buildDoubleSidedBackCoverPrompt(
+  topicKeywords: string
+): string {
+  const topic = topicKeywords.trim() || "elegant print design";
+  return DOUBLE_SIDED_BACK_COVER_PROMPT_TEMPLATE.replace(
+    "{topic_keywords}",
+    topic
+  );
+}
+
 /** Front / inner / back framing so each page gets a distinct composition. */
 export function pageFaceBrief(
   pageIndex: number,
@@ -27,6 +65,9 @@ export function pageFaceBrief(
   }
   if (n === 1) {
     return `FRONT of a ${total}-page ${piece} (page 1 of ${total}): hero establishing shot of the same theme, inviting composition, extra open space in the upper third for a headline — unique to the cover, never reused on later pages`;
+  }
+  if (total === 2 && n === 2) {
+    return `BACK COVER of a double-sided ${piece}: light pastel center for text readability, ornate decorative borders matching the front theme — never a duplicate of page 1`;
   }
   if (n === total) {
     return `BACK/closing of a ${total}-page ${piece} (page ${n} of ${total}): same world and color palette as the front but a clearly different camera angle, depth, and layout — complementary reverse side, never a duplicate of page 1`;
@@ -44,20 +85,42 @@ function pageCopyHint(state: PrintWizardState, pageIndex: number): string {
   return `this page carries overlay copy (do not render any letters): ${texts.join(" / ")}`;
 }
 
+function truncatePrompt(prompt: string, max = 1950): string {
+  if (prompt.length <= max) return prompt;
+  return `${prompt.slice(0, max - 3).trimEnd()}...`;
+}
+
 /** Per-page prompt: shared concept + unique face/purpose. */
 export function buildPagePrintAiContext(
   state: PrintWizardState,
   pageIndex: number
 ): string {
+  // 양면(2면) 뒷면 — dedicated light-center / ornate-border back-cover prompt.
+  if (state.pageCount === 2 && pageIndex === 1) {
+    const back = buildDoubleSidedBackCoverPrompt(
+      topicKeywordsFromState(state)
+    );
+    const copy = pageCopyHint(state, pageIndex);
+    const format = formatById(state.formatId);
+    const use = useById(state.useId);
+    const formatLabel =
+      state.formatId === "free" && state.customSize
+        ? `${state.customSize.width}×${state.customSize.height}${state.customSize.unit}`
+        : format.label;
+    const meta = `print piece: ${formatLabel}, ${use.label}, ${pageCountLabel(2)}. print-ready photographic background only, no text, no letters, no watermark, no logos`;
+    const combined = copy
+      ? `${back}. ${meta}. ${copy}`
+      : `${back}. ${meta}`;
+    return truncatePrompt(combined);
+  }
+
   const base = buildUnifiedPrintAiContext(state);
   if (!base) return "";
   const use = useById(state.useId);
   const face = pageFaceBrief(pageIndex, state.pageCount, use.label);
   const copy = pageCopyHint(state, pageIndex);
   const combined = copy ? `${base}. ${face}. ${copy}` : `${base}. ${face}`;
-  return combined.length > 1950
-    ? `${combined.slice(0, 1947).trimEnd()}...`
-    : combined;
+  return truncatePrompt(combined);
 }
 
 /** Single organic context string for Flux / layout — options + tags together. */
