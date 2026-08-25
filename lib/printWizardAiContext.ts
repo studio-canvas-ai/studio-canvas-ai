@@ -18,7 +18,7 @@ export function pageCountLabel(pageCount: number): string {
  * `{topic_keywords}` is replaced with the user's theme / keyword tags.
  */
 export const DOUBLE_SIDED_BACK_COVER_PROMPT_TEMPLATE =
-  "A professional double-sided print back cover background matching the theme: {topic_keywords}, elegant and clean layout. The center area is extremely light, faint soft off-white and pastel tones with a subtle texture to ensure high text readability and contrast. The outer borders and frame feature exquisite, sophisticated decorative elements and refined motifs matching the user's concept. High-end premium editorial design, minimalist center space, ornate borders, 8k resolution, photorealistic, masterpiece.";
+  "A professional double-sided print back cover background matching the theme: {topic_keywords}, elegant and clean layout. The color palette and hue of the background must naturally derive from the dominant color tone of the front page concept, rendered in a much softer, lighter, and desaturated pastel tint to ensure high text readability and contrast in the center. The outer borders and frame feature exquisite, sophisticated decorative elements and refined motifs matching the user's theme. High-end premium editorial design, minimalist center space, ornate borders, 8k resolution, photorealistic, masterpiece.";
 
 /** Theme keywords shared across front/back of a double-sided print. */
 export function topicKeywordsFromState(state: PrintWizardState): string {
