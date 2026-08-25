@@ -1,9 +1,12 @@
 /**
  * Screen 13 (Shorts Studio) curated BGM library.
- * Upbeat tracks live under `bgm/upbeat/` on Cloudflare R2.
+ * Tracks live under `bgm/{category}/` on Cloudflare R2.
  */
 
-import { buildUpbeatItemsFromFilenames } from "@/lib/bgm/buildUpbeatItems";
+import {
+  buildBgmItemsFromFilenames,
+} from "@/lib/bgm/buildBgmItems";
+import { CHILL_BGM_FILENAMES } from "@/lib/bgm/chillFilenames";
 import { UPBEAT_BGM_FILENAMES } from "@/lib/bgm/upbeatFilenames";
 
 export type BgmCategory = "업비트" | "칠" | "시네마틱" | "브이로그";
@@ -13,7 +16,7 @@ export interface BGMItem {
   title: string;
   category: BgmCategory;
   duration: string;
-  /** Object key under the R2 public base (e.g. bgm/upbeat/track-name.mp3). */
+  /** Object key under the R2 public base (e.g. bgm/chill/track-name.mp3). */
   objectKey: string;
   /** Optional hard-coded absolute URL override. */
   urlOverride?: string;
@@ -33,11 +36,13 @@ function r2PublicBase(): string {
   return (raw.trim() || R2_BGM_PUBLIC_BASE).replace(/\/$/, "");
 }
 
-/** Resolve playable URL for a library track. */
+/** Resolve playable URL for a library track (path segments URL-encoded). */
 export function resolveBgmUrl(item: BGMItem): string {
   if (item.urlOverride?.trim()) return item.urlOverride.trim();
   const base = r2PublicBase();
-  return `${base}/${item.objectKey.replace(/^\//, "")}`;
+  const key = item.objectKey.replace(/^\//, "");
+  const encoded = key.split("/").map((segment) => encodeURIComponent(segment)).join("/");
+  return `${base}/${encoded}`;
 }
 
 /** Same-origin proxy URL for FFmpeg.wasm fetch (avoids R2 CORS on mix). */
@@ -56,9 +61,10 @@ export function resolveBgmMixUrl(publicUrl: string): string {
   return trimmed;
 }
 
-const UPBEAT_LIBRARY = buildUpbeatItemsFromFilenames(UPBEAT_BGM_FILENAMES);
+const UPBEAT_LIBRARY = buildBgmItemsFromFilenames(UPBEAT_BGM_FILENAMES, "업비트");
+const CHILL_LIBRARY = buildBgmItemsFromFilenames(CHILL_BGM_FILENAMES, "칠");
 
-export const BGM_LIBRARY: BGMItem[] = [...UPBEAT_LIBRARY];
+export const BGM_LIBRARY: BGMItem[] = [...UPBEAT_LIBRARY, ...CHILL_LIBRARY];
 
 export const BGM_CATEGORIES: BgmCategory[] = [
   "업비트",
@@ -70,4 +76,18 @@ export const BGM_CATEGORIES: BgmCategory[] = [
 export function bgmItemsByCategory(category: BgmCategory | "all"): BGMItem[] {
   if (category === "all") return BGM_LIBRARY;
   return BGM_LIBRARY.filter((item) => item.category === category);
+}
+
+/** UI label for category filter chips. */
+export function bgmCategoryLabel(category: BgmCategory): string {
+  switch (category) {
+    case "업비트":
+      return "업비트 (Upbeat)";
+    case "칠":
+      return "칠 (Chill)";
+    case "시네마틱":
+      return "시네마틱 (Cinematic)";
+    case "브이로그":
+      return "브이로그 (Vlog)";
+  }
 }

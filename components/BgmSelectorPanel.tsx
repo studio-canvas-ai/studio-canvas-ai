@@ -6,6 +6,7 @@ import { useI18n } from "@/components/I18nProvider";
 import {
   BGM_CATEGORIES,
   BGM_LIBRARY,
+  bgmCategoryLabel,
   resolveBgmUrl,
   type BGMItem,
   type BgmCategory,
@@ -235,7 +236,7 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
                       : "bg-white/5 text-white/55 hover:bg-white/10 hover:text-white/80"
                   }`}
                 >
-                  {cat}
+                  {bgmCategoryLabel(cat)}
                 </button>
               ))}
             </div>
@@ -265,7 +266,7 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
                           {item.title}
                         </p>
                         <p className="truncate text-[11px] text-white/40">
-                          {item.category} ·{" "}
+                          {bgmCategoryLabel(item.category)} ·{" "}
                           {t.shorts.bgmDurationLabel.replace(
                             "{duration}",
                             item.duration
