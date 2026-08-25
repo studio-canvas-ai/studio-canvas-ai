@@ -409,7 +409,7 @@ export default function PreviewTextOverlay({
   };
 
   useEffect(() => {
-    if (!backgroundSrc || !size.w || !size.h || !layers.length || interactive) return;
+    if (!backgroundSrc || !size.w || !size.h || !layers.length) return;
     let cancelled = false;
     const image = new Image();
     image.crossOrigin = "anonymous";
@@ -457,7 +457,7 @@ export default function PreviewTextOverlay({
     return () => {
       cancelled = true;
     };
-  }, [backgroundSrc, interactive, size.h, size.w]);
+  }, [backgroundSrc, size.h, size.w, layers]);
 
   if (!layers.length) return null;
   if (!pageLayersHaveVisibleText(layers) && !interactive) return null;

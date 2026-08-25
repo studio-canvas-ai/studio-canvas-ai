@@ -78,14 +78,37 @@ function AutoGrowTextarea({
   );
 }
 
-function mergeIncomingKeepOrder(
+function normalizeRows(layers: TextLayer[], pageIndex: number): TextLayer[] {
+  return pageIndex === 0 ? ensurePageZoneLayers(layers, pageIndex) : layers;
+}
+
+function sameLayerIds(a: TextLayer[], b: TextLayer[]): boolean {
+  return (
+    a.length === b.length && a.every((layer, i) => layer.id === b[i]?.id)
+  );
+}
+
+/**
+ * Sync parent → local, but never clobber in-progress typing with a stale
+ * empty parent payload (that left the modal full and the canvas blank).
+ */
+function mergeIncomingKeepTyped(
   prev: TextLayer[],
   incoming: TextLayer[]
-): TextLayer[] {
-  if (prev.length === 0) return incoming;
+): { rows: TextLayer[]; replay: TextLayer[] | null } {
+  if (prev.length === 0) return { rows: incoming, replay: null };
   const byId = new Map(incoming.map((layer) => [layer.id, layer]));
   const prevIds = new Set(prev.map((layer) => layer.id));
-  const next = prev.map((row) => byId.get(row.id) ?? row);
+  let needsReplay = false;
+  const next = prev.map((row) => {
+    const parent = byId.get(row.id);
+    if (!parent) return row;
+    if (row.text.trim() && !parent.text.trim()) {
+      needsReplay = true;
+      return { ...parent, text: row.text };
+    }
+    return parent;
+  });
   incoming.forEach((layer, index) => {
     if (prevIds.has(layer.id)) return;
     let insertAt = next.length;
@@ -98,17 +121,7 @@ function mergeIncomingKeepOrder(
     }
     next.splice(insertAt, 0, layer);
   });
-  return next;
-}
-
-function normalizeRows(layers: TextLayer[], pageIndex: number): TextLayer[] {
-  return pageIndex === 0 ? ensurePageZoneLayers(layers, pageIndex) : layers;
-}
-
-function sameLayerIds(a: TextLayer[], b: TextLayer[]): boolean {
-  return (
-    a.length === b.length && a.every((layer, i) => layer.id === b[i]?.id)
-  );
+  return { rows: next, replay: needsReplay ? next : null };
 }
 
 export default function PageLayerEditor({
@@ -130,9 +143,9 @@ export default function PageLayerEditor({
   const pageRef = useRef(page);
   const onAddAfterRef = useRef(onAddAfter);
   onAddAfterRef.current = onAddAfter;
-  const pendingSeedRef = useRef(false);
+  const seededSigRef = useRef<string>("");
 
-  /** Replace whole page in parent so preview always sees the same rows as the modal. */
+  /** Whole-page commit — preview reads parent textLayersByPage, not local rows. */
   const commitPage = (next: TextLayer[], focusAdded = false) => {
     const normalized = normalizeRows(next, pageIndex);
     if (focusAdded) {
@@ -144,8 +157,23 @@ export default function PageLayerEditor({
       }
     }
     setRows(normalized);
+    seededSigRef.current = normalized.map((l) => l.id).join("|");
     onAddAfterRef.current(normalized);
   };
+
+  // Cover zones must exist in parent before the first keystroke.
+  useLayoutEffect(() => {
+    const normalized = normalizeRows(layers, pageIndex);
+    const sig = normalized.map((l) => l.id).join("|");
+    if (sameLayerIds(layers, normalized)) {
+      seededSigRef.current = sig;
+      return;
+    }
+    if (seededSigRef.current === sig) return;
+    seededSigRef.current = sig;
+    setRows(normalized);
+    onAddAfterRef.current(normalized);
+  }, [pageIndex, layers]);
 
   useEffect(() => {
     const incoming = normalizeRows(layers, pageIndex);
@@ -153,26 +181,31 @@ export default function PageLayerEditor({
       pageRef.current = page;
       setFocusId(null);
       setRows(incoming);
+      seededSigRef.current = incoming.map((l) => l.id).join("|");
       if (!sameLayerIds(layers, incoming)) {
-        pendingSeedRef.current = true;
         onAddAfterRef.current(incoming);
       }
       return;
     }
 
     if (!sameLayerIds(layers, incoming)) {
-      if (!pendingSeedRef.current) {
-        pendingSeedRef.current = true;
-        setRows(incoming);
+      const sig = incoming.map((l) => l.id).join("|");
+      setRows(incoming);
+      if (seededSigRef.current !== sig) {
+        seededSigRef.current = sig;
         onAddAfterRef.current(incoming);
       }
       return;
     }
 
-    pendingSeedRef.current = false;
-    setRows((prev) =>
-      normalizeRows(mergeIncomingKeepOrder(prev, incoming), pageIndex)
-    );
+    setRows((prev) => {
+      const { rows: merged, replay } = mergeIncomingKeepTyped(prev, incoming);
+      const normalized = normalizeRows(merged, pageIndex);
+      if (replay) {
+        queueMicrotask(() => onAddAfterRef.current(normalized));
+      }
+      return normalized;
+    });
   }, [page, pageIndex, layers]);
 
   const renderRow = (
@@ -227,6 +260,7 @@ export default function PageLayerEditor({
               setRows(normalized);
               onDelete(layer.id);
               if (!sameLayerIds(next, normalized)) {
+                seededSigRef.current = normalized.map((l) => l.id).join("|");
                 onAddAfterRef.current(normalized);
               }
             }}

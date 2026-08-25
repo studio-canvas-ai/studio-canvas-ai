@@ -681,7 +681,8 @@ function makeZoneLayer(pageIndex: number, zone: SemanticZone): TextLayer {
     // Stable ids so local editor rows and parent preview stay in sync.
     id: `page-${pageIndex}-zone-${zone}`,
     text: "",
-    color: "inkBlack",
+    // White reads on dark AI backgrounds; contrast sampler may refine later.
+    color: "white",
     maxWidth: 0.88,
     lineHeight: 1.25,
     letterSpacing: 0,

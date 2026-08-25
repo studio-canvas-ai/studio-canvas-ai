@@ -61,6 +61,7 @@ import {
   applySemanticPageLayout,
   editorSlotCount,
   EDITOR_PAGE_SLOTS,
+  ensurePageZoneLayers,
   layersToInputPatch,
   mergeRestoredTextLayersByPage,
   patchGlobalInputsFromPage,
@@ -585,9 +586,14 @@ export default function PrintWizardStep2({
 
   const onAddLayerAfter = useCallback(
     (nextLayers: TextLayer[]) => {
-      updateTextLayersForPage(editorPageIndex, () => nextLayers, {
-        applyLayout: false,
-      });
+      updateTextLayersForPage(
+        editorPageIndex,
+        () =>
+          editorPageIndex === 0
+            ? ensurePageZoneLayers(nextLayers, 0)
+            : nextLayers,
+        { applyLayout: false }
+      );
     },
     [editorPageIndex, updateTextLayersForPage]
   );
