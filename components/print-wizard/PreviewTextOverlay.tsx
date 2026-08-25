@@ -17,7 +17,7 @@ import {
   SNAP_THRESHOLD_PX,
   type SnapGuides,
 } from "@/lib/canvas/snapGuides";
-import { formatFormFieldText, formFieldFromLayerId } from "@/lib/printWizardTextFormat";
+import { formatFormFieldText, formFieldFromLayerId, toPlainLayerListText } from "@/lib/printWizardTextFormat";
 import {
   addPageTextLayerAfter,
   boxToLayerPatch,
@@ -28,7 +28,7 @@ import {
   stripLayerPlaceholderPrefix,
 } from "@/lib/printWizardTextLayers";
 import { drawPrintLayerInBox } from "@/lib/printWizardTextDraw";
-import { colorPresetFill, fontForText, type TextLayer } from "@/lib/thumbnailStyles";
+import { colorPresetFill, type TextLayer } from "@/lib/thumbnailStyles";
 
 export type PreviewTextOverlayProps = {
   layers: TextLayer[];
@@ -341,11 +341,11 @@ export default function PreviewTextOverlay({
         if (!moved && drag.kind === "move") {
           const now = Date.now();
           const prev = lastTapRef.current;
+          // Double-tap to edit; single tap only selects (keeps canvas paint stable).
           if (prev && prev.id === drag.layerId && now - prev.t < 380) {
             setEditingId(drag.layerId);
             lastTapRef.current = null;
           } else {
-            setEditingId(drag.layerId);
             lastTapRef.current = { id: drag.layerId, t: now };
           }
         } else {
@@ -496,16 +496,8 @@ export default function PreviewTextOverlay({
           8,
           Math.round((layer.fontSize || 48) * scale)
         );
-        const fontFamily = fontForText(
-          layer.fontPreset || "pretendard",
-          layer.text
-        );
         const field = formFieldFromLayerId(layer.id);
         const alignClass = textAlignClass(layer.align);
-        const letterSpacing =
-          field === "date" || field === "programs"
-            ? 0
-            : (layer.letterSpacing ?? 0) * scale;
 
         return (
           <div
@@ -596,7 +588,7 @@ export default function PreviewTextOverlay({
               {isEditing ? (
                 <textarea
                   autoFocus
-                  value={layer.text}
+                  value={toPlainLayerListText(layer.text)}
                   onBlur={() => {
                     setEditingId(null);
                     if (field) {
@@ -611,7 +603,9 @@ export default function PreviewTextOverlay({
                     }
                   }}
                   onChange={(e) => {
-                    const text = stripLayerPlaceholderPrefix(e.target.value);
+                    const text = toPlainLayerListText(
+                      stripLayerPlaceholderPrefix(e.target.value)
+                    );
                     onLayersChange(
                       layersRef.current.map((l) =>
                         l.id === layer.id ? { ...l, text } : l
@@ -622,15 +616,14 @@ export default function PreviewTextOverlay({
                   onKeyDown={(e) => {
                     if (e.key === "Escape") setEditingId(null);
                   }}
-                  className={`font-emoji h-full w-full resize-none overflow-hidden border-0 bg-transparent p-0 outline-none ${alignClass}`}
+                  className={`layer-list-plain-text h-full w-full resize-none overflow-hidden border-0 bg-transparent p-0 outline-none ${alignClass}`}
                   style={{
                     color: colorPresetFill(layer.color),
-                    fontFamily,
                     fontSize,
                     fontWeight: layer.fontWeight ?? 700,
                     textAlign: layer.align || "center",
                     lineHeight: layer.lineHeight ?? 1.25,
-                    letterSpacing,
+                    letterSpacing: 0,
                     whiteSpace: "pre-wrap",
                     overflowWrap: "anywhere",
                     wordBreak: "break-word",
