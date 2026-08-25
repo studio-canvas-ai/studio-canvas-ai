@@ -810,14 +810,6 @@ export default function ResultWorkspace({
       </div>
 
       <div className="space-y-3">
-        {creditsLabel ? (
-          <p className="text-center text-xs text-white/40">
-            {t.creator.creditBadge
-              .replace("{current}", unlimitedCredits ? creditsLabel : String(credits))
-              .replace("{max}", unlimitedCredits ? creditsLabel : String(maxCredits))}
-          </p>
-        ) : null}
-
         {onDelete ? (
           <button
             type="button"

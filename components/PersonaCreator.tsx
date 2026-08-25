@@ -170,18 +170,16 @@ function PersonaCreatorInner() {
   const pathname = usePathname();
   const router = useRouter();
   const {
-    credits,
-    maxCredits,
-    unlimitedCredits,
-    creditsLabel,
     applyBrandWatermark,
-    consumeCredit,
     applyServerCredits,
-    setShowCreditModal,
     registerPortrait,
     requestRetouch,
     planId,
     refreshAccount,
+    credits,
+    maxCredits,
+    unlimitedCredits,
+    creditsLabel,
   } = useCredits();
   const { confirm, showToast } = useFeedback();
   const stepContentRef = useRef<HTMLDivElement>(null);
@@ -191,7 +189,7 @@ function PersonaCreatorInner() {
   const autoTrainArmedRef = useRef(false);
   /** Gallery → thumbnail edit track (no AI /api/generate). */
   const [directEditMode, setDirectEditMode] = useState(false);
-  /** Face-model vault → Step 4 train (5 credits) path. */
+  /** Face-model vault → Step 4 train path. */
   const [useTrainCredits, setUseTrainCredits] = useState(false);
   const [pendingAutoTrain, setPendingAutoTrain] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
@@ -1194,17 +1192,12 @@ function PersonaCreatorInner() {
     uploadedFiles,
   ]);
 
-  /** Runs portrait generation + gallery save. Returns false if blocked (e.g. no credits). */
+  /** Runs portrait generation + gallery save. */
   const runInitialGeneration = useCallback(async (opts?: { train?: boolean }): Promise<boolean> => {
     // Direct thumbnail-edit track never hits the AI generate API.
     if (directEditMode) return false;
 
     const trainMode = opts?.train ?? useTrainCredits;
-    // Initial generate still uses the wallet; train mode is free (no credit gate).
-    if (!trainMode && !unlimitedCredits && credits < 1) {
-      setShowCreditModal(true);
-      return false;
-    }
 
     setIsGenerating(true);
     setResultReady(false);
@@ -1272,7 +1265,6 @@ function PersonaCreatorInner() {
         }
         setGenerationError(t.creator.generateFailed);
         showToast(t.creator.generateFailed, "error");
-        setShowCreditModal(true);
         setIsGenerating(false);
         return false;
       }
@@ -1323,12 +1315,8 @@ function PersonaCreatorInner() {
       return false;
     }
 
-    // Train is free; initial still falls back to local wallet if server did not debit.
-    if (!trainMode && !serverDebited && !consumeCredit(1)) {
-      setShowCreditModal(true);
-      setIsGenerating(false);
-      return false;
-    }
+    // Portrait generate modes are free — no local wallet debit.
+    void serverDebited;
 
     registerPortrait(`${base}-0`);
     registerPortrait(`${base}-1`);
@@ -1429,17 +1417,13 @@ function PersonaCreatorInner() {
   }, [
     aspectRatio,
     applyServerCredits,
-    consumeCredit,
-    credits,
     directEditMode,
-    unlimitedCredits,
     planId,
     prompt,
     refreshAccount,
     registerPortrait,
     replaceQuerySilently,
     selectedStyles,
-    setShowCreditModal,
     showToast,
     t.creator.generateFailed,
     t.creator.generateFailedRefunded,
@@ -1463,11 +1447,6 @@ function PersonaCreatorInner() {
     }
     const trainMode =
       opts?.train === true || useTrainCredits || Boolean(selectedProfileId);
-    // Train path is free; only block initial generate on empty wallet.
-    if (!trainMode && !unlimitedCredits && credits < 1) {
-      setShowCreditModal(true);
-      return;
-    }
     setUseTrainCredits(trainMode);
     setValidationError(null);
     clearResultSession();
@@ -1637,7 +1616,7 @@ function PersonaCreatorInner() {
 
         const data = result.data;
         if (result.status === 402) {
-          setShowCreditModal(true);
+          setActionMessage(t.creator.generateFailed);
           setRegenerateBusy(false);
           setRegeneratingSlot(null);
           return;
@@ -1914,8 +1893,8 @@ function PersonaCreatorInner() {
         console.error("[PersonaCreator] bg-fusion failed", err);
         setActionMessage(message);
         showToast(message, "error");
-        if (err instanceof BackgroundFusionError && err.code === "insufficient_credits") {
-          setShowCreditModal(true);
+        if (err instanceof BackgroundFusionError && err.code === "generation_blocked") {
+          setActionMessage(message);
         }
         throw err instanceof Error ? err : new Error(message);
       } finally {
@@ -1927,9 +1906,7 @@ function PersonaCreatorInner() {
       aspectRatio,
       applyServerCredits,
       buildFusionPromptForApi,
-      consumeCredit,
       confirmedImageUrl,
-      credits,
       directEditMode,
       draftAspectRatios,
       drafts,
@@ -1943,7 +1920,6 @@ function PersonaCreatorInner() {
       selectedResultUrl,
       selectedProfileId,
       selectedStyles,
-      setShowCreditModal,
       showToast,
       snapshotConfirmedImage,
       t.creator.bgFusionNeedSelfies,
@@ -1951,9 +1927,7 @@ function PersonaCreatorInner() {
       t.creator.generateNetworkError,
       t.creator.regenerateBusyLabel,
       t.creator.regenerateDone,
-      t.creator.regenerateNeedCredit,
       t.creator.regenerateNeedDraft,
-      unlimitedCredits,
       uploadedFiles,
     ]
   );
@@ -2707,11 +2681,6 @@ function PersonaCreatorInner() {
                       <div>
                         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                           <label className="text-sm font-medium text-white/70">{t.creator.promptLabel}</label>
-                          <span className="text-[11px] text-white/40">
-                            {t.creator.creditBadge
-                              .replace("{current}", unlimitedCredits ? creditsLabel : String(credits))
-                              .replace("{max}", unlimitedCredits ? creditsLabel : String(maxCredits))}
-                          </span>
                         </div>
                         <textarea
                           value={prompt}

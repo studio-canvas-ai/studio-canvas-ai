@@ -29,7 +29,7 @@ const en: Translations = {
     topup: "+ Top up",
     promoCode: "[Enter code]",
     promoBalance: "Code balance",
-    creditsBadge: "{n} credits",
+    creditsBadge: "{n} left",
   },
   hero: {
     badge: "AI-Powered Portrait Studio",
@@ -216,7 +216,7 @@ const en: Translations = {
     fullStudioOpen: "Open full-page dual studio",
     fullStudioClose: "Close",
     fullStudioFreeEditHint:
-      "All edits here are free. AI auto captions also run without credits.",
+      "All edits here are free, including AI auto captions.",
     dualStudioVideoPanel: "Video edit (9:16)",
     dualStudioThumbPanel: "Thumbnail edit (9:16)",
     dualStudioTabCaption: "Caption edit",
@@ -395,7 +395,7 @@ const en: Translations = {
     uploadGuide: "Upload guide",
     generateFailed: "Portrait generation failed.",
     generateFailedRefunded:
-      "Portrait generation failed, so the credit used has been refunded.",
+      "Portrait generation failed. Please try again.",
     generateNetworkError: "Could not reach the server. Please check your connection.",
     generateRetryHint: "Try again in a moment, or use different photos.",
     generateRetry: "Try again",
@@ -408,7 +408,7 @@ const en: Translations = {
     promptPreviewLabel: "Your custom direction",
     promptPlaceholder:
       "e.g. change to Maldives beach background, wear black-red horn-rimmed glasses, remove mole under nose, soften eye wrinkles, natural smile expression",
-    creditBadge: "⚡ Credits: {current}/{max}",
+    creditBadge: "",
     generatePortrait: "Generate Portrait",
     downloadPortrait: "📸 Download HD Portrait",
     deletePortrait: "🗑️ Delete generated portrait",

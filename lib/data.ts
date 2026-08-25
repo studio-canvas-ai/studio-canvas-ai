@@ -448,7 +448,7 @@ export const ACCEPTED_IMAGE_MIME = [
   "image/svg+xml",
 ] as const;
 
-/** #60 / #104: regenerate / train / download no longer use the credit wallet. */
+/** Portrait generate / train / regenerate / download — no credit wallet debit. */
 export const RETOUCH_FREE_PER_CYCLE = 0;
 export const RETOUCH_EXTRA_COST = 0;
 export const REGENERATE_CREDIT_COST = 0;
@@ -456,8 +456,8 @@ export const RETOUCH_NEXT_DAY_ENTRY_COST = 0;
 export const RETOUCH_DAILY_MAX = 50;
 export const GENERATE_DRAFT_COUNT = 2;
 
-/** Baseline cost of one initial generation. */
-export const GENERATE_CREDIT_COST = 1;
+/** Baseline cost of one initial generation (wallet disabled). */
+export const GENERATE_CREDIT_COST = 0;
 
 /** Cost to export / download a finished portrait (HD, print, etc.). */
 export const DOWNLOAD_CREDIT_COST = 0;
@@ -468,25 +468,24 @@ export const TRAIN_CREDIT_COST = 0;
 /**
  * Server-side price list per style pack. The client never decides what it pays —
  * `resolveGenerationCost` is the single source of truth for billing.
+ * All portrait generate modes are currently free (plan quotas govern downloads).
  */
 export const STYLE_CREDIT_COST: Record<string, number> = {
-  "luxury-lifestyle": 1,
-  "cinematic-poster": 1,
-  "business-executive": 1,
-  "cultural-elegance-east": 1,
-  "cultural-elegance-west": 1,
-  "classic-western": 1,
-  "neon-urban": 1,
-  "soft-studio": 1,
+  "luxury-lifestyle": 0,
+  "cinematic-poster": 0,
+  "business-executive": 0,
+  "cultural-elegance-east": 0,
+  "cultural-elegance-west": 0,
+  "classic-western": 0,
+  "neon-urban": 0,
+  "soft-studio": 0,
 };
 
 export function resolveGenerationCost(
-  mode: "initial" | "regenerate" | "train",
-  styleIds: string[] = []
+  _mode: "initial" | "regenerate" | "train",
+  _styleIds: string[] = []
 ): number {
-  if (mode === "regenerate" || mode === "train") return 0;
-  const styleId = styleIds.find((id) => id in STYLE_CREDIT_COST);
-  return styleId ? STYLE_CREDIT_COST[styleId] : GENERATE_CREDIT_COST;
+  return 0;
 }
 
 /** #54 face profile slots by plan */

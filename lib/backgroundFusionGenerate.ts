@@ -109,8 +109,8 @@ export async function runBackgroundFusionGenerate(
   }
 
   if (result.status === 402) {
-    throw new BackgroundFusionError("크레딧이 부족합니다.", {
-      code: "insufficient_credits",
+    throw new BackgroundFusionError("생성을 진행할 수 없습니다. 잠시 후 다시 시도해 주세요.", {
+      code: "generation_blocked",
       status: 402,
     });
   }

@@ -29,7 +29,7 @@ const kr: Translations = {
     topup: "+ 충전",
     promoCode: "[코드 입력]",
     promoBalance: "코드 잔액",
-    creditsBadge: "{n} 크레딧",
+    creditsBadge: "{n}회",
   },
   hero: {
     badge: "AI 포트레이트 스튜디오",
@@ -216,7 +216,7 @@ const kr: Translations = {
     fullStudioOpen: "대화면 듀얼 스튜디오 열기",
     fullStudioClose: "닫기",
     fullStudioFreeEditHint:
-      "이 화면의 일반 편집은 무료입니다. AI 자동 자막 생성도 크레딧 없이 실행됩니다.",
+      "이 화면의 일반 편집과 AI 자동 자막 생성은 자유롭게 실행할 수 있습니다.",
     dualStudioVideoPanel: "영상 편집 (9:16)",
     dualStudioThumbPanel: "썸네일편집 (9:16)",
     dualStudioTabCaption: "자막편집",
@@ -390,7 +390,7 @@ const kr: Translations = {
     editAndExport: "썸네일 편집 · 내보내기",
     uploadGuide: "업로드 안내",
     generateFailed: "AI 화보 생성 중 오류가 발생했습니다.",
-    generateFailedRefunded: "AI 화보 생성에 실패하여 사용된 크레딧을 돌려드렸습니다.",
+    generateFailedRefunded: "AI 화보 생성에 실패했습니다. 다시 시도해 주세요.",
     generateNetworkError: "서버에 연결하지 못했습니다. 네트워크 상태를 확인해 주세요.",
     generateRetryHint: "잠시 후 다시 시도하거나, 사진을 바꿔서 시도해 보세요.",
     generateRetry: "다시 시도하기",
@@ -403,7 +403,7 @@ const kr: Translations = {
     promptPreviewLabel: "나만의 세부 연출",
     promptPlaceholder:
       "예: 몰디브 해변 배경으로 변경, 검은색 굵은 뿔테 안경 착용, 코 밑 점 지워줘, 눈가 주름 완화해줘, 자연스러운 미소 표정",
-    creditBadge: "⚡ 보유 크레딧: {current}/{max}회",
+    creditBadge: "",
     generatePortrait: "화보 생성하기",
     downloadPortrait: "📸 고화질 화보 다운로드",
     deletePortrait: "🗑️ 생성된 화보 삭제하기",
