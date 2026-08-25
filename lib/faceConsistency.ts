@@ -2,7 +2,7 @@
  * Face consistency control stack (#105, #106).
  * Maximizes selfie→draft→regenerate identity lock via InsightFace / IP-Adapter / ControlNet.
  */
-import { REGENERATE_CREDIT_COST, TRAIN_CREDIT_COST, GENERATE_CREDIT_COST } from "@/lib/data";
+import { GENERATE_CREDIT_COST } from "@/lib/data";
 
 export const FACE_ID_EXTRACTOR = {
   engine: "insightface" as const,
@@ -96,11 +96,7 @@ export function buildFaceConsistencyPayload(input: {
     input.fusionMode ?? (isRegen ? "edit_draft" : "full_rerender");
   return {
     mode: input.mode,
-    creditCost: isRegen
-      ? REGENERATE_CREDIT_COST
-      : isTrain
-        ? TRAIN_CREDIT_COST
-        : GENERATE_CREDIT_COST,
+    creditCost: isRegen || isTrain ? 0 : GENERATE_CREDIT_COST,
     selfieUrls: input.selfieUrls.slice(0, 10),
     draftUrl: isRegen ? input.draftUrl : undefined,
     prompt: input.prompt.trim(),

@@ -221,7 +221,7 @@ export async function POST(req: Request) {
       Array.isArray(body.styleIds) ? body.styleIds : []
     );
 
-    if (userId) {
+    if (cost > 0 && userId) {
       const debit = await debitCredits({
         userId,
         amount: cost,
@@ -248,7 +248,7 @@ export async function POST(req: Request) {
         debitMeta = debit.entry.meta;
         walletSource = "account";
       }
-    } else {
+    } else if (cost > 0) {
       const cookieStore = await cookies();
       promoToken = cookieStore.get(PROMO_COOKIE_NAME)?.value;
       const activePromo = getPromotionByToken(promoToken);
@@ -275,6 +275,9 @@ export async function POST(req: Request) {
         ledgerId = debit.transactionId;
         walletSource = "promotion";
       }
+    } else if (userId && resolved.ok) {
+      walletSource = "account";
+      creditsAfter = resolved.user.credits;
     }
 
     let inference: InferenceResult;

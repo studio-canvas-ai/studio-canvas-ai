@@ -8,7 +8,8 @@ import {
   type FontPreset,
 } from "@/lib/thumbnailStyles";
 
-export const SHORTS_CAPTION_CREDIT_COST = 1;
+/** Legacy constant — AI captions no longer debit the credit wallet. */
+export const SHORTS_CAPTION_CREDIT_COST = 0;
 /** Cap timed PNG overlays to keep FFmpeg.wasm filtergraphs manageable. */
 export const SHORTS_CAPTION_RENDER_MAX = 40;
 

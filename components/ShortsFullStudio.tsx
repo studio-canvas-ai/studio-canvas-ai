@@ -41,7 +41,6 @@ import {
 } from "@/lib/shortsCaptionPresets";
 import type { ShortsBgmState } from "@/lib/shortsBgm";
 import {
-  SHORTS_CAPTION_CREDIT_COST,
   DEFAULT_SHORTS_CAPTION_STYLE,
   activeCaptionAt,
   applyCaptionPosPreset,
@@ -171,7 +170,7 @@ type Props = {
 
 /**
  * Hybrid dual studio — full-page 9:16 video + thumbnail editor (no floating window).
- * Free editing; only AI STT charges credits (parent-owned).
+ * Free editing; AI STT captions do not charge credits (parent-owned).
  */
 export default function ShortsFullStudio({
   open,
@@ -1283,10 +1282,7 @@ export default function ShortsFullStudio({
         ) : (
           <Sparkles className="h-3.5 w-3.5" />
         )}
-        {t.shorts.studioCaptionsGenerate.replace(
-          "{n}",
-          String(SHORTS_CAPTION_CREDIT_COST)
-        )}
+        {t.shorts.studioCaptionsGenerate}
       </button>
       <button
         type="button"

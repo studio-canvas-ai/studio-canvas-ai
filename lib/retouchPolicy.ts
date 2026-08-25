@@ -41,7 +41,7 @@ export type RetouchAttemptResult =
 /**
  * #104 policy:
  * - Partial retouch UI removed — edits go through prompt + regenerate
- * - Selected-draft regenerate always costs 1 credit
+ * - Selected-draft regenerate is free (no credit wallet debit)
  */
 export function evaluateRetouchRequest(params: {
   state: PortraitRetouchState | null;

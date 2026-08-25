@@ -733,7 +733,7 @@ export default function ShortsTextEditStudio() {
         });
       }
 
-      if (res.status === 402 || data.error === "insufficient_credits") {
+      if (res.status === 401 || data.error === "authentication required") {
         setShowCreditModal(true);
         void refreshAccount();
         setSttError(t.shorts.studioCaptionsInsufficient);

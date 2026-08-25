@@ -448,11 +448,11 @@ export const ACCEPTED_IMAGE_MIME = [
   "image/svg+xml",
 ] as const;
 
-/** #60 / #104: regenerate costs 1 credit; free retouch path removed from UI */
+/** #60 / #104: regenerate / train / download no longer use the credit wallet. */
 export const RETOUCH_FREE_PER_CYCLE = 0;
-export const RETOUCH_EXTRA_COST = 1;
-export const REGENERATE_CREDIT_COST = 1;
-export const RETOUCH_NEXT_DAY_ENTRY_COST = 1;
+export const RETOUCH_EXTRA_COST = 0;
+export const REGENERATE_CREDIT_COST = 0;
+export const RETOUCH_NEXT_DAY_ENTRY_COST = 0;
 export const RETOUCH_DAILY_MAX = 50;
 export const GENERATE_DRAFT_COUNT = 2;
 
@@ -460,10 +460,10 @@ export const GENERATE_DRAFT_COUNT = 2;
 export const GENERATE_CREDIT_COST = 1;
 
 /** Cost to export / download a finished portrait (HD, print, etc.). */
-export const DOWNLOAD_CREDIT_COST = 1;
+export const DOWNLOAD_CREDIT_COST = 0;
 
 /** Face/object model training → A/B draft generation cost. */
-export const TRAIN_CREDIT_COST = 5;
+export const TRAIN_CREDIT_COST = 0;
 
 /**
  * Server-side price list per style pack. The client never decides what it pays —
@@ -484,8 +484,7 @@ export function resolveGenerationCost(
   mode: "initial" | "regenerate" | "train",
   styleIds: string[] = []
 ): number {
-  if (mode === "regenerate") return REGENERATE_CREDIT_COST;
-  if (mode === "train") return TRAIN_CREDIT_COST;
+  if (mode === "regenerate" || mode === "train") return 0;
   const styleId = styleIds.find((id) => id in STYLE_CREDIT_COST);
   return styleId ? STYLE_CREDIT_COST[styleId] : GENERATE_CREDIT_COST;
 }

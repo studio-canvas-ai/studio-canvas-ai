@@ -43,9 +43,6 @@ import {
   HERO_AFTER_IMAGE,
   MIN_SELFIE_UPLOADS,
   MAX_SELFIE_UPLOADS,
-  REGENERATE_CREDIT_COST,
-  TRAIN_CREDIT_COST,
-  DOWNLOAD_CREDIT_COST,
   CONCEPT_POSE_HINTS,
   BACKGROUND_TAG_IDS,
   BACKGROUND_MODE_IDS,
@@ -1203,8 +1200,8 @@ function PersonaCreatorInner() {
     if (directEditMode) return false;
 
     const trainMode = opts?.train ?? useTrainCredits;
-    const creditNeed = trainMode ? TRAIN_CREDIT_COST : 1;
-    if (!unlimitedCredits && credits < creditNeed) {
+    // Initial generate still uses the wallet; train mode is free (no credit gate).
+    if (!trainMode && !unlimitedCredits && credits < 1) {
       setShowCreditModal(true);
       return false;
     }
@@ -1326,7 +1323,8 @@ function PersonaCreatorInner() {
       return false;
     }
 
-    if (!serverDebited && !consumeCredit(creditNeed)) {
+    // Train is free; initial still falls back to local wallet if server did not debit.
+    if (!trainMode && !serverDebited && !consumeCredit(1)) {
       setShowCreditModal(true);
       setIsGenerating(false);
       return false;
@@ -1465,8 +1463,8 @@ function PersonaCreatorInner() {
     }
     const trainMode =
       opts?.train === true || useTrainCredits || Boolean(selectedProfileId);
-    const creditNeed = trainMode ? TRAIN_CREDIT_COST : 1;
-    if (!unlimitedCredits && credits < creditNeed) {
+    // Train path is free; only block initial generate on empty wallet.
+    if (!trainMode && !unlimitedCredits && credits < 1) {
       setShowCreditModal(true);
       return;
     }
@@ -1558,10 +1556,6 @@ function PersonaCreatorInner() {
       drafts[targetSlot] || selectedResultUrl || confirmedImageUrl || drafts[0] || "";
     if (!sourceDraft.trim()) {
       setActionMessage(t.creator.regenerateNeedDraft);
-      return;
-    }
-    if (!unlimitedCredits && credits < REGENERATE_CREDIT_COST) {
-      setShowCreditModal(true);
       return;
     }
 
@@ -1697,43 +1691,17 @@ function PersonaCreatorInner() {
       }
 
       if (!serverDebited) {
-        const spend = await apiFetchJson<{
-          creditsAfter?: number;
-          ledgerId?: string | null;
-        }>("/api/credits/spend", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            amount: REGENERATE_CREDIT_COST,
-            reason: "regenerate",
-            meta: { portraitSlot: id },
-          }),
-        });
-        if (spend.status === 402) {
-          setShowCreditModal(true);
-          setRegenerateBusy(false);
-          setRegeneratingSlot(null);
-          return;
-        }
-        if (spend.ok && typeof spend.data?.creditsAfter === "number") {
-          applyServerCredits(spend.data.creditsAfter);
-        } else if (!consumeCredit(REGENERATE_CREDIT_COST)) {
-          setShowCreditModal(true);
-          setRegenerateBusy(false);
-          setRegeneratingSlot(null);
-          return;
-        }
+        // Regenerate is free — keep retouch bookkeeping only.
         const debitResult = requestRetouch(id, "regenerate", { skipCredit: true });
         if (!debitResult.ok) {
           setRegenerateBusy(false);
           setRegeneratingSlot(null);
           if (debitResult.reason === "throttle") setActionMessage(t.creator.retouchThrottle);
           else if (debitResult.reason === "daily_limit") setActionMessage(t.creator.retouchDailyLimit);
-          else if (debitResult.reason === "insufficient_credits") setShowCreditModal(true);
           return;
         }
       } else {
-        // Keep retouch bookkeeping in sync when /api/generate already billed.
+        // Keep retouch bookkeeping in sync when /api/generate already ran.
         requestRetouch(id, "regenerate", { skipCredit: true });
       }
 
@@ -1855,11 +1823,6 @@ function PersonaCreatorInner() {
         throw new Error(t.creator.bgFusionNeedSelfies);
       }
 
-      if (!unlimitedCredits && credits < REGENERATE_CREDIT_COST) {
-        setShowCreditModal(true);
-        throw new Error(t.creator.regenerateNeedCredit);
-      }
-
       const pid = portraitId || `portrait-${Date.now()}`;
       if (!portraitId) {
         setPortraitId(pid);
@@ -1904,8 +1867,6 @@ function PersonaCreatorInner() {
           applyServerCredits(creditsAfter);
         } else if (ledgerId) {
           await refreshAccount();
-        } else if (!consumeCredit(REGENERATE_CREDIT_COST)) {
-          setShowCreditModal(true);
         }
 
         const nextDrafts: [string, string] = [drafts[0] || "", drafts[1] || ""];
@@ -2012,50 +1973,13 @@ function PersonaCreatorInner() {
       showToast(t.creator.downloadFailed, "error");
       return;
     }
-    if (!unlimitedCredits && credits < DOWNLOAD_CREDIT_COST) {
-      setShowCreditModal(true);
-      return;
-    }
 
     const activeAspect = draftAspectRatios[focusedDraft] ?? aspectRatio;
     const activePan = draftImagePans[focusedDraft] ?? DEFAULT_IMAGE_PAN;
     setIsDownloading(true);
     if (preset !== "hd") setExportPreset(preset);
 
-    let serverSpent = false;
     try {
-      const spend = await apiFetchJson<{
-        creditsAfter?: number;
-        ledgerId?: string | null;
-        error?: string;
-      }>("/api/credits/spend", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amount: DOWNLOAD_CREDIT_COST,
-          reason: "download",
-          meta: { preset, portraitId: portraitId ?? null },
-        }),
-      });
-
-      if (spend.status === 402) {
-        setShowCreditModal(true);
-        return;
-      }
-      if (spend.ok && typeof spend.data?.creditsAfter === "number") {
-        applyServerCredits(spend.data.creditsAfter);
-        serverSpent = Boolean(spend.data.ledgerId);
-      } else if (!spend.ok) {
-        // Fall back to local wallet when spend API is unavailable (offline / promo).
-        if (!consumeCredit(DOWNLOAD_CREDIT_COST)) {
-          setShowCreditModal(true);
-          return;
-        }
-      } else if (!consumeCredit(DOWNLOAD_CREDIT_COST)) {
-        setShowCreditModal(true);
-        return;
-      }
-
       await downloadImageFile({
         imageUrl,
         filename:
@@ -2080,9 +2004,6 @@ function PersonaCreatorInner() {
     } catch (err) {
       console.error("[PersonaCreator] download failed", err);
       showToast(t.creator.downloadFailed, "error");
-      // Best-effort: if file export failed after a server spend, leave debit
-      // (file may have partially written); client-only spend cannot refund easily.
-      void serverSpent;
     } finally {
       setIsDownloading(false);
     }

@@ -3,7 +3,6 @@
 import { Loader2, Sparkles, Trash2 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import {
-  SHORTS_CAPTION_CREDIT_COST,
   applyCaptionPosPreset,
   type ShortsCaptionPosPreset,
   type ShortsCaptionSegment,
@@ -84,10 +83,7 @@ export default function ShortsCaptionTimelinePanel({
           )}
           {generating
             ? t.shorts.studioCaptionsGenerating
-            : t.shorts.studioCaptionsGenerate.replace(
-                "{n}",
-                String(SHORTS_CAPTION_CREDIT_COST)
-              )}
+            : t.shorts.studioCaptionsGenerate}
         </button>
       </div>
 

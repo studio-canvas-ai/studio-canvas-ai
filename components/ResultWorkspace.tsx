@@ -29,7 +29,7 @@ import {
   type ExportPreset,
   type ImagePan,
 } from "@/lib/downloadImage";
-import { PROMPT_MAX_LENGTH, REGENERATE_CREDIT_COST } from "@/lib/data";
+import { PROMPT_MAX_LENGTH } from "@/lib/data";
 import { requestAiBackground } from "@/lib/aiBackground";
 import { toDisplayImageSrc } from "@/lib/resultSession";
 
@@ -854,9 +854,7 @@ export default function ResultWorkspace({
               <span>
                 {regenerateBusy
                   ? t.creator.regenerateBusyLabel
-                  : unlimitedCredits || credits >= REGENERATE_CREDIT_COST
-                    ? t.creator.regenerateWithCredit
-                    : t.creator.regenerateNeedCredit}
+                  : t.creator.regenerateWithCredit}
               </span>
             </button>
             {actionMessage ? (

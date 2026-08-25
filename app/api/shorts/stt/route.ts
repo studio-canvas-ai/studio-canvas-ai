@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
-import { creditUser, debitCredits } from "@/lib/db/credits";
 import { resolveAppUser } from "@/lib/resolveAppUser";
 import { checkUploadRateLimit } from "@/lib/rateLimit";
 import { polishCaptionSegments } from "@/lib/shortsCaptionPolish";
-import { SHORTS_CAPTION_CREDIT_COST } from "@/lib/shortsCaptions";
 import {
   SHORTS_STT_MAX_BYTES,
   SHORTS_STT_VERCEL_SAFE_BYTES,
@@ -29,12 +27,11 @@ function formKeys(form: FormData): string[] {
  *  - fileName (optional)
  *  - mimeType (optional)
  *  - sourceKind (optional): "audio" | "video"
- * Debits 1 credit, restores on Whisper failure.
+ * No credit wallet debit — captions run on auth + rate limit only.
  */
 export async function POST(req: Request) {
   const reqStarted = Date.now();
   let userId: string | null = null;
-  let debitEntryMeta: Record<string, unknown> | null = null;
 
   try {
     const apiKey = getOpenAiApiKey();
@@ -178,41 +175,6 @@ export async function POST(req: Request) {
       "application/octet-stream";
     const fileName = whisperSafeFileName(rawName, mimeType);
 
-    const debit = await debitCredits({
-      userId,
-      amount: SHORTS_CAPTION_CREDIT_COST,
-      reason: "shorts_stt",
-      meta: {
-        source: "shorts_stt_api",
-        fileName: fileName.slice(0, 120),
-        bytes: file.size,
-        mimeType: mimeType.slice(0, 80),
-        sourceKind: sourceKind || "unknown",
-      },
-    });
-
-    if (!debit.ok) {
-      if (debit.reason === "insufficient") {
-        return NextResponse.json(
-          {
-            error: "insufficient_credits",
-            code: "insufficient_credits",
-            message: "Insufficient credits.",
-            credits: debit.credits ?? resolved.user.credits,
-            cost: SHORTS_CAPTION_CREDIT_COST,
-          },
-          { status: 402 }
-        );
-      }
-      console.error("[shorts/stt] debit failed", { reason: debit.reason });
-      return NextResponse.json(
-        { error: "not_found", code: "debit_failed" },
-        { status: 404 }
-      );
-    }
-
-    debitEntryMeta = debit.entry.meta ?? null;
-
     try {
       const result = await transcribeWithWhisper({
         apiKey,
@@ -221,7 +183,6 @@ export async function POST(req: Request) {
         mimeType,
       });
 
-      // Included in the same 1-credit STT debit — polish + keyword spans.
       const polished = await polishCaptionSegments({
         apiKey,
         language: result.language || "ko",
@@ -251,13 +212,10 @@ export async function POST(req: Request) {
         ms: Date.now() - reqStarted,
         segments: segments.length,
         polished: polished.length > 0,
-        creditsAfter: debit.user.credits,
       });
 
       return NextResponse.json({
         ok: true,
-        creditsAfter: debit.user.credits,
-        cost: SHORTS_CAPTION_CREDIT_COST,
         language: result.language ?? null,
         text: result.text,
         segments,
@@ -276,7 +234,7 @@ export async function POST(req: Request) {
       const status =
         err instanceof ShortsSttError && err.status === 413 ? 413 : 502;
 
-      console.error("[shorts/stt] whisper failed — restoring credit", {
+      console.error("[shorts/stt] whisper failed", {
         userId,
         code,
         detail: detail.slice(0, 800),
@@ -286,23 +244,11 @@ export async function POST(req: Request) {
         bytes: file.size,
       });
 
-      await creditUser({
-        userId,
-        amount: SHORTS_CAPTION_CREDIT_COST,
-        reason: "system_error_restore",
-        meta: {
-          source: "shorts_stt_api",
-          restore: "whisper_failed",
-          code,
-        },
-        restoreFromDebitMeta: debit.entry.meta,
-      });
-
       return NextResponse.json(
         {
           error: "stt_failed",
           code,
-          message: "Speech recognition failed. Credit was restored.",
+          message: "Speech recognition failed.",
           detail: detail.slice(0, 400),
         },
         { status }
@@ -314,7 +260,6 @@ export async function POST(req: Request) {
       ms: Date.now() - reqStarted,
       err: err instanceof Error ? err.message : String(err),
       stack: err instanceof Error ? err.stack?.slice(0, 1200) : undefined,
-      debitEntryMeta,
     });
     return NextResponse.json(
       {

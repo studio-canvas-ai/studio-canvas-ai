@@ -26,7 +26,6 @@ import {
   type FaceProfile,
 } from "@/lib/faceProfiles";
 import { STUDIO_STORE_RECOVERED_EVENT } from "@/lib/studioStore/clientRecovery";
-import { TRAIN_CREDIT_COST } from "@/lib/data";
 import { processUploadFiles, urlToCompressedDataUrl } from "@/lib/processUpload";
 import {
   hasUnlimitedProfileSlots,
@@ -59,9 +58,6 @@ export default function FaceProfilePanel({ compact, onSelect, selectedId }: Prop
     billingInterval,
     authUser,
     isAuthenticated,
-    credits,
-    unlimitedCredits,
-    setShowCreditModal,
   } = useCredits();
   const [profiles, setProfiles] = useState<FaceProfile[]>([]);
   const [name, setName] = useState("");
@@ -347,10 +343,6 @@ export default function FaceProfilePanel({ compact, onSelect, selectedId }: Prop
           .replace("{max}", String(TRAIN_SELECTION_MAX))
       );
       setVaultOpen(true);
-      return;
-    }
-    if (!unlimitedCredits && credits < TRAIN_CREDIT_COST) {
-      setShowCreditModal(true);
       return;
     }
 

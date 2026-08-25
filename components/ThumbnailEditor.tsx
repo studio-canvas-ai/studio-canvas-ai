@@ -1596,9 +1596,6 @@ export default function ThumbnailEditor({
         >
           <Download className="h-4 w-4 shrink-0" />
           {t.thumbnail.saveAlbum}
-          <span className="ml-1 rounded-md bg-white/15 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-white/90">
-            1크레딧
-          </span>
         </button>
         <button
           type="button"
