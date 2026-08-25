@@ -105,12 +105,17 @@ function normalizeRows(layers: TextLayer[], pageIndex: number): TextLayer[] {
   return pageIndex === 0 ? ensurePageZoneLayers(layers, pageIndex) : layers;
 }
 
+function sameLayerIds(a: TextLayer[], b: TextLayer[]): boolean {
+  return (
+    a.length === b.length && a.every((layer, i) => layer.id === b[i]?.id)
+  );
+}
+
 export default function PageLayerEditor({
   page,
   layers,
   activeLayerId = null,
   onActiveLayerChange,
-  onLayerTextChange,
   onAddAfter,
   onDelete,
 }: PageLayerEditorProps) {
@@ -123,21 +128,12 @@ export default function PageLayerEditor({
   );
   const [focusId, setFocusId] = useState<string | null>(null);
   const pageRef = useRef(page);
+  const onAddAfterRef = useRef(onAddAfter);
+  onAddAfterRef.current = onAddAfter;
+  const pendingSeedRef = useRef(false);
 
-  useEffect(() => {
-    const incoming = normalizeRows(layers, pageIndex);
-    if (pageRef.current !== page) {
-      pageRef.current = page;
-      setFocusId(null);
-      setRows(incoming);
-      return;
-    }
-    setRows((prev) =>
-      normalizeRows(mergeIncomingKeepOrder(prev, incoming), pageIndex)
-    );
-  }, [page, pageIndex, layers]);
-
-  const commit = (next: TextLayer[], focusAdded = false) => {
+  /** Replace whole page in parent so preview always sees the same rows as the modal. */
+  const commitPage = (next: TextLayer[], focusAdded = false) => {
     const normalized = normalizeRows(next, pageIndex);
     if (focusAdded) {
       const prevIds = new Set(rows.map((layer) => layer.id));
@@ -148,8 +144,36 @@ export default function PageLayerEditor({
       }
     }
     setRows(normalized);
-    onAddAfter(normalized);
+    onAddAfterRef.current(normalized);
   };
+
+  useEffect(() => {
+    const incoming = normalizeRows(layers, pageIndex);
+    if (pageRef.current !== page) {
+      pageRef.current = page;
+      setFocusId(null);
+      setRows(incoming);
+      if (!sameLayerIds(layers, incoming)) {
+        pendingSeedRef.current = true;
+        onAddAfterRef.current(incoming);
+      }
+      return;
+    }
+
+    if (!sameLayerIds(layers, incoming)) {
+      if (!pendingSeedRef.current) {
+        pendingSeedRef.current = true;
+        setRows(incoming);
+        onAddAfterRef.current(incoming);
+      }
+      return;
+    }
+
+    pendingSeedRef.current = false;
+    setRows((prev) =>
+      normalizeRows(mergeIncomingKeepOrder(prev, incoming), pageIndex)
+    );
+  }, [page, pageIndex, layers]);
 
   const renderRow = (
     layer: TextLayer,
@@ -182,7 +206,7 @@ export default function PageLayerEditor({
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              commit(addPageTextLayerAfter(rows, pageIndex, rowIndex), true);
+              commitPage(addPageTextLayerAfter(rows, pageIndex, rowIndex), true);
             }}
             className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-700 bg-[#121824] text-slate-300 transition hover:border-slate-500 hover:text-white"
           >
@@ -199,8 +223,12 @@ export default function PageLayerEditor({
               e.stopPropagation();
               if (!canDelete) return;
               const next = rows.filter((item) => item.id !== layer.id);
-              setRows(normalizeRows(next, pageIndex));
+              const normalized = normalizeRows(next, pageIndex);
+              setRows(normalized);
               onDelete(layer.id);
+              if (!sameLayerIds(next, normalized)) {
+                onAddAfterRef.current(normalized);
+              }
             }}
             className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-700 bg-[#121824] text-slate-300 transition hover:border-rose-500/50 hover:bg-rose-950/40 hover:text-rose-200 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-slate-700 disabled:hover:bg-[#121824] disabled:hover:text-slate-300"
           >
@@ -217,12 +245,11 @@ export default function PageLayerEditor({
               /^\s*(상단문구:|중간문구:|하단문구:)\s*/,
               ""
             );
-            setRows((prev) =>
-              prev.map((item) =>
+            commitPage(
+              rows.map((item) =>
                 item.id === layer.id ? { ...item, text: nextText } : item
               )
             );
-            onLayerTextChange(layer.id, nextText);
           }}
         />
       </div>

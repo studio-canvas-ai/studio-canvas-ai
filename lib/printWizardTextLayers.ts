@@ -678,7 +678,8 @@ export function layerZone(layer: TextLayer): SemanticZone {
 function makeZoneLayer(pageIndex: number, zone: SemanticZone): TextLayer {
   return createLayer({
     ...SEMANTIC_ZONE_STYLES[zone],
-    id: `page-${pageIndex}-zone-${zone}-${Math.random().toString(36).slice(2, 7)}`,
+    // Stable ids so local editor rows and parent preview stay in sync.
+    id: `page-${pageIndex}-zone-${zone}`,
     text: "",
     color: "inkBlack",
     maxWidth: 0.88,

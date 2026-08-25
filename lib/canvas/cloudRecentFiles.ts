@@ -1,3 +1,5 @@
+'use client';
+
 /**
  * Cloud SCA recent-files (user_saved_forms).
  * Drop-in for localStorage drawers: load/save per SCREEN-007 / 008 / 010.
