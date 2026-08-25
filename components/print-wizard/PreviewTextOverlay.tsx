@@ -469,6 +469,7 @@ export default function PreviewTextOverlay({
           className="pointer-events-auto absolute inset-0 z-[4]"
           onPointerDown={(e) => {
             if (e.target !== e.currentTarget) return;
+            // Deco/photo overlays sit above this sheet and own their hits.
             e.stopPropagation();
             onActiveLayerChange?.(null);
             setEditingId(null);

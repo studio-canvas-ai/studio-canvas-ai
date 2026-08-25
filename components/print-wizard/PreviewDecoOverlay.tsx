@@ -111,6 +111,16 @@ function applyFreeCornerResize(
     height = Math.max(MIN_BOX, start.height - dy);
     x = start.x + (start.width - width);
     y = start.y + (start.height - height);
+  } else if (handle === "e") {
+    width = Math.max(MIN_BOX, start.width + dx);
+  } else if (handle === "w") {
+    width = Math.max(MIN_BOX, start.width - dx);
+    x = start.x + (start.width - width);
+  } else if (handle === "s") {
+    height = Math.max(MIN_BOX, start.height + dy);
+  } else if (handle === "n") {
+    height = Math.max(MIN_BOX, start.height - dy);
+    y = start.y + (start.height - height);
   }
 
   return { x, y, width, height };
@@ -225,7 +235,8 @@ function resolveResizeMode(layer: PrintDecoLayer): ResizeMode {
 function handlesForResizeMode(mode: ResizeMode) {
   if (mode === "line-x") return LINE_X_HANDLES;
   if (mode === "line-y") return LINE_Y_HANDLES;
-  return CORNERS;
+  if (mode === "aspect") return CORNERS;
+  return [...CORNERS, ...LINE_X_HANDLES, ...LINE_Y_HANDLES];
 }
 
 function boxChanged(a: PrintDecoBox, b: PrintDecoBox): boolean {
@@ -467,7 +478,7 @@ export default function PreviewDecoOverlay({
   return (
     <div
       ref={hostRef}
-      className="pointer-events-none absolute inset-0 z-[2] overflow-visible"
+      className="pointer-events-none absolute inset-0 overflow-visible"
       style={{ transformOrigin: "top left" }}
     >
       {layers.map((layer) => {
@@ -481,7 +492,10 @@ export default function PreviewDecoOverlay({
             : (layer.rotation ?? 0);
         const isActive = activeLayerId === layer.id;
         const isHover = hoverId === layer.id;
-        const showChrome = interactive && (isActive || isHover || dragging);
+        const isLiveDrag = Boolean(
+          dragging && (liveBox?.id === layer.id || liveRotation?.id === layer.id)
+        );
+        const showChrome = interactive && (isActive || isHover || isLiveDrag);
         const resizeMode = resolveResizeMode(layer);
         const handles = handlesForResizeMode(resizeMode);
         const symbolSize = Math.max(
@@ -495,9 +509,9 @@ export default function PreviewDecoOverlay({
           <div
             key={layer.id}
             data-deco-layer={layer.id}
-            className={`pointer-events-auto absolute z-[2] touch-none select-none ${
+            className={`pointer-events-auto absolute touch-none select-none ${
               interactive ? "cursor-grab active:cursor-grabbing" : ""
-            } ${isActive ? "z-[3]" : ""}`}
+            } ${isActive || isLiveDrag ? "z-[3]" : "z-[1]"}`}
             style={{
               left: box.x,
               top: box.y,
@@ -511,23 +525,31 @@ export default function PreviewDecoOverlay({
             onPointerDown={(e) => handlePointerDown(e, layer.id, "move")}
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Full-box hit target so thin dividers/frames remain grabbable. */}
             <div
-              className="h-full w-full"
+              aria-hidden
+              className="pointer-events-none absolute inset-0"
               style={{
                 transform: `rotate(${rotation}deg)`,
                 transformOrigin: "center center",
               }}
             >
-              {symbol ? (
-                <span
-                  className="font-emoji flex h-full w-full items-center justify-center leading-none text-black drop-shadow-[0_1px_2px_rgba(255,255,255,0.65)]"
-                  style={{ fontSize: symbolSize }}
-                >
-                  {symbol}
-                </span>
-              ) : catalog ? (
-                <DecoShapeSvg category={catalog.category} variant={catalog.variant} />
-              ) : null}
+              <div className="pointer-events-none h-full w-full text-black/90">
+                {symbol ? (
+                  <span
+                    className="font-emoji flex h-full w-full items-center justify-center leading-none drop-shadow-[0_1px_2px_rgba(255,255,255,0.65)]"
+                    style={{ fontSize: symbolSize }}
+                  >
+                    {symbol}
+                  </span>
+                ) : catalog ? (
+                  <DecoShapeSvg
+                    category={catalog.category}
+                    variant={catalog.variant}
+                    className="pointer-events-none h-full w-full"
+                  />
+                ) : null}
+              </div>
             </div>
             {showChrome ? (
               <div className="absolute -top-5 left-0 right-0 z-[8] flex items-center justify-end gap-0.5">
@@ -549,7 +571,12 @@ export default function PreviewDecoOverlay({
             {showChrome ? (
               <div
                 className="pointer-events-none absolute inset-0 rounded-[3px] bg-red-500/12"
-                style={{ outline: "2px dashed #ef4444", outlineOffset: 0 }}
+                style={{
+                  outline: "2px dashed #ef4444",
+                  outlineOffset: 0,
+                  transform: `rotate(${rotation}deg)`,
+                  transformOrigin: "center center",
+                }}
               />
             ) : null}
             {showChrome ? (
@@ -573,7 +600,7 @@ export default function PreviewDecoOverlay({
                     onPointerDown={(e) =>
                       handlePointerDown(e, layer.id, "resize", h.id)
                     }
-                    className={`absolute z-[9] h-2 w-2 touch-none rounded-[2px] border-2 border-red-500 bg-white shadow pointer-events-auto pointer-coarse:h-2.5 pointer-coarse:w-2.5 ${h.className}`}
+                    className={`absolute z-[9] h-2.5 w-2.5 touch-none rounded-[2px] border-2 border-red-500 bg-white shadow pointer-events-auto pointer-coarse:h-3 pointer-coarse:w-3 ${h.className}`}
                     style={{ cursor: h.cursor }}
                   />
                 ))

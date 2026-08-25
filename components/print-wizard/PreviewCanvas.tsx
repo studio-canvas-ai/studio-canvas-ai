@@ -819,30 +819,6 @@ export default function PreviewCanvas({
                     />
                   ) : null}
 
-                  {decoLayersByPage?.[index]?.length && onDecoLayersChange ? (
-                    <PreviewDecoOverlay
-                      layers={decoLayersByPage[index]}
-                      onLayersChange={(layers) =>
-                        onDecoLayersChange(index, layers)
-                      }
-                      interactive={
-                        textOverlayInteractive &&
-                        currentPage === pageNum &&
-                        !lightbox
-                      }
-                      activeLayerId={
-                        currentPage === pageNum ? activeDecoLayerId : null
-                      }
-                      onActiveLayerChange={(id) => {
-                        onActiveDecoLayerChange?.(id);
-                        if (id) {
-                          onActiveTextLayerChange?.(null);
-                          onActivePhotoLayerChange?.(null);
-                        }
-                      }}
-                    />
-                  ) : null}
-
                   {/* Form-to-Design: draggable text boxes over pure visual bg. */}
                   {(overlayLayersByPage?.[index]?.length ?? 0) > 0 &&
                   onOverlayLayersChange ? (
@@ -912,6 +888,36 @@ export default function PreviewCanvas({
                       </div>
                     </div>
                   )}
+
+                  {/* Deco above text so catalog items stay selectable/draggable over text hit areas. */}
+                  {decoLayersByPage?.[index]?.length && onDecoLayersChange ? (
+                    <div
+                      data-deco-overlay
+                      className="pointer-events-none absolute inset-0 z-[8] overflow-visible"
+                    >
+                      <PreviewDecoOverlay
+                        layers={decoLayersByPage[index]}
+                        onLayersChange={(layers) =>
+                          onDecoLayersChange(index, layers)
+                        }
+                        interactive={
+                          textOverlayInteractive &&
+                          currentPage === pageNum &&
+                          !lightbox
+                        }
+                        activeLayerId={
+                          currentPage === pageNum ? activeDecoLayerId : null
+                        }
+                        onActiveLayerChange={(id) => {
+                          onActiveDecoLayerChange?.(id);
+                          if (id) {
+                            onActiveTextLayerChange?.(null);
+                            onActivePhotoLayerChange?.(null);
+                          }
+                        }}
+                      />
+                    </div>
+                  ) : null}
                   </div>
                 </div>
               </div>
@@ -1114,24 +1120,6 @@ export default function PreviewCanvas({
                     }}
                   />
                 ) : null}
-                {decoLayersByPage?.[lightbox.pageNum - 1]?.length &&
-                onDecoLayersChange ? (
-                  <PreviewDecoOverlay
-                    layers={decoLayersByPage[lightbox.pageNum - 1]}
-                    onLayersChange={(layers) =>
-                      onDecoLayersChange(lightbox.pageNum - 1, layers)
-                    }
-                    interactive={textOverlayInteractive}
-                    activeLayerId={activeDecoLayerId}
-                    onActiveLayerChange={(id) => {
-                      onActiveDecoLayerChange?.(id);
-                      if (id) {
-                        onActiveTextLayerChange?.(null);
-                        onActivePhotoLayerChange?.(null);
-                      }
-                    }}
-                  />
-                ) : null}
                 {(overlayLayersByPage?.[lightbox.pageNum - 1]?.length ?? 0) >
                   0 && onOverlayLayersChange ? (
                   <div
@@ -1197,6 +1185,29 @@ export default function PreviewCanvas({
                     </div>
                   </div>
                 )}
+                {decoLayersByPage?.[lightbox.pageNum - 1]?.length &&
+                onDecoLayersChange ? (
+                  <div
+                    data-deco-overlay
+                    className="pointer-events-none absolute inset-0 z-[8] overflow-visible"
+                  >
+                    <PreviewDecoOverlay
+                      layers={decoLayersByPage[lightbox.pageNum - 1]}
+                      onLayersChange={(layers) =>
+                        onDecoLayersChange(lightbox.pageNum - 1, layers)
+                      }
+                      interactive={textOverlayInteractive}
+                      activeLayerId={activeDecoLayerId}
+                      onActiveLayerChange={(id) => {
+                        onActiveDecoLayerChange?.(id);
+                        if (id) {
+                          onActiveTextLayerChange?.(null);
+                          onActivePhotoLayerChange?.(null);
+                        }
+                      }}
+                    />
+                  </div>
+                ) : null}
                 </div>
               </div>
             </div>
