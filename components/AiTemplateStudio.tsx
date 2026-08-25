@@ -109,6 +109,7 @@ import {
   parseProgramEntries,
   programNumFontCss,
   programNumberColumnWidth,
+  toPlainLayerListText,
 } from "@/lib/printWizardTextFormat";
 import { wrapParagraph } from "@/lib/printWizardTextDraw";
 import {
@@ -397,9 +398,10 @@ const FONT_SIZE_MAX = 360;
 const LETTER_SPACING_MIN = -8;
 const LETTER_SPACING_MAX = 80;
 const LETTER_SPACING_DEFAULT = 0;
-const LINE_HEIGHT_MIN = 0.8;
-const LINE_HEIGHT_MAX = 2.5;
-const LINE_HEIGHT_STEP = 0.05;
+/** Allow tight stacking (programs / organizer lines) with fine slider steps. */
+const LINE_HEIGHT_MIN = 0.5;
+const LINE_HEIGHT_MAX = 3.0;
+const LINE_HEIGHT_STEP = 0.01;
 const LINE_HEIGHT_DEFAULT = 1.2;
 const PRINT_DPI = 300;
 const PREVIEW_MAX_EDGE = 1200;
@@ -3106,13 +3108,15 @@ export default function AiTemplateStudio({
             <input
               type="text"
               data-layer-id={layer.id}
-              value={layer.text}
+              value={toPlainLayerListText(layer.text)}
               onFocus={() => {
                 selectionClearedRef.current = false;
                 setActiveLayerId(layer.id);
               }}
               onChange={(e) => {
-                const nextValue = stripStickerTokens(e.target.value);
+                const nextValue = toPlainLayerListText(
+                  stripStickerTokens(e.target.value)
+                );
                 setOverlayLayers((prev) =>
                   prev.map((l) =>
                     l.id === layer.id ? { ...l, text: nextValue } : l
@@ -3120,7 +3124,7 @@ export default function AiTemplateStudio({
                 );
               }}
               placeholder={PLACEHOLDER_TEXT}
-              className={`font-emoji min-w-0 flex-1 truncate rounded-lg border bg-black/30 px-2 py-1 text-sm font-semibold whitespace-nowrap text-white outline-none placeholder:text-sm placeholder:font-normal placeholder:text-white/35 ${
+              className={`layer-list-plain-text min-w-0 flex-1 truncate rounded-lg border bg-black/30 px-2 py-1 text-sm font-semibold tracking-normal whitespace-nowrap text-white outline-none placeholder:text-sm placeholder:font-normal placeholder:text-white/35 ${
                 activeLayer?.id === layer.id
                   ? "border-purple-400/70 ring-2 ring-purple-400/30"
                   : "border-white/10 focus:border-purple-400/40"
@@ -3208,13 +3212,15 @@ export default function AiTemplateStudio({
                 autoResizeLayerTextarea(node);
               }}
               data-layer-id={layer.id}
-              value={layer.text}
+              value={toPlainLayerListText(layer.text)}
               onFocus={() => {
                 selectionClearedRef.current = false;
                 setActiveLayerId(layer.id);
               }}
               onChange={(e) => {
-                const nextValue = stripStickerTokens(e.target.value);
+                const nextValue = toPlainLayerListText(
+                  stripStickerTokens(e.target.value)
+                );
                 setOverlayLayers((prev) =>
                   prev.map((l) =>
                     l.id === layer.id ? { ...l, text: nextValue } : l
@@ -3224,7 +3230,7 @@ export default function AiTemplateStudio({
               }}
               rows={1}
               placeholder={PLACEHOLDER_TEXT}
-              className={`font-emoji w-full resize-y overflow-hidden rounded-lg border bg-black/30 px-3 py-1.5 text-2xl font-bold leading-tight tracking-wide text-white outline-none placeholder:text-sm placeholder:font-normal placeholder:text-white/35 ${
+              className={`layer-list-plain-text w-full resize-y overflow-hidden rounded-lg border bg-black/30 px-3 py-1.5 text-2xl font-bold leading-tight tracking-normal text-white outline-none placeholder:text-sm placeholder:font-normal placeholder:text-white/35 ${
                 activeLayer?.id === layer.id
                   ? "border-purple-400/70 ring-2 ring-purple-400/30"
                   : "border-white/10 focus:border-purple-400/40"

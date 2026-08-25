@@ -21,16 +21,18 @@ export function useDownloadQuota() {
     [planId, billingInterval]
   );
 
-  const fhdRemaining = planUsage?.fhdRemaining ?? limits.fhd;
-  const uhd4kRemaining = planUsage?.uhd4kRemaining ?? limits.uhd4k;
+  // Prefer server snapshot; never invent "full plan" remaining while usage is loading.
+  const fhdRemaining = planUsage?.fhdRemaining ?? 0;
+  const uhd4kRemaining = planUsage?.uhd4kRemaining ?? 0;
+  const usageReady = planUsage != null;
 
   const standardLabel = t.gallery.worksDownloadStandardCount.replace(
     "{n}",
-    String(fhdRemaining)
+    usageReady ? String(fhdRemaining) : "—"
   );
   const highLabel = t.gallery.worksDownloadHighCount.replace(
     "{n}",
-    String(uhd4kRemaining)
+    usageReady ? String(uhd4kRemaining) : "—"
   );
 
   const labelFor = useCallback(
@@ -49,12 +51,12 @@ export function useDownloadQuota() {
   const spendForQuality = useCallback(
     async (quality: DownloadQualityKind) => {
       const kind = quality === "high" ? "uhd4k" : "fhd";
-      if (remainingFor(quality) < 1) {
+      if (usageReady && remainingFor(quality) < 1) {
         return { ok: false as const, remaining: 0 };
       }
       return consumeDownloadQuota(kind);
     },
-    [consumeDownloadQuota, remainingFor]
+    [consumeDownloadQuota, remainingFor, usageReady]
   );
 
   return {
@@ -64,9 +66,12 @@ export function useDownloadQuota() {
     highLabel,
     labelFor,
     remainingFor,
-    canDownloadStandard: fhdRemaining >= 1,
-    canDownloadHigh: uhd4kRemaining >= 1,
+    canDownloadStandard: usageReady && fhdRemaining >= 1,
+    canDownloadHigh: usageReady && uhd4kRemaining >= 1,
     quotaEmptyMessage: t.gallery.worksDownloadQuotaEmpty,
     spendForQuality,
+    /** True once /api/account/me (or a spend) has hydrated usage. */
+    usageReady,
+    limits,
   };
 }

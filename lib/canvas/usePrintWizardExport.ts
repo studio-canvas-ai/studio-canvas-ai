@@ -101,11 +101,7 @@ export function usePrintWizardExport({
     if (!requireSubscription()) return;
     setBusy(true);
     try {
-      const spent = await spendForQuality(quality);
-      if (!spent.ok) {
-        showToast(quotaEmptyMessage, "error");
-        return;
-      }
+      // Build the file first — only spend quota after we have a real blob.
       let imageBlob: Blob | null = null;
       if (resolveExportImage) {
         try {
@@ -159,6 +155,13 @@ export function usePrintWizardExport({
           }
         }
       }
+
+      const spent = await spendForQuality(quality);
+      if (!spent.ok) {
+        showToast(quotaEmptyMessage, "error");
+        return;
+      }
+
       const project = buildStep2Project();
       const baseName = isPhoto
         ? `lookbook-${quality}`

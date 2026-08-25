@@ -58,10 +58,17 @@ export function applyQuotaCookieToUser(
   if (cookie.quotaPeriodStart !== periodStart) return;
   const limits = limitsFor(user);
   user.quotaPeriodStart = periodStart;
-  user.fhdRemaining = Math.min(limits.fhd, Math.max(0, cookie.fhdRemaining));
+  // Prefer the lower remaining so a stale cookie cannot undo a fresh spend,
+  // and a cold DB reset cannot ignore a lower cookie value.
+  user.fhdRemaining = Math.min(
+    limits.fhd,
+    Math.max(0, cookie.fhdRemaining),
+    user.fhdRemaining ?? cookie.fhdRemaining
+  );
   user.uhd4kRemaining = Math.min(
     limits.uhd4k,
-    Math.max(0, cookie.uhd4kRemaining)
+    Math.max(0, cookie.uhd4kRemaining),
+    user.uhd4kRemaining ?? cookie.uhd4kRemaining
   );
 }
 

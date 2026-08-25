@@ -71,13 +71,48 @@ export function normalizeDateText(raw: string): string {
   return compact;
 }
 
+/**
+ * Strip keycap / enclosed digit “badge” glyphs so layer-list inputs show
+ * plain ASCII numbers (Screen 7 / 24 list UI).
+ * - Keycaps: 1️⃣ (digit + VS16 + combining keycap)
+ * - Circled / parenthesized digits (① ⑴ …)
+ * - Fullwidth digits ０–９
+ */
+export function toPlainLayerListText(raw: string): string {
+  if (!raw) return raw;
+  let text = raw
+    // Keycap sequences: "1" + optional FE0F + 20E3 → "1"
+    .replace(/([0-9])\uFE0F?\u20E3/g, "$1")
+    // Variation selectors left after keycap strip
+    .replace(/\uFE0F/g, "");
+
+  // Enclosed alphanumerics → ASCII digits
+  text = text.replace(/[\u2460-\u2468]/g, (ch) =>
+    String(ch.charCodeAt(0) - 0x2460 + 1)
+  );
+  text = text.replace(/\u24EA/g, "0"); // ⓪
+  text = text.replace(/[\u2474-\u247C]/g, (ch) =>
+    String(ch.charCodeAt(0) - 0x2474 + 1)
+  ); // ⑴–⑼
+  text = text.replace(/[\u2488-\u2490]/g, (ch) =>
+    String(ch.charCodeAt(0) - 0x2488 + 1)
+  ); // ⒈–⒐
+  // Fullwidth digits
+  text = text.replace(/[\uFF10-\uFF19]/g, (ch) =>
+    String(ch.charCodeAt(0) - 0xff10)
+  );
+
+  return text;
+}
+
 export function formatFormFieldText(
   field: string,
   text: string
 ): string {
-  if (field === "programs") return formatProgramsList(text);
-  if (field === "date") return normalizeDateText(text);
-  return text;
+  const plain = toPlainLayerListText(text);
+  if (field === "programs") return formatProgramsList(plain);
+  if (field === "date") return normalizeDateText(plain);
+  return plain;
 }
 
 export function formFieldFromLayerId(id: string): string | null {

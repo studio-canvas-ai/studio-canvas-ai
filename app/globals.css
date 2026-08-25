@@ -261,6 +261,20 @@
   color-scheme: dark;
 }
 
+/**
+ * Screen 7 / 24 text-layer list fields — never use emoji fonts for digits
+ * (Segoe UI Emoji + font-variant-emoji:emoji renders ASCII digits as keycap badges).
+ */
+.layer-list-plain-text {
+  font-family: Pretendard, "Noto Sans KR", system-ui, -apple-system, "Segoe UI",
+    sans-serif !important;
+  font-variant-emoji: text !important;
+  font-variant-numeric: normal !important;
+  letter-spacing: normal !important;
+  -webkit-text-stroke: 0 !important;
+  text-shadow: none !important;
+}
+
 @keyframes sca-bridge-spin {
   to {
     transform: rotate(360deg);

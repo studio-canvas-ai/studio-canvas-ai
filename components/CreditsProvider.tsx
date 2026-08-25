@@ -43,6 +43,39 @@ import { clearAuthStorageOnly } from "@/lib/auth/clearAuthStorage";
 import { SESSION_LOCK_STORAGE_KEY } from "@/lib/auth/sessionLockShared";
 import type { PlanUsageSnapshot } from "@/lib/planQuotas";
 
+const PLAN_USAGE_CACHE_KEY = "sca_plan_usage_v1";
+
+function readCachedPlanUsage(): PlanUsageSnapshot | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(PLAN_USAGE_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PlanUsageSnapshot;
+    if (
+      typeof parsed?.fhdRemaining !== "number" ||
+      typeof parsed?.uhd4kRemaining !== "number"
+    ) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedPlanUsage(usage: PlanUsageSnapshot | null) {
+  if (typeof window === "undefined") return;
+  try {
+    if (!usage) {
+      localStorage.removeItem(PLAN_USAGE_CACHE_KEY);
+      return;
+    }
+    localStorage.setItem(PLAN_USAGE_CACHE_KEY, JSON.stringify(usage));
+  } catch {
+    /* ignore quota */
+  }
+}
+
 export type { PlanId } from "@/lib/faceProfiles";
 
 export { PLAN_CREDITS } from "@/lib/data";
@@ -183,7 +216,11 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
     useState<BillingInterval>("annual");
   const [socialProviders, setSocialProviders] = useState<SocialProviderId[]>([]);
   const [socialProvidersLoaded, setSocialProvidersLoaded] = useState(false);
-  const [planUsage, setPlanUsage] = useState<PlanUsageSnapshot | null>(null);
+  const [planUsage, setPlanUsageState] = useState<PlanUsageSnapshot | null>(null);
+  const setPlanUsage = useCallback((usage: PlanUsageSnapshot | null) => {
+    setPlanUsageState(usage);
+    writeCachedPlanUsage(usage);
+  }, []);
   const [portraits, setPortraits] = useState<Record<string, PortraitRetouchState>>({});
   const [dailyRetouchCount, setDailyRetouchCount] = useState(0);
   const [dailyKey, setDailyKey] = useState(todayKey);
@@ -200,6 +237,8 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
+    const cached = readCachedPlanUsage();
+    if (cached) setPlanUsageState(cached);
     const meta = getAccountMeta();
     if (meta.hadPaidPlan || meta.lastLoginAt) setIsAuthenticated(true);
     if (meta.planId && meta.planId !== "free") {
