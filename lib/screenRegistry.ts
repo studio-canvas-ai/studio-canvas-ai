@@ -76,10 +76,15 @@ export const SCREEN_REGISTRY: readonly ScreenRegistryEntry[] = [
     label: "AI Photo Generator — Editor / Complete (Step 2)",
     step: 2,
   },
+  {
+    id: "SCREEN-026",
+    path: "/print-unified-editor",
+    label: "Print Unified Editor — One-page canvas + design tools",
+  },
 ] as const;
 
 /** Next ID to assign when adding a screen (do not recycle). */
-export const NEXT_SCREEN_ID_NUMBER = 26;
+export const NEXT_SCREEN_ID_NUMBER = 27;
 
 /** Paths that share one URL across internal wizard steps. */
 const STEPPED_PATH_SESSION_KEYS: Readonly<Record<string, readonly string[]>> = {

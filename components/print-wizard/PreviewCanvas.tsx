@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { ArrowLeft, Loader2, Trash2, X } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { fillCanvas } from "@/lib/i18n";
@@ -17,6 +18,7 @@ import {
   PRINT_PENDING_PROJECT_KEY,
   PRINT_WIZARD_STUDIO_PATH,
 } from "@/lib/wizard/wizardProduct";
+import { PRINT_UNIFIED_EDITOR_PATH } from "@/lib/printUnifiedEditor";
 import PreviewTextOverlay from "@/components/print-wizard/PreviewTextOverlay";
 import PrintBlueprintOverlay from "@/components/print-wizard/PrintBlueprintOverlay";
 import {
@@ -554,6 +556,15 @@ export default function PreviewCanvas({
         <h2 className="shrink-0 text-[12px] font-semibold tracking-tight text-slate-200 [word-break:keep-all] sm:text-[13px]">
           {panelTitle ?? cs.printTitle}
         </h2>
+        {showHeaderBack ? (
+          <Link
+            href={PRINT_UNIFIED_EDITOR_PATH}
+            className="inline-flex shrink-0 items-center rounded-md border border-emerald-400/35 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-200 transition hover:bg-emerald-500/20 hover:text-emerald-100"
+            title="Screen 26 통합 에디터 (테스트)"
+          >
+            새 에디터 테스트
+          </Link>
+        ) : null}
         <div className="min-w-0 flex-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <CanvasUploadToolbar
             dense={!toolbarRoomy}

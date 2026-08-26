@@ -24,6 +24,8 @@ import {
   canvasTextScale,
   clampBoxAllowOverflow,
   layerToBox,
+  layerZone,
+  PAGE_ZONE_LABELS,
   removeTextLayer,
   stripLayerPlaceholderPrefix,
 } from "@/lib/printWizardTextLayers";
@@ -39,6 +41,10 @@ export type PreviewTextOverlayProps = {
   onActiveLayerChange?: (id: string | null) => void;
   pageIndex?: number;
   backgroundSrc?: string | null;
+  /** Screen 26 — always render empty zone guide boxes. */
+  showEmptyGuideBoxes?: boolean;
+  /** Screen 26 — single click enters inline edit (not only double-click). */
+  editOnSingleClick?: boolean;
 };
 
 type ResizeHandle = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
@@ -152,6 +158,8 @@ export default function PreviewTextOverlay({
   onActiveLayerChange,
   pageIndex = 0,
   backgroundSrc = null,
+  showEmptyGuideBoxes = false,
+  editOnSingleClick = false,
 }: PreviewTextOverlayProps) {
   const { t } = useI18n();
   const cs = t.canvasStudio;
@@ -484,10 +492,21 @@ export default function PreviewTextOverlay({
         const isActive = activeLayerId === layer.id;
         const isHover = hoverId === layer.id;
         const isEditing = editingId === layer.id;
-        if (!layer.text.trim() && !isActive && !isHover && !isEditing) {
+        if (
+          !layer.text.trim() &&
+          !isActive &&
+          !isHover &&
+          !isEditing &&
+          !showEmptyGuideBoxes
+        ) {
           return null;
         }
-        const showChrome = interactive && (isActive || isHover || isEditing);
+        const showChrome =
+          interactive &&
+          (isActive ||
+            isHover ||
+            isEditing ||
+            (showEmptyGuideBoxes && !layer.text.trim()));
         const fontSize = Math.max(
           8,
           Math.round((layer.fontSize || 48) * scale)
@@ -523,9 +542,14 @@ export default function PreviewTextOverlay({
               setHoverId((id) => (id === layer.id ? null : id))
             }
             onPointerDown={(e) => handlePointerDown(e, layer.id, "move")}
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!interactive || !editOnSingleClick || dragging) return;
+              onActiveLayerChange?.(layer.id);
+              setEditingId(layer.id);
+            }}
             onDoubleClick={(e) => {
-              if (!interactive) return;
+              if (!interactive || editOnSingleClick) return;
               e.stopPropagation();
               onActiveLayerChange?.(layer.id);
               setEditingId(layer.id);
@@ -636,12 +660,19 @@ export default function PreviewTextOverlay({
                   }}
                 />
               ) : (
-                <LayerTextCanvas
-                  layer={layer}
-                  width={box.width}
-                  height={box.height}
-                  scale={scale}
-                />
+                <>
+                  <LayerTextCanvas
+                    layer={layer}
+                    width={box.width}
+                    height={box.height}
+                    scale={scale}
+                  />
+                  {showEmptyGuideBoxes && !layer.text.trim() && !isEditing ? (
+                    <span className="pointer-events-none absolute inset-0 flex items-center justify-center px-2 text-center text-[11px] font-medium text-white/35">
+                      {PAGE_ZONE_LABELS[layerZone(layer)]}
+                    </span>
+                  ) : null}
+                </>
               )}
 
               {showChrome
