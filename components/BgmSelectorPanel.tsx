@@ -176,6 +176,47 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
     value.bgmName.trim() ||
     (value.bgmUrl ? t.shorts.bgmCustomTrack : t.shorts.bgmNone);
 
+  const volumePct = Math.round(clampBgmVolume(value.bgmVolume) * 100);
+
+  const setVolume = useCallback(
+    (raw: number) => {
+      onChange({
+        ...value,
+        bgmVolume: clampBgmVolume(raw),
+      });
+    },
+    [onChange, value]
+  );
+
+  /** Shared BGM volume control — top + bottom stay in sync via `value.bgmVolume`. */
+  const volumeSlider = (
+    <div className="flex items-center gap-2.5">
+      <span className="shrink-0 text-[10px] font-semibold text-white/85">
+        {t.shorts.bgmVolume}
+      </span>
+      <input
+        type="range"
+        min={SHORTS_BGM_VOLUME_MIN}
+        max={SHORTS_BGM_VOLUME_MAX}
+        step={0.01}
+        value={clampBgmVolume(value.bgmVolume)}
+        onChange={(e) => setVolume(Number(e.target.value))}
+        aria-label={t.shorts.bgmVolume}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={volumePct}
+        aria-valuetext={`${volumePct}%`}
+        className="min-w-0 flex-1 accent-emerald-400"
+      />
+      <span
+        className="inline-flex w-11 shrink-0 items-center justify-center rounded-md border border-emerald-400/40 bg-emerald-400/15 px-1 py-0.5 text-[11px] font-bold tabular-nums text-emerald-300"
+        aria-live="polite"
+      >
+        {volumePct}%
+      </span>
+    </div>
+  );
+
   return (
     <div className="overflow-hidden rounded-xl border border-white/10 bg-black/20">
       <button
@@ -211,6 +252,9 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
           <div>
             <p className="mb-2 text-xs font-medium text-white/90">
               {t.shorts.bgmPresetsLabel}
+              <span className="ml-1.5 font-semibold text-red-500">
+                {t.shorts.bgmCommercialUse}
+              </span>
             </p>
             <div className="mb-2 grid grid-cols-2 gap-1.5">
               <button
@@ -244,6 +288,9 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
                 ? `전체 ${tracks.length}곡`
                 : `${bgmCategoryLabel(category)} · ${tracks.length}곡`}
             </p>
+            <div className="mb-2 rounded-lg border border-white/10 bg-black/25 px-2.5 py-2">
+              {volumeSlider}
+            </div>
             <ul
               key={category}
               ref={listRef}
@@ -368,23 +415,19 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
                 max={SHORTS_BGM_VOLUME_MAX}
                 step={0.01}
                 value={clampBgmVolume(value.bgmVolume)}
-                onChange={(e) =>
-                  onChange({
-                    ...value,
-                    bgmVolume: clampBgmVolume(Number(e.target.value)),
-                  })
-                }
+                onChange={(e) => setVolume(Number(e.target.value))}
+                aria-label={t.shorts.bgmVolume}
                 aria-valuemin={0}
                 aria-valuemax={100}
-                aria-valuenow={Math.round(clampBgmVolume(value.bgmVolume) * 100)}
-                aria-valuetext={`${Math.round(clampBgmVolume(value.bgmVolume) * 100)}%`}
+                aria-valuenow={volumePct}
+                aria-valuetext={`${volumePct}%`}
                 className="min-w-0 flex-1 accent-emerald-400"
               />
               <span
                 className="inline-flex w-12 shrink-0 items-center justify-center rounded-md border border-emerald-400/40 bg-emerald-400/15 px-1.5 py-1 text-xs font-bold tabular-nums text-emerald-300"
                 aria-live="polite"
               >
-                {Math.round(clampBgmVolume(value.bgmVolume) * 100)}%
+                {volumePct}%
               </span>
             </div>
           </div>

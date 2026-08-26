@@ -134,6 +134,7 @@ const kr: Translations = {
     studioBoxWidth: "텍스트 박스 너비",
     bgmToggle: "🎵 배경음악 추가 및 믹싱",
     bgmPresetsLabel: "BGM 라이브러리",
+    bgmCommercialUse: "(상업적 이용 가능)",
     bgmPresets: {
       upbeat: "업비트 에너지",
       chill: "칠 그루브",
@@ -240,7 +241,7 @@ const kr: Translations = {
     projectRestoreHint:
       "저장된 수정용 파일(.sca)이나 최근 영상을 불러와 이어서 편집할 수 있습니다.",
     dualStudioVideoPanel: "영상 편집 (9:16)",
-    dualStudioThumbPanel: "썸네일편집 (9:16)",
+    dualStudioThumbPanel: "썸네일 편집 (9:16)",
     dualStudioTabCaption: "자막편집",
     dualStudioTabThumb: "글자편집",
     captionWorkspaceTitle: "자막 편집 워크스페이스",

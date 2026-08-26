@@ -164,6 +164,7 @@ export interface Translations {
     studioBoxWidth: string;
     bgmToggle: string;
     bgmPresetsLabel: string;
+    bgmCommercialUse: string;
     bgmPresets: {
       upbeat: string;
       chill: string;

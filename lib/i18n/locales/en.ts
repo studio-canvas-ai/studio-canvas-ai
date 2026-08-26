@@ -134,6 +134,7 @@ const en: Translations = {
     studioBoxWidth: "Text box width",
     bgmToggle: "🎵 Add & mix background music",
     bgmPresetsLabel: "BGM library",
+    bgmCommercialUse: "(Commercial use OK)",
     bgmPresets: {
       upbeat: "Upbeat Energy",
       chill: "Chill Groove",
