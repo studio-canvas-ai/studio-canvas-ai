@@ -219,9 +219,8 @@ const en: Translations = {
     studioWaveformTitle: "Waveform timeline",
     studioWaveformHint: "Drag block edges to trim start/end (0.1s). Drag body to move.",
     studioWaveformEmpty: "Generate captions to load the waveform",
-    fullStudioTitle: "Hybrid dual studio",
-    fullStudioSubtitle:
-      "Full page · video + thumbnail · waveform · YouTube upload",
+    fullStudioTitle: "Canvas Dual Studio",
+    fullStudioSubtitle: "",
     fullStudioOpen: "Open full-page dual studio",
     fullStudioClose: "Close",
     fullStudioFreeEditHint:

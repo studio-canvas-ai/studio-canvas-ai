@@ -219,9 +219,8 @@ const kr: Translations = {
     studioWaveformTitle: "파형 타임라인",
     studioWaveformHint: "블록 양끝으로 시작/종료(0.1초) 조절, 본문 드래그로 이동",
     studioWaveformEmpty: "자막을 생성하면 파형이 표시됩니다",
-    fullStudioTitle: "하이브리드 듀얼 스튜디오",
-    fullStudioSubtitle:
-      "전체 화면 · 영상+썸네일 · 파형 · 유튜브 업로드",
+    fullStudioTitle: "캔버스 듀얼스튜디오",
+    fullStudioSubtitle: "",
     fullStudioOpen: "대화면 듀얼 스튜디오 열기",
     fullStudioClose: "닫기",
     fullStudioFreeEditHint:

@@ -12,7 +12,6 @@ import {
   AlignCenter,
   AlignLeft,
   AlignRight,
-  ArrowLeft,
   Clapperboard,
   Loader2,
   Plus,
@@ -1671,29 +1670,15 @@ export default function ShortsFullStudio({
     >
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-white/[0.04] px-3 py-2.5 sm:px-4">
         <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/90 transition hover:bg-white/10 hover:text-white"
-            aria-label={t.shorts.studioBack}
-            title={t.shorts.studioBack}
-          >
-            <ArrowLeft className="h-4 w-4" aria-hidden />
-          </button>
+          <p className="shrink-0 text-sm font-bold tracking-tight text-white sm:text-[15px]">
+            {t.shorts.fullStudioTitle}
+          </p>
           {onLoadShortsProject ? (
             <ShortsProjectToolbar
               busy={mixing || youtubeBusy}
               onLoadProject={onLoadShortsProject}
             />
           ) : null}
-          <div className="min-w-0 hidden lg:block">
-            <p className="truncate text-sm font-bold">{t.shorts.fullStudioTitle}</p>
-            {t.shorts.fullStudioSubtitle ? (
-              <p className="truncate text-[11px] text-white/85">
-                {t.shorts.fullStudioSubtitle}
-              </p>
-            ) : null}
-          </div>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
           {headerRight}
