@@ -70,25 +70,44 @@ export default function ShortsThumbnailWorkspace() {
     setSelectedHook(frame);
   }, []);
 
+  const goToStudioWithHook = useCallback(
+    (frame: ShortsHookFrame) => {
+      if (!asset) return;
+      void useShortsProjectStore.getState().hydrateFromAsset(asset);
+      saveShortsStudioSession({
+        videoId: asset.videoId,
+        fileName: asset.fileName,
+        sizeBytes: asset.sizeBytes,
+        contentType: asset.contentType,
+        storageKey: asset.storageKey,
+        playbackUrl: asset.playbackUrl,
+        videoUrl: asset.playbackUrl || asset.previewUrl || null,
+        videoFileName: asset.fileName,
+        storage: asset.storage,
+        hook: frame,
+      });
+      router.push(SHORTS_STUDIO_PATH);
+    },
+    [asset, router]
+  );
+
+  const onManualFrameCaptured = useCallback(
+    (frame: ShortsHookFrame) => {
+      setHooks((prev) => {
+        const rest = prev.filter((h) => !h.id.startsWith("manual_"));
+        return [frame, ...rest];
+      });
+      setSelectedHook(frame);
+      setPhase("hooks_ready");
+      goToStudioWithHook(frame);
+    },
+    [goToStudioWithHook]
+  );
+
   const onContinueToStudio = useCallback(() => {
     if (!asset || !selectedHook) return;
-    // Keep video URL + filename in global store across /shorts → /studio.
-    void useShortsProjectStore.getState().hydrateFromAsset(asset);
-    saveShortsStudioSession({
-      videoId: asset.videoId,
-      fileName: asset.fileName,
-      sizeBytes: asset.sizeBytes,
-      contentType: asset.contentType,
-      storageKey: asset.storageKey,
-      playbackUrl: asset.playbackUrl,
-      /** Alias for studio mix — prefer R2 playback, else local preview blob URL. */
-      videoUrl: asset.playbackUrl || asset.previewUrl || null,
-      videoFileName: asset.fileName,
-      storage: asset.storage,
-      hook: selectedHook,
-    });
-    router.push(SHORTS_STUDIO_PATH);
-  }, [asset, selectedHook, router]);
+    goToStudioWithHook(selectedHook);
+  }, [asset, goToStudioWithHook, selectedHook]);
 
   return (
     <section
@@ -153,6 +172,7 @@ export default function ShortsThumbnailWorkspace() {
           onStartHookExtract={() => {
             void onStartHookExtract();
           }}
+          onManualFrameCaptured={onManualFrameCaptured}
         />
 
         {(phase === "hooks_ready" || hooks.length > 0) && (

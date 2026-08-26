@@ -212,13 +212,13 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
             <p className="mb-2 text-xs font-medium text-white/60">
               {t.shorts.bgmPresetsLabel}
             </p>
-            <div className="mb-2 flex flex-wrap gap-1.5">
+            <div className="mb-2 grid grid-cols-2 gap-1.5">
               <button
                 type="button"
                 onClick={() => setCategory("all")}
-                className={`rounded-full px-2.5 py-1 text-[10px] font-semibold transition ${
+                className={`rounded-lg px-2.5 py-1.5 text-center text-[10px] font-semibold transition ${
                   category === "all"
-                    ? "bg-glow-emerald/20 text-glow-emerald"
+                    ? "bg-glow-emerald/20 text-glow-emerald ring-1 ring-glow-emerald/40"
                     : "bg-white/5 text-white/55 hover:bg-white/10 hover:text-white/80"
                 }`}
               >
@@ -229,9 +229,9 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
                   key={cat}
                   type="button"
                   onClick={() => setCategory(cat)}
-                  className={`rounded-full px-2.5 py-1 text-[10px] font-semibold transition ${
+                  className={`rounded-lg px-2.5 py-1.5 text-center text-[10px] font-semibold transition ${
                     category === cat
-                      ? "bg-glow-emerald/20 text-glow-emerald"
+                      ? "bg-glow-emerald/20 text-glow-emerald ring-1 ring-glow-emerald/40"
                       : "bg-white/5 text-white/55 hover:bg-white/10 hover:text-white/80"
                   }`}
                 >

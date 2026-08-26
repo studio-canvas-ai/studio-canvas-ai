@@ -98,6 +98,11 @@ const en: Translations = {
     extractPending:
       "Sampling peak moments and saving thumbnail candidates to secure storage.",
     reExtract: "✨ Extract hook frames again",
+    manualCaptureCta: "📷 Use this frame as thumbnail",
+    manualCapturing: "Capturing frame…",
+    manualCaptureHint:
+      "Double-click the preview (or tap Capture) to set this frame as the Screen 13 thumbnail.",
+    manualCaptureError: "Could not capture this frame. Please try again.",
     hooksTitle: "AI hook-frame candidates",
     hooksHint: "Tap the frame you want for your Shorts thumbnail.",
     hookLabel: "Hook",

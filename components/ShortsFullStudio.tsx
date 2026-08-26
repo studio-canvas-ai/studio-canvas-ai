@@ -1277,12 +1277,6 @@ export default function ShortsFullStudio({
 
   const headerRight = (
     <>
-      {onLoadShortsProject ? (
-        <ShortsProjectToolbar
-          busy={mixing || youtubeBusy}
-          onLoadProject={onLoadShortsProject}
-        />
-      ) : null}
       <button
         type="button"
         disabled={sttGenerating || !videoUrl}
@@ -1676,7 +1670,7 @@ export default function ShortsFullStudio({
       className="fixed inset-0 z-[100] flex h-[100dvh] w-screen flex-col overflow-hidden bg-[#0b0d14] text-white"
     >
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-white/[0.04] px-3 py-2.5 sm:px-4">
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
           <button
             type="button"
             onClick={onClose}
@@ -1686,7 +1680,13 @@ export default function ShortsFullStudio({
           >
             <ArrowLeft className="h-4 w-4" aria-hidden />
           </button>
-          <div className="min-w-0">
+          {onLoadShortsProject ? (
+            <ShortsProjectToolbar
+              busy={mixing || youtubeBusy}
+              onLoadProject={onLoadShortsProject}
+            />
+          ) : null}
+          <div className="min-w-0 hidden lg:block">
             <p className="truncate text-sm font-bold">{t.shorts.fullStudioTitle}</p>
             {t.shorts.fullStudioSubtitle ? (
               <p className="truncate text-[11px] text-white/45">

@@ -83,6 +83,30 @@ function canvasFrame(video: HTMLVideoElement): Promise<Blob> {
   });
 }
 
+/** Capture the currently displayed frame from a live <video> element. */
+export async function captureCurrentVideoFrame(
+  video: HTMLVideoElement
+): Promise<CapturedHookFrame> {
+  if (!video.videoWidth || !video.videoHeight) {
+    throw new Error("video_not_ready");
+  }
+  const timestampSec = Number.isFinite(video.currentTime)
+    ? Math.round(video.currentTime * 100) / 100
+    : 0;
+  // Pause so the painted frame is stable (user can resume afterward).
+  const wasPlaying = !video.paused && !video.ended;
+  if (wasPlaying) {
+    try {
+      video.pause();
+    } catch {
+      /* ignore */
+    }
+  }
+  await new Promise((r) => requestAnimationFrame(() => r(undefined)));
+  const blob = await canvasFrame(video);
+  return { blob, timestampSec };
+}
+
 /** Capture evenly spaced stills from a local/object URL video. */
 export async function captureHookFramesFromVideoUrl(
   previewUrl: string,

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import {
   CheckCircle2,
+  Camera,
   Loader2,
   Smartphone,
   Sparkles,
@@ -11,6 +12,8 @@ import {
 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { useCredits } from "@/components/CreditsProvider";
+import { captureCurrentVideoFrame } from "@/lib/shortsCaptureFrames";
+import type { ShortsHookFrame } from "@/lib/shortsHookShared";
 import { uploadShortsVideoFile } from "@/lib/shortsUploadClient";
 import { useShortsProjectStore } from "@/lib/shortsProjectStore";
 import { persistShortsVideoBlob } from "@/lib/shortsVideoIdb";
@@ -34,6 +37,8 @@ type Props = {
   onProgressChange: (pct: number) => void;
   onError: (message: string | null) => void;
   onStartHookExtract: () => void;
+  /** Manual still from the preview player → Screen 13 thumbnail. */
+  onManualFrameCaptured?: (frame: ShortsHookFrame) => void | Promise<void>;
 };
 
 function mapUploadError(code: string, t: ReturnType<typeof useI18n>["t"]): string {
@@ -73,13 +78,16 @@ export default function ShortsVideoUpload({
   onProgressChange,
   onError,
   onStartHookExtract,
+  onManualFrameCaptured,
 }: Props) {
   const { t, locale } = useI18n();
   const { isAuthenticated, openAuthModal } = useCredits();
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const [dragOver, setDragOver] = useState(false);
-  const busy = phase === "uploading" || phase === "extracting";
+  const [capturing, setCapturing] = useState(false);
+  const busy = phase === "uploading" || phase === "extracting" || capturing;
 
   useEffect(() => {
     return () => {
@@ -161,6 +169,43 @@ export default function ShortsVideoUpload({
     const file = e.dataTransfer.files?.[0];
     void processFile(file);
   };
+
+  const captureManualFrame = useCallback(async () => {
+    if (!asset || !onManualFrameCaptured || capturing) return;
+    const video = videoRef.current;
+    if (!video) {
+      onError(t.shorts.manualCaptureError);
+      return;
+    }
+    setCapturing(true);
+    onError(null);
+    try {
+      const { blob, timestampSec } = await captureCurrentVideoFrame(video);
+      const imageUrl = URL.createObjectURL(blob);
+      const frame: ShortsHookFrame = {
+        id: `manual_${Date.now().toString(36)}_${Math.random()
+          .toString(36)
+          .slice(2, 6)}`,
+        index: 0,
+        timestampSec,
+        score: 1,
+        imageUrl,
+        storageKey: null,
+      };
+      await onManualFrameCaptured(frame);
+    } catch (err) {
+      console.error("[shorts] manual capture", err);
+      onError(t.shorts.manualCaptureError);
+    } finally {
+      setCapturing(false);
+    }
+  }, [
+    asset,
+    capturing,
+    onError,
+    onManualFrameCaptured,
+    t.shorts.manualCaptureError,
+  ]);
 
   return (
     <div className="space-y-5">
@@ -285,39 +330,73 @@ export default function ShortsVideoUpload({
             </button>
           </div>
 
-          <div className="overflow-hidden rounded-xl bg-black/40 ring-1 ring-white/10">
-            <video
-              key={asset.previewUrl}
-              src={asset.previewUrl}
-              controls
-              playsInline
-              preload="metadata"
-              className="mx-auto max-h-[min(60vh,420px)] w-full bg-black object-contain"
-            />
+          <div className="space-y-2">
+            <div className="relative overflow-hidden rounded-xl bg-black/40 ring-1 ring-white/10">
+              <video
+                ref={videoRef}
+                key={asset.previewUrl || asset.playbackUrl || asset.videoId}
+                src={asset.previewUrl || asset.playbackUrl || undefined}
+                crossOrigin={
+                  (asset.previewUrl || asset.playbackUrl || "").startsWith(
+                    "blob:"
+                  )
+                    ? undefined
+                    : "anonymous"
+                }
+                controls
+                playsInline
+                preload="metadata"
+                className="mx-auto max-h-[min(60vh,420px)] w-full bg-black object-contain"
+                onDoubleClick={(e) => {
+                  e.preventDefault();
+                  void captureManualFrame();
+                }}
+                title={t.shorts.manualCaptureHint}
+              />
+            </div>
+            <p className="text-center text-[11px] text-white/40">
+              {t.shorts.manualCaptureHint}
+            </p>
           </div>
 
-          {/*
-            Phase 3: POST /api/shorts/extract-hooks (FFmpeg or client canvas → R2 thumbs/)
-          */}
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onStartHookExtract}
-            className="btn-primary flex w-full items-center justify-center gap-2 px-5 py-3 text-sm font-semibold sm:text-base disabled:opacity-60"
-          >
-            {phase === "extracting" ? (
-              <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
-            ) : (
-              <Sparkles className="h-5 w-5" aria-hidden />
-            )}
-            <span>
-              {phase === "extracting"
-                ? t.shorts.extracting
-                : phase === "hooks_ready"
-                  ? t.shorts.reExtract
-                  : t.shorts.startHookExtract}
-            </span>
-          </button>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              disabled={busy || !onManualFrameCaptured}
+              onClick={() => void captureManualFrame()}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-sky-400/40 bg-sky-500/15 px-5 py-3 text-sm font-semibold text-sky-100 transition hover:bg-sky-500/25 disabled:opacity-60"
+            >
+              {capturing ? (
+                <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
+              ) : (
+                <Camera className="h-5 w-5" aria-hidden />
+              )}
+              <span>
+                {capturing
+                  ? t.shorts.manualCapturing
+                  : t.shorts.manualCaptureCta}
+              </span>
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onStartHookExtract}
+              className="btn-primary flex w-full items-center justify-center gap-2 px-5 py-3 text-sm font-semibold sm:text-base disabled:opacity-60"
+            >
+              {phase === "extracting" ? (
+                <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
+              ) : (
+                <Sparkles className="h-5 w-5" aria-hidden />
+              )}
+              <span>
+                {phase === "extracting"
+                  ? t.shorts.extracting
+                  : phase === "hooks_ready"
+                    ? t.shorts.reExtract
+                    : t.shorts.startHookExtract}
+              </span>
+            </button>
+          </div>
 
           {phase === "extracting" && (
             <p className="text-center text-xs text-white/45">

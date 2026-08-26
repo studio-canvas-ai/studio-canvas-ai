@@ -132,6 +132,10 @@ export interface Translations {
     extracting: string;
     extractPending: string;
     reExtract: string;
+    manualCaptureCta: string;
+    manualCapturing: string;
+    manualCaptureHint: string;
+    manualCaptureError: string;
     hooksTitle: string;
     hooksHint: string;
     hookLabel: string;

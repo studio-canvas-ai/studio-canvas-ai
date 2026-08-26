@@ -97,6 +97,11 @@ const kr: Translations = {
     extractPending:
       "핵심 장면을 샘플링하고 썸네일 후보를 보안 스토리지에 저장합니다.",
     reExtract: "✨ 훅 프레임 다시 추출",
+    manualCaptureCta: "📷 이 장면 썸네일로 지정",
+    manualCapturing: "프레임 캡처 중…",
+    manualCaptureHint:
+      "원하는 장면에서 더블클릭하거나 캡처 버튼을 누르면 Screen 13 썸네일로 바로 적용됩니다.",
+    manualCaptureError: "현재 장면을 캡처하지 못했습니다. 잠시 후 다시 시도해 주세요.",
     hooksTitle: "AI 훅 프레임 후보",
     hooksHint: "쇼츠 썸네일로 쓸 장면을 하나 선택하세요.",
     hookLabel: "훅",
