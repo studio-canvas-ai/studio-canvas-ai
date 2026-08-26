@@ -96,8 +96,9 @@ function hydrateInitialState(): PrintWizardState {
 export default function PrintUnifiedEditor() {
   const [state, setState] = useState<PrintWizardState>(defaultPrintWizardState);
   const [hydrated, setHydrated] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [zoom, setZoom] = useState<PrintUnifiedZoom>(0.75);
+  /** 0 until the user clicks a page tab — no canvas guides on first paint. */
+  const [currentPage, setCurrentPage] = useState(0);
+  const [zoom, setZoom] = useState<PrintUnifiedZoom>(1);
   const [generating, setGenerating] = useState(false);
   const [activeTextLayerId, setActiveTextLayerId] = useState<string | null>(
     null
@@ -138,7 +139,8 @@ export default function PrintUnifiedEditor() {
     [state.decoLayersByPage, state.pageCount]
   );
 
-  const pageIndex = Math.max(0, currentPage - 1);
+  const pageActivated = currentPage > 0;
+  const pageIndex = pageActivated ? currentPage - 1 : -1;
   const aspect = resolvePrintAspect(state.formatId, state.customSize);
   const typographyStage = useMemo(
     () => referencePrintStageSize(aspect),
@@ -146,15 +148,17 @@ export default function PrintUnifiedEditor() {
   );
 
   const overlayLayers = useMemo(() => {
+    if (!pageActivated || pageIndex < 0) return [];
     const raw = textLayersByPage[pageIndex] ?? [];
     return applySemanticPageLayout(raw, pageIndex);
-  }, [textLayersByPage, pageIndex]);
+  }, [textLayersByPage, pageIndex, pageActivated]);
 
   const onTextLayersChange = useCallback(
     (
       layers: TextLayer[],
       options?: { applyLayout?: boolean }
     ) => {
+      if (!pageActivated || pageIndex < 0) return;
       const nextLayers =
         options?.applyLayout === false
           ? layers
@@ -178,7 +182,7 @@ export default function PrintUnifiedEditor() {
         return next;
       });
     },
-    [pageIndex, typographyStage.h, typographyStage.w]
+    [pageIndex, pageActivated, typographyStage.h, typographyStage.w]
   );
 
   const updateDecoLayersForPage = useCallback(
@@ -198,7 +202,8 @@ export default function PrintUnifiedEditor() {
 
   const onDecoCatalogPick = useCallback(
     (decoId: string) => {
-      const idx = Math.max(0, currentPage - 1);
+      if (!pageActivated) return;
+      const idx = currentPage - 1;
       const stage = referencePrintStageSize(
         resolvePrintAspect(stateRef.current.formatId, stateRef.current.customSize)
       );
@@ -212,12 +217,13 @@ export default function PrintUnifiedEditor() {
         /* invalid deco */
       }
     },
-    [currentPage, decoLayersByPage, updateDecoLayersForPage]
+    [currentPage, decoLayersByPage, pageActivated, updateDecoLayersForPage]
   );
 
   const onCanvasSymbolPick = useCallback(
     (symbol: string) => {
-      const idx = Math.max(0, currentPage - 1);
+      if (!pageActivated) return;
+      const idx = currentPage - 1;
       const stage = referencePrintStageSize(
         resolvePrintAspect(stateRef.current.formatId, stateRef.current.customSize)
       );
@@ -231,7 +237,7 @@ export default function PrintUnifiedEditor() {
         /* empty symbol */
       }
     },
-    [currentPage, decoLayersByPage, updateDecoLayersForPage]
+    [currentPage, decoLayersByPage, pageActivated, updateDecoLayersForPage]
   );
 
   const onGenerateBackground = useCallback(async () => {
@@ -285,12 +291,11 @@ export default function PrintUnifiedEditor() {
       setState((prev) => {
         const slots = editorSlotCount(prev.pageCount);
         const pages = resizeIndependentPages(prev.textLayersByPage, slots);
-        if (pages[idx]?.length) {
-          saveSession(prev);
-          return prev;
-        }
         const nextPages = [...pages];
-        nextPages[idx] = applySemanticPageLayout([], idx);
+        nextPages[idx] = applySemanticPageLayout(
+          pages[idx]?.length ? pages[idx]! : [],
+          idx
+        );
         const next = { ...prev, textLayersByPage: nextPages };
         saveSession(next);
         return next;
@@ -304,11 +309,10 @@ export default function PrintUnifiedEditor() {
     return raw ? toDisplayImageSrc(raw) : null;
   }, [state.backgroundUrl, state.backgroundUrls]);
 
-  const activeBg = pageBackgroundUrl(
-    state.backgroundUrls,
-    state.backgroundUrl,
-    pageIndex
-  );
+  const activeBg =
+    pageActivated && pageIndex >= 0
+      ? pageBackgroundUrl(state.backgroundUrls, state.backgroundUrl, pageIndex)
+      : null;
 
   const {
     busy: exportBusy,
@@ -329,6 +333,9 @@ export default function PrintUnifiedEditor() {
     recentNamespace: "screen_008",
     overlayLayers,
     resolveExportImage: async (quality) => {
+      if (!pageActivated || pageIndex < 0) {
+        throw new Error("no_page_selected");
+      }
       const exportState: PrintWizardState = {
         ...stateRef.current,
         textLayersByPage,
@@ -368,6 +375,7 @@ export default function PrintUnifiedEditor() {
             pageCount={state.pageCount}
             customSize={state.customSize}
             currentPage={currentPage}
+            pageActivated={pageActivated}
             backgroundUrl={state.backgroundUrl}
             backgroundUrls={state.backgroundUrls}
             backgroundPansByPage={state.backgroundPansByPage}
@@ -375,9 +383,13 @@ export default function PrintUnifiedEditor() {
             onTextLayersChange={(layers) =>
               onTextLayersChange(layers, { applyLayout: false })
             }
-            decoLayers={decoLayersByPage[pageIndex]}
-            onDecoLayersChange={(layers) =>
-              updateDecoLayersForPage(pageIndex, layers)
+            decoLayers={
+              pageActivated ? decoLayersByPage[pageIndex] : undefined
+            }
+            onDecoLayersChange={
+              pageActivated
+                ? (layers) => updateDecoLayersForPage(pageIndex, layers)
+                : undefined
             }
             activeTextLayerId={activeTextLayerId}
             onActiveTextLayerChange={setActiveTextLayerId}
@@ -416,9 +428,12 @@ export default function PrintUnifiedEditor() {
             onUseChange={(id: PrintUseId) =>
               patch(markSpecPick({ ...stateRef.current, useId: id }, "use"))
             }
-            onPageCountChange={(count: PrintPageCount) =>
-              patch(markSpecPick({ ...stateRef.current, pageCount: count }, "pages"))
-            }
+            onPageCountChange={(count: PrintPageCount) => {
+              patch(
+                markSpecPick({ ...stateRef.current, pageCount: count }, "pages")
+              );
+              setCurrentPage((p) => (p > count ? 0 : p));
+            }}
             onBgKeywordChange={(keyword) => patch({ bgKeyword: keyword })}
             onBgPresetPick={(id: BgPresetId) => patch({ bgPresetId: id })}
             onGenerateBackground={() => void onGenerateBackground()}

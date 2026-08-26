@@ -3,6 +3,7 @@
 import { EDITOR_PAGE_SLOTS } from "@/lib/printWizardTextLayers";
 
 export type PrintUnifiedEditorPageBarProps = {
+  /** 0 = idle (no tab selected yet). */
   currentPage: number;
   pageCount: number;
   onSelectPage: (page: number) => void;
@@ -25,7 +26,7 @@ export default function PrintUnifiedEditorPageBar({
       </p>
       <div className="grid grid-cols-4 gap-1.5">
         {PAGE_BUTTONS.map((page) => {
-          const active = page === currentPage;
+          const active = currentPage > 0 && page === currentPage;
           const disabled = page > pageCount;
           return (
             <button
