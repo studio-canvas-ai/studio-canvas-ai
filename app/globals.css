@@ -18,6 +18,8 @@
   html {
     scroll-behavior: smooth;
     background-color: #0d0e12;
+    scrollbar-width: auto;
+    scrollbar-color: #ffffff #1e293b;
   }
 
   body {
@@ -34,20 +36,22 @@
   }
 
   ::-webkit-scrollbar {
-    width: 6px;
+    width: 10px;
   }
 
   ::-webkit-scrollbar-track {
-    background: #0d0e12;
+    background: #1e293b;
   }
 
   ::-webkit-scrollbar-thumb {
-    background: rgba(139, 92, 246, 0.3);
-    border-radius: 3px;
+    background: #ffffff;
+    border-radius: 6px;
+    border: 2px solid #38bdf8;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(139, 92, 246, 0.5);
+    background: #38bdf8;
+    border-color: #ffffff;
   }
 }
 
@@ -74,6 +78,34 @@
 }
 
 .bgm-track-scroll::-webkit-scrollbar-thumb:hover {
+  background: #38bdf8 !important;
+  border-color: #ffffff;
+}
+
+/* Screen 13 shorts studio — outer side-panel scrollbar */
+.shorts-side-panel-scroll {
+  scrollbar-width: auto;
+  scrollbar-color: #ffffff #1e293b;
+  scrollbar-gutter: stable;
+}
+
+.shorts-side-panel-scroll::-webkit-scrollbar {
+  width: 10px !important;
+}
+
+.shorts-side-panel-scroll::-webkit-scrollbar-track {
+  background: #1e293b !important;
+  border-radius: 6px;
+}
+
+.shorts-side-panel-scroll::-webkit-scrollbar-thumb {
+  background: #ffffff !important;
+  border-radius: 6px;
+  border: 2px solid #38bdf8;
+  min-height: 40px;
+}
+
+.shorts-side-panel-scroll::-webkit-scrollbar-thumb:hover {
   background: #38bdf8 !important;
   border-color: #ffffff;
 }
