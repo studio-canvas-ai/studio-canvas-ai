@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Music2, Pause, Play, Upload } from "lucide-react";
+import {
+  ChevronDown,
+  Music2,
+  Pause,
+  Play,
+  Upload,
+  Volume2,
+} from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import {
   BGM_CATEGORIES,
@@ -190,10 +197,11 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
 
   /** Shared BGM volume control — top + bottom stay in sync via `value.bgmVolume`. */
   const volumeSlider = (
-    <div className="flex items-center gap-2.5">
-      <span className="shrink-0 text-[10px] font-semibold text-white/85">
-        {t.shorts.bgmVolume}
-      </span>
+    <div className="flex w-full items-center gap-2">
+      <Volume2
+        className="h-4 w-4 shrink-0 text-white/85"
+        aria-hidden
+      />
       <input
         type="range"
         min={SHORTS_BGM_VOLUME_MIN}
@@ -206,10 +214,10 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
         aria-valuemax={100}
         aria-valuenow={volumePct}
         aria-valuetext={`${volumePct}%`}
-        className="min-w-0 flex-1 accent-emerald-400"
+        className="h-1.5 min-w-0 flex-1 accent-emerald-400"
       />
       <span
-        className="inline-flex w-11 shrink-0 items-center justify-center rounded-md border border-emerald-400/40 bg-emerald-400/15 px-1 py-0.5 text-[11px] font-bold tabular-nums text-emerald-300"
+        className="inline-flex w-10 shrink-0 items-center justify-center rounded-md border border-emerald-400/40 bg-emerald-400/15 px-1 py-0.5 text-[10px] font-bold tabular-nums text-emerald-300"
         aria-live="polite"
       >
         {volumePct}%
@@ -402,34 +410,10 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
           </div>
 
           <div>
-            <div className="mb-1.5 flex items-center justify-between gap-2 text-xs text-white/90">
-              <span>{t.shorts.bgmVolume}</span>
-              <span className="min-w-0 truncate text-[11px] text-white/85">
-                {selectedLabel}
-              </span>
+            <div className="mb-1.5 min-w-0 truncate text-[11px] text-white/85">
+              {selectedLabel}
             </div>
-            <div className="flex items-center gap-3">
-              <input
-                type="range"
-                min={SHORTS_BGM_VOLUME_MIN}
-                max={SHORTS_BGM_VOLUME_MAX}
-                step={0.01}
-                value={clampBgmVolume(value.bgmVolume)}
-                onChange={(e) => setVolume(Number(e.target.value))}
-                aria-label={t.shorts.bgmVolume}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={volumePct}
-                aria-valuetext={`${volumePct}%`}
-                className="min-w-0 flex-1 accent-emerald-400"
-              />
-              <span
-                className="inline-flex w-12 shrink-0 items-center justify-center rounded-md border border-emerald-400/40 bg-emerald-400/15 px-1.5 py-1 text-xs font-bold tabular-nums text-emerald-300"
-                aria-live="polite"
-              >
-                {volumePct}%
-              </span>
-            </div>
+            {volumeSlider}
           </div>
 
           {value.bgmUrl && (

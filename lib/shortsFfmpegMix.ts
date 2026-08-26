@@ -395,17 +395,35 @@ function buildAudioBranch(params: {
   bgmInputIndex: number;
   voiceGain: number;
   bgmGain: number;
+  /** When > 0, looped BGM is trimmed to this many seconds (bgm-only path). */
+  videoDurationSec?: number;
 }): string {
   const { audioMode, bgmInputIndex, voiceGain, bgmGain } = params;
+  const dur =
+    typeof params.videoDurationSec === "number" &&
+    Number.isFinite(params.videoDurationSec) &&
+    params.videoDurationSec > 0.05
+      ? Math.min(params.videoDurationSec, 3600)
+      : 0;
+
+  // BGM input is opened with `-stream_loop -1` so short tracks cover the full video.
+  // Format + optional atrim keeps the graph finite when there is no voice to drive amix.
+  const bgmBase = `[${bgmInputIndex}:a]aformat=sample_fmts=fltp:channel_layouts=stereo,volume=${bgmGain}`;
+
   if (audioMode === "bgm") {
-    return `[${bgmInputIndex}:a]volume=${bgmGain}[aout]`;
+    if (dur > 0) {
+      return (
+        `${bgmBase},atrim=0:${dur.toFixed(3)},asetpts=PTS-STARTPTS[aout]`
+      );
+    }
+    return `${bgmBase}[aout]`;
   }
   if (audioMode === "voice") {
     return `[0:a]volume=${voiceGain}[aout]`;
   }
   return (
     `[0:a]volume=${voiceGain}[a1];` +
-    `[${bgmInputIndex}:a]volume=${bgmGain}[a2];` +
+    `${bgmBase}[a2];` +
     `[a1][a2]amix=inputs=2:duration=first:dropout_transition=2:normalize=0[aout]`
   );
 }
@@ -419,6 +437,7 @@ function buildFilterComplex(params: {
   audioMode: AudioMode;
   voiceGain: number;
   bgmGain: number;
+  videoDurationSec?: number;
 }): string {
   const bgmInputIndex =
     1 + params.captions.length + (params.hasStaticOverlay ? 1 : 0);
@@ -430,6 +449,7 @@ function buildFilterComplex(params: {
       bgmInputIndex,
       voiceGain: params.voiceGain,
       bgmGain: params.bgmGain,
+      videoDurationSec: params.videoDurationSec,
     })
   );
 }
@@ -600,6 +620,39 @@ function buildAttemptPlan(params: {
   return attempts;
 }
 
+/** Probe media duration (seconds) via a temporary <video> element. */
+async function probeVideoDurationSec(blob: Blob): Promise<number> {
+  if (typeof document === "undefined") return 0;
+  const url = URL.createObjectURL(blob);
+  try {
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.muted = true;
+    video.playsInline = true;
+    await new Promise<void>((resolve, reject) => {
+      const onMeta = () => {
+        cleanup();
+        resolve();
+      };
+      const onErr = () => {
+        cleanup();
+        reject(new Error("duration_probe_failed"));
+      };
+      const cleanup = () => {
+        video.removeEventListener("loadedmetadata", onMeta);
+        video.removeEventListener("error", onErr);
+      };
+      video.addEventListener("loadedmetadata", onMeta);
+      video.addEventListener("error", onErr);
+      video.src = url;
+    });
+    const d = video.duration;
+    return Number.isFinite(d) && d > 0 ? d : 0;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 /**
  * Frame source video into 9:16, burn permanent text overlay for the full
  * duration, optionally mix voice + BGM — with multi-tier audio/canvas fallbacks.
@@ -634,12 +687,18 @@ export async function mixShortsVideoWithBgm(params: {
 
   let srcW = 0;
   let srcH = 0;
+  let videoDurationSec = 0;
   try {
     const dim = await probeVideoDimensions(videoBlob);
     srcW = dim.width;
     srcH = dim.height;
   } catch (err) {
     console.warn("[shorts/ffmpeg] probe dimensions failed", err);
+  }
+  try {
+    videoDurationSec = await probeVideoDurationSec(videoBlob);
+  } catch (err) {
+    console.warn("[shorts/ffmpeg] probe duration failed", err);
   }
 
   const preferLight =
@@ -649,6 +708,7 @@ export async function mixShortsVideoWithBgm(params: {
   console.info("[shorts/ffmpeg] source", {
     srcW,
     srcH,
+    videoDurationSec,
     bytes: videoBlob.size,
     preferLight,
     hasStaticOverlay,
@@ -746,6 +806,7 @@ export async function mixShortsVideoWithBgm(params: {
         audioMode: attempt.audioMode,
         voiceGain,
         bgmGain,
+        videoDurationSec,
       });
 
       const inputArgs = ["-i", videoName];
@@ -756,7 +817,8 @@ export async function mixShortsVideoWithBgm(params: {
         inputArgs.push("-i", overlayName);
       }
       if (hasBgm && bgmName) {
-        inputArgs.push("-i", bgmName);
+        // Loop BGM at demuxer level so short tracks cover the full video.
+        inputArgs.push("-stream_loop", "-1", "-i", bgmName);
       }
 
       console.info("[shorts/ffmpeg] attempt", {
@@ -765,23 +827,34 @@ export async function mixShortsVideoWithBgm(params: {
         label: attempt.label,
         captions: captionTimes.length,
         layout,
+        videoDurationSec,
         filterComplex,
       });
 
+      const encodeArgs = [
+        ...inputArgs,
+        "-filter_complex",
+        filterComplex,
+        "-map",
+        "[vout]",
+        "-map",
+        "[aout]",
+        ...ENCODE_VIDEO_ARGS,
+        ...ENCODE_AUDIO_ARGS,
+      ];
+      // Belt-and-suspenders: never let infinite BGM stretch past the video.
+      if (hasBgm) {
+        if (videoDurationSec > 0.05) {
+          encodeArgs.push("-t", videoDurationSec.toFixed(3));
+        } else {
+          encodeArgs.push("-shortest");
+        }
+      }
+      encodeArgs.push(outputName);
+
       const code = await execGuarded(
         ffmpeg,
-        [
-          ...inputArgs,
-          "-filter_complex",
-          filterComplex,
-          "-map",
-          "[vout]",
-          "-map",
-          "[aout]",
-          ...ENCODE_VIDEO_ARGS,
-          ...ENCODE_AUDIO_ARGS,
-          outputName,
-        ],
+        encodeArgs,
         onProgress,
         logBuf
       );
@@ -828,6 +901,8 @@ export async function mixShortsVideoWithBgm(params: {
       ? [
           "-i",
           videoName,
+          "-stream_loop",
+          "-1",
           "-i",
           bgmName,
           "-map",

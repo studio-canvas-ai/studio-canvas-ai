@@ -39,6 +39,7 @@ import {
   resolveCaptionStyle,
   type ShortsCaptionPresetId,
 } from "@/lib/shortsCaptionPresets";
+import { clampBgmVolume } from "@/lib/shortsBgm";
 import type { ShortsBgmState } from "@/lib/shortsBgm";
 import {
   DEFAULT_SHORTS_CAPTION_STYLE,
@@ -222,6 +223,8 @@ export default function ShortsFullStudio({
 }: Props) {
   const { t } = useI18n();
   const videoRef = useRef<HTMLVideoElement>(null);
+  /** Studio-preview BGM — loops to cover video longer than the track. */
+  const bgmAudioRef = useRef<HTMLAudioElement | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const thumbRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{
@@ -606,6 +609,121 @@ export default function ShortsFullStudio({
       video.removeEventListener("seeked", onSeeked);
     };
   }, [open, videoUrl]);
+
+  // Keep a looping BGM element in sync with the left video preview.
+  useEffect(() => {
+    if (typeof Audio === "undefined") return;
+    const audio = new Audio();
+    audio.loop = true;
+    audio.preload = "auto";
+    bgmAudioRef.current = audio;
+    return () => {
+      audio.pause();
+      audio.removeAttribute("src");
+      try {
+        audio.load();
+      } catch {
+        /* ignore */
+      }
+      bgmAudioRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const audio = bgmAudioRef.current;
+    if (!audio) return;
+    const url = (bgm.bgmUrl || "").trim();
+    audio.volume = clampBgmVolume(bgm.bgmVolume);
+    audio.loop = true;
+    if (!url) {
+      audio.pause();
+      if (audio.src) {
+        audio.removeAttribute("src");
+        try {
+          audio.load();
+        } catch {
+          /* ignore */
+        }
+      }
+      return;
+    }
+    const abs = (() => {
+      try {
+        return new URL(url, window.location.href).href;
+      } catch {
+        return url;
+      }
+    })();
+    if (audio.src !== abs) {
+      const wasPlaying = !audio.paused;
+      audio.src = url;
+      audio.loop = true;
+      if (wasPlaying) {
+        void audio.play().catch(() => {
+          /* autoplay / decode */
+        });
+      }
+    }
+  }, [bgm.bgmUrl, bgm.bgmVolume]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    const audio = bgmAudioRef.current;
+    if (!video || !open) return;
+
+    const syncBgmTime = () => {
+      if (!audio || !bgm.bgmUrl) return;
+      const d = audio.duration;
+      if (!Number.isFinite(d) || d <= 0) return;
+      const target = video.currentTime % d;
+      if (Math.abs(audio.currentTime - target) > 0.35) {
+        try {
+          audio.currentTime = target;
+        } catch {
+          /* ignore seek race */
+        }
+      }
+    };
+
+    const onPlay = () => {
+      if (!audio || !bgm.bgmUrl) return;
+      audio.loop = true;
+      audio.volume = clampBgmVolume(bgm.bgmVolume);
+      syncBgmTime();
+      void audio.play().catch(() => {
+        /* autoplay policy */
+      });
+    };
+    const onPause = () => {
+      audio?.pause();
+    };
+    const onEnded = () => {
+      if (!audio) return;
+      audio.pause();
+      try {
+        audio.currentTime = 0;
+      } catch {
+        /* ignore */
+      }
+    };
+    const onSeeked = () => {
+      syncBgmTime();
+    };
+
+    video.addEventListener("play", onPlay);
+    video.addEventListener("pause", onPause);
+    video.addEventListener("ended", onEnded);
+    video.addEventListener("seeked", onSeeked);
+    if (!video.paused && bgm.bgmUrl) onPlay();
+
+    return () => {
+      video.removeEventListener("play", onPlay);
+      video.removeEventListener("pause", onPause);
+      video.removeEventListener("ended", onEnded);
+      video.removeEventListener("seeked", onSeeked);
+      audio?.pause();
+    };
+  }, [open, videoUrl, bgm.bgmUrl, bgm.bgmVolume]);
 
   // Keep both 9:16 stages the same pixel height (1:1 symmetry).
   useEffect(() => {
@@ -2097,15 +2215,15 @@ export default function ShortsFullStudio({
               </div>
             </div>
 
-            <div className="shorts-side-panel-scroll flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto overscroll-contain p-4">
+            <div className="shorts-side-panel-scroll flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain px-3 py-2.5">
               {panelTab === "thumb" ? (
                 <>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 leading-snug">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0 leading-tight">
                       <p className="text-xs font-semibold text-white">
                         {t.thumbnail.layersLabel}
                       </p>
-                      <p className="mt-0.5 text-[10px] font-medium text-white/80">
+                      <p className="text-[10px] font-medium text-white/80">
                         {activePreview === "video"
                           ? t.shorts.dualStudioVideoPanel
                           : t.shorts.dualStudioThumbPanel}
@@ -2114,21 +2232,21 @@ export default function ShortsFullStudio({
                     <button
                       type="button"
                       onClick={addLayer}
-                      className="inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-lg bg-white/10 px-2.5 py-1.5 text-xs font-semibold leading-none text-white transition hover:bg-white/15"
+                      className="inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-md bg-white/10 px-2 py-1 text-[11px] font-semibold leading-none text-white transition hover:bg-white/15"
                     >
                       {t.shorts.studioAddLayer}
                     </button>
                   </div>
 
                   {layers.length > 0 ? (
-                    <ul className="flex flex-col gap-2">
+                    <ul className="flex flex-col gap-1.5">
                       {layers.map((layer, i) => {
                         const selected =
                           layer.id === (activeLayer?.id ?? activeLayerId);
                         return (
                           <li
                             key={layer.id}
-                            className={`rounded-xl border p-2.5 transition ${
+                            className={`rounded-xl border px-2 py-1.5 transition ${
                               selected
                                 ? "border-glow-emerald/45 bg-glow-emerald/5"
                                 : "border-white/10 bg-black/25"
@@ -2137,9 +2255,9 @@ export default function ShortsFullStudio({
                               onActiveLayerIdChange(layer.id);
                             }}
                           >
-                            <div className="mb-1.5 flex items-center justify-between gap-2">
+                            <div className="mb-1 flex items-center justify-between gap-1.5">
                               <span
-                                className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${
+                                className={`rounded px-1.5 py-0.5 text-[10px] font-bold leading-none ${
                                   selected
                                     ? "bg-glow-emerald/20 text-glow-emerald"
                                     : "bg-white/10 text-white/90"
@@ -2157,11 +2275,11 @@ export default function ShortsFullStudio({
                                   e.stopPropagation();
                                   deleteLayerById(layer.id);
                                 }}
-                                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-red-400/35 bg-red-500/10 text-red-300 transition hover:border-red-400/60 hover:bg-red-500/25 hover:text-red-200"
+                                className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-red-300/90 transition hover:bg-red-500/15 hover:text-red-200"
                                 aria-label={t.shorts.studioDeleteLayer}
                                 title={t.shorts.studioDeleteLayer}
                               >
-                                <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                                <Trash2 className="h-3 w-3" aria-hidden />
                               </button>
                             </div>
                             <textarea
