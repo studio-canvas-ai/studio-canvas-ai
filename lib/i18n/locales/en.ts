@@ -221,6 +221,20 @@ const en: Translations = {
     fullStudioClose: "Close",
     fullStudioFreeEditHint:
       "All edits here are free, including AI auto captions.",
+    projectRecentButton: "Recent videos ({count}/{max})",
+    projectRecentButtonShort: "Recent ({count}/{max})",
+    projectRecentTitle: "Load recent video",
+    projectRecentHint:
+      "Editable projects auto-saved on render. Keeps up to {max} entries.",
+    projectRecentEmpty:
+      "No saved videos yet. Use “Render & download” to store up to {max} here.",
+    projectRecentMissing: "That recent video could not be found.",
+    projectLoadFile: "Load editable video",
+    projectLoadFileShort: "Load project",
+    projectLoadError: "Could not load the editable project file.",
+    projectWrongKind: "This is not a Shorts studio project (.sca).",
+    projectRestoreHint:
+      "Load a saved .sca project or a recent video to continue editing.",
     dualStudioVideoPanel: "Video edit (9:16)",
     dualStudioThumbPanel: "Thumbnail edit (9:16)",
     dualStudioTabCaption: "Caption edit",

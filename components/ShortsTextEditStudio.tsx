@@ -64,11 +64,20 @@ import {
 } from "@/lib/shortsFfmpegMix";
 import { useShortsProjectStore } from "@/lib/shortsProjectStore";
 import {
+  buildShortsStudioProject,
+  downloadVideoAndShortsProjectLocally,
+  sessionFromShortsProject,
+  type ShortsStudioProjectV1,
+} from "@/lib/shortsProjectFile";
+import { pushShortsRecentProject } from "@/lib/shortsRecentProjects";
+import {
   loadShortsStudioSession,
+  saveShortsStudioSession,
   SHORTS_STUDIO_PATH,
   type ShortsStudioSession,
 } from "@/lib/shortsStudioSession";
 import { SHORTS_THUMBNAIL_PATH } from "@/lib/shortsThumbnail";
+import ShortsProjectToolbar from "@/components/ShortsProjectToolbar";
 import {
   SHORTS_BOX_WIDTH_MAX,
   SHORTS_BOX_WIDTH_MIN,
@@ -319,6 +328,52 @@ export default function ShortsTextEditStudio() {
     }
     router.push(SHORTS_THUMBNAIL_PATH);
   }, [preferLegacySingle, router]);
+
+  const applyShortsProject = useCallback(
+    async (project: ShortsStudioProjectV1) => {
+      const { edit, media } = project;
+      setCaptions(edit.captions);
+      setCaptionStyle(edit.captionStyle);
+      setVideoLayers(edit.videoLayers);
+      setThumbnailLayers(edit.thumbnailLayers);
+      setBgm(edit.bgm);
+      setVideoScale(edit.videoScale);
+      setVideoPosY(edit.videoPosY);
+      setBindThumbIntro(edit.bindThumbIntro);
+      setActiveCaptionId(edit.captions[0]?.id ?? null);
+      setActiveVideoLayerId(edit.videoLayers[0]?.id ?? null);
+      setActiveId(edit.thumbnailLayers[0]?.id ?? null);
+      setMixedVideoUrl(null);
+      setMixError(null);
+      setError(null);
+
+      const nextSession = sessionFromShortsProject(project);
+      setSession(nextSession);
+      try {
+        saveShortsStudioSession(nextSession);
+      } catch {
+        /* ignore */
+      }
+
+      const videoUrl = media.videoUrl || media.playbackUrl || null;
+      if (media.videoId || videoUrl) {
+        await hydrateFromAsset({
+          videoId: media.videoId || nextSession.videoId,
+          fileName: media.videoFileName || media.fileName || "shorts.mp4",
+          sizeBytes: media.sizeBytes,
+          contentType: media.contentType || "video/mp4",
+          previewUrl: videoUrl || "",
+          storageKey: media.storageKey,
+          playbackUrl: media.playbackUrl || videoUrl,
+          storage: media.storage || "local",
+        });
+      }
+
+      setFullStudioOpen(true);
+      setPreferLegacySingle(false);
+    },
+    [hydrateFromAsset, setBgm, setMixedVideoUrl]
+  );
 
   const hasVideoSource = Boolean(
     projectVideoUrl ||
@@ -940,7 +995,7 @@ export default function ShortsTextEditStudio() {
       setMixProgress(100);
       setMixStatus(t.shorts.studioMixDone);
 
-      // Auto-save finished Shorts MP4 to the user's download folder.
+      // Auto-download finished MP4 + editable .sca, and push to recent (max 5).
       if (autoDownload) {
         const base =
           (
@@ -949,10 +1004,42 @@ export default function ShortsTextEditStudio() {
             session?.videoFileName ||
             "shorts"
           ).replace(/\.[^.]+$/, "") || "shorts";
-        triggerVideoDownload(
-          mixed,
-          bgm.bgmUrl ? `${base}-bgm-mix.mp4` : `${base}-render.mp4`
-        );
+        const store = useShortsProjectStore.getState();
+        const project = buildShortsStudioProject({
+          session,
+          videoId: store.videoId,
+          videoUrl: store.videoUrl,
+          videoFileName: store.videoFileName,
+          contentType: store.contentType,
+          sizeBytes: store.sizeBytes,
+          storageKey: store.storageKey,
+          storage: store.storage,
+          captions,
+          captionStyle,
+          videoLayers,
+          thumbnailLayers,
+          bgm,
+          videoScale,
+          videoPosY,
+          bindThumbIntro,
+        });
+        try {
+          await downloadVideoAndShortsProjectLocally({
+            videoBlob: mixed,
+            project,
+            baseName: base,
+            videoFileName: bgm.bgmUrl
+              ? `${base}-bgm-mix.mp4`
+              : `${base}-render.mp4`,
+          });
+          pushShortsRecentProject(project);
+        } catch (err) {
+          console.warn("[shorts/studio] project save failed; MP4 only", err);
+          triggerVideoDownload(
+            mixed,
+            bgm.bgmUrl ? `${base}-bgm-mix.mp4` : `${base}-render.mp4`
+          );
+        }
       }
     } catch (err) {
       console.error("[shorts/studio] mix", err);
@@ -970,9 +1057,7 @@ export default function ShortsTextEditStudio() {
     mixInputKey,
     projectVideoName,
     resolveVideoBlob,
-    session?.fileName,
-    session?.hook?.imageUrl,
-    session?.videoFileName,
+    session,
     setMixedVideoUrl,
     thumbnailLayers,
     videoLayers,
@@ -1140,8 +1225,12 @@ export default function ShortsTextEditStudio() {
 
   if (!session) {
     return (
-      <div className="mx-auto max-w-lg space-y-4 px-3 py-16 text-center">
+      <div className="mx-auto max-w-lg space-y-5 px-3 py-16 text-center">
         <p className="text-sm text-white/60">{t.shorts.studioMissing}</p>
+        <p className="text-xs text-white/40">{t.shorts.projectRestoreHint}</p>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <ShortsProjectToolbar onLoadProject={applyShortsProject} />
+        </div>
         <Link
           href={SHORTS_THUMBNAIL_PATH}
           className="btn-primary inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold"
@@ -2055,6 +2144,7 @@ export default function ShortsTextEditStudio() {
         youtubeProgress={youtubeProgress}
         youtubeWatchUrl={youtubeWatchUrl}
         onYoutubeAssistFallback={() => void onYoutubeAssistFallback()}
+        onLoadShortsProject={applyShortsProject}
       />
     </section>
   );

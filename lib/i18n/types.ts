@@ -246,6 +246,17 @@ export interface Translations {
     fullStudioOpen: string;
     fullStudioClose: string;
     fullStudioFreeEditHint: string;
+    projectRecentButton: string;
+    projectRecentButtonShort: string;
+    projectRecentTitle: string;
+    projectRecentHint: string;
+    projectRecentEmpty: string;
+    projectRecentMissing: string;
+    projectLoadFile: string;
+    projectLoadFileShort: string;
+    projectLoadError: string;
+    projectWrongKind: string;
+    projectRestoreHint: string;
     dualStudioVideoPanel: string;
     dualStudioThumbPanel: string;
     dualStudioTabCaption: string;

@@ -33,6 +33,7 @@ import ShortsCaptionWaveTimeline from "@/components/ShortsCaptionWaveTimeline";
 import ShortsPreviewControlBar, {
   SHORTS_PREVIEW_DEFAULT_VOLUME,
 } from "@/components/ShortsPreviewControlBar";
+import ShortsProjectToolbar from "@/components/ShortsProjectToolbar";
 import { useI18n } from "@/components/I18nProvider";
 import {
   SHORTS_CAPTION_PRESETS,
@@ -166,6 +167,10 @@ type Props = {
   youtubeProgress: number;
   youtubeWatchUrl: string | null;
   onYoutubeAssistFallback?: () => void;
+  /** Restore editor state from a sealed Shorts `.sca` / recent drawer entry. */
+  onLoadShortsProject?: (
+    project: import("@/lib/shortsProjectFile").ShortsStudioProjectV1
+  ) => void | Promise<void>;
 };
 
 /**
@@ -214,6 +219,7 @@ export default function ShortsFullStudio({
   youtubeProgress,
   youtubeWatchUrl,
   onYoutubeAssistFallback,
+  onLoadShortsProject,
 }: Props) {
   const { t } = useI18n();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -1271,6 +1277,12 @@ export default function ShortsFullStudio({
 
   const headerRight = (
     <>
+      {onLoadShortsProject ? (
+        <ShortsProjectToolbar
+          busy={mixing || youtubeBusy}
+          onLoadProject={onLoadShortsProject}
+        />
+      ) : null}
       <button
         type="button"
         disabled={sttGenerating || !videoUrl}

@@ -5,6 +5,7 @@ const CATEGORY_PREFIX: Record<BgmCategory, string> = {
   칠: "bgm/chill/",
   시네마틱: "bgm/cinematic/",
   브이로그: "bgm/vlog/",
+  힐링: "bgm/healing/",
 };
 
 const CATEGORY_ID: Record<BgmCategory, string> = {
@@ -12,6 +13,7 @@ const CATEGORY_ID: Record<BgmCategory, string> = {
   칠: "chill",
   시네마틱: "cinematic",
   브이로그: "vlog",
+  힐링: "healing",
 };
 
 /** Vendor / artist prefixes that crowd the start of every Pixabay-style filename. */
@@ -68,6 +70,11 @@ export function formatBgmDisplayTitle(
     body = body.slice(0, -idMatch[0].length);
   }
 
+  // Healing-style sort prefixes: "1,Title" / "계정10 Title" / "아침3 Title"
+  body = body.replace(/^\d+\s*,\s*/, "");
+  body = body.replace(/^(계정|아침)\d+\s+/u, "");
+  body = body.replace(/,/g, " ").replace(/\s+/g, " ").trim();
+
   const lower = body.toLowerCase();
   for (const prefix of ARTIST_PREFIXES) {
     if (lower === prefix || lower.startsWith(`${prefix}-`) || lower.startsWith(`${prefix}_`)) {
@@ -76,7 +83,10 @@ export function formatBgmDisplayTitle(
     }
   }
 
-  let tokens = body.split(/[-_]+/).map((t) => t.trim()).filter(Boolean);
+  let tokens = body
+    .split(/[-_\s]+/)
+    .map((t) => t.trim())
+    .filter(Boolean);
   tokens = tokens.filter(
     (t, i) => i === 0 || t.toLowerCase() !== tokens[i - 1]!.toLowerCase()
   );

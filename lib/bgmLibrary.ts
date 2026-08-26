@@ -8,17 +8,18 @@ import {
 } from "@/lib/bgm/buildBgmItems";
 import { CHILL_BGM_FILENAMES } from "@/lib/bgm/chillFilenames";
 import { CINEMATIC_BGM_FILENAMES } from "@/lib/bgm/cinematicFilenames";
+import { HEALING_BGM_FILENAMES } from "@/lib/bgm/healingFilenames";
 import { UPBEAT_BGM_FILENAMES } from "@/lib/bgm/upbeatFilenames";
 import { VLOG_BGM_FILENAMES } from "@/lib/bgm/vlogFilenames";
 
-export type BgmCategory = "업비트" | "칠" | "시네마틱" | "브이로그";
+export type BgmCategory = "업비트" | "칠" | "시네마틱" | "브이로그" | "힐링";
 
 export interface BGMItem {
   id: string;
   title: string;
   category: BgmCategory;
   duration: string;
-  /** Object key under the R2 public base (e.g. bgm/chill/track-name.mp3). */
+  /** Object key under the R2 public base (e.g. bgm/healing/track-name.mp3). */
   objectKey: string;
   /** Optional hard-coded absolute URL override. */
   urlOverride?: string;
@@ -70,12 +71,14 @@ const CINEMATIC_LIBRARY = buildBgmItemsFromFilenames(
   "시네마틱"
 );
 const VLOG_LIBRARY = buildBgmItemsFromFilenames(VLOG_BGM_FILENAMES, "브이로그");
+const HEALING_LIBRARY = buildBgmItemsFromFilenames(HEALING_BGM_FILENAMES, "힐링");
 
 export const BGM_LIBRARY: BGMItem[] = [
   ...UPBEAT_LIBRARY,
   ...CHILL_LIBRARY,
   ...CINEMATIC_LIBRARY,
   ...VLOG_LIBRARY,
+  ...HEALING_LIBRARY,
 ];
 
 export const BGM_CATEGORIES: BgmCategory[] = [
@@ -83,6 +86,7 @@ export const BGM_CATEGORIES: BgmCategory[] = [
   "칠",
   "시네마틱",
   "브이로그",
+  "힐링",
 ];
 
 const CATEGORY_OBJECT_PREFIX: Record<BgmCategory, string> = {
@@ -90,6 +94,7 @@ const CATEGORY_OBJECT_PREFIX: Record<BgmCategory, string> = {
   칠: "bgm/chill/",
   시네마틱: "bgm/cinematic/",
   브이로그: "bgm/vlog/",
+  힐링: "bgm/healing/",
 };
 
 /** True when item.category and objectKey folder agree. */
@@ -128,6 +133,7 @@ export function bgmCategoryCounts(): Record<BgmCategory, number> {
     칠: bgmItemsByCategory("칠").length,
     시네마틱: bgmItemsByCategory("시네마틱").length,
     브이로그: bgmItemsByCategory("브이로그").length,
+    힐링: bgmItemsByCategory("힐링").length,
   };
 }
 
@@ -142,5 +148,7 @@ export function bgmCategoryLabel(category: BgmCategory): string {
       return "시네마틱 (Cinematic)";
     case "브이로그":
       return "브이로그 (Vlog)";
+    case "힐링":
+      return "힐링 (Healing)";
   }
 }

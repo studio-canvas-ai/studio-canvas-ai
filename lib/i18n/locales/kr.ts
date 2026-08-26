@@ -221,6 +221,20 @@ const kr: Translations = {
     fullStudioClose: "닫기",
     fullStudioFreeEditHint:
       "이 화면의 일반 편집과 AI 자동 자막 생성은 자유롭게 실행할 수 있습니다.",
+    projectRecentButton: "최근 영상 불러오기 ({count}/{max})",
+    projectRecentButtonShort: "최근 ({count}/{max})",
+    projectRecentTitle: "최근 영상 불러오기",
+    projectRecentHint:
+      "렌더링 시 자동 저장된 수정용 프로젝트입니다. 최대 {max}개까지 보관됩니다.",
+    projectRecentEmpty:
+      "아직 저장된 영상이 없습니다. 「영상 렌더링 및 다운받기」를 실행하면 최대 {max}개까지 여기에 쌓입니다.",
+    projectRecentMissing: "선택한 최근 영상을 찾을 수 없습니다.",
+    projectLoadFile: "수정용 영상 불러오기",
+    projectLoadFileShort: "수정용 불러오기",
+    projectLoadError: "수정용 프로젝트 파일을 불러오지 못했습니다.",
+    projectWrongKind: "쇼츠 스튜디오용 수정 파일(.sca)이 아닙니다.",
+    projectRestoreHint:
+      "저장된 수정용 파일(.sca)이나 최근 영상을 불러와 이어서 편집할 수 있습니다.",
     dualStudioVideoPanel: "영상 편집 (9:16)",
     dualStudioThumbPanel: "썸네일편집 (9:16)",
     dualStudioTabCaption: "자막편집",
