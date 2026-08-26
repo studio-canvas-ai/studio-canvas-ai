@@ -51,6 +51,31 @@
   }
 }
 
+/* Screen 13 BGM track list — high-contrast scrollbar on dark panels */
+.bgm-track-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #6ee7b7 rgba(255, 255, 255, 0.08);
+}
+
+.bgm-track-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.bgm-track-scroll::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+}
+
+.bgm-track-scroll::-webkit-scrollbar-thumb {
+  background: #6ee7b7;
+  border-radius: 4px;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.bgm-track-scroll::-webkit-scrollbar-thumb:hover {
+  background: #34d399;
+}
+
 @layer components {
   .glass-card {
     @apply rounded-2xl border border-white/[0.08] bg-white/[0.04] backdrop-blur-xl;

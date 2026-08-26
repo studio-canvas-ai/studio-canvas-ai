@@ -244,7 +244,7 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
             {libraryLoading && tracks.length === 0 && (
               <p className="py-2 text-center text-[11px] text-white/40">…</p>
             )}
-            <ul className="space-y-2">
+            <ul className="bgm-track-scroll max-h-64 space-y-2 overflow-y-auto overscroll-contain pr-1">
               {tracks.map((item, trackIndex) => {
                 const url = resolveBgmUrl(item);
                 const selected = value.bgmUrl === url;
@@ -256,8 +256,8 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
                     <div
                       className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 transition ${
                         selected
-                          ? "border-glow-emerald/40 bg-glow-emerald/10"
-                          : "border-white/10 bg-black/25 hover:border-white/20"
+                          ? "border-2 border-emerald-400 bg-emerald-400/25 shadow-[0_0_0_1px_rgba(52,211,153,0.55),0_0_18px_rgba(16,185,129,0.35)]"
+                          : "border border-white/10 bg-black/25 hover:border-white/20"
                       }`}
                       title={fullFilename}
                     >
@@ -267,20 +267,42 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
                         className="min-w-0 flex-1 text-left"
                         title={fullFilename}
                       >
-                        <p className="truncate text-sm font-medium text-white">
-                          <span className="mr-1.5 tabular-nums text-white/35">
+                        <p
+                          className={`truncate text-sm font-medium ${
+                            selected ? "text-emerald-100" : "text-white"
+                          }`}
+                        >
+                          <span
+                            className={`mr-1.5 tabular-nums ${
+                              selected ? "text-emerald-300/80" : "text-white/35"
+                            }`}
+                          >
                             {listNo}.
                           </span>
                           {item.title}
+                          {selected && (
+                            <span className="ml-1.5 inline-block rounded-full bg-emerald-400 px-1.5 py-0.5 align-middle text-[9px] font-bold uppercase tracking-wide text-black">
+                              ON
+                            </span>
+                          )}
                         </p>
-                        <p className="truncate text-[11px] text-white/40" title={fullFilename}>
+                        <p
+                          className={`truncate text-[11px] ${
+                            selected ? "text-emerald-100/70" : "text-white/40"
+                          }`}
+                          title={fullFilename}
+                        >
                           {bgmCategoryLabel(item.category)} · {fullFilename}
                         </p>
                       </button>
                       <button
                         type="button"
                         onClick={() => void togglePreview(item.id, url)}
-                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/15"
+                        className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white transition ${
+                          selected
+                            ? "bg-emerald-400/30 hover:bg-emerald-400/45"
+                            : "bg-white/10 hover:bg-white/15"
+                        }`}
                         aria-label={
                           playing ? t.shorts.bgmPause : t.shorts.bgmPlay
                         }
@@ -329,24 +351,36 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
           <div>
             <div className="mb-1.5 flex items-center justify-between gap-2 text-xs text-white/60">
               <span>{t.shorts.bgmVolume}</span>
-              <span className="truncate text-white/80">
-                {selectedLabel} · {Math.round(value.bgmVolume * 100)}%
+              <span className="min-w-0 truncate text-[11px] text-white/50">
+                {selectedLabel}
               </span>
             </div>
-            <input
-              type="range"
-              min={SHORTS_BGM_VOLUME_MIN}
-              max={SHORTS_BGM_VOLUME_MAX}
-              step={0.01}
-              value={clampBgmVolume(value.bgmVolume)}
-              onChange={(e) =>
-                onChange({
-                  ...value,
-                  bgmVolume: clampBgmVolume(Number(e.target.value)),
-                })
-              }
-              className="w-full accent-emerald-400"
-            />
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min={SHORTS_BGM_VOLUME_MIN}
+                max={SHORTS_BGM_VOLUME_MAX}
+                step={0.01}
+                value={clampBgmVolume(value.bgmVolume)}
+                onChange={(e) =>
+                  onChange({
+                    ...value,
+                    bgmVolume: clampBgmVolume(Number(e.target.value)),
+                  })
+                }
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(clampBgmVolume(value.bgmVolume) * 100)}
+                aria-valuetext={`${Math.round(clampBgmVolume(value.bgmVolume) * 100)}%`}
+                className="min-w-0 flex-1 accent-emerald-400"
+              />
+              <span
+                className="inline-flex w-12 shrink-0 items-center justify-center rounded-md border border-emerald-400/40 bg-emerald-400/15 px-1.5 py-1 text-xs font-bold tabular-nums text-emerald-300"
+                aria-live="polite"
+              >
+                {Math.round(clampBgmVolume(value.bgmVolume) * 100)}%
+              </span>
+            </div>
           </div>
 
           {value.bgmUrl && (
