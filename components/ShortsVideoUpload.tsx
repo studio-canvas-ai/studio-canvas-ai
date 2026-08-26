@@ -267,14 +267,14 @@ export default function ShortsVideoUpload({
                 ? t.shorts.uploading
                 : t.shorts.pickVideo}
             </p>
-            <p className="text-xs leading-relaxed text-white/45 sm:text-sm">
+            <p className="text-xs leading-relaxed text-white/85 sm:text-sm">
               {t.shorts.dropHint}
             </p>
             <span className="btn-primary pointer-events-none inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold">
               <Upload className="h-4 w-4" aria-hidden />
               {t.shorts.pickVideoCta}
             </span>
-            <p className="text-[11px] text-white/35">
+            <p className="text-[11px] text-white/75">
               {t.shorts.sizeHint.replace(
                 "{max}",
                 formatBytes(DEFAULT_SHORTS_MAX_VIDEO_BYTES, locale)
@@ -290,7 +290,7 @@ export default function ShortsVideoUpload({
                   style={{ width: `${uploadProgress}%` }}
                 />
               </div>
-              <p className="mt-2 text-center text-[11px] text-white/50">
+              <p className="mt-2 text-center text-[11px] text-white/85">
                 {uploadProgress}%
               </p>
             </div>
@@ -309,7 +309,7 @@ export default function ShortsVideoUpload({
                 />
                 <span className="truncate">{asset.fileName}</span>
               </div>
-              <p className="text-xs text-white/45">
+              <p className="text-xs text-white/85">
                 {formatBytes(asset.sizeBytes, locale)}
                 {" · "}
                 {asset.contentType}
@@ -323,7 +323,7 @@ export default function ShortsVideoUpload({
               type="button"
               onClick={clearAsset}
               disabled={busy}
-              className="rounded-lg p-1.5 text-white/40 transition hover:bg-white/5 hover:text-white"
+              className="rounded-lg p-1.5 text-white/80 transition hover:bg-white/5 hover:text-white"
               aria-label={t.shorts.clearVideo}
             >
               <X className="h-4 w-4" />
@@ -354,7 +354,7 @@ export default function ShortsVideoUpload({
                 title={t.shorts.manualCaptureHint}
               />
             </div>
-            <p className="text-center text-[11px] text-white/40">
+            <p className="text-center text-[11px] text-white/80">
               {t.shorts.manualCaptureHint}
             </p>
           </div>
@@ -399,7 +399,7 @@ export default function ShortsVideoUpload({
           </div>
 
           {phase === "extracting" && (
-            <p className="text-center text-xs text-white/45">
+            <p className="text-center text-xs text-white/85">
               {t.shorts.extractPending}
             </p>
           )}

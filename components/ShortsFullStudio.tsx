@@ -12,6 +12,7 @@ import {
   AlignCenter,
   AlignLeft,
   AlignRight,
+  ArrowLeft,
   Clapperboard,
   Loader2,
   Plus,
@@ -238,6 +239,8 @@ export default function ShortsFullStudio({
 
   const [previewTime, setPreviewTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  /** False until the left-stage <video> can play (hide black void). */
+  const [videoReady, setVideoReady] = useState(false);
   /** Single source of truth for selected caption across player / timeline / panel. */
   const [activeCapId, setActiveCapId] = useState<string | null>(null);
   const [peaks, setPeaks] = useState<ShortsWaveformPeaks | null>(null);
@@ -562,9 +565,20 @@ export default function ShortsFullStudio({
   }, [open, audioBlob]);
 
   useEffect(() => {
+    setVideoReady(false);
+    if (!videoUrl) return;
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.readyState >= 2) {
+      setVideoReady(true);
+    }
+  }, [videoUrl, open]);
+
+  useEffect(() => {
     const video = videoRef.current;
     if (!video || !open) return;
     video.volume = SHORTS_PREVIEW_DEFAULT_VOLUME;
+    const markReady = () => setVideoReady(true);
     const onMeta = () =>
       setDuration(Number.isFinite(video.duration) ? video.duration : 0);
     const onSeeked = () => {
@@ -579,12 +593,17 @@ export default function ShortsFullStudio({
     };
     video.addEventListener("loadedmetadata", onMeta);
     video.addEventListener("durationchange", onMeta);
+    video.addEventListener("loadeddata", markReady);
+    video.addEventListener("canplay", markReady);
     video.addEventListener("seeked", onSeeked);
     onMeta();
     onSeeked();
+    if (video.readyState >= 2) markReady();
     return () => {
       video.removeEventListener("loadedmetadata", onMeta);
       video.removeEventListener("durationchange", onMeta);
+      video.removeEventListener("loadeddata", markReady);
+      video.removeEventListener("canplay", markReady);
       video.removeEventListener("seeked", onSeeked);
     };
   }, [open, videoUrl]);
@@ -1670,6 +1689,15 @@ export default function ShortsFullStudio({
     >
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-white/[0.04] px-3 py-2.5 sm:px-4">
         <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/90 transition hover:bg-white/10 hover:text-white"
+            aria-label={t.shorts.studioBack}
+            title={t.shorts.studioBack}
+          >
+            <ArrowLeft className="h-4 w-4" aria-hidden />
+          </button>
           <p className="shrink-0 text-sm font-bold tracking-tight text-white sm:text-[15px]">
             {t.shorts.fullStudioTitle}
           </p>
@@ -1789,9 +1817,13 @@ export default function ShortsFullStudio({
                       ref={videoRef}
                       key={videoUrl}
                       src={videoUrl}
-                      className="h-full w-full object-contain"
+                      className={`h-full w-full object-contain transition-opacity duration-200 ${
+                        videoReady ? "opacity-100" : "opacity-0"
+                      }`}
                       playsInline
-                      preload="metadata"
+                      preload="auto"
+                      onLoadedData={() => setVideoReady(true)}
+                      onCanPlay={() => setVideoReady(true)}
                     />
                   </div>
                 ) : (
@@ -1799,6 +1831,20 @@ export default function ShortsFullStudio({
                     {t.shorts.studioVideoMissing}
                   </div>
                 )}
+                {videoUrl && !videoReady ? (
+                  <div
+                    className="absolute inset-0 z-[1] flex items-center justify-center bg-black/70"
+                    role="status"
+                    aria-live="polite"
+                    aria-busy="true"
+                  >
+                    <Loader2
+                      className="h-9 w-9 animate-spin text-glow-emerald"
+                      aria-hidden
+                    />
+                    <span className="sr-only">{t.shorts.studioLoading}</span>
+                  </div>
+                ) : null}
               </div>
               {/* Transparent pan / click surface (under overlays). */}
               <div

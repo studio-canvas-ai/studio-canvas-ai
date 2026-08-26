@@ -30,7 +30,7 @@ export default function ShortsHookFrameGrid({
           <h2 className="text-sm font-semibold text-white sm:text-base">
             {t.shorts.hooksTitle}
           </h2>
-          <p className="mt-0.5 text-xs text-white/45">{t.shorts.hooksHint}</p>
+          <p className="mt-0.5 text-xs text-white/85">{t.shorts.hooksHint}</p>
         </div>
       </div>
 

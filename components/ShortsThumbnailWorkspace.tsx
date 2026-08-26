@@ -1,22 +1,28 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Clapperboard, Film, Smartphone, Type } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
-import ShortsVideoUpload from "@/components/ShortsVideoUpload";
 import ShortsHookFrameGrid from "@/components/ShortsHookFrameGrid";
+import ShortsProjectToolbar from "@/components/ShortsProjectToolbar";
+import ShortsVideoUpload from "@/components/ShortsVideoUpload";
 import { extractShortsHookFrames } from "@/lib/shortsExtractClient";
 import type { ShortsHookFrame } from "@/lib/shortsHookShared";
-import type { ShortsUploadPhase, ShortsVideoAsset } from "@/lib/shortsVideo";
+import {
+  sessionFromShortsProject,
+  stashShortsProjectForStudio,
+  type ShortsStudioProjectV1,
+} from "@/lib/shortsProjectFile";
+import { useShortsProjectStore } from "@/lib/shortsProjectStore";
 import {
   saveShortsStudioSession,
   SHORTS_STUDIO_PATH,
 } from "@/lib/shortsStudioSession";
-import { useShortsProjectStore } from "@/lib/shortsProjectStore";
+import type { ShortsUploadPhase, ShortsVideoAsset } from "@/lib/shortsVideo";
 
 /**
- * ShortsThumbnailWorkspace — 영상/썸네일 스튜디오.
+ * ShortsThumbnailWorkspace — 영상/썸네일 스튜디오 (Screen 12).
  *
  * ---------------------------------------------------------------------------
  * PHASE MAP:
@@ -38,6 +44,8 @@ export default function ShortsThumbnailWorkspace() {
   const [selectedHook, setSelectedHook] = useState<ShortsHookFrame | null>(
     null
   );
+  const [projectBusy, setProjectBusy] = useState(false);
+  const navigatingRef = useRef(false);
 
   const handleAssetChange = useCallback((next: ShortsVideoAsset | null) => {
     setAsset(next);
@@ -59,9 +67,7 @@ export default function ShortsThumbnailWorkspace() {
       const raw = err instanceof Error ? err.message : "extract_failed";
       setPhase("ready");
       setErrorMessage(
-        raw.includes("auth")
-          ? t.shorts.errorAuth
-          : t.shorts.errorExtract
+        raw.includes("auth") ? t.shorts.errorAuth : t.shorts.errorExtract
       );
     }
   }, [asset, t.shorts.errorAuth, t.shorts.errorExtract]);
@@ -109,6 +115,55 @@ export default function ShortsThumbnailWorkspace() {
     goToStudioWithHook(selectedHook);
   }, [asset, goToStudioWithHook, selectedHook]);
 
+  /** Load recent / .sca project → restore session + open Screen 13. */
+  const onLoadShortsProject = useCallback(
+    async (project: ShortsStudioProjectV1) => {
+      if (navigatingRef.current) return;
+      navigatingRef.current = true;
+      setProjectBusy(true);
+      setErrorMessage(null);
+      try {
+        const nextSession = sessionFromShortsProject(project);
+        saveShortsStudioSession(nextSession);
+        stashShortsProjectForStudio(project);
+
+        const videoUrl =
+          project.media.videoUrl || project.media.playbackUrl || null;
+        if (project.media.videoId || videoUrl) {
+          await useShortsProjectStore.getState().hydrateFromAsset({
+            videoId: project.media.videoId || nextSession.videoId,
+            fileName:
+              project.media.videoFileName ||
+              project.media.fileName ||
+              "shorts.mp4",
+            sizeBytes: project.media.sizeBytes,
+            contentType: project.media.contentType || "video/mp4",
+            previewUrl: videoUrl || "",
+            storageKey: project.media.storageKey,
+            playbackUrl: project.media.playbackUrl || videoUrl,
+            storage: project.media.storage || "local",
+          });
+        }
+
+        if (project.edit.bgm.bgmUrl || project.edit.bgm.bgmName) {
+          useShortsProjectStore.getState().setBgm({
+            bgmUrl: project.edit.bgm.bgmUrl,
+            bgmName: project.edit.bgm.bgmName,
+            bgmVolume: project.edit.bgm.bgmVolume,
+          });
+        }
+
+        router.push(SHORTS_STUDIO_PATH);
+      } catch (err) {
+        console.error("[shorts] load project from screen 12", err);
+        setErrorMessage(t.shorts.projectLoadError);
+        navigatingRef.current = false;
+        setProjectBusy(false);
+      }
+    },
+    [router, t.shorts.projectLoadError]
+  );
+
   return (
     <section
       id="shorts-thumbnail"
@@ -119,20 +174,36 @@ export default function ShortsThumbnailWorkspace() {
       <div className="ambient-glow top-1/3 -right-16 h-56 w-56 bg-glow-purple/10" />
 
       <div className="relative space-y-8">
-        <header className="space-y-3 text-center sm:text-left">
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/60 backdrop-blur-sm">
-            <Clapperboard className="h-3.5 w-3.5 text-glow-emerald" aria-hidden />
-            <span>{t.shorts.eyebrow}</span>
+        <header className="space-y-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0 space-y-3 text-center sm:text-left">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/90 backdrop-blur-sm">
+                <Clapperboard
+                  className="h-3.5 w-3.5 text-glow-emerald"
+                  aria-hidden
+                />
+                <span>{t.shorts.eyebrow}</span>
+              </div>
+              <h1
+                id="shorts-thumbnail-title"
+                className="font-display text-2xl font-bold tracking-tight text-white sm:text-3xl md:text-4xl"
+              >
+                {t.shorts.title}
+              </h1>
+              <p className="max-w-2xl text-sm leading-relaxed text-white/85 sm:text-base">
+                {t.shorts.subtitle}
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-col items-center gap-1.5 sm:items-end">
+              <ShortsProjectToolbar
+                busy={projectBusy || phase === "uploading" || phase === "extracting"}
+                onLoadProject={onLoadShortsProject}
+              />
+              <p className="max-w-[16rem] text-center text-[10px] leading-snug text-white/80 sm:text-right">
+                {t.shorts.projectRestoreHint}
+              </p>
+            </div>
           </div>
-          <h1
-            id="shorts-thumbnail-title"
-            className="font-display text-2xl font-bold tracking-tight text-white sm:text-3xl md:text-4xl"
-          >
-            {t.shorts.title}
-          </h1>
-          <p className="max-w-2xl text-sm leading-relaxed text-white/55 sm:text-base">
-            {t.shorts.subtitle}
-          </p>
         </header>
 
         <div className="grid gap-4 md:grid-cols-3">
@@ -209,7 +280,7 @@ function PlaceholderCard({
     >
       <Icon className="h-5 w-5 text-glow-emerald" aria-hidden />
       <h2 className="text-sm font-semibold text-white">{title}</h2>
-      <p className="text-xs leading-relaxed text-white/45">{body}</p>
+      <p className="text-xs leading-relaxed text-white/85">{body}</p>
     </div>
   );
 }

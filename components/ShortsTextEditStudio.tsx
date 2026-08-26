@@ -67,6 +67,7 @@ import {
   buildShortsStudioProject,
   downloadVideoAndShortsProjectLocally,
   sessionFromShortsProject,
+  takeShortsProjectForStudio,
   type ShortsStudioProjectV1,
 } from "@/lib/shortsProjectFile";
 import { pushShortsRecentProject } from "@/lib/shortsRecentProjects";
@@ -374,6 +375,16 @@ export default function ShortsTextEditStudio() {
     },
     [hydrateFromAsset, setBgm, setMixedVideoUrl]
   );
+
+  /** Screen 12 handoff: apply stashed .sca project once studio mounts. */
+  const pendingAppliedRef = useRef(false);
+  useEffect(() => {
+    if (!ready || pendingAppliedRef.current) return;
+    const pending = takeShortsProjectForStudio();
+    if (!pending) return;
+    pendingAppliedRef.current = true;
+    void applyShortsProject(pending);
+  }, [ready, applyShortsProject]);
 
   const hasVideoSource = Boolean(
     projectVideoUrl ||

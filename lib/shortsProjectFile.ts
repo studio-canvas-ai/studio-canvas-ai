@@ -381,3 +381,35 @@ export function sessionFromShortsProject(
     savedAt: Date.now(),
   };
 }
+
+/** Screen 12 → 13 handoff: stash sealed project JSON for studio apply on mount. */
+const PENDING_PROJECT_KEY = "sca_shorts_pending_project_v1";
+
+export function stashShortsProjectForStudio(
+  project: ShortsStudioProjectV1
+): void {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(PENDING_PROJECT_KEY, JSON.stringify(project));
+  } catch {
+    /* quota */
+  }
+}
+
+/** Read + clear pending project (one-shot). */
+export function takeShortsProjectForStudio(): ShortsStudioProjectV1 | null {
+  if (typeof sessionStorage === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(PENDING_PROJECT_KEY);
+    if (!raw) return null;
+    sessionStorage.removeItem(PENDING_PROJECT_KEY);
+    return parseShortsStudioProject(JSON.parse(raw) as unknown);
+  } catch {
+    try {
+      sessionStorage.removeItem(PENDING_PROJECT_KEY);
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }
+}
