@@ -200,7 +200,7 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
             </span>
           )}
           <ChevronDown
-            className={`h-4 w-4 text-white/50 transition ${open ? "rotate-180" : ""}`}
+            className={`h-4 w-4 text-white/85 transition ${open ? "rotate-180" : ""}`}
             aria-hidden
           />
         </span>
@@ -209,7 +209,7 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
       {open && (
         <div className="space-y-4 border-t border-white/10 px-3 py-3">
           <div>
-            <p className="mb-2 text-xs font-medium text-white/60">
+            <p className="mb-2 text-xs font-medium text-white/90">
               {t.shorts.bgmPresetsLabel}
             </p>
             <div className="mb-2 grid grid-cols-2 gap-1.5">
@@ -219,7 +219,7 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
                 className={`rounded-lg px-2.5 py-1.5 text-center text-[10px] font-semibold transition ${
                   category === "all"
                     ? "bg-glow-emerald/20 text-glow-emerald ring-1 ring-glow-emerald/40"
-                    : "bg-white/5 text-white/55 hover:bg-white/10 hover:text-white/80"
+                    : "bg-white/5 text-white/90 hover:bg-white/10 hover:text-white"
                 }`}
               >
                 {t.shorts.bgmCategoryAll} ({BGM_LIBRARY.length})
@@ -232,14 +232,14 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
                   className={`rounded-lg px-2.5 py-1.5 text-center text-[10px] font-semibold transition ${
                     category === cat
                       ? "bg-glow-emerald/20 text-glow-emerald ring-1 ring-glow-emerald/40"
-                      : "bg-white/5 text-white/55 hover:bg-white/10 hover:text-white/80"
+                      : "bg-white/5 text-white/90 hover:bg-white/10 hover:text-white"
                   }`}
                 >
                   {bgmCategoryLabel(cat)} ({categoryCounts[cat]})
                 </button>
               ))}
             </div>
-            <p className="mb-2 text-[11px] text-white/45">
+            <p className="mb-2 text-[11px] text-white/85">
               {category === "all"
                 ? `전체 ${tracks.length}곡`
                 : `${bgmCategoryLabel(category)} · ${tracks.length}곡`}
@@ -278,7 +278,7 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
                         >
                           <span
                             className={`mr-1.5 tabular-nums ${
-                              selected ? "text-emerald-300/80" : "text-white/35"
+                              selected ? "text-emerald-300/80" : "text-white/75"
                             }`}
                           >
                             {listNo}.
@@ -292,7 +292,7 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
                         </p>
                         <p
                           className={`truncate text-[11px] ${
-                            selected ? "text-emerald-100/70" : "text-white/40"
+                            selected ? "text-emerald-100/70" : "text-white/80"
                           }`}
                           title={fullFilename}
                         >
@@ -328,7 +328,7 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
           </div>
 
           <div>
-            <p className="mb-2 text-xs font-medium text-white/60">
+            <p className="mb-2 text-xs font-medium text-white/90">
               {t.shorts.bgmUploadLabel}
             </p>
             <input
@@ -349,15 +349,15 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
               <Upload className="h-3.5 w-3.5" aria-hidden />
               {t.shorts.bgmUploadCta}
             </button>
-            <p className="mt-1.5 text-[10px] text-white/35">
+            <p className="mt-1.5 text-[10px] text-white/75">
               {t.shorts.bgmUploadHint}
             </p>
           </div>
 
           <div>
-            <div className="mb-1.5 flex items-center justify-between gap-2 text-xs text-white/60">
+            <div className="mb-1.5 flex items-center justify-between gap-2 text-xs text-white/90">
               <span>{t.shorts.bgmVolume}</span>
-              <span className="min-w-0 truncate text-[11px] text-white/50">
+              <span className="min-w-0 truncate text-[11px] text-white/85">
                 {selectedLabel}
               </span>
             </div>
@@ -393,7 +393,7 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
             <button
               type="button"
               onClick={clearTrack}
-              className="w-full rounded-lg py-1.5 text-[11px] text-white/45 transition hover:bg-white/5 hover:text-white/70"
+              className="w-full rounded-lg py-1.5 text-[11px] text-white/85 transition hover:bg-white/5 hover:text-white"
             >
               {t.shorts.bgmClear}
             </button>

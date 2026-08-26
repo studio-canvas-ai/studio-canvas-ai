@@ -1191,7 +1191,7 @@ export default function ShortsFullStudio({
       className={`flex flex-1 items-center justify-center rounded-lg py-1.5 transition disabled:opacity-40 ${
         activeLayer?.align === value
           ? "bg-white/15 text-white"
-          : "text-white/45 hover:bg-white/5"
+          : "text-white/85 hover:bg-white/5"
       }`}
       aria-pressed={activeLayer?.align === value}
     >
@@ -1337,7 +1337,7 @@ export default function ShortsFullStudio({
       <button
         type="button"
         onClick={onClose}
-        className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] text-white/70 hover:bg-white/10"
+        className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] text-white/90 hover:bg-white/10"
       >
         <X className="h-3.5 w-3.5" />
         {t.shorts.fullStudioClose}
@@ -1553,7 +1553,7 @@ export default function ShortsFullStudio({
           <p className="truncate text-[11px] font-semibold tracking-wide text-white/90">
             {t.shorts.captionWorkspaceTitle}
           </p>
-          <p className="mt-0.5 line-clamp-2 text-[9px] leading-snug text-white/40">
+          <p className="mt-0.5 line-clamp-2 text-[9px] leading-snug text-white/80">
             {t.shorts.captionWorkspaceHint}
           </p>
         </div>
@@ -1567,7 +1567,7 @@ export default function ShortsFullStudio({
                   1,
                   captions.findIndex((c) => c.id === activeCap.id) + 1
                 )}{" "}
-                <span className="font-normal text-white/40">
+                <span className="font-normal text-white/80">
                   {activeCap.startSec.toFixed(1)}s –{" "}
                   {activeCap.endSec.toFixed(1)}s
                 </span>
@@ -1626,7 +1626,7 @@ export default function ShortsFullStudio({
               </div>
             </>
           ) : (
-            <p className="text-[11px] text-white/40">
+            <p className="text-[11px] text-white/80">
               {t.shorts.studioCaptionsEmpty}
             </p>
           )}
@@ -1646,10 +1646,10 @@ export default function ShortsFullStudio({
                     ? "bg-glow-emerald/15 text-white ring-1 ring-glow-emerald/40"
                     : playheadSeg?.id === seg.id
                       ? "bg-white/10 text-white/85"
-                      : "bg-black/35 text-white/60 hover:bg-white/10 hover:text-white/80"
+                      : "bg-black/35 text-white/90 hover:bg-white/10 hover:text-white"
                 }`}
               >
-                <span className="mr-1 font-semibold text-white/40">
+                <span className="mr-1 font-semibold text-white/80">
                   #{i + 1}
                 </span>
                 <span className="break-words">{seg.text || "…"}</span>
@@ -1674,7 +1674,7 @@ export default function ShortsFullStudio({
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/70 transition hover:bg-white/10 hover:text-white"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/90 transition hover:bg-white/10 hover:text-white"
             aria-label={t.shorts.studioBack}
             title={t.shorts.studioBack}
           >
@@ -1689,7 +1689,7 @@ export default function ShortsFullStudio({
           <div className="min-w-0 hidden lg:block">
             <p className="truncate text-sm font-bold">{t.shorts.fullStudioTitle}</p>
             {t.shorts.fullStudioSubtitle ? (
-              <p className="truncate text-[11px] text-white/45">
+              <p className="truncate text-[11px] text-white/85">
                 {t.shorts.fullStudioSubtitle}
               </p>
             ) : null}
@@ -1723,7 +1723,7 @@ export default function ShortsFullStudio({
         )}
         {(mixing || mixProgress > 0) && (
           <div className="shrink-0 space-y-1 border-b border-white/10 bg-glow-emerald/10 px-3 py-1.5">
-            <div className="flex items-center justify-between gap-2 text-[10px] text-white/70">
+            <div className="flex items-center justify-between gap-2 text-[10px] text-white/90">
               <span className="truncate">
                 {mixStatus || t.shorts.studioMixProgress}
               </span>
@@ -1810,7 +1810,7 @@ export default function ShortsFullStudio({
                     />
                   </div>
                 ) : (
-                  <div className="flex h-full items-center justify-center text-[11px] text-white/35">
+                  <div className="flex h-full items-center justify-center text-[11px] text-white/75">
                     {t.shorts.studioVideoMissing}
                   </div>
                 )}
@@ -1917,7 +1917,7 @@ export default function ShortsFullStudio({
                           </span>
                         ))}
                         {!canvasCap.text.trim() ? (
-                          <span className="text-white/35">…</span>
+                          <span className="text-white/75">…</span>
                         ) : null}
                       </span>
                     )}
@@ -2007,7 +2007,7 @@ export default function ShortsFullStudio({
                     />
                   </div>
                 ) : (
-                  <div className="flex h-full items-center justify-center text-[11px] text-white/35">
+                  <div className="flex h-full items-center justify-center text-[11px] text-white/75">
                     {t.shorts.studioMissing}
                   </div>
                 )}
@@ -2058,7 +2058,7 @@ export default function ShortsFullStudio({
                         ? id === "youtube"
                           ? "bg-red-500/25 text-red-100"
                           : "bg-glow-emerald/20 text-glow-emerald"
-                        : "text-white/50 hover:text-white"
+                        : "text-white/85 hover:text-white"
                     }`}
                   >
                     {label}
@@ -2071,9 +2071,9 @@ export default function ShortsFullStudio({
               {panelTab === "thumb" ? (
                 <>
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-medium text-white/60">
+                    <p className="text-xs font-medium text-white/90">
                       {t.thumbnail.layersLabel}
-                      <span className="ml-1.5 text-[10px] font-normal text-white/35">
+                      <span className="ml-1.5 text-[10px] font-normal text-white/75">
                         (
                         {activePreview === "video"
                           ? t.shorts.dualStudioVideoPanel
@@ -2113,7 +2113,7 @@ export default function ShortsFullStudio({
                                 className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${
                                   selected
                                     ? "bg-glow-emerald/20 text-glow-emerald"
-                                    : "bg-white/10 text-white/60"
+                                    : "bg-white/10 text-white/90"
                                 }`}
                               >
                                 {t.thumbnail.lineN.replace(
@@ -2153,7 +2153,7 @@ export default function ShortsFullStudio({
                               ref={(node) => {
                                 autoResizeLayerTextarea(node);
                               }}
-                              className={`w-full resize-none overflow-hidden rounded-lg border bg-black/30 px-2.5 py-1.5 text-sm leading-snug text-white outline-none placeholder:text-white/30 ${
+                              className={`w-full resize-none overflow-hidden rounded-lg border bg-black/30 px-2.5 py-1.5 text-sm leading-snug text-white outline-none placeholder:text-white/55 ${
                                 selected
                                   ? "border-glow-emerald/50 ring-1 ring-glow-emerald/25"
                                   : "border-white/10 focus:border-glow-emerald/35"
@@ -2174,7 +2174,7 @@ export default function ShortsFullStudio({
                       })}
                     </ul>
                   ) : (
-                    <p className="text-xs text-white/40">
+                    <p className="text-xs text-white/80">
                       {t.shorts.studioEmptyLayer}
                     </p>
                   )}
@@ -2183,7 +2183,7 @@ export default function ShortsFullStudio({
                     <div className="flex flex-col gap-6 border-t border-white/10 pt-4">
                       {/* emoji */}
                       <div>
-                        <p className="mb-2 text-xs font-medium text-white/60">
+                        <p className="mb-2 text-xs font-medium text-white/90">
                           {t.thumbnail.symbolsLabel}
                         </p>
                         <div className="flex flex-wrap items-center gap-1.5">
@@ -2230,7 +2230,7 @@ export default function ShortsFullStudio({
 
                       {/* fonts */}
                       <div>
-                        <p className="mb-2 text-xs font-medium text-white/60">
+                        <p className="mb-2 text-xs font-medium text-white/90">
                           {t.thumbnail.fontLabel}
                         </p>
                         <div className="flex flex-wrap gap-1.5">
@@ -2247,7 +2247,7 @@ export default function ShortsFullStudio({
                               className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition ${
                                 activeLayer.fontPreset === fp
                                   ? "bg-white/15 text-white"
-                                  : "bg-black/20 text-white/45 hover:text-white/80"
+                                  : "bg-black/20 text-white/85 hover:text-white"
                               }`}
                               style={{
                                 fontFamily: `"${FONT_PRESET_PRIMARY[fp]}", ${fontForText(fp, "가A")}`,
@@ -2262,7 +2262,7 @@ export default function ShortsFullStudio({
 
                       {/* ⑤ size / weight / align / box */}
                       <div>
-                        <div className="mb-1.5 flex items-center justify-between text-xs text-white/60">
+                        <div className="mb-1.5 flex items-center justify-between text-xs text-white/90">
                           <span>{t.shorts.studioFontSize}</span>
                           <span className="tabular-nums text-white/80">
                             {activeLayer.fontSize}px
@@ -2284,7 +2284,7 @@ export default function ShortsFullStudio({
                       </div>
 
                       <div>
-                        <p className="mb-2 text-xs font-medium text-white/60">
+                        <p className="mb-2 text-xs font-medium text-white/90">
                           {t.shorts.studioAlign}
                         </p>
                         <div className="flex overflow-hidden rounded-xl border border-white/10 bg-black/20">
@@ -2295,7 +2295,7 @@ export default function ShortsFullStudio({
                       </div>
 
                       <div>
-                        <div className="mb-1.5 flex items-center justify-between text-xs text-white/60">
+                        <div className="mb-1.5 flex items-center justify-between text-xs text-white/90">
                           <span>{t.shorts.studioFontWeight}</span>
                           <span className="tabular-nums text-white/80">
                             {clampFontWeight(
@@ -2325,7 +2325,7 @@ export default function ShortsFullStudio({
                       </div>
 
                       <div>
-                        <div className="mb-1.5 flex items-center justify-between text-xs text-white/60">
+                        <div className="mb-1.5 flex items-center justify-between text-xs text-white/90">
                           <span>{t.shorts.studioBoxWidth}</span>
                           <span className="tabular-nums text-white/80">
                             {Math.round(
@@ -2377,7 +2377,7 @@ export default function ShortsFullStudio({
                               />
                             </label>
                             <div>
-                              <div className="mb-1 flex justify-between text-[11px] text-white/45">
+                              <div className="mb-1 flex justify-between text-[11px] text-white/85">
                                 <span>{t.shorts.studioBgOpacity}</span>
                                 <span>
                                   {Math.round(
@@ -2406,7 +2406,7 @@ export default function ShortsFullStudio({
 
                       {/* colors */}
                       <div>
-                        <p className="mb-2 text-xs font-medium text-white/60">
+                        <p className="mb-2 text-xs font-medium text-white/90">
                           {t.shorts.studioColor}
                         </p>
                         <div className="grid grid-cols-6 gap-2">
@@ -2438,11 +2438,11 @@ export default function ShortsFullStudio({
 
                       {/* background color */}
                       <div>
-                        <p className="mb-2 text-xs font-medium text-white/60">
+                        <p className="mb-2 text-xs font-medium text-white/90">
                           {t.thumbnail.bgColorLabel}
                         </p>
                         <div className="flex flex-col gap-2">
-                          <label className="inline-flex cursor-pointer items-center gap-2 text-[11px] text-white/70">
+                          <label className="inline-flex cursor-pointer items-center gap-2 text-[11px] text-white/90">
                             <input
                               type="checkbox"
                               checked={Boolean(activeLayer.showBox)}
@@ -2469,7 +2469,7 @@ export default function ShortsFullStudio({
                       </div>
                     </div>
                   ) : (
-                    <p className="text-xs text-white/40">
+                    <p className="text-xs text-white/80">
                       {t.shorts.studioEmptyLayer}
                     </p>
                   )}
@@ -2485,7 +2485,7 @@ export default function ShortsFullStudio({
                     />
                     <span>
                       {t.shorts.bindThumbIntro}
-                      <span className="mt-0.5 block text-[10px] font-normal text-white/40">
+                      <span className="mt-0.5 block text-[10px] font-normal text-white/80">
                         {t.shorts.bindThumbIntroHint}
                       </span>
                     </span>
@@ -2506,16 +2506,16 @@ export default function ShortsFullStudio({
                   onBlurCapture={onCaptionPanelFocusOut}
                 >
                   {captionWorkspaceOpen ? (
-                    <p className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-[11px] leading-relaxed text-white/50">
+                    <p className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-[11px] leading-relaxed text-white/85">
                       {t.shorts.captionWorkspaceStylesHint}
                     </p>
                   ) : (
-                    <p className="text-xs text-white/40">
+                    <p className="text-xs text-white/80">
                       {t.shorts.studioCaptionsEmpty}
                     </p>
                   )}
                   <div>
-                    <p className="mb-2 text-xs font-semibold text-white/65">
+                    <p className="mb-2 text-xs font-semibold text-white/90">
                       {t.shorts.captionFontLabel}
                     </p>
                     <div className="mb-2 flex gap-1 rounded-lg bg-black/40 p-0.5">
@@ -2535,7 +2535,7 @@ export default function ShortsFullStudio({
                           className={`min-w-0 flex-1 truncate rounded-md px-1.5 py-1.5 text-[10px] font-semibold ${
                             captionFontScope === id
                               ? "bg-white/15 text-white"
-                              : "text-white/45 hover:text-white/70"
+                              : "text-white/85 hover:text-white"
                           }`}
                         >
                           {label}
@@ -2585,7 +2585,7 @@ export default function ShortsFullStudio({
                           disabled={
                             captionFontScope === "active" && !activeCap
                           }
-                          className="rounded-lg bg-white/10 px-2.5 py-1.5 text-xs text-white/70 transition hover:bg-white/15 disabled:opacity-40"
+                          className="rounded-lg bg-white/10 px-2.5 py-1.5 text-xs text-white/90 transition hover:bg-white/15 disabled:opacity-40"
                         >
                           {label}
                         </button>
@@ -2594,7 +2594,7 @@ export default function ShortsFullStudio({
                   </div>
 
                   <div>
-                    <div className="mb-1.5 flex items-center justify-between text-[11px] text-white/55">
+                    <div className="mb-1.5 flex items-center justify-between text-[11px] text-white/90">
                       <span>{t.shorts.studioFontSize}</span>
                       <span className="tabular-nums text-white/80">
                         {clampCaptionFontSize(overlayStyle.fontSize)}px
@@ -2615,13 +2615,13 @@ export default function ShortsFullStudio({
                       className="w-full accent-emerald-400"
                       aria-label={t.shorts.studioFontSize}
                     />
-                    <p className="mt-1 text-[10px] text-white/35">
+                    <p className="mt-1 text-[10px] text-white/75">
                       {t.shorts.captionFontSizeHint}
                     </p>
                   </div>
 
                   <div className="space-y-3">
-                    <p className="text-xs font-semibold text-white/65">
+                    <p className="text-xs font-semibold text-white/90">
                       {t.shorts.captionColorTitle}
                     </p>
                     {(
@@ -2649,7 +2649,7 @@ export default function ShortsFullStudio({
                     ).map(([key, label, value, onPick]) => (
                       <div key={key} className="space-y-1.5">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-[11px] text-white/55">
+                          <span className="text-[11px] text-white/90">
                             {label}
                           </span>
                           <div className="flex items-center gap-1.5">
@@ -2660,7 +2660,7 @@ export default function ShortsFullStudio({
                               className="h-7 w-9 cursor-pointer rounded border border-white/20 bg-transparent p-0.5"
                               aria-label={label}
                             />
-                            <span className="min-w-[4.5rem] text-[10px] tabular-nums text-white/45">
+                            <span className="min-w-[4.5rem] text-[10px] tabular-nums text-white/85">
                               {normalizeHexColor(value)}
                             </span>
                           </div>
@@ -2689,7 +2689,7 @@ export default function ShortsFullStudio({
                         </div>
                       </div>
                     ))}
-                    <label className="flex items-center justify-between gap-2 text-[11px] text-white/60">
+                    <label className="flex items-center justify-between gap-2 text-[11px] text-white/90">
                       <span>{t.shorts.captionShowBoxLabel}</span>
                       <input
                         type="checkbox"
@@ -2706,7 +2706,7 @@ export default function ShortsFullStudio({
                   </div>
 
                   <div>
-                    <p className="mb-2 text-xs font-semibold text-white/65">
+                    <p className="mb-2 text-xs font-semibold text-white/90">
                       {t.shorts.captionPresetsTitle}
                     </p>
                     <div className="grid grid-cols-2 gap-1.5">
@@ -2718,7 +2718,7 @@ export default function ShortsFullStudio({
                           className={`rounded-md px-2 py-1.5 text-left text-[11px] font-semibold ${
                             activeCap?.stylePresetId === p.id
                               ? "bg-glow-emerald/20 text-glow-emerald ring-1 ring-glow-emerald/40"
-                              : "bg-black/30 text-white/65 hover:bg-white/10"
+                              : "bg-black/30 text-white/90 hover:bg-white/10"
                           }`}
                         >
                           {t.shorts[p.labelKey]}
@@ -2726,7 +2726,7 @@ export default function ShortsFullStudio({
                       ))}
                     </div>
                   </div>
-                  <label className="flex items-center justify-between gap-2 text-xs text-white/70">
+                  <label className="flex items-center justify-between gap-2 text-xs text-white/90">
                     <span>{t.shorts.studioCaptionsPopToggle}</span>
                     <input
                       type="checkbox"
@@ -2753,7 +2753,7 @@ export default function ShortsFullStudio({
                   </p>
 
                   {ytStatusLoading ? (
-                    <p className="flex items-center gap-2 text-[11px] text-white/45">
+                    <p className="flex items-center gap-2 text-[11px] text-white/85">
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       …
                     </p>
@@ -2762,7 +2762,7 @@ export default function ShortsFullStudio({
                       {t.shorts.youtubeNotConfigured}
                     </p>
                   ) : ytConnected ? (
-                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[11px] text-white/70">
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[11px] text-white/90">
                       <span>
                         {t.shorts.youtubeConnectedAs.replace(
                           "{name}",
@@ -2771,7 +2771,7 @@ export default function ShortsFullStudio({
                       </span>
                       <button
                         type="button"
-                        className="text-white/40 underline-offset-2 hover:text-white hover:underline"
+                        className="text-white/80 underline-offset-2 hover:text-white hover:underline"
                         onClick={() => {
                           void fetch("/api/shorts/youtube/disconnect", {
                             method: "POST",
@@ -2796,7 +2796,7 @@ export default function ShortsFullStudio({
                   )}
 
                   <label className="block space-y-1.5">
-                    <span className="text-xs font-medium text-white/60">
+                    <span className="text-xs font-medium text-white/90">
                       {t.shorts.youtubeTitleLabel}
                     </span>
                     <input
@@ -2810,7 +2810,7 @@ export default function ShortsFullStudio({
                   </label>
 
                   <label className="block space-y-1.5">
-                    <span className="text-xs font-medium text-white/60">
+                    <span className="text-xs font-medium text-white/90">
                       {t.shorts.youtubeDescriptionLabel}
                     </span>
                     <textarea
@@ -2824,7 +2824,7 @@ export default function ShortsFullStudio({
                   </label>
 
                   <label className="block space-y-1.5">
-                    <span className="text-xs font-medium text-white/60">
+                    <span className="text-xs font-medium text-white/90">
                       {t.shorts.youtubePrivacyLabel}
                     </span>
                     <select
@@ -2848,7 +2848,7 @@ export default function ShortsFullStudio({
 
                   {(youtubeBusy || youtubeProgress > 0) && (
                     <div className="space-y-1.5">
-                      <div className="flex justify-between text-[11px] text-white/55">
+                      <div className="flex justify-between text-[11px] text-white/90">
                         <span>{t.shorts.youtubeUploading}</span>
                         <span className="tabular-nums font-bold text-red-200">
                           {youtubeProgress}%
@@ -2902,7 +2902,7 @@ export default function ShortsFullStudio({
                       type="button"
                       disabled={youtubeBusy}
                       onClick={onYoutubeAssistFallback}
-                      className="w-full text-center text-[11px] text-white/40 underline-offset-2 hover:text-white/70 hover:underline"
+                      className="w-full text-center text-[11px] text-white/80 underline-offset-2 hover:text-white hover:underline"
                     >
                       {t.shorts.youtubeAssistFallback}
                     </button>
@@ -3000,7 +3000,7 @@ export default function ShortsFullStudio({
               <p className="text-center text-base font-bold text-white">
                 {t.shorts.youtubeUploadSuccess}
               </p>
-              <p className="text-center text-xs text-white/55">
+              <p className="text-center text-xs text-white/90">
                 {t.shorts.youtubeUploadReady}
               </p>
               <a

@@ -340,7 +340,7 @@ export default function ShortsPreviewControlBar({
     layout === "stacked" ? (
       // Dual studio: single-line, labeled, tight packing.
       <div className="flex shrink-0 flex-nowrap items-center gap-0.5 sm:gap-1">
-        <span className="shrink-0 text-[9px] font-semibold text-white/55">
+        <span className="shrink-0 text-[9px] font-semibold text-white/90">
           {scaleLabelText}
         </span>
         <input
@@ -356,10 +356,10 @@ export default function ShortsPreviewControlBar({
           aria-label={scaleLabelText}
           title={`${scaleLabelText} ${formatScaleValue(videoScale)}`}
         />
-        <span className="w-8 shrink-0 text-right text-[9px] tabular-nums text-white/55">
+        <span className="w-8 shrink-0 text-right text-[9px] tabular-nums text-white/90">
           {formatScaleValue(videoScale)}
         </span>
-        <span className="ml-0.5 shrink-0 text-[9px] font-semibold text-white/55">
+        <span className="ml-0.5 shrink-0 text-[9px] font-semibold text-white/90">
           {posYLabelText}
         </span>
         <input
@@ -375,14 +375,14 @@ export default function ShortsPreviewControlBar({
           aria-label={posYLabelText}
           title={`${posYLabelText} ${formatPosYValue(videoPosY)}`}
         />
-        <span className="w-8 shrink-0 text-right text-[9px] tabular-nums text-white/55">
+        <span className="w-8 shrink-0 text-right text-[9px] tabular-nums text-white/90">
           {formatPosYValue(videoPosY)}
         </span>
       </div>
     ) : (
       <div className="ml-0.5 flex w-[9.75rem] shrink-0 flex-col justify-center gap-0.5 sm:w-[10.5rem]">
         <div className="flex w-full min-w-0 items-center gap-1">
-          <span className="w-7 shrink-0 truncate text-[9px] text-white/45">
+          <span className="w-7 shrink-0 truncate text-[9px] text-white/85">
             {scaleLabelText}
           </span>
           <input
@@ -397,12 +397,12 @@ export default function ShortsPreviewControlBar({
             className="h-1 min-w-0 flex-1 cursor-pointer accent-emerald-400"
             aria-label={scaleLabelText}
           />
-          <span className="w-8 shrink-0 text-right text-[9px] tabular-nums text-white/55">
+          <span className="w-8 shrink-0 text-right text-[9px] tabular-nums text-white/90">
             {formatScaleValue(videoScale)}
           </span>
         </div>
         <div className="flex w-full min-w-0 items-center gap-1">
-          <span className="w-7 shrink-0 truncate text-[9px] text-white/45">
+          <span className="w-7 shrink-0 truncate text-[9px] text-white/85">
             {posYLabelText}
           </span>
           <input
@@ -417,7 +417,7 @@ export default function ShortsPreviewControlBar({
             className="h-1 min-w-0 flex-1 cursor-pointer accent-emerald-400"
             aria-label={posYLabelText}
           />
-          <span className="w-8 shrink-0 text-right text-[9px] tabular-nums text-white/55">
+          <span className="w-8 shrink-0 text-right text-[9px] tabular-nums text-white/90">
             {formatPosYValue(videoPosY)}
           </span>
         </div>
@@ -446,7 +446,7 @@ export default function ShortsPreviewControlBar({
       </select>
     ) : (
       <label className="ml-0.5 flex min-w-0 max-w-[11.5rem] shrink-0 flex-col gap-0.5 sm:max-w-[13rem]">
-        <span className="truncate text-[9px] leading-none text-white/45">
+        <span className="truncate text-[9px] leading-none text-white/85">
           {t.shorts.captionEntranceLabel}
         </span>
         <select
@@ -537,9 +537,9 @@ export default function ShortsPreviewControlBar({
 
       {layout === "inline" ? seekSlider : null}
 
-      <span className="shrink-0 text-[10px] tabular-nums text-white/50">
+      <span className="shrink-0 text-[10px] tabular-nums text-white/85">
         {formatTime(current)}
-        <span className="text-white/30"> / </span>
+        <span className="text-white/90"> / </span>
         {formatTime(displayDuration)}
       </span>
 
@@ -568,7 +568,7 @@ export default function ShortsPreviewControlBar({
           className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition ${
             pipActive
               ? "border-glow-emerald/50 bg-glow-emerald/15 text-glow-emerald"
-              : "border-white/15 bg-white/5 text-white/70 hover:border-white/25 hover:text-white"
+              : "border-white/15 bg-white/5 text-white/90 hover:border-white/25 hover:text-white"
           }`}
           aria-pressed={pipActive}
           aria-label={

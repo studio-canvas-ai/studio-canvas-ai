@@ -66,7 +66,7 @@ export default function ShortsCaptionTimelinePanel({
           <p className="text-xs font-semibold text-white/80">
             {t.shorts.studioCaptionsTitle}
           </p>
-          <p className="mt-0.5 text-[11px] text-white/40">
+          <p className="mt-0.5 text-[11px] text-white/80">
             {t.shorts.studioCaptionsHint}
           </p>
         </div>
@@ -94,7 +94,7 @@ export default function ShortsCaptionTimelinePanel({
       ) : null}
 
       {captions.length === 0 ? (
-        <p className="text-[11px] text-white/35">{t.shorts.studioCaptionsEmpty}</p>
+        <p className="text-[11px] text-white/75">{t.shorts.studioCaptionsEmpty}</p>
       ) : (
         <ul className="max-h-64 space-y-2 overflow-y-auto pr-0.5">
           {captions.map((seg, i) => {
@@ -117,7 +117,7 @@ export default function ShortsCaptionTimelinePanel({
                   onClick={() => onSelect(seg.id)}
                   className="mb-1.5 flex w-full items-center justify-between gap-2 text-left"
                 >
-                  <span className="text-[10px] font-semibold text-white/55">
+                  <span className="text-[10px] font-semibold text-white/90">
                     #{i + 1} · {formatSec(seg.startSec)} –{" "}
                     {formatSec(seg.endSec)}
                   </span>
@@ -147,7 +147,7 @@ export default function ShortsCaptionTimelinePanel({
                       key={preset}
                       type="button"
                       onClick={() => setPreset(seg.id, preset)}
-                      className="rounded-md bg-white/10 px-2 py-1 text-[10px] font-medium text-white/70 transition hover:bg-white/15 hover:text-white"
+                      className="rounded-md bg-white/10 px-2 py-1 text-[10px] font-medium text-white/90 transition hover:bg-white/15 hover:text-white"
                     >
                       {label}
                     </button>
@@ -155,7 +155,7 @@ export default function ShortsCaptionTimelinePanel({
                   <button
                     type="button"
                     onClick={() => remove(seg.id)}
-                    className="ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-white/45 transition hover:bg-red-500/15 hover:text-red-200"
+                    className="ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-white/85 transition hover:bg-red-500/15 hover:text-red-200"
                     aria-label={t.shorts.studioCaptionsDelete}
                   >
                     <Trash2 className="h-3 w-3" aria-hidden />

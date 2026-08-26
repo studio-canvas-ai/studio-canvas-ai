@@ -145,7 +145,7 @@ export function EmojiMoreDropdown({
       >
         {label}
         <ChevronDown
-          className={`h-3.5 w-3.5 text-white/45 transition ${open ? "rotate-180" : ""}`}
+          className={`h-3.5 w-3.5 text-white/80 transition ${open ? "rotate-180" : ""}`}
           aria-hidden
         />
       </button>
@@ -217,7 +217,7 @@ export function StickerMoreDropdown({
           </span>
         ) : null}
         <ChevronDown
-          className={`h-3.5 w-3.5 shrink-0 text-white/45 transition ${open ? "rotate-180" : ""}`}
+          className={`h-3.5 w-3.5 shrink-0 text-white/80 transition ${open ? "rotate-180" : ""}`}
           aria-hidden
         />
       </button>
@@ -305,7 +305,7 @@ export function BgColorDropdown({
         />
         <span className="min-w-0 flex-1 truncate">{label}</span>
         <ChevronDown
-          className={`h-3.5 w-3.5 shrink-0 text-white/45 transition ${open ? "rotate-180" : ""}`}
+          className={`h-3.5 w-3.5 shrink-0 text-white/80 transition ${open ? "rotate-180" : ""}`}
           aria-hidden
         />
       </button>

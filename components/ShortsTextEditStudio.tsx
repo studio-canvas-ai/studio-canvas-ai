@@ -1217,7 +1217,7 @@ export default function ShortsTextEditStudio() {
 
   if (!ready) {
     return (
-      <div className="mx-auto max-w-5xl px-3 py-16 text-center text-sm text-white/50">
+      <div className="mx-auto max-w-5xl px-3 py-16 text-center text-sm text-white/85">
         {t.shorts.studioLoading}
       </div>
     );
@@ -1226,8 +1226,8 @@ export default function ShortsTextEditStudio() {
   if (!session) {
     return (
       <div className="mx-auto max-w-lg space-y-5 px-3 py-16 text-center">
-        <p className="text-sm text-white/60">{t.shorts.studioMissing}</p>
-        <p className="text-xs text-white/40">{t.shorts.projectRestoreHint}</p>
+        <p className="text-sm text-white/90">{t.shorts.studioMissing}</p>
+        <p className="text-xs text-white/80">{t.shorts.projectRestoreHint}</p>
         <div className="flex flex-wrap items-center justify-center gap-2">
           <ShortsProjectToolbar onLoadProject={applyShortsProject} />
         </div>
@@ -1250,7 +1250,7 @@ export default function ShortsTextEditStudio() {
       className={`flex flex-1 items-center justify-center rounded-lg py-2 transition disabled:opacity-40 ${
         active?.align === value
           ? "bg-white/15 text-white"
-          : "text-white/45 hover:bg-white/5 hover:text-white/80"
+          : "text-white/85 hover:bg-white/5 hover:text-white"
       }`}
       aria-pressed={active?.align === value}
     >
@@ -1282,12 +1282,12 @@ export default function ShortsTextEditStudio() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Link
             href={SHORTS_THUMBNAIL_PATH}
-            className="inline-flex items-center gap-1.5 text-xs text-white/50 transition hover:text-white"
+            className="inline-flex items-center gap-1.5 text-xs text-white/85 transition hover:text-white"
           >
             <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
             {t.shorts.studioBack}
           </Link>
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/60">
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/90">
             <Type className="h-3.5 w-3.5 text-glow-violet" aria-hidden />
             {t.shorts.studioEyebrow}
           </div>
@@ -1297,7 +1297,7 @@ export default function ShortsTextEditStudio() {
           <h1 className="font-display text-2xl font-bold text-white sm:text-3xl">
             {t.shorts.studioTitle}
           </h1>
-          <p className="max-w-2xl text-sm text-white/50">
+          <p className="max-w-2xl text-sm text-white/85">
             {t.shorts.studioSubtitle}
           </p>
         </header>
@@ -1591,7 +1591,7 @@ export default function ShortsTextEditStudio() {
                 videoKey={previewVideoUrl}
               />
             )}
-            <p className="mt-2 text-center text-[11px] text-white/35">
+            <p className="mt-2 text-center text-[11px] text-white/75">
               {captions.length
                 ? t.shorts.studioCaptionsDragHint
                 : t.shorts.studioDragHint}
@@ -1600,7 +1600,7 @@ export default function ShortsTextEditStudio() {
 
           <div className="glass-card space-y-4 rounded-2xl border border-white/10 p-4 sm:p-6">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-medium text-white/60">
+              <p className="text-xs font-medium text-white/90">
                 {t.thumbnail.layersLabel}
               </p>
               <button
@@ -1622,7 +1622,7 @@ export default function ShortsTextEditStudio() {
                     className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
                       layer.id === activeId
                         ? "bg-glow-emerald/20 text-glow-emerald ring-1 ring-glow-emerald/40"
-                        : "bg-black/25 text-white/55 hover:text-white"
+                        : "bg-black/25 text-white/90 hover:text-white"
                     }`}
                   >
                     {t.thumbnail.lineN.replace("{n}", String(i + 1))}
@@ -1647,7 +1647,7 @@ export default function ShortsTextEditStudio() {
                     onClick={rememberCaret}
                     onBlur={rememberCaret}
                     placeholder={t.shorts.studioTextPlaceholder}
-                    className="min-w-0 flex-1 resize-y rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-white placeholder:text-white/30 outline-none focus:border-glow-emerald/40 focus:ring-2 focus:ring-glow-emerald/20"
+                    className="min-w-0 flex-1 resize-y rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-white placeholder:text-white/55 outline-none focus:border-glow-emerald/40 focus:ring-2 focus:ring-glow-emerald/20"
                     style={{
                       fontFamily: fontForText(
                         active.fontPreset,
@@ -1662,7 +1662,7 @@ export default function ShortsTextEditStudio() {
                   <button
                     type="button"
                     onClick={() => removeLayer(active.id)}
-                    className="rounded-lg p-2 text-white/40 transition hover:bg-red-500/15 hover:text-red-300"
+                    className="rounded-lg p-2 text-white/80 transition hover:bg-red-500/15 hover:text-red-300"
                     aria-label={t.shorts.studioDeleteLayer}
                     title={t.shorts.studioDeleteLayer}
                   >
@@ -1671,7 +1671,7 @@ export default function ShortsTextEditStudio() {
                 </div>
 
                 <div>
-                  <p className="mb-2 text-xs font-medium text-white/60">
+                  <p className="mb-2 text-xs font-medium text-white/90">
                     {t.thumbnail.symbolsLabel}
                   </p>
                   <div className="flex flex-wrap gap-1.5">
@@ -1696,7 +1696,7 @@ export default function ShortsTextEditStudio() {
                 />
 
                 <div>
-                  <p className="mb-2 text-xs font-medium text-white/60">
+                  <p className="mb-2 text-xs font-medium text-white/90">
                     {t.thumbnail.fontLabel}
                   </p>
                   <div className="flex flex-wrap gap-1.5">
@@ -1714,7 +1714,7 @@ export default function ShortsTextEditStudio() {
                         className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition ${
                           active.fontPreset === fp
                             ? "bg-white/15 text-white"
-                            : "bg-black/20 text-white/45 hover:text-white/80"
+                            : "bg-black/20 text-white/85 hover:text-white"
                         }`}
                         style={{
                           fontFamily: `"${FONT_PRESET_PRIMARY[fp]}", ${fontForText(fp, "Sample 가A")}`,
@@ -1729,7 +1729,7 @@ export default function ShortsTextEditStudio() {
                 </div>
 
                 <div>
-                  <div className="mb-1.5 flex items-center justify-between text-xs text-white/60">
+                  <div className="mb-1.5 flex items-center justify-between text-xs text-white/90">
                     <span>{t.shorts.studioFontSize}</span>
                     <span className="tabular-nums text-white/80">
                       {active.fontSize}px
@@ -1749,7 +1749,7 @@ export default function ShortsTextEditStudio() {
                 </div>
 
                 <div>
-                  <p className="mb-2 text-xs font-medium text-white/60">
+                  <p className="mb-2 text-xs font-medium text-white/90">
                     {t.shorts.studioAlign}
                   </p>
                   <div className="flex overflow-hidden rounded-xl border border-white/10 bg-black/20">
@@ -1760,7 +1760,7 @@ export default function ShortsTextEditStudio() {
                 </div>
 
                 <div>
-                  <div className="mb-1.5 flex items-center justify-between text-xs text-white/60">
+                  <div className="mb-1.5 flex items-center justify-between text-xs text-white/90">
                     <span>{t.shorts.studioFontWeight}</span>
                     <span className="tabular-nums text-white/80">
                       {clampFontWeight(
@@ -1786,7 +1786,7 @@ export default function ShortsTextEditStudio() {
                 </div>
 
                 <div>
-                  <div className="mb-1.5 flex items-center justify-between text-xs text-white/60">
+                  <div className="mb-1.5 flex items-center justify-between text-xs text-white/90">
                     <span>{t.shorts.studioBoxWidth}</span>
                     <span className="tabular-nums text-white/80">
                       {Math.round(clampBoxWidth(active.maxWidth) * 100)}%
@@ -1833,7 +1833,7 @@ export default function ShortsTextEditStudio() {
                         />
                       </label>
                       <div>
-                        <div className="mb-1 flex justify-between text-[11px] text-white/45">
+                        <div className="mb-1 flex justify-between text-[11px] text-white/85">
                           <span>{t.shorts.studioBgOpacity}</span>
                           <span>{Math.round(active.boxOpacity * 100)}%</span>
                         </div>
@@ -1854,7 +1854,7 @@ export default function ShortsTextEditStudio() {
                 </div>
 
                 <div>
-                  <p className="mb-2 text-xs font-medium text-white/60">
+                  <p className="mb-2 text-xs font-medium text-white/90">
                     {t.shorts.studioColor}
                   </p>
                   <div className="flex flex-wrap gap-2">
@@ -1888,7 +1888,7 @@ export default function ShortsTextEditStudio() {
                 {t.shorts.studioVideoLayout}
               </p>
               <div>
-                <div className="mb-1 flex justify-between text-[11px] text-white/45">
+                <div className="mb-1 flex justify-between text-[11px] text-white/85">
                   <span>{t.shorts.studioVideoScale}</span>
                   <span>{Math.round(clampVideoScale(videoScale) * 100)}%</span>
                 </div>
@@ -1906,7 +1906,7 @@ export default function ShortsTextEditStudio() {
                 />
               </div>
               <div>
-                <div className="mb-1 flex justify-between text-[11px] text-white/45">
+                <div className="mb-1 flex justify-between text-[11px] text-white/85">
                   <span>{t.shorts.studioVideoPosY}</span>
                   <span>
                     {t.shorts.studioVideoPosYValue.replace(
@@ -1956,7 +1956,7 @@ export default function ShortsTextEditStudio() {
 
             <BgmSelectorPanel value={bgm} onChange={setBgm} />
 
-            <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-[11px] text-white/45">
+            <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-[11px] text-white/85">
               {hasVideoSource ? (
                 <span className="inline-flex items-center gap-1.5 text-glow-emerald/90">
                   <Clapperboard className="h-3.5 w-3.5" aria-hidden />
@@ -2015,7 +2015,7 @@ export default function ShortsTextEditStudio() {
 
             {(mixing || mixProgress > 0) && (
               <div className="space-y-1.5">
-                <div className="flex justify-between text-[11px] text-white/50">
+                <div className="flex justify-between text-[11px] text-white/85">
                   <span>{mixStatus || t.shorts.studioMixProgress}</span>
                   <span className="tabular-nums">{mixProgress}%</span>
                 </div>
@@ -2030,7 +2030,7 @@ export default function ShortsTextEditStudio() {
 
             {mixedVideoUrl && (
               <div className="space-y-3 rounded-xl border border-white/10 bg-black/30 p-3">
-                <p className="text-xs font-medium text-white/70">
+                <p className="text-xs font-medium text-white/90">
                   {t.shorts.studioMixPreview}
                 </p>
                 <video
@@ -2079,7 +2079,7 @@ export default function ShortsTextEditStudio() {
         </>
       ) : !fullStudioOpen ? (
         <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 px-4 py-12">
-          <p className="text-center text-sm text-white/55">
+          <p className="text-center text-sm text-white/90">
             {t.shorts.fullStudioTitle}
           </p>
           <button
@@ -2092,7 +2092,7 @@ export default function ShortsTextEditStudio() {
           </button>
           <Link
             href={SHORTS_THUMBNAIL_PATH}
-            className="inline-flex items-center gap-1.5 text-xs text-white/45 hover:text-white"
+            className="inline-flex items-center gap-1.5 text-xs text-white/85 hover:text-white"
           >
             <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
             {t.shorts.studioBack}

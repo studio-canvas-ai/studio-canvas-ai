@@ -177,7 +177,7 @@ export default function ShortsProjectToolbar({ busy = false, onLoadProject }: Pr
               <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-200/80">
                 {s.projectRecentTitle}
               </p>
-              <p className="text-[10px] text-white/40">
+              <p className="text-[10px] text-white/80">
                 {s.projectRecentHint.replace(
                   "{max}",
                   String(SHORTS_RECENT_PROJECTS_MAX)
@@ -185,7 +185,7 @@ export default function ShortsProjectToolbar({ busy = false, onLoadProject }: Pr
               </p>
             </div>
             {recent.length === 0 ? (
-              <p className="px-3 py-3 text-[11px] leading-relaxed text-white/45">
+              <p className="px-3 py-3 text-[11px] leading-relaxed text-white/85">
                 {s.projectRecentEmpty.replace(
                   "{max}",
                   String(SHORTS_RECENT_PROJECTS_MAX)
@@ -210,9 +210,9 @@ export default function ShortsProjectToolbar({ busy = false, onLoadProject }: Pr
                         className="h-full w-full object-cover"
                       />
                     ) : loadingId === item.id ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-white/50" />
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-white/85" />
                     ) : (
-                      <History className="h-3.5 w-3.5 text-white/35" />
+                      <History className="h-3.5 w-3.5 text-white/75" />
                     )}
                   </span>
                   <span className="min-w-0 flex-1">
@@ -220,7 +220,7 @@ export default function ShortsProjectToolbar({ busy = false, onLoadProject }: Pr
                       {item.label}
                     </span>
                     {item.videoFileName ? (
-                      <span className="block truncate text-[10px] text-white/40">
+                      <span className="block truncate text-[10px] text-white/80">
                         {item.videoFileName}
                       </span>
                     ) : null}

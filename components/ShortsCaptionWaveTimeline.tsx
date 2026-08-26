@@ -321,7 +321,7 @@ function ShortsCaptionWaveTimeline({
         <p
           className={
             compact
-              ? "text-[10px] font-semibold text-white/70"
+              ? "text-[10px] font-semibold text-white/90"
               : "text-xs font-semibold text-white/80"
           }
         >
@@ -329,13 +329,13 @@ function ShortsCaptionWaveTimeline({
         </p>
         <p
           ref={headerTimeRef}
-          className="text-[10px] text-white/40 tabular-nums"
+          className="text-[10px] text-white/80 tabular-nums"
         >
           {formatSec(liveTime)} / {formatSec(duration)}
         </p>
       </div>
       {!compact ? (
-        <p className="text-[11px] text-white/35">{t.shorts.studioWaveformHint}</p>
+        <p className="text-[11px] text-white/75">{t.shorts.studioWaveformHint}</p>
       ) : null}
 
       <div
@@ -379,7 +379,7 @@ function ShortsCaptionWaveTimeline({
                     ? "border-glow-emerald/70 bg-glow-emerald/25 text-white"
                     : active
                       ? "border-white/40 bg-white/15 text-white"
-                      : "border-white/15 bg-white/10 text-white/70"
+                      : "border-white/15 bg-white/10 text-white/90"
                 }`}
                 style={{ left: `${left}%`, width: `${width}%` }}
                 onPointerDown={(e) => beginDrag(e, seg, "move")}
