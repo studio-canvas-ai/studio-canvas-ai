@@ -85,9 +85,50 @@ export const BGM_CATEGORIES: BgmCategory[] = [
   "브이로그",
 ];
 
+const CATEGORY_OBJECT_PREFIX: Record<BgmCategory, string> = {
+  업비트: "bgm/upbeat/",
+  칠: "bgm/chill/",
+  시네마틱: "bgm/cinematic/",
+  브이로그: "bgm/vlog/",
+};
+
+/** True when item.category and objectKey folder agree. */
+export function bgmItemMatchesCategory(
+  item: BGMItem,
+  category: BgmCategory
+): boolean {
+  if (item.category !== category) return false;
+  return item.objectKey.startsWith(CATEGORY_OBJECT_PREFIX[category]);
+}
+
 export function bgmItemsByCategory(category: BgmCategory | "all"): BGMItem[] {
   if (category === "all") return BGM_LIBRARY;
-  return BGM_LIBRARY.filter((item) => item.category === category);
+  const items = BGM_LIBRARY.filter((item) =>
+    bgmItemMatchesCategory(item, category)
+  );
+  // Put genre-unique titles first so tab switches are obvious
+  // (many Pixabay files are shared across folders with the same cleaned name).
+  const otherTitles = new Set(
+    BGM_LIBRARY.filter((item) => item.category !== category).map((item) =>
+      item.title.toLowerCase()
+    )
+  );
+  const unique: BGMItem[] = [];
+  const shared: BGMItem[] = [];
+  for (const item of items) {
+    if (otherTitles.has(item.title.toLowerCase())) shared.push(item);
+    else unique.push(item);
+  }
+  return [...unique, ...shared];
+}
+
+export function bgmCategoryCounts(): Record<BgmCategory, number> {
+  return {
+    업비트: bgmItemsByCategory("업비트").length,
+    칠: bgmItemsByCategory("칠").length,
+    시네마틱: bgmItemsByCategory("시네마틱").length,
+    브이로그: bgmItemsByCategory("브이로그").length,
+  };
 }
 
 /** UI label for category filter chips. */

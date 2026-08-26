@@ -1,27 +1,8 @@
 import { NextResponse } from "next/server";
-import {
-  buildBgmItemsFromFilenames,
-  buildBgmItemsFromObjectKeys,
-} from "@/lib/bgm/buildBgmItems";
-import { CHILL_BGM_FILENAMES } from "@/lib/bgm/chillFilenames";
-import { CINEMATIC_BGM_FILENAMES } from "@/lib/bgm/cinematicFilenames";
-import { UPBEAT_BGM_FILENAMES } from "@/lib/bgm/upbeatFilenames";
-import { VLOG_BGM_FILENAMES } from "@/lib/bgm/vlogFilenames";
 import { BGM_LIBRARY, resolveBgmUrl, type BGMItem } from "@/lib/bgmLibrary";
-import {
-  createR2Client,
-  getR2Config,
-  isR2Configured,
-  listR2Keys,
-} from "@/lib/r2";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
-
-const UPBEAT_PREFIX = "bgm/upbeat/";
-const CHILL_PREFIX = "bgm/chill/";
-const CINEMATIC_PREFIX = "bgm/cinematic/";
-const VLOG_PREFIX = "bgm/vlog/";
 
 function withUrls(items: BGMItem[]) {
   return items.map((item) => ({
@@ -30,59 +11,25 @@ function withUrls(items: BGMItem[]) {
   }));
 }
 
-function staticLibrary(): BGMItem[] {
-  return [
-    ...buildBgmItemsFromFilenames(UPBEAT_BGM_FILENAMES, "업비트"),
-    ...buildBgmItemsFromFilenames(CHILL_BGM_FILENAMES, "칠"),
-    ...buildBgmItemsFromFilenames(CINEMATIC_BGM_FILENAMES, "시네마틱"),
-    ...buildBgmItemsFromFilenames(VLOG_BGM_FILENAMES, "브이로그"),
-  ];
-}
-
-/** GET — curated BGM tracks from R2 (falls back to static manifest). */
+/**
+ * GET — curated BGM tracks from static per-genre manifests
+ * (`bgm/upbeat|chill|cinematic|vlog` filenames). R2 public URLs are resolved
+ * from objectKey; we do not replace the catalog with a live R2 listing so
+ * category tabs always map to the correct genre arrays.
+ */
 export async function GET() {
-  try {
-    if (isR2Configured()) {
-      const config = getR2Config()!;
-      const client = createR2Client(config);
-      const [upbeatKeys, chillKeys, cinematicKeys, vlogKeys] = await Promise.all([
-        listR2Keys(client, config.bucketName, UPBEAT_PREFIX),
-        listR2Keys(client, config.bucketName, CHILL_PREFIX),
-        listR2Keys(client, config.bucketName, CINEMATIC_PREFIX),
-        listR2Keys(client, config.bucketName, VLOG_PREFIX),
-      ]);
-      const fromR2 = [
-        ...buildBgmItemsFromObjectKeys(upbeatKeys, "업비트"),
-        ...buildBgmItemsFromObjectKeys(chillKeys, "칠"),
-        ...buildBgmItemsFromObjectKeys(cinematicKeys, "시네마틱"),
-        ...buildBgmItemsFromObjectKeys(vlogKeys, "브이로그"),
-      ];
-      if (fromR2.length > 0) {
-        return NextResponse.json({
-          ok: true,
-          source: "r2",
-          count: fromR2.length,
-          tracks: withUrls(fromR2),
-        });
-      }
-    }
-
-    const fallback = staticLibrary();
-    return NextResponse.json({
-      ok: true,
-      source: "static",
-      count: fallback.length,
-      tracks: withUrls(fallback.length ? fallback : BGM_LIBRARY),
-    });
-  } catch (err) {
-    console.error("[api/bgm/tracks]", err);
-    const fallback = staticLibrary();
-    return NextResponse.json({
-      ok: false,
-      source: "static",
-      count: fallback.length,
-      tracks: withUrls(fallback),
-      error: "list_failed",
-    });
-  }
+  const tracks = withUrls(BGM_LIBRARY);
+  const byCategory = {
+    업비트: tracks.filter((t) => t.category === "업비트").length,
+    칠: tracks.filter((t) => t.category === "칠").length,
+    시네마틱: tracks.filter((t) => t.category === "시네마틱").length,
+    브이로그: tracks.filter((t) => t.category === "브이로그").length,
+  };
+  return NextResponse.json({
+    ok: true,
+    source: "static",
+    count: tracks.length,
+    byCategory,
+    tracks,
+  });
 }

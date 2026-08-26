@@ -6,9 +6,10 @@ import { useI18n } from "@/components/I18nProvider";
 import {
   BGM_CATEGORIES,
   BGM_LIBRARY,
+  bgmCategoryCounts,
   bgmCategoryLabel,
+  bgmItemsByCategory,
   resolveBgmUrl,
-  type BGMItem,
   type BgmCategory,
 } from "@/lib/bgmLibrary";
 import { bgmFilenameFromObjectKey } from "@/lib/bgm/buildBgmItems";
@@ -28,6 +29,7 @@ type Props = {
 /**
  * Accordion BGM selector — R2 library + local upload + volume.
  * Preview audio is panel-local; selection syncs to parent shorts studio state.
+ * Track lists always come from static per-genre manifests (never R2 re-list).
  */
 export default function BgmSelectorPanel({ value, onChange }: Props) {
   const { t } = useI18n();
@@ -35,41 +37,15 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
   const [category, setCategory] = useState<BgmCategory | "all">("all");
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [libraryTracks, setLibraryTracks] = useState<BGMItem[]>(BGM_LIBRARY);
-  const [libraryLoading, setLibraryLoading] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const customObjectUrlRef = useRef<string | null>(null);
+  const listRef = useRef<HTMLUListElement | null>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    setLibraryLoading(true);
-    void fetch("/api/bgm/tracks", { cache: "no-store" })
-      .then(async (res) => {
-        if (!res.ok) return null;
-        return (await res.json()) as { tracks?: BGMItem[] };
-      })
-      .then((data) => {
-        if (cancelled || !data?.tracks?.length) return;
-        setLibraryTracks(data.tracks);
-      })
-      .catch(() => {
-        /* keep static BGM_LIBRARY */
-      })
-      .finally(() => {
-        if (!cancelled) setLibraryLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [open]);
+  const categoryCounts = useMemo(() => bgmCategoryCounts(), []);
 
-  const tracks = useMemo(() => {
-    if (category === "all") return libraryTracks;
-    return libraryTracks.filter((item) => item.category === category);
-  }, [category, libraryTracks]);
+  const tracks = useMemo(() => bgmItemsByCategory(category), [category]);
 
   const stopPreview = useCallback(() => {
     const audio = audioRef.current;
@@ -80,6 +56,12 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
     }
     setPreviewId(null);
   }, []);
+
+  // Scroll to top + stop preview whenever the genre tab changes.
+  useEffect(() => {
+    listRef.current?.scrollTo({ top: 0 });
+    stopPreview();
+  }, [category, stopPreview]);
 
   useEffect(() => {
     const audio = new Audio();
@@ -129,8 +111,12 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
     });
   }, [onChange, stopPreview, value]);
 
+  /**
+   * Preview play also applies the track as the project BGM so the green
+   * selection + export mix always match the last play button pressed.
+   */
   const togglePreview = useCallback(
-    async (id: string, url: string) => {
+    async (id: string, url: string, name: string) => {
       const audio = audioRef.current;
       if (!audio) return;
 
@@ -138,6 +124,13 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
         stopPreview();
         return;
       }
+
+      onChange({
+        ...value,
+        bgmUrl: url,
+        bgmName: name,
+      });
+      setUploadError(null);
 
       try {
         audio.pause();
@@ -151,7 +144,13 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
         setUploadError(t.shorts.bgmPreviewError);
       }
     },
-    [previewId, stopPreview, t.shorts.bgmPreviewError, value.bgmVolume]
+    [
+      previewId,
+      stopPreview,
+      onChange,
+      value,
+      t.shorts.bgmPreviewError,
+    ]
   );
 
   const onUpload = useCallback(
@@ -168,10 +167,9 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
       const url = URL.createObjectURL(file);
       customObjectUrlRef.current = url;
       const name = file.name.replace(/\.[^.]+$/, "") || file.name;
-      selectTrack(url, name);
-      void togglePreview(`custom:${url}`, url);
+      void togglePreview(`custom:${url}`, url, name);
     },
-    [selectTrack, t.shorts.bgmUploadTypeError, togglePreview]
+    [t.shorts.bgmUploadTypeError, togglePreview]
   );
 
   const selectedLabel =
@@ -224,7 +222,7 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
                     : "bg-white/5 text-white/55 hover:bg-white/10 hover:text-white/80"
                 }`}
               >
-                {t.shorts.bgmCategoryAll}
+                {t.shorts.bgmCategoryAll} ({BGM_LIBRARY.length})
               </button>
               {BGM_CATEGORIES.map((cat) => (
                 <button
@@ -237,14 +235,20 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
                       : "bg-white/5 text-white/55 hover:bg-white/10 hover:text-white/80"
                   }`}
                 >
-                  {bgmCategoryLabel(cat)}
+                  {bgmCategoryLabel(cat)} ({categoryCounts[cat]})
                 </button>
               ))}
             </div>
-            {libraryLoading && tracks.length === 0 && (
-              <p className="py-2 text-center text-[11px] text-white/40">…</p>
-            )}
-            <ul className="bgm-track-scroll max-h-64 space-y-2 overflow-y-auto overscroll-contain pr-1">
+            <p className="mb-2 text-[11px] text-white/45">
+              {category === "all"
+                ? `전체 ${tracks.length}곡`
+                : `${bgmCategoryLabel(category)} · ${tracks.length}곡`}
+            </p>
+            <ul
+              key={category}
+              ref={listRef}
+              className="bgm-track-scroll max-h-64 space-y-2 overflow-y-auto overscroll-contain pr-1.5 [scrollbar-gutter:stable]"
+            >
               {tracks.map((item, trackIndex) => {
                 const url = resolveBgmUrl(item);
                 const selected = value.bgmUrl === url;
@@ -252,7 +256,7 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
                 const fullFilename = bgmFilenameFromObjectKey(item.objectKey);
                 const listNo = String(trackIndex + 1).padStart(2, "0");
                 return (
-                  <li key={item.id}>
+                  <li key={`${item.category}:${item.objectKey}`}>
                     <div
                       className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 transition ${
                         selected
@@ -297,7 +301,9 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
                       </button>
                       <button
                         type="button"
-                        onClick={() => void togglePreview(item.id, url)}
+                        onClick={() =>
+                          void togglePreview(item.id, url, item.title)
+                        }
                         className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white transition ${
                           selected
                             ? "bg-emerald-400/30 hover:bg-emerald-400/45"
