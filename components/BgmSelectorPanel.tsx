@@ -11,6 +11,7 @@ import {
   type BGMItem,
   type BgmCategory,
 } from "@/lib/bgmLibrary";
+import { bgmFilenameFromObjectKey } from "@/lib/bgm/buildBgmItems";
 import {
   SHORTS_BGM_VOLUME_MAX,
   SHORTS_BGM_VOLUME_MIN,
@@ -244,10 +245,12 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
               <p className="py-2 text-center text-[11px] text-white/40">…</p>
             )}
             <ul className="space-y-2">
-              {tracks.map((item) => {
+              {tracks.map((item, trackIndex) => {
                 const url = resolveBgmUrl(item);
                 const selected = value.bgmUrl === url;
                 const playing = previewId === item.id;
+                const fullFilename = bgmFilenameFromObjectKey(item.objectKey);
+                const listNo = String(trackIndex + 1).padStart(2, "0");
                 return (
                   <li key={item.id}>
                     <div
@@ -256,21 +259,22 @@ export default function BgmSelectorPanel({ value, onChange }: Props) {
                           ? "border-glow-emerald/40 bg-glow-emerald/10"
                           : "border-white/10 bg-black/25 hover:border-white/20"
                       }`}
+                      title={fullFilename}
                     >
                       <button
                         type="button"
                         onClick={() => selectTrack(url, item.title)}
                         className="min-w-0 flex-1 text-left"
+                        title={fullFilename}
                       >
                         <p className="truncate text-sm font-medium text-white">
+                          <span className="mr-1.5 tabular-nums text-white/35">
+                            {listNo}.
+                          </span>
                           {item.title}
                         </p>
-                        <p className="truncate text-[11px] text-white/40">
-                          {bgmCategoryLabel(item.category)} ·{" "}
-                          {t.shorts.bgmDurationLabel.replace(
-                            "{duration}",
-                            item.duration
-                          )}
+                        <p className="truncate text-[11px] text-white/40" title={fullFilename}>
+                          {bgmCategoryLabel(item.category)} · {fullFilename}
                         </p>
                       </button>
                       <button
