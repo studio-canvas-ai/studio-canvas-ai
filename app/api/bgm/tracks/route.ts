@@ -6,6 +6,7 @@ import {
 import { CHILL_BGM_FILENAMES } from "@/lib/bgm/chillFilenames";
 import { CINEMATIC_BGM_FILENAMES } from "@/lib/bgm/cinematicFilenames";
 import { UPBEAT_BGM_FILENAMES } from "@/lib/bgm/upbeatFilenames";
+import { VLOG_BGM_FILENAMES } from "@/lib/bgm/vlogFilenames";
 import { BGM_LIBRARY, resolveBgmUrl, type BGMItem } from "@/lib/bgmLibrary";
 import {
   createR2Client,
@@ -20,6 +21,7 @@ export const maxDuration = 30;
 const UPBEAT_PREFIX = "bgm/upbeat/";
 const CHILL_PREFIX = "bgm/chill/";
 const CINEMATIC_PREFIX = "bgm/cinematic/";
+const VLOG_PREFIX = "bgm/vlog/";
 
 function withUrls(items: BGMItem[]) {
   return items.map((item) => ({
@@ -33,6 +35,7 @@ function staticLibrary(): BGMItem[] {
     ...buildBgmItemsFromFilenames(UPBEAT_BGM_FILENAMES, "업비트"),
     ...buildBgmItemsFromFilenames(CHILL_BGM_FILENAMES, "칠"),
     ...buildBgmItemsFromFilenames(CINEMATIC_BGM_FILENAMES, "시네마틱"),
+    ...buildBgmItemsFromFilenames(VLOG_BGM_FILENAMES, "브이로그"),
   ];
 }
 
@@ -42,15 +45,17 @@ export async function GET() {
     if (isR2Configured()) {
       const config = getR2Config()!;
       const client = createR2Client(config);
-      const [upbeatKeys, chillKeys, cinematicKeys] = await Promise.all([
+      const [upbeatKeys, chillKeys, cinematicKeys, vlogKeys] = await Promise.all([
         listR2Keys(client, config.bucketName, UPBEAT_PREFIX),
         listR2Keys(client, config.bucketName, CHILL_PREFIX),
         listR2Keys(client, config.bucketName, CINEMATIC_PREFIX),
+        listR2Keys(client, config.bucketName, VLOG_PREFIX),
       ]);
       const fromR2 = [
         ...buildBgmItemsFromObjectKeys(upbeatKeys, "업비트"),
         ...buildBgmItemsFromObjectKeys(chillKeys, "칠"),
         ...buildBgmItemsFromObjectKeys(cinematicKeys, "시네마틱"),
+        ...buildBgmItemsFromObjectKeys(vlogKeys, "브이로그"),
       ];
       if (fromR2.length > 0) {
         return NextResponse.json({

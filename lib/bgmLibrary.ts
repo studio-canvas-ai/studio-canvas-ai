@@ -9,6 +9,7 @@ import {
 import { CHILL_BGM_FILENAMES } from "@/lib/bgm/chillFilenames";
 import { CINEMATIC_BGM_FILENAMES } from "@/lib/bgm/cinematicFilenames";
 import { UPBEAT_BGM_FILENAMES } from "@/lib/bgm/upbeatFilenames";
+import { VLOG_BGM_FILENAMES } from "@/lib/bgm/vlogFilenames";
 
 export type BgmCategory = "업비트" | "칠" | "시네마틱" | "브이로그";
 
@@ -68,11 +69,13 @@ const CINEMATIC_LIBRARY = buildBgmItemsFromFilenames(
   CINEMATIC_BGM_FILENAMES,
   "시네마틱"
 );
+const VLOG_LIBRARY = buildBgmItemsFromFilenames(VLOG_BGM_FILENAMES, "브이로그");
 
 export const BGM_LIBRARY: BGMItem[] = [
   ...UPBEAT_LIBRARY,
   ...CHILL_LIBRARY,
   ...CINEMATIC_LIBRARY,
+  ...VLOG_LIBRARY,
 ];
 
 export const BGM_CATEGORIES: BgmCategory[] = [
