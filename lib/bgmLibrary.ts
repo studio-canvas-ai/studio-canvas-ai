@@ -7,6 +7,7 @@ import {
   buildBgmItemsFromFilenames,
 } from "@/lib/bgm/buildBgmItems";
 import { CHILL_BGM_FILENAMES } from "@/lib/bgm/chillFilenames";
+import { CINEMATIC_BGM_FILENAMES } from "@/lib/bgm/cinematicFilenames";
 import { UPBEAT_BGM_FILENAMES } from "@/lib/bgm/upbeatFilenames";
 
 export type BgmCategory = "업비트" | "칠" | "시네마틱" | "브이로그";
@@ -63,8 +64,16 @@ export function resolveBgmMixUrl(publicUrl: string): string {
 
 const UPBEAT_LIBRARY = buildBgmItemsFromFilenames(UPBEAT_BGM_FILENAMES, "업비트");
 const CHILL_LIBRARY = buildBgmItemsFromFilenames(CHILL_BGM_FILENAMES, "칠");
+const CINEMATIC_LIBRARY = buildBgmItemsFromFilenames(
+  CINEMATIC_BGM_FILENAMES,
+  "시네마틱"
+);
 
-export const BGM_LIBRARY: BGMItem[] = [...UPBEAT_LIBRARY, ...CHILL_LIBRARY];
+export const BGM_LIBRARY: BGMItem[] = [
+  ...UPBEAT_LIBRARY,
+  ...CHILL_LIBRARY,
+  ...CINEMATIC_LIBRARY,
+];
 
 export const BGM_CATEGORIES: BgmCategory[] = [
   "업비트",
