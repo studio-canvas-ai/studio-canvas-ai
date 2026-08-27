@@ -149,12 +149,9 @@ export default function PrintUnifiedEditorCanvas({
       customSize
     );
     if (!raw) return null;
-    // Fold lines are sheet-level — show only on the cover face so pages 2–N
-    // are not stamped with the same vertical guides.
-    if (pageIndex > 0) {
-      return { ...raw, foldLines: [] };
-    }
-    return raw;
+    // Match Screen 8/24 idle canvas: no permanent fold dashed lines.
+    // Cut/safe frames remain; snap alignment lines come from overlays on drag.
+    return { ...raw, foldLines: [] };
   }, [
     pageActivated,
     formatId,
@@ -378,8 +375,6 @@ export default function PrintUnifiedEditorCanvas({
                     onActiveLayerChange={onActiveTextLayerChange}
                     pageIndex={pageIndex}
                     backgroundSrc={pageBg}
-                    showEmptyGuideBoxes
-                    hideGuideLabels
                     editOnSingleClick
                     viewScale={zoom}
                   />
@@ -392,8 +387,7 @@ export default function PrintUnifiedEditorCanvas({
                 중앙 패널 하단에서 편집할 페이지를 선택해 주세요
               </p>
               <p className="max-w-xs text-[11px] leading-relaxed text-white/35">
-                1~8페이지 미니 보기를 탭하면 배경과 점선 가이드 박스가
-                표시됩니다
+                1~8페이지 미니 보기를 탭하면 해당 페이지 캔버스가 활성화됩니다
               </p>
             </div>
           )}

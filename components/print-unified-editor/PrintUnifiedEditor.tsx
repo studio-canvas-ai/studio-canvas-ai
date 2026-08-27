@@ -330,9 +330,12 @@ export default function PrintUnifiedEditor() {
   const overlayLayers = useMemo(() => {
     if (!pageActivated || pageIndex < 0) return [];
     const raw = textLayersByPage[pageIndex] ?? [];
-    // Layout is display-only for the active face — never written to other pages.
+    // Screen 8/24 parity: never invent empty dashed guide boxes.
+    // Only real text layers render; snap lines appear on drag in PreviewTextOverlay.
+    const withText = raw.filter((l) => String(l.text || "").trim());
+    if (!withText.length) return [];
     return applyUnifiedEditorPageLayout(
-      raw,
+      withText,
       pageIndex,
       typographyStage.w,
       typographyStage.h
