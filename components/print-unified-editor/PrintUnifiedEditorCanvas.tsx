@@ -348,9 +348,14 @@ export default function PrintUnifiedEditorCanvas({
                     ) : null}
                   </div>
 
-                  {/* Overlays share the same unscaled stage box (viewScale corrects pointer math). */}
+                  {/*
+                    Remount overlays per page (Screen 24 keeps one instance per face).
+                    Without a page key, the shared instance swaps layers→[] on navigate
+                    and a late blur/commit writes that empty payload onto the prior page.
+                  */}
                   {photoLayers?.length && onPhotoLayersChange ? (
                     <PreviewPhotoOverlay
+                      key={`photo-${pageIndex}`}
                       layers={photoLayers}
                       onLayersChange={(layers) =>
                         onPhotoLayersChange(pageIndex, layers)
@@ -363,6 +368,7 @@ export default function PrintUnifiedEditorCanvas({
 
                   {decoLayers?.length && onDecoLayersChange ? (
                     <PreviewDecoOverlay
+                      key={`deco-${pageIndex}`}
                       layers={decoLayers}
                       onLayersChange={(layers) =>
                         onDecoLayersChange(pageIndex, layers)
@@ -374,6 +380,7 @@ export default function PrintUnifiedEditorCanvas({
                   ) : null}
 
                   <PreviewTextOverlay
+                    key={`text-${pageIndex}`}
                     layers={textLayers}
                     onLayersChange={(layers) =>
                       onTextLayersChange(pageIndex, layers)

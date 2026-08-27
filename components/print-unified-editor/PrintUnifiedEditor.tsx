@@ -344,8 +344,8 @@ export default function PrintUnifiedEditor() {
 
   /**
    * Screen 24 style: callers pass the page index from the event/render that
-   * produced the layers. Never retarget via a mutable pageIndexRef — that let
-   * late empty writes from another face wipe the newly active page.
+   * produced the layers. Also reject accidental [] overwrites of a filled page
+   * (late blur after navigate can emit empty payloads).
    */
   const onTextLayersChange = useCallback(
     (
@@ -371,6 +371,7 @@ export default function PrintUnifiedEditor() {
           prev.pageCount
         );
         if (pageIndexToUpdate >= pages.length) return prev;
+        const existing = pages[pageIndexToUpdate] ?? [];
         const savedLayers =
           options?.applyLayout === false
             ? nextLayers
@@ -381,6 +382,10 @@ export default function PrintUnifiedEditor() {
                   typographyStage.h
                 )
               );
+        // Contaminated empty commit after page switch — never wipe a filled face.
+        if (savedLayers.length === 0 && existing.length > 0) {
+          return prev;
+        }
         const nextPages = pages.map((page, i) =>
           i === pageIndexToUpdate ? savedLayers : page
         );
@@ -954,6 +959,7 @@ export default function PrintUnifiedEditor() {
           <div className="flex h-full min-h-0 w-full flex-col gap-2">
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]">
               <AiTemplateStudio
+                key={`unified-studio-${pageIndex}`}
                 mode="agent"
                 embedded
                 panelOnly

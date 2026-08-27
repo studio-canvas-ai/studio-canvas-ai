@@ -203,6 +203,18 @@ export default function PreviewTextOverlay({
   layersRef.current = layers;
   onLayersChangeRef.current = onLayersChange;
 
+  // Same-instance page swaps (Screen 26 without remount) must drop edit/drag
+  // before foreign layers replace layersRef, or blur commits [].
+  useEffect(() => {
+    setEditingId(null);
+    setHoverId(null);
+    dragRef.current = null;
+    setPointerActive(false);
+    setDragging(false);
+    setLiveBox(null);
+    setSnapGuides({ vertical: [], horizontal: [] });
+  }, [pageIndex]);
+
   const measureStage = () => {
     const el = hostRef.current;
     // offsetWidth/Height ignore CSS transforms — required when stage world uses scale().
@@ -263,8 +275,10 @@ export default function PreviewTextOverlay({
     ) => {
       const w = Math.max(1, stageW);
       const h = Math.max(1, stageH);
+      const base = layersRef.current;
+      if (!base.some((layer) => layer.id === layerId)) return;
       onLayersChange(
-        layersRef.current.map((layer) => {
+        base.map((layer) => {
           if (layer.id !== layerId) return layer;
           const clamped = clampBoxAllowOverflow(box, w, h);
           return {
@@ -656,8 +670,10 @@ export default function PreviewTextOverlay({
                     if (field) {
                       const formatted = formatFormFieldText(field, layer.text);
                       if (formatted !== layer.text) {
+                        const base = layersRef.current;
+                        if (!base.some((l) => l.id === layer.id)) return;
                         onLayersChange(
-                          layersRef.current.map((l) =>
+                          base.map((l) =>
                             l.id === layer.id ? { ...l, text: formatted } : l
                           )
                         );
@@ -668,8 +684,10 @@ export default function PreviewTextOverlay({
                     const text = toPlainLayerListText(
                       stripLayerPlaceholderPrefix(e.target.value)
                     );
+                    const base = layersRef.current;
+                    if (!base.some((l) => l.id === layer.id)) return;
                     onLayersChange(
-                      layersRef.current.map((l) =>
+                      base.map((l) =>
                         l.id === layer.id ? { ...l, text } : l
                       )
                     );
