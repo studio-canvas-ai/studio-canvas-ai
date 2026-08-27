@@ -176,27 +176,31 @@ function boxedLayer(
     fontSize: number;
     boxColor: string;
     color?: TextLayer["color"];
+    boxOpacity?: number;
+    align?: TextLayer["align"];
+    lineHeight?: number;
   }
 ): TextLayer {
+  const { color, boxOpacity, align, lineHeight, ...boxGeom } = geom;
   return createLayer({
     text,
     pos,
     layoutLocked: true,
     boxManual: true,
-    manualX: geom.manualX,
-    manualY: geom.manualY,
-    boxW: geom.boxW,
-    boxH: geom.boxH,
-    maxWidth: geom.boxW,
+    manualX: boxGeom.manualX,
+    manualY: boxGeom.manualY,
+    boxW: boxGeom.boxW,
+    boxH: boxGeom.boxH,
+    maxWidth: boxGeom.boxW,
     showBox: true,
     showBoxBorder: true,
-    boxOpacity: 0.94,
-    boxColor: geom.boxColor,
-    color: geom.color ?? "white",
-    fontSize: geom.fontSize,
+    boxOpacity: boxOpacity ?? 0.94,
+    boxColor: boxGeom.boxColor,
+    color: color ?? "white",
+    fontSize: boxGeom.fontSize,
     fontWeight: 700,
-    align: "center",
-    lineHeight: 1.25,
+    align: align ?? "center",
+    lineHeight: lineHeight ?? 1.25,
     fontPreset: "pretendard",
   });
 }
