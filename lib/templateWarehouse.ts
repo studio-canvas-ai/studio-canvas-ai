@@ -103,10 +103,27 @@ export type Template01NestedCard = {
   footerText: string;
 };
 
+export type Template01ModularCard = {
+  id: number;
+  title: string;
+  desc: string;
+  layoutType: "modular-block-system";
+  heroBanner: { title: string; subtitle: string };
+  circularItems: string[];
+  comparisonCards: Array<{
+    title: string;
+    supportText: string;
+    amount: string;
+  }>;
+  stepFlow: string[];
+  footerText: string;
+};
+
 export type Template01Card =
   | Template01SimpleCard
   | Template01StructuredCard
-  | Template01NestedCard;
+  | Template01NestedCard
+  | Template01ModularCard;
 
 export function isStructuredTemplate01(
   card: Template01Card
@@ -118,6 +135,39 @@ export function isNestedTemplate01(
   card: Template01Card
 ): card is Template01NestedCard {
   return card.layoutType === "nested-boxes";
+}
+
+export function isModularTemplate01(
+  card: Template01Card
+): card is Template01ModularCard {
+  return card.layoutType === "modular-block-system";
+}
+
+/** Persist Template 01 cards removed via warehouse trash button. */
+export const TEMPLATE_01_REMOVED_KEY = "sca_warehouse_tpl01_removed_v1";
+
+export function loadRemovedTemplate01Ids(): number[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(TEMPLATE_01_REMOVED_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((v) => Number(v))
+      .filter((n) => Number.isFinite(n));
+  } catch {
+    return [];
+  }
+}
+
+export function saveRemovedTemplate01Ids(ids: number[]) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(TEMPLATE_01_REMOVED_KEY, JSON.stringify(ids));
+  } catch {
+    /* ignore quota */
+  }
 }
 
 /** Soft clinic-style page fill for structured-grid templates (no Screen 26 changes). */
@@ -151,6 +201,25 @@ export function buildNestedBoxesBackgroundDataUrl(): string {
   <rect width="900" height="1600" fill="url(#page)"/>
   <rect x="40" y="40" width="820" height="1520" rx="24" fill="none" stroke="#BFDBFE" stroke-width="3"/>
   <rect x="64" y="300" width="772" height="980" rx="20" fill="none" stroke="#93C5FD" stroke-width="2" stroke-dasharray="8 6"/>
+</svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+/** Hearing-aid / modular public poster page fill. */
+export function buildModularBlockBackgroundDataUrl(): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1600" viewBox="0 0 900 1600">
+  <defs>
+    <linearGradient id="page" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFF7ED"/>
+      <stop offset="45%" stop-color="#FFFBEB"/>
+      <stop offset="100%" stop-color="#E2E8F0"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="1600" fill="url(#page)"/>
+  <rect x="32" y="32" width="836" height="1536" rx="26" fill="none" stroke="#FDBA74" stroke-width="3"/>
+  <circle cx="160" cy="420" r="70" fill="#FED7AA" opacity="0.45"/>
+  <circle cx="450" cy="420" r="70" fill="#FDBA74" opacity="0.35"/>
+  <circle cx="740" cy="420" r="70" fill="#FB923C" opacity="0.28"/>
 </svg>`;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
@@ -375,6 +444,110 @@ export function buildNestedBoxesTextLayers(
   return layers;
 }
 
+/**
+ * Modular block system: hero banner + circular slots + comparison cards +
+ * 4-step flow + footer. Each block is its own layoutLocked text layer so Screen 26
+ * can move / edit / delete blocks independently via existing layer tools.
+ */
+export function buildModularBlockTextLayers(
+  card: Template01ModularCard
+): TextLayer[] {
+  const margin = 0.045;
+  const gap = 0.02;
+  const contentW = 1 - margin * 2;
+  const layers: TextLayer[] = [];
+
+  const heroY = 0.035;
+  const heroH = 0.12;
+  layers.push(
+    boxedLayer(`${card.heroBanner.title}\n${card.heroBanner.subtitle}`, "top", {
+      manualX: margin,
+      manualY: heroY,
+      boxW: contentW,
+      boxH: heroH,
+      fontSize: 28,
+      boxColor: "#C2410C",
+      color: "white",
+      lineHeight: 1.3,
+    })
+  );
+
+  const circleCount = Math.min(3, Math.max(1, card.circularItems.length));
+  const circleGap = 0.03;
+  const circleW = (contentW - circleGap * (circleCount - 1)) / circleCount;
+  const circleH = 0.11;
+  const circleY = heroY + heroH + 0.028;
+  card.circularItems.slice(0, circleCount).forEach((label, index) => {
+    layers.push(
+      boxedLayer(label, "center", {
+        manualX: margin + index * (circleW + circleGap),
+        manualY: circleY,
+        boxW: circleW,
+        boxH: circleH,
+        fontSize: 20,
+        boxColor: "#FFEDD5",
+        color: "inkBlack",
+      })
+    );
+  });
+
+  const compareCount = Math.min(2, Math.max(1, card.comparisonCards.length));
+  const compareGap = 0.025;
+  const compareW = (contentW - compareGap * (compareCount - 1)) / compareCount;
+  const compareH = 0.16;
+  const compareY = circleY + circleH + 0.03;
+  card.comparisonCards.slice(0, compareCount).forEach((cmp, index) => {
+    layers.push(
+      boxedLayer(`${cmp.title}\n${cmp.supportText}\n${cmp.amount}`, "center", {
+        manualX: margin + index * (compareW + compareGap),
+        manualY: compareY,
+        boxW: compareW,
+        boxH: compareH,
+        fontSize: 22,
+        boxColor: "#FFFFFF",
+        color: "inkBlack",
+        lineHeight: 1.35,
+      })
+    );
+  });
+
+  const steps = card.stepFlow.slice(0, 4);
+  while (steps.length < 4) steps.push(`0${steps.length + 1}. 단계`);
+  const stepGap = 0.015;
+  const stepH = 0.07;
+  const stepY = compareY + compareH + 0.028;
+  steps.forEach((step, index) => {
+    layers.push(
+      boxedLayer(step, "center", {
+        manualX: margin,
+        manualY: stepY + index * (stepH + stepGap),
+        boxW: contentW,
+        boxH: stepH,
+        fontSize: 20,
+        boxColor: index % 2 === 0 ? "#FED7AA" : "#FDBA74",
+        color: "inkBlack",
+        align: "left",
+      })
+    );
+  });
+
+  const footerH = 0.09;
+  const footerY = 1 - margin - footerH;
+  layers.push(
+    boxedLayer(card.footerText, "bottom", {
+      manualX: margin,
+      manualY: footerY,
+      boxW: contentW,
+      boxH: footerH,
+      fontSize: 24,
+      boxColor: "#7C2D12",
+      color: "white",
+    })
+  );
+
+  return layers;
+}
+
 /** Expert Template 01 catalog — append entries; modal renders large scrollable grid cards. */
 export const TEMPLATE_01_CARDS: Template01Card[] = [
   {
@@ -441,11 +614,54 @@ export const TEMPLATE_01_CARDS: Template01Card[] = [
     ],
     footerText: "미리미리 예방하세요 | 010 1234 5678",
   },
+  {
+    id: 5,
+    title: "보청기 구입 지원금 안내 포스터",
+    desc: "단면 · 모듈형 블록 시스템 (A4)",
+    layoutType: "modular-block-system",
+    heroBanner: {
+      title: "보청기 구입할 때 지원금 받자",
+      subtitle: "정부 지원금 최대 혜택 안내",
+    },
+    circularItems: ["귓속형 보청기", "오픈형 보청기", "프리미엄형"],
+    comparisonCards: [
+      {
+        title: "일반형 / 차상위",
+        supportText: "정부 지원금 90%",
+        amount: "111만 9천원",
+      },
+      {
+        title: "기초수급자",
+        supportText: "정부 지원금 100%",
+        amount: "131만원",
+      },
+    ],
+    stepFlow: [
+      "01. 국민건강보험공단 등록",
+      "02. 보조기기 처방전 발급",
+      "03. 보청기 구입 및 검수",
+      "04. 지원금 청구 및 지급",
+    ],
+    footerText: "빠른 상담 | 1588-0000",
+  },
 ];
 
 export function template01CardToWarehouse(
   card: Template01Card
 ): WarehouseTemplate {
+  if (isModularTemplate01(card)) {
+    return {
+      id: `tpl-single-${card.id}`,
+      tab: "single",
+      title: card.title,
+      subtitle: card.desc,
+      formatId: "a4",
+      pageCount: 1,
+      thumbClass: "bg-orange-900",
+      backgroundUrl: buildModularBlockBackgroundDataUrl(),
+      textLayersByPage: [buildModularBlockTextLayers(card)],
+    };
+  }
   if (isNestedTemplate01(card)) {
     return {
       id: `tpl-single-${card.id}`,

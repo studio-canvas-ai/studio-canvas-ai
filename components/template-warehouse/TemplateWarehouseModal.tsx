@@ -3,14 +3,17 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePathname, useRouter } from "next/navigation";
-import { X } from "lucide-react";
+import { Trash2, X } from "lucide-react";
 import { PRINT_UNIFIED_EDITOR_PATH } from "@/lib/printUnifiedEditor";
 import {
   TEMPLATE_01_CARDS,
   TEMPLATE_WAREHOUSE_OPEN_EVENT,
   applyWarehouseTemplate,
+  isModularTemplate01,
   isNestedTemplate01,
   isStructuredTemplate01,
+  loadRemovedTemplate01Ids,
+  saveRemovedTemplate01Ids,
   template01CardToWarehouse,
   templatesForTab,
   type Template01Card,
@@ -19,6 +22,70 @@ import {
 } from "@/lib/templateWarehouse";
 
 function Template01CardPreview({ card }: { card: Template01Card }) {
+  if (isModularTemplate01(card)) {
+    return (
+      <div className="flex h-full w-full flex-col gap-1 bg-gradient-to-b from-orange-50 to-slate-200 p-2 sm:gap-1.5 sm:p-2.5">
+        <div className="flex shrink-0 flex-col items-center justify-center rounded-md bg-orange-700 px-1.5 py-1.5 text-center">
+          <p className="line-clamp-2 text-[8px] font-bold leading-tight text-white sm:text-[9px]">
+            {card.heroBanner.title}
+          </p>
+          <p className="mt-0.5 line-clamp-1 text-[7px] text-orange-100 sm:text-[8px]">
+            {card.heroBanner.subtitle}
+          </p>
+        </div>
+        <div className="grid shrink-0 grid-cols-3 gap-1">
+          {card.circularItems.slice(0, 3).map((label) => (
+            <div
+              key={label}
+              className="flex aspect-square items-center justify-center rounded-full border border-orange-200 bg-orange-100 px-0.5"
+            >
+              <p className="line-clamp-3 text-center text-[6px] font-semibold leading-tight text-slate-800 sm:text-[7px]">
+                {label}
+              </p>
+            </div>
+          ))}
+        </div>
+        <div className="grid min-h-0 flex-1 grid-cols-2 gap-1">
+          {card.comparisonCards.slice(0, 2).map((cmp) => (
+            <div
+              key={cmp.title}
+              className="flex flex-col justify-center rounded border border-orange-200 bg-white px-1 py-1 shadow-sm"
+            >
+              <p className="line-clamp-1 text-[7px] font-bold text-slate-800 sm:text-[8px]">
+                {cmp.title}
+              </p>
+              <p className="line-clamp-1 text-[6px] text-orange-700 sm:text-[7px]">
+                {cmp.supportText}
+              </p>
+              <p className="line-clamp-1 text-[7px] font-semibold text-slate-900 sm:text-[8px]">
+                {cmp.amount}
+              </p>
+            </div>
+          ))}
+        </div>
+        <div className="space-y-0.5">
+          {card.stepFlow.slice(0, 4).map((step, i) => (
+            <div
+              key={step}
+              className={`rounded px-1 py-0.5 ${
+                i % 2 === 0 ? "bg-orange-200/80" : "bg-orange-300/70"
+              }`}
+            >
+              <p className="line-clamp-1 text-[6px] font-medium text-slate-800 sm:text-[7px]">
+                {step}
+              </p>
+            </div>
+          ))}
+        </div>
+        <div className="flex shrink-0 items-center justify-center rounded-md bg-orange-950 px-1.5 py-1 text-center">
+          <p className="line-clamp-1 text-[7px] font-semibold text-white/95 sm:text-[8px]">
+            {card.footerText}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (isNestedTemplate01(card)) {
     const [leftBox, rightBox] = card.subBoxes;
     return (
@@ -167,9 +234,17 @@ export default function TemplateWarehouseModal() {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<WarehouseTabId>("single");
   const [mounted, setMounted] = useState(false);
+  const [template01Cards, setTemplate01Cards] =
+    useState<Template01Card[]>(TEMPLATE_01_CARDS);
 
   useEffect(() => {
     setMounted(true);
+    const removed = new Set(loadRemovedTemplate01Ids());
+    if (removed.size > 0) {
+      setTemplate01Cards(
+        TEMPLATE_01_CARDS.filter((card) => !removed.has(card.id))
+      );
+    }
   }, []);
 
   useEffect(() => {
@@ -204,6 +279,17 @@ export default function TemplateWarehouseModal() {
     if (!pathname.startsWith(PRINT_UNIFIED_EDITOR_PATH)) {
       router.push(PRINT_UNIFIED_EDITOR_PATH);
     }
+  };
+
+  const removeTemplate01Card = (cardId: number) => {
+    setTemplate01Cards((prev) => {
+      const next = prev.filter((card) => card.id !== cardId);
+      const removed = TEMPLATE_01_CARDS.filter(
+        (card) => !next.some((n) => n.id === card.id)
+      ).map((card) => card.id);
+      saveRemovedTemplate01Ids(removed);
+      return next;
+    });
   };
 
   const goSpace4 = () => {
@@ -274,34 +360,52 @@ export default function TemplateWarehouseModal() {
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-5">
           {tab === "space4" ? null : tab === "single" ? (
-            <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
-              {TEMPLATE_01_CARDS.map((card) => (
-                <li key={card.id}>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      pickTemplate(template01CardToWarehouse(card))
-                    }
-                    className="group flex w-full flex-col overflow-hidden rounded-2xl border border-white/12 bg-black/30 text-left transition hover:border-emerald-400/50 hover:bg-emerald-500/10 hover:shadow-[0_12px_40px_rgba(16,185,129,0.12)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400"
-                  >
-                    <div
-                      className="relative aspect-[9/16] w-full overflow-hidden bg-slate-900"
-                      aria-hidden
+            template01Cards.length === 0 ? (
+              <p className="py-10 text-center text-[13px] text-white/45">
+                표시할 템플릿이 없습니다. 휴지통으로 모두 삭제되었습니다.
+              </p>
+            ) : (
+              <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
+                {template01Cards.map((card) => (
+                  <li key={card.id} className="relative">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeTemplate01Card(card.id);
+                      }}
+                      className="absolute right-2 top-2 z-[2] inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/20 bg-black/65 text-white/80 shadow-lg backdrop-blur-sm transition hover:border-rose-400/50 hover:bg-rose-500/90 hover:text-white"
+                      aria-label={`${card.title} 삭제`}
+                      title="템플릿 삭제"
                     >
-                      <Template01CardPreview card={card} />
-                    </div>
-                    <div className="space-y-1 border-t border-white/8 px-2.5 py-2.5 sm:px-3 sm:py-3">
-                      <p className="line-clamp-2 text-[13px] font-semibold leading-snug text-white sm:text-[14px]">
-                        {card.title}
-                      </p>
-                      <p className="truncate text-[11px] text-white/45">
-                        {card.desc}
-                      </p>
-                    </div>
-                  </button>
-                </li>
-              ))}
-            </ul>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        pickTemplate(template01CardToWarehouse(card))
+                      }
+                      className="group flex w-full flex-col overflow-hidden rounded-2xl border border-white/12 bg-black/30 text-left transition hover:border-emerald-400/50 hover:bg-emerald-500/10 hover:shadow-[0_12px_40px_rgba(16,185,129,0.12)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400"
+                    >
+                      <div
+                        className="relative aspect-[9/16] w-full overflow-hidden bg-slate-900"
+                        aria-hidden
+                      >
+                        <Template01CardPreview card={card} />
+                      </div>
+                      <div className="space-y-1 border-t border-white/8 px-2.5 py-2.5 sm:px-3 sm:py-3">
+                        <p className="line-clamp-2 text-[13px] font-semibold leading-snug text-white sm:text-[14px]">
+                          {card.title}
+                        </p>
+                        <p className="truncate text-[11px] text-white/45">
+                          {card.desc}
+                        </p>
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )
           ) : (
             <ul className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
               {list.map((tpl) => (
