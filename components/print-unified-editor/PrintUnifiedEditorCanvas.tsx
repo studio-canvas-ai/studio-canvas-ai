@@ -54,11 +54,12 @@ export type PrintUnifiedEditorCanvasProps = {
     offset: PrintContentOffset
   ) => void;
   textLayers: TextLayer[];
-  onTextLayersChange: (layers: TextLayer[]) => void;
+  /** Screen 24 style — page index is fixed at the call site, not a live ref. */
+  onTextLayersChange: (pageIndex: number, layers: TextLayer[]) => void;
   photoLayers?: PrintPhotoLayer[];
-  onPhotoLayersChange?: (layers: PrintPhotoLayer[]) => void;
+  onPhotoLayersChange?: (pageIndex: number, layers: PrintPhotoLayer[]) => void;
   decoLayers?: PrintDecoLayer[];
-  onDecoLayersChange?: (layers: PrintDecoLayer[]) => void;
+  onDecoLayersChange?: (pageIndex: number, layers: PrintDecoLayer[]) => void;
   activeTextLayerId?: string | null;
   onActiveTextLayerChange?: (id: string | null) => void;
   activePhotoLayerId?: string | null;
@@ -268,6 +269,7 @@ export default function PrintUnifiedEditorCanvas({
               if (type !== "photo" || !onPhotoLayersChange || !photoLayers)
                 return;
               onPhotoLayersChange(
+                pageIndex,
                 photoLayers.filter((layer) => layer.id !== id)
               );
               if (activePhotoLayerId === id) onActivePhotoLayerChange?.(null);
@@ -350,7 +352,9 @@ export default function PrintUnifiedEditorCanvas({
                   {photoLayers?.length && onPhotoLayersChange ? (
                     <PreviewPhotoOverlay
                       layers={photoLayers}
-                      onLayersChange={onPhotoLayersChange}
+                      onLayersChange={(layers) =>
+                        onPhotoLayersChange(pageIndex, layers)
+                      }
                       activeLayerId={activePhotoLayerId ?? null}
                       onActiveLayerChange={onActivePhotoLayerChange}
                       viewScale={zoom}
@@ -360,7 +364,9 @@ export default function PrintUnifiedEditorCanvas({
                   {decoLayers?.length && onDecoLayersChange ? (
                     <PreviewDecoOverlay
                       layers={decoLayers}
-                      onLayersChange={onDecoLayersChange}
+                      onLayersChange={(layers) =>
+                        onDecoLayersChange(pageIndex, layers)
+                      }
                       activeLayerId={activeDecoLayerId ?? null}
                       onActiveLayerChange={onActiveDecoLayerChange}
                       viewScale={zoom}
@@ -369,7 +375,9 @@ export default function PrintUnifiedEditorCanvas({
 
                   <PreviewTextOverlay
                     layers={textLayers}
-                    onLayersChange={onTextLayersChange}
+                    onLayersChange={(layers) =>
+                      onTextLayersChange(pageIndex, layers)
+                    }
                     interactive
                     activeLayerId={activeTextLayerId ?? null}
                     onActiveLayerChange={onActiveTextLayerChange}

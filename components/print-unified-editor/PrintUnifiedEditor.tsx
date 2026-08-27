@@ -221,15 +221,8 @@ export default function PrintUnifiedEditor() {
   );
   const stateRef = useRef(state);
   stateRef.current = state;
-  /** Sync target page for layer writes — avoids stale blur/controlled wipes. */
-  const pageIndexRef = useRef(-1);
-  const pageEpochRef = useRef(0);
-  const pageActivatedRef = useRef(false);
 
   const activatePage = useCallback((page: number) => {
-    pageEpochRef.current += 1;
-    pageIndexRef.current = Math.max(0, page - 1);
-    pageActivatedRef.current = page > 0;
     setCurrentPage(page);
     setActiveTextLayerId(null);
     setActiveDecoLayerId(null);
@@ -332,8 +325,6 @@ export default function PrintUnifiedEditor() {
 
   const pageActivated = currentPage > 0;
   const pageIndex = pageActivated ? currentPage - 1 : -1;
-  pageActivatedRef.current = pageActivated;
-  pageIndexRef.current = pageIndex;
 
   const aspect = resolvePrintAspect(state.formatId, state.customSize);
   const typographyStage = useMemo(
@@ -351,34 +342,35 @@ export default function PrintUnifiedEditor() {
     return textLayersByPage[pageIndex] ?? [];
   }, [textLayersByPage, pageIndex, pageActivated]);
 
+  /**
+   * Screen 24 style: callers pass the page index from the event/render that
+   * produced the layers. Never retarget via a mutable pageIndexRef — that let
+   * late empty writes from another face wipe the newly active page.
+   */
   const onTextLayersChange = useCallback(
     (
+      pageIndexToUpdate: number,
       layers: TextLayer[],
       options?: { applyLayout?: boolean }
     ) => {
-      const idx = pageIndexRef.current;
-      const epoch = pageEpochRef.current;
-      if (!pageActivatedRef.current || idx < 0) return;
+      if (pageIndexToUpdate < 0) return;
 
       const nextLayers =
         options?.applyLayout === false
           ? layers
           : applyUnifiedEditorPageLayout(
               layers,
-              idx,
+              pageIndexToUpdate,
               typographyStage.w,
               typographyStage.h
             );
 
       setState((prev) => {
-        // Page switched after this write was queued (blur / controlled sync).
-        if (epoch !== pageEpochRef.current || idx !== pageIndexRef.current) {
-          return prev;
-        }
         const pages = resizeBlankIsolatedPages(
           prev.textLayersByPage,
           prev.pageCount
         );
+        if (pageIndexToUpdate >= pages.length) return prev;
         const savedLayers =
           options?.applyLayout === false
             ? nextLayers
@@ -390,7 +382,7 @@ export default function PrintUnifiedEditor() {
                 )
               );
         const nextPages = pages.map((page, i) =>
-          i === idx ? savedLayers : page
+          i === pageIndexToUpdate ? savedLayers : page
         );
         const next = { ...prev, textLayersByPage: nextPages };
         saveSession(next);
@@ -402,10 +394,10 @@ export default function PrintUnifiedEditor() {
 
   const updateDecoLayersForPage = useCallback(
     (idx: number, layers: PrintDecoLayer[]) => {
-      const epoch = pageEpochRef.current;
+      if (idx < 0) return;
       setState((prev) => {
-        if (epoch !== pageEpochRef.current) return prev;
         const pages = resizeDecoPages(prev.decoLayersByPage, prev.pageCount);
+        if (idx >= pages.length) return prev;
         const nextPages = pages.map((pageLayers, i) =>
           i === idx ? layers : pageLayers
         );
@@ -419,10 +411,10 @@ export default function PrintUnifiedEditor() {
 
   const updatePhotoLayersForPage = useCallback(
     (idx: number, layers: PrintPhotoLayer[]) => {
-      const epoch = pageEpochRef.current;
+      if (idx < 0) return;
       setState((prev) => {
-        if (epoch !== pageEpochRef.current) return prev;
         const pages = resizePhotoPages(prev.photoLayersByPage, prev.pageCount);
+        if (idx >= pages.length) return prev;
         const nextPages = pages.map((pageLayers, i) =>
           i === idx ? layers : pageLayers
         );
@@ -834,15 +826,15 @@ export default function PrintUnifiedEditor() {
             contentOffsetByPage={state.contentOffsetByPage}
             onContentOffsetChange={updateContentOffsetForPage}
             textLayers={activeTextLayers}
-            onTextLayersChange={(layers) =>
-              onTextLayersChange(layers, { applyLayout: false })
+            onTextLayersChange={(idx, layers) =>
+              onTextLayersChange(idx, layers, { applyLayout: false })
             }
             photoLayers={
               pageActivated ? photoLayersByPage[pageIndex] : undefined
             }
             onPhotoLayersChange={
               pageActivated
-                ? (layers) => updatePhotoLayersForPage(pageIndex, layers)
+                ? (idx, layers) => updatePhotoLayersForPage(idx, layers)
                 : undefined
             }
             activePhotoLayerId={activePhotoLayerId}
@@ -852,7 +844,7 @@ export default function PrintUnifiedEditor() {
             }
             onDecoLayersChange={
               pageActivated
-                ? (layers) => updateDecoLayersForPage(pageIndex, layers)
+                ? (idx, layers) => updateDecoLayersForPage(idx, layers)
                 : undefined
             }
             activeTextLayerId={activeTextLayerId}
@@ -972,6 +964,7 @@ export default function PrintUnifiedEditor() {
                 controlledOverlayLayers={activeTextLayers}
                 onControlledOverlayLayersChange={(layers) =>
                   onTextLayersChange(
+                    pageIndex,
                     layers.map((layer) =>
                       reconcileLayerTypographyBox(
                         layer,
