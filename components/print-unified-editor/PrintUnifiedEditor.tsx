@@ -16,6 +16,11 @@ import {
   type PrintUnifiedZoom,
 } from "@/lib/printUnifiedEditor";
 import {
+  TEMPLATE_WAREHOUSE_APPLY_EVENT,
+  consumePendingWarehouseTemplate,
+  type WarehouseTemplate,
+} from "@/lib/templateWarehouse";
+import {
   editorSlotCount,
   applySemanticPageLayout,
   reconcileLayerTypographyBox,
@@ -132,6 +137,73 @@ export default function PrintUnifiedEditor() {
     setState(hydrateInitialState());
     setHydrated(true);
   }, []);
+
+  const applyWarehouseTemplateToEditor = useCallback(
+    (detail: WarehouseTemplate) => {
+      if (!detail?.id) return;
+      const pageCount = detail.pageCount;
+      const slots = editorSlotCount(pageCount);
+      const textPages = resizeIndependentPages(
+        detail.textLayersByPage,
+        slots
+      ).map((page, i) => {
+        const stage = referencePrintStageSize(
+          resolvePrintAspect(detail.formatId, null)
+        );
+        return applyUnifiedEditorPageLayout(page, i, stage.w, stage.h);
+      });
+      const next: PrintWizardState = {
+        ...defaultPrintWizardState(),
+        ...stateRef.current,
+        formatId: detail.formatId,
+        pageCount,
+        wizardStep: 2,
+        backgroundUrl: detail.backgroundUrl ?? null,
+        backgroundUrls: Array.from({ length: pageCount }, (_, i) =>
+          i === 0 ? detail.backgroundUrl || "" : ""
+        ),
+        textLayersByPage: textPages,
+        photoLayersByPage: [],
+        decoLayersByPage: [],
+        backgroundPansByPage: [],
+        contentOffsetByPage: resizeContentOffsets(undefined, pageCount),
+        specPicks: {
+          format: true,
+          style: Boolean(stateRef.current.visualStyle?.imageStyleId),
+          use: true,
+          pages: true,
+        },
+      };
+      saveSession(next);
+      setState(next);
+      setCurrentPage(1);
+      setActiveTextLayerId(null);
+      setActivePhotoLayerId(null);
+      setActiveDecoLayerId(null);
+      setZoom(1);
+      showToast(`템플릿 적용: ${detail.title}`, "success");
+    },
+    [showToast]
+  );
+
+  /** Template Warehouse → apply seed layout onto this editor (additive listener). */
+  useEffect(() => {
+    const onApply = (event: Event) => {
+      const detail = (event as CustomEvent<WarehouseTemplate>).detail;
+      // Clear pending stash so remount does not double-apply.
+      consumePendingWarehouseTemplate();
+      if (detail) applyWarehouseTemplateToEditor(detail);
+    };
+    window.addEventListener(TEMPLATE_WAREHOUSE_APPLY_EVENT, onApply);
+    return () =>
+      window.removeEventListener(TEMPLATE_WAREHOUSE_APPLY_EVENT, onApply);
+  }, [applyWarehouseTemplateToEditor]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const pending = consumePendingWarehouseTemplate();
+    if (pending) applyWarehouseTemplateToEditor(pending);
+  }, [hydrated, applyWarehouseTemplateToEditor]);
 
   const patch = useCallback((partial: Partial<PrintWizardState>) => {
     setState((prev) => {
@@ -529,6 +601,7 @@ export default function PrintUnifiedEditor() {
     recentNamespace: "screen_008",
     overlayLayers,
     onApplyRecentProject: onOpenRecentProject,
+    depositToSpace4: true,
     resolveExportImage: async (quality) => {
       if (!pageActivated || pageIndex < 0) {
         throw new Error("no_page_selected");
@@ -671,7 +744,18 @@ export default function PrintUnifiedEditor() {
                   })
                 }
                 onMainPromptChange={(value) => patch({ mainPrompt: value })}
-                onVisualStyleChange={(visualStyle) => patch({ visualStyle })}
+                onVisualStyleChange={(visualStyle) => {
+                  const hasStyle = Boolean(
+                    visualStyle.imageStyleId || visualStyle.moodStyleId
+                  );
+                  patch(
+                    markSpecPick(
+                      { ...stateRef.current, visualStyle },
+                      "style",
+                      hasStyle
+                    )
+                  );
+                }}
               />
             </div>
             {/* Empty flex space — do not stretch mini thumbs into the middle */}

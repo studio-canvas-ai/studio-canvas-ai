@@ -34,6 +34,8 @@ export type UsePrintWizardExportArgs = {
   buildLookbookSnapshot?: () => PhotoLookbookSnapshot | null;
   /** Apply recent/.sca on the current wizard canvas (no studio redirect). */
   onApplyRecentProject?: (project: StudioCanvasProjectV1) => void;
+  /** Screen 26 — deposit sealed .sca into Space 4 on download. */
+  depositToSpace4?: boolean;
 };
 
 export function usePrintWizardExport({
@@ -48,6 +50,7 @@ export function usePrintWizardExport({
   resolveExportImage,
   buildLookbookSnapshot,
   onApplyRecentProject,
+  depositToSpace4 = false,
 }: UsePrintWizardExportArgs) {
   const { showToast } = useFeedback();
   const { requireSubscription, premiumModal } = useExportGate();
@@ -60,6 +63,7 @@ export function usePrintWizardExport({
   const projectFileInputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const isPhoto = recentNamespace === "screen_010";
+  const depositSpace4 = depositToSpace4;
 
   const buildStep2Project = () => {
     const snapshot = useCanvasStore.getState().getExportSnapshot();
@@ -171,6 +175,7 @@ export function usePrintWizardExport({
         project,
         baseName,
         imageExt: quality === "high" ? "png" : "jpg",
+        depositToSpace4: depositSpace4,
         successMessage:
           quality === "high"
             ? "고화질 파일 + 수정용 상태파일(.sca)을 저장하고 최근 목록에 등록했습니다."

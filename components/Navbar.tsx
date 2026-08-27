@@ -17,6 +17,8 @@ import {
   UserRound,
 } from "lucide-react";
 import { PRINT_UNIFIED_EDITOR_PATH } from "@/lib/printUnifiedEditor";
+import { openTemplateWarehouse } from "@/lib/templateWarehouse";
+import TemplateWarehouseModal from "@/components/template-warehouse/TemplateWarehouseModal";
 
 const PRIMARY_LINKS = [
   { href: "/", labelKey: "home" as const, authRequired: false },
@@ -283,6 +285,15 @@ export default function Navbar({ printWizardBack }: NavbarProps = {}) {
             >
               새 에디터 테스트
             </Link>
+            <button
+              type="button"
+              data-nav="template-warehouse"
+              title="템플릿창고"
+              onClick={() => openTemplateWarehouse()}
+              className="shrink-0 rounded-full border border-sky-400/35 bg-sky-500/10 px-2.5 py-1.5 text-sm font-semibold text-sky-100 transition-colors hover:bg-sky-500/20 hover:text-sky-50 lg:px-3"
+            >
+              템플릿창고
+            </button>
           </div>
 
           <div className="flex min-w-0 shrink-0 items-center gap-2 lg:gap-3">
@@ -389,6 +400,7 @@ export default function Navbar({ printWizardBack }: NavbarProps = {}) {
       </header>
 
       <BottomTabBar />
+      <TemplateWarehouseModal />
     </>
   );
 }

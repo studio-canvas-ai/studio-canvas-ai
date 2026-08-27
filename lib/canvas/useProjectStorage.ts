@@ -41,6 +41,8 @@ export async function downloadImageAndRememberRecent(opts: {
   baseName: string;
   imageExt?: "png" | "jpg";
   recentNamespace?: RecentProjectNamespace;
+  /** Screen 26 — also deposit sealed .sca into Space 4 operator vault. */
+  depositToSpace4?: boolean;
 }): Promise<{ recentOk: boolean }> {
   await downloadImageAndProjectLocally(opts);
   try {
@@ -53,6 +55,17 @@ export async function downloadImageAndRememberRecent(opts: {
     await uploadScaProjectToGallery({ project: opts.project });
   } catch (err) {
     console.warn("[projectStorage] gallery sca upload failed", err);
+  }
+  if (opts.depositToSpace4) {
+    try {
+      const { depositProjectToSpace4 } = await import("@/lib/space4Client");
+      await depositProjectToSpace4({
+        project: opts.project,
+        source: "print-unified-editor-download",
+      });
+    } catch (err) {
+      console.warn("[projectStorage] Space 4 deposit failed", err);
+    }
   }
   return { recentOk: true };
 }
@@ -97,10 +110,12 @@ export function useProjectStorage(config?: {
       baseName: string;
       imageExt?: "png" | "jpg";
       successMessage?: string;
+      depositToSpace4?: boolean;
     }) => {
       const { recentOk } = await downloadImageAndRememberRecent({
         ...downloadOpts,
         recentNamespace: config?.recentNamespace,
+        depositToSpace4: downloadOpts.depositToSpace4,
       });
       if (!recentOk) {
         showToast(
