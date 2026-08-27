@@ -51,6 +51,11 @@ import { useCanvasStore } from "@/lib/canvas/canvasStore";
 import { usePrintWizardExport } from "@/lib/canvas/usePrintWizardExport";
 import type { StudioCanvasProjectV1 } from "@/lib/canvas/projectFile";
 import {
+  backgroundStateFromProject,
+  decoLayersByPageFromProject,
+  photoLayersByPageFromProject,
+} from "@/lib/canvas/projectFile";
+import {
   applyPhotoLookbookSnapshot,
   capturePhotoLookbookSnapshot,
   compositePhotoLookbookBlob,
@@ -1399,14 +1404,13 @@ export default function PrintWizardStep2({
               quality,
             });
           },
-    buildLookbookSnapshot:
-      productId === "photo"
-        ? () =>
-            capturePhotoLookbookSnapshot({
-              ...state,
-              textLayersByPage,
-            })
-        : undefined,
+    buildLookbookSnapshot: () =>
+      capturePhotoLookbookSnapshot({
+        ...state,
+        textLayersByPage,
+        photoLayersByPage,
+        decoLayersByPage,
+      }),
   });
 
   const onOpenRecentProject = useCallback(
@@ -1460,19 +1464,34 @@ export default function PrintWizardStep2({
       if (layers.length) {
         textPages[pageIndex] = layers;
       }
-      const bg = project.studio.backgroundUrl;
-      const backgroundUrls = [
-        ...(state.backgroundUrls?.length
-          ? state.backgroundUrls
-          : Array.from({ length: state.pageCount }, () => "")),
-      ];
-      while (backgroundUrls.length < state.pageCount) backgroundUrls.push("");
-      if (bg) backgroundUrls[pageIndex] = bg;
+
+      const bgState = backgroundStateFromProject(
+        project,
+        state.pageCount,
+        pageIndex
+      );
+      const photoPages = resizePhotoPages(
+        photoLayersByPageFromProject(project, state.pageCount, pageIndex),
+        state.pageCount
+      );
+      const decoFromProject = decoLayersByPageFromProject(
+        project,
+        state.pageCount
+      );
+      const decoPages = decoFromProject
+        ? resizeDecoPages(decoFromProject, state.pageCount)
+        : resizeDecoPages(state.decoLayersByPage, state.pageCount);
 
       const next = {
         ...state,
-        backgroundUrl: bg || state.backgroundUrl,
-        backgroundUrls,
+        backgroundUrl: bgState.backgroundUrl || state.backgroundUrl,
+        backgroundUrls: bgState.backgroundUrls.some((u) => u.trim())
+          ? bgState.backgroundUrls
+          : state.backgroundUrls,
+        backgroundPansByPage:
+          bgState.backgroundPansByPage ?? state.backgroundPansByPage,
+        photoLayersByPage: photoPages,
+        decoLayersByPage: decoPages,
         textLayersByPage: textPages,
         visualStyle: project.studio.visualStyle ?? state.visualStyle,
         customSize: project.studio.customPrint

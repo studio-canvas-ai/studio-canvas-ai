@@ -183,15 +183,13 @@ export default function PrintWizardEditStage({
         quality,
       });
     },
-    buildLookbookSnapshot: isPhotoLookbook
-      ? () =>
-          capturePhotoLookbookSnapshot({
-            ...state,
-            textLayersByPage,
-            photoLayersByPage: photoLayersByPage ?? state.photoLayersByPage,
-            decoLayersByPage: decoLayersByPage ?? state.decoLayersByPage,
-          })
-      : undefined,
+    buildLookbookSnapshot: () =>
+      capturePhotoLookbookSnapshot({
+        ...state,
+        textLayersByPage,
+        photoLayersByPage: photoLayersByPage ?? state.photoLayersByPage,
+        decoLayersByPage: decoLayersByPage ?? state.decoLayersByPage,
+      }),
   });
 
   return (

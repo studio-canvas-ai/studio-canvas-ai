@@ -31,6 +31,12 @@ import { usePrintWizardExport } from "@/lib/canvas/usePrintWizardExport";
 import { useCanvasStore } from "@/lib/canvas/canvasStore";
 import type { PhotoKind } from "@/lib/canvas/addPhotoLayer";
 import type { StudioCanvasProjectV1 } from "@/lib/canvas/projectFile";
+import {
+  backgroundStateFromProject,
+  decoLayersByPageFromProject,
+  photoLayersByPageFromProject,
+} from "@/lib/canvas/projectFile";
+import { capturePhotoLookbookSnapshot } from "@/lib/photoLookbookProject";
 import { buildPagePrintAiContext } from "@/lib/printWizardAiContext";
 import {
   generatePrintBackgroundPages,
@@ -403,19 +409,34 @@ export default function PrintUnifiedEditor() {
       if (layers.length) {
         textPages[pageIdx] = layers;
       }
-      const bg = project.studio.backgroundUrl;
-      const backgroundUrls = [
-        ...(state.backgroundUrls?.length
-          ? state.backgroundUrls
-          : Array.from({ length: state.pageCount }, () => "")),
-      ];
-      while (backgroundUrls.length < state.pageCount) backgroundUrls.push("");
-      if (bg) backgroundUrls[pageIdx] = bg;
+
+      const bgState = backgroundStateFromProject(
+        project,
+        state.pageCount,
+        pageIdx
+      );
+      const photoPages = resizePhotoPages(
+        photoLayersByPageFromProject(project, state.pageCount, pageIdx),
+        state.pageCount
+      );
+      const decoFromProject = decoLayersByPageFromProject(
+        project,
+        state.pageCount
+      );
+      const decoPages = decoFromProject
+        ? resizeDecoPages(decoFromProject, state.pageCount)
+        : resizeDecoPages(state.decoLayersByPage, state.pageCount);
 
       const next: PrintWizardState = {
         ...state,
-        backgroundUrl: bg || state.backgroundUrl,
-        backgroundUrls,
+        backgroundUrl: bgState.backgroundUrl || state.backgroundUrl,
+        backgroundUrls: bgState.backgroundUrls.some((u) => u.trim())
+          ? bgState.backgroundUrls
+          : state.backgroundUrls,
+        backgroundPansByPage:
+          bgState.backgroundPansByPage ?? state.backgroundPansByPage,
+        photoLayersByPage: photoPages,
+        decoLayersByPage: decoPages,
         textLayersByPage: textPages,
         visualStyle: project.studio.visualStyle ?? state.visualStyle,
         customSize: project.studio.customPrint
@@ -602,6 +623,13 @@ export default function PrintUnifiedEditor() {
     overlayLayers,
     onApplyRecentProject: onOpenRecentProject,
     depositToSpace4: true,
+    buildLookbookSnapshot: () =>
+      capturePhotoLookbookSnapshot({
+        ...stateRef.current,
+        textLayersByPage,
+        decoLayersByPage,
+        photoLayersByPage,
+      }),
     resolveExportImage: async (quality) => {
       if (!pageActivated || pageIndex < 0) {
         throw new Error("no_page_selected");
@@ -610,6 +638,7 @@ export default function PrintUnifiedEditor() {
         ...stateRef.current,
         textLayersByPage,
         decoLayersByPage,
+        photoLayersByPage,
       };
       if (!printWizardHasExportableFrame(exportState)) {
         throw new Error("nothing_to_export");

@@ -44,15 +44,15 @@ export async function downloadImageAndRememberRecent(opts: {
   /** Screen 26 — also deposit sealed .sca into Space 4 operator vault. */
   depositToSpace4?: boolean;
 }): Promise<{ recentOk: boolean }> {
-  await downloadImageAndProjectLocally(opts);
+  const sealedProject = await downloadImageAndProjectLocally(opts);
   try {
-    await pushRecentProject(opts.project, opts.recentNamespace);
+    await pushRecentProject(sealedProject, opts.recentNamespace);
   } catch (err) {
     console.warn("[projectStorage] recent FIFO save failed", err);
     return { recentOk: false };
   }
   try {
-    await uploadScaProjectToGallery({ project: opts.project });
+    await uploadScaProjectToGallery({ project: sealedProject });
   } catch (err) {
     console.warn("[projectStorage] gallery sca upload failed", err);
   }
@@ -60,7 +60,7 @@ export async function downloadImageAndRememberRecent(opts: {
     try {
       const { depositProjectToSpace4 } = await import("@/lib/space4Client");
       await depositProjectToSpace4({
-        project: opts.project,
+        project: sealedProject,
         source: "print-unified-editor-download",
       });
     } catch (err) {

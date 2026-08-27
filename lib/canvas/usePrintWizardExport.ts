@@ -79,7 +79,7 @@ export function usePrintWizardExport({
           }))
         : [titleLayer];
     const lookbook = buildLookbookSnapshot?.() ?? undefined;
-    return buildStudioProject({
+    const project = buildStudioProject({
       mode: "agent",
       subjectUrl: "",
       backgroundUrl: activeBg,
@@ -99,6 +99,15 @@ export function usePrintWizardExport({
       canvas: snapshot,
       lookbook: lookbook || undefined,
     });
+    // Prefer lookbook background when activeBg was empty but wizard has plates.
+    if (!project.studio.backgroundUrl && project.lookbook?.wizard) {
+      const w = project.lookbook.wizard;
+      project.studio.backgroundUrl =
+        w.backgroundUrl ||
+        w.backgroundUrls?.find((u) => typeof u === "string" && u.trim()) ||
+        null;
+    }
+    return project;
   };
 
   const downloadWithProject = async (quality: "standard" | "high") => {
