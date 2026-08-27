@@ -254,6 +254,8 @@ export type PreviewDecoOverlayProps = {
   interactive?: boolean;
   activeLayerId?: string | null;
   onActiveLayerChange?: (id: string | null) => void;
+  /** Ancestor CSS scale — pointer deltas are divided by this. */
+  viewScale?: number;
 };
 
 export default function PreviewDecoOverlay({
@@ -262,6 +264,7 @@ export default function PreviewDecoOverlay({
   interactive = true,
   activeLayerId = null,
   onActiveLayerChange,
+  viewScale = 1,
 }: PreviewDecoOverlayProps) {
   const { t } = useI18n();
   const cs = t.canvasStudio;
@@ -284,22 +287,25 @@ export default function PreviewDecoOverlay({
   layersRef.current = layers;
 
   const measureStage = () => {
-    const rect = hostRef.current?.getBoundingClientRect();
+    const el = hostRef.current;
     return {
-      w: Math.max(1, rect?.width ?? size.w),
-      h: Math.max(1, rect?.height ?? size.h),
+      w: Math.max(1, el?.offsetWidth || size.w),
+      h: Math.max(1, el?.offsetHeight || size.h),
     };
   };
 
   useEffect(() => {
     const el = hostRef.current;
     if (!el) return;
-    const apply = () => {
-      const { width, height } = el.getBoundingClientRect();
+    const apply = (width: number, height: number) => {
       setSize({ w: Math.max(1, width), h: Math.max(1, height) });
     };
-    apply();
-    const ro = new ResizeObserver(() => apply());
+    apply(el.offsetWidth, el.offsetHeight);
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      apply(entry.contentRect.width, entry.contentRect.height);
+    });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
@@ -388,9 +394,12 @@ export default function PreviewDecoOverlay({
     const onMove = (e: PointerEvent) => {
       const drag = dragRef.current;
       if (!drag) return;
-      const dx = e.clientX - drag.startClientX;
-      const dy = e.clientY - drag.startClientY;
-      const dist = Math.hypot(dx, dy);
+      const inv = 1 / Math.max(0.001, viewScale);
+      const screenDx = e.clientX - drag.startClientX;
+      const screenDy = e.clientY - drag.startClientY;
+      const dx = screenDx * inv;
+      const dy = screenDy * inv;
+      const dist = Math.hypot(screenDx, screenDy);
       if (drag.kind === "move" && !draggingRef.current && dist < DRAG_THRESHOLD_PX) {
         return;
       }
@@ -471,7 +480,7 @@ export default function PreviewDecoOverlay({
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
     };
-  }, [pointerActive, commitLayer]);
+  }, [pointerActive, commitLayer, viewScale]);
 
   if (!layers.length) return null;
 

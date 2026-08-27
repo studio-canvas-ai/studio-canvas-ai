@@ -47,6 +47,11 @@ export type PreviewTextOverlayProps = {
   hideGuideLabels?: boolean;
   /** Screen 26 — single click enters inline edit (not only double-click). */
   editOnSingleClick?: boolean;
+  /**
+   * CSS transform scale on an ancestor stage world.
+   * Pointer deltas are divided by this so drag/resize stay 1:1 with the cursor.
+   */
+  viewScale?: number;
 };
 
 type ResizeHandle = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
@@ -172,6 +177,7 @@ export default function PreviewTextOverlay({
   showEmptyGuideBoxes = false,
   hideGuideLabels = false,
   editOnSingleClick = false,
+  viewScale = 1,
 }: PreviewTextOverlayProps) {
   const { t } = useI18n();
   const cs = t.canvasStudio;
@@ -198,21 +204,26 @@ export default function PreviewTextOverlay({
   onLayersChangeRef.current = onLayersChange;
 
   const measureStage = () => {
-    const rect = hostRef.current?.getBoundingClientRect();
-    const w = rect?.width ?? size.w;
-    const h = rect?.height ?? size.h;
-    return { w: Math.max(1, w), h: Math.max(1, h) };
+    const el = hostRef.current;
+    // offsetWidth/Height ignore CSS transforms — required when stage world uses scale().
+    return {
+      w: Math.max(1, el?.offsetWidth || size.w),
+      h: Math.max(1, el?.offsetHeight || size.h),
+    };
   };
 
   useEffect(() => {
     const el = hostRef.current;
     if (!el) return;
-    const apply = () => {
-      const { width, height } = el.getBoundingClientRect();
+    const apply = (width: number, height: number) => {
       setSize({ w: Math.max(1, width), h: Math.max(1, height) });
     };
-    apply();
-    const ro = new ResizeObserver(() => apply());
+    apply(el.offsetWidth, el.offsetHeight);
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      apply(entry.contentRect.width, entry.contentRect.height);
+    });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
@@ -305,9 +316,12 @@ export default function PreviewTextOverlay({
     const onMove = (e: PointerEvent) => {
       const drag = dragRef.current;
       if (!drag) return;
-      const dx = e.clientX - drag.startClientX;
-      const dy = e.clientY - drag.startClientY;
-      const dist = Math.hypot(dx, dy);
+      const inv = 1 / Math.max(0.001, viewScale);
+      const screenDx = e.clientX - drag.startClientX;
+      const screenDy = e.clientY - drag.startClientY;
+      const dx = screenDx * inv;
+      const dy = screenDy * inv;
+      const dist = Math.hypot(screenDx, screenDy);
 
       if (drag.kind === "move" && !dragging && dist < DRAG_THRESHOLD_PX) {
         return;
@@ -397,7 +411,7 @@ export default function PreviewTextOverlay({
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
     };
-  }, [pointerActive, dragging, getBoxes, commitBox]);
+  }, [pointerActive, dragging, getBoxes, commitBox, viewScale]);
 
   const handleCopy = async (layer: TextLayer) => {
     try {

@@ -16,7 +16,7 @@ export const PRINT_UNIFIED_EDITOR_SESSION_KEY = "sca_print_unified_v1";
 
 export const PRINT_UNIFIED_EDITOR_SCREEN_ID = "SCREEN-026";
 
-/** Canvas zoom presets (layout scale — visibly shrinks/grows the page card). */
+/** Canvas zoom presets — applied as transform:scale on the shared stage world. */
 export const PRINT_UNIFIED_ZOOM_LEVELS = [0.5, 0.75, 1, 1.25, 1.5] as const;
 
 export type PrintUnifiedZoom = (typeof PRINT_UNIFIED_ZOOM_LEVELS)[number];
@@ -47,7 +47,7 @@ export function nextUnifiedZoom(
   return PRINT_UNIFIED_ZOOM_LEVELS[next] ?? current;
 }
 
-/** Free content-group pan (stage fractions). Unclamped — may leave frame. */
+/** Free stage-world pan in CSS pixels (translate after scale). Unclamped. */
 export type PrintContentOffset = { x: number; y: number };
 
 export const DEFAULT_CONTENT_OFFSET: PrintContentOffset = { x: 0, y: 0 };

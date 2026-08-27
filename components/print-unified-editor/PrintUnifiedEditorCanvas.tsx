@@ -47,6 +47,7 @@ export type PrintUnifiedEditorCanvasProps = {
   pageActivated: boolean;
   backgroundUrl: string | null;
   backgroundUrls: (string | null)[];
+  /** Screen pan in CSS pixels (applied with zoom on the shared stage world). */
   contentOffsetByPage?: PrintContentOffset[];
   onContentOffsetChange?: (
     pageIndex: number,
@@ -77,15 +78,17 @@ export type PrintUnifiedEditorCanvasProps = {
   recentNamespace?: RecentProjectNamespace;
 };
 
-type ContentPanDrag = {
+type StagePanDrag = {
   pageIndex: number;
   startX: number;
   startY: number;
   origin: PrintContentOffset;
-  frameW: number;
-  frameH: number;
 };
 
+/**
+ * Screen 26 canvas — one stage world owns bg + overlays.
+ * Zoom/pan are CSS transforms on that world so children stay locked together.
+ */
 export default function PrintUnifiedEditorCanvas({
   formatId,
   useId,
@@ -123,15 +126,15 @@ export default function PrintUnifiedEditorCanvas({
 }: PrintUnifiedEditorCanvasProps) {
   const { t } = useI18n();
   const cs = t.canvasStudio;
-  const viewportRef = useRef<HTMLDivElement>(null);
-  const contentPanRef = useRef<ContentPanDrag | null>(null);
-  const [contentPanning, setContentPanning] = useState(false);
+  const stagePanRef = useRef<StagePanDrag | null>(null);
+  const [stagePanning, setStagePanning] = useState(false);
+  const [zoomAnimating, setZoomAnimating] = useState(false);
   const pageIndex = Math.max(0, currentPage - 1);
   const aspect = resolvePrintAspect(formatId, customSize);
   const pageBg = pageActivated
     ? pageBackgroundUrl(backgroundUrls, backgroundUrl, pageIndex)
     : null;
-  const contentOffset = pageActivated
+  const pan = pageActivated
     ? normalizeContentOffset(contentOffsetByPage?.[pageIndex])
     : DEFAULT_CONTENT_OFFSET;
   const blueprint =
@@ -145,19 +148,22 @@ export default function PrintUnifiedEditorCanvas({
         )
       : null;
 
-  /** Same sizing as Screen 8 PreviewCanvas — zoom multiplies layout size (not just visual scale). */
-  const pageCardStyle = useMemo(
+  /** Logical page size at 100% — zoom is transform:scale on the parent world. */
+  const stageStyle = useMemo(
     () =>
       ({
         aspectRatio: `${aspect}`,
-        width: `min(calc(100cqw * ${zoom}), calc(100cqh * ${aspect} * ${zoom}))`,
-        height: `min(calc(100cqh * ${zoom}), calc(100cqw / ${aspect} * ${zoom}))`,
+        width: `min(100cqw, calc(100cqh * ${aspect}))`,
+        height: `min(100cqh, calc(100cqw / ${aspect}))`,
         maxWidth: "100%",
         maxHeight: "100%",
-        transition:
-          "width 220ms ease, height 220ms ease, aspect-ratio 220ms ease",
       }) as const,
-    [aspect, zoom]
+    [aspect]
+  );
+
+  const worldTransform = useMemo(
+    () => `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+    [pan.x, pan.y, zoom]
   );
 
   const zoomLabel = `${Math.round(zoom * 100)}%`;
@@ -166,53 +172,49 @@ export default function PrintUnifiedEditorCanvas({
       ? fillCanvas(cs.pageOf, { page: currentPage, total: pageCount })
       : null;
 
-  const startContentPan = (e: React.PointerEvent<HTMLElement>) => {
+  const changeZoom = (next: PrintUnifiedZoom) => {
+    setZoomAnimating(true);
+    onZoomChange(next);
+    window.setTimeout(() => setZoomAnimating(false), 200);
+  };
+
+  const startStagePan = (e: React.PointerEvent<HTMLElement>) => {
     if (!onContentOffsetChange || !pageActivated) return;
     if (e.button !== 0 && e.pointerType === "mouse") return;
-    const t = e.target as HTMLElement;
+    const target = e.target as HTMLElement;
     if (
-      t.closest("[data-text-layer]") ||
-      t.closest("[data-photo-layer]") ||
-      t.closest("[data-deco-layer]") ||
-      t.closest("[data-blueprint-chrome]")
+      target.closest("[data-text-layer]") ||
+      target.closest("[data-photo-layer]") ||
+      target.closest("[data-deco-layer]")
     ) {
       return;
     }
-    const stage =
-      (e.currentTarget.closest("[data-page-stage]") as HTMLElement | null) ??
-      e.currentTarget;
-    const rect = stage.getBoundingClientRect();
-    if (rect.width < 8 || rect.height < 8) return;
     e.stopPropagation();
     if (e.pointerType === "touch") e.preventDefault();
     e.currentTarget.setPointerCapture?.(e.pointerId);
-    contentPanRef.current = {
+    stagePanRef.current = {
       pageIndex,
       startX: e.clientX,
       startY: e.clientY,
-      origin: contentOffset,
-      frameW: rect.width,
-      frameH: rect.height,
+      origin: pan,
     };
-    setContentPanning(true);
+    setStagePanning(true);
   };
 
   useEffect(() => {
-    if (!contentPanning) return;
+    if (!stagePanning) return;
     const onMove = (e: PointerEvent) => {
-      const drag = contentPanRef.current;
+      const drag = stagePanRef.current;
       if (!drag || !onContentOffsetChange) return;
-      const dx = (e.clientX - drag.startX) / Math.max(1, drag.frameW);
-      const dy = (e.clientY - drag.startY) / Math.max(1, drag.frameH);
-      // 1:1 pan, unclamped — content may leave the page frame.
+      // translate() is applied after scale in visual space → 1:1 screen pixels.
       onContentOffsetChange(drag.pageIndex, {
-        x: drag.origin.x + dx,
-        y: drag.origin.y + dy,
+        x: drag.origin.x + (e.clientX - drag.startX),
+        y: drag.origin.y + (e.clientY - drag.startY),
       });
     };
     const onUp = () => {
-      contentPanRef.current = null;
-      setContentPanning(false);
+      stagePanRef.current = null;
+      setStagePanning(false);
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
@@ -222,7 +224,7 @@ export default function PrintUnifiedEditorCanvas({
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
     };
-  }, [contentPanning, onContentOffsetChange]);
+  }, [stagePanning, onContentOffsetChange]);
 
   return (
     <section className="flex h-full min-h-0 flex-col gap-1">
@@ -277,89 +279,94 @@ export default function PrintUnifiedEditorCanvas({
       </header>
 
       <div className="relative flex min-h-0 flex-1 flex-col rounded-2xl border border-slate-800 bg-[#121824] p-1.5 shadow-[0_8px_32px_rgba(0,0,0,0.35)] sm:gap-2 sm:p-2">
-        <div
-          ref={viewportRef}
-          className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-slate-800 bg-[#0E1420]"
-        >
+        <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-slate-800 bg-[#0E1420]">
           {pageActivated ? (
-            <div className="flex h-full min-h-0 w-full items-center justify-center overflow-auto overscroll-contain p-1.5 sm:p-2 [container-type:size]">
+            <div
+              className={`absolute inset-0 flex items-center justify-center overflow-hidden p-1.5 sm:p-2 [container-type:size] ${
+                stagePanning ? "cursor-grabbing" : "cursor-grab"
+              }`}
+              onPointerDown={startStagePan}
+            >
+              {/* Shared world: pan + zoom transform — all stage children move/scale together */}
               <div
-                data-page-card
-                className="relative shrink-0 overflow-hidden rounded-md border border-slate-700/70 bg-[#0B0F19] shadow-[0_12px_36px_rgba(0,0,0,0.4)]"
-                style={pageCardStyle}
+                data-stage-world
+                className="relative shrink-0 will-change-transform"
+                style={{
+                  transform: worldTransform,
+                  transformOrigin: "center center",
+                  transition:
+                    zoomAnimating && !stagePanning
+                      ? "transform 180ms ease"
+                      : undefined,
+                }}
               >
                 <div
                   data-page-stage
-                  className={`absolute inset-0 overflow-hidden ${
-                    contentPanning ? "cursor-grabbing" : "cursor-grab"
-                  }`}
-                  onPointerDown={startContentPan}
+                  data-page-card
+                  className="relative overflow-hidden rounded-md border border-slate-700/70 bg-[#0B0F19] shadow-[0_12px_36px_rgba(0,0,0,0.4)]"
+                  style={stageStyle}
                 >
-                  {/* Background + overlays pan as one group (unclamped). */}
-                  <div
-                    data-content-group
-                    className="absolute inset-0 will-change-transform"
-                    style={{
-                      transform: `translate(${contentOffset.x * 100}%, ${contentOffset.y * 100}%)`,
-                    }}
-                  >
-                    <div className="absolute inset-0 overflow-visible">
-                      {pageBg ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={pageBg}
-                          alt=""
-                          draggable={false}
-                          className="pointer-events-none absolute inset-0 h-full w-full object-cover"
-                          style={{
-                            animation: "pw-fade-in 0.45s ease forwards",
-                          }}
-                        />
-                      ) : (
-                        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(99,102,241,0.22),transparent_55%),radial-gradient(ellipse_at_80%_80%,rgba(16,185,129,0.12),transparent_50%),linear-gradient(160deg,#121824,#0B0F19)]" />
-                      )}
+                  {/* Background plate */}
+                  <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-md">
+                    {pageBg ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={pageBg}
+                        alt=""
+                        draggable={false}
+                        className="absolute inset-0 h-full w-full object-cover"
+                        style={{
+                          animation: "pw-fade-in 0.45s ease forwards",
+                        }}
+                      />
+                    ) : (
+                      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(99,102,241,0.22),transparent_55%),radial-gradient(ellipse_at_80%_80%,rgba(16,185,129,0.12),transparent_50%),linear-gradient(160deg,#121824,#0B0F19)]" />
+                    )}
 
-                      {blueprint ? (
-                        <PrintBlueprintOverlay
-                          blueprint={blueprint}
-                          foldGuidesHidden={foldGuidesHidden}
-                          onHideFoldGuides={onHideFoldGuides}
-                          removeFoldLabel={cs.removeFoldGuides}
-                        />
-                      ) : null}
-                    </div>
-
-                    {photoLayers?.length && onPhotoLayersChange ? (
-                      <PreviewPhotoOverlay
-                        layers={photoLayers}
-                        onLayersChange={onPhotoLayersChange}
-                        activeLayerId={activePhotoLayerId ?? null}
-                        onActiveLayerChange={onActivePhotoLayerChange}
+                    {blueprint ? (
+                      <PrintBlueprintOverlay
+                        blueprint={blueprint}
+                        foldGuidesHidden={foldGuidesHidden}
+                        onHideFoldGuides={onHideFoldGuides}
+                        removeFoldLabel={cs.removeFoldGuides}
                       />
                     ) : null}
-
-                    {decoLayers?.length && onDecoLayersChange ? (
-                      <PreviewDecoOverlay
-                        layers={decoLayers}
-                        onLayersChange={onDecoLayersChange}
-                        activeLayerId={activeDecoLayerId ?? null}
-                        onActiveLayerChange={onActiveDecoLayerChange}
-                      />
-                    ) : null}
-
-                    <PreviewTextOverlay
-                      layers={textLayers}
-                      onLayersChange={onTextLayersChange}
-                      interactive
-                      activeLayerId={activeTextLayerId ?? null}
-                      onActiveLayerChange={onActiveTextLayerChange}
-                      pageIndex={pageIndex}
-                      backgroundSrc={pageBg}
-                      showEmptyGuideBoxes
-                      hideGuideLabels
-                      editOnSingleClick
-                    />
                   </div>
+
+                  {/* Overlays share the same unscaled stage box (viewScale corrects pointer math). */}
+                  {photoLayers?.length && onPhotoLayersChange ? (
+                    <PreviewPhotoOverlay
+                      layers={photoLayers}
+                      onLayersChange={onPhotoLayersChange}
+                      activeLayerId={activePhotoLayerId ?? null}
+                      onActiveLayerChange={onActivePhotoLayerChange}
+                      viewScale={zoom}
+                    />
+                  ) : null}
+
+                  {decoLayers?.length && onDecoLayersChange ? (
+                    <PreviewDecoOverlay
+                      layers={decoLayers}
+                      onLayersChange={onDecoLayersChange}
+                      activeLayerId={activeDecoLayerId ?? null}
+                      onActiveLayerChange={onActiveDecoLayerChange}
+                      viewScale={zoom}
+                    />
+                  ) : null}
+
+                  <PreviewTextOverlay
+                    layers={textLayers}
+                    onLayersChange={onTextLayersChange}
+                    interactive
+                    activeLayerId={activeTextLayerId ?? null}
+                    onActiveLayerChange={onActiveTextLayerChange}
+                    pageIndex={pageIndex}
+                    backgroundSrc={pageBg}
+                    showEmptyGuideBoxes
+                    hideGuideLabels
+                    editOnSingleClick
+                    viewScale={zoom}
+                  />
                 </div>
               </div>
             </div>
@@ -382,7 +389,7 @@ export default function PrintUnifiedEditorCanvas({
               type="button"
               aria-label="캔버스 축소"
               title="축소"
-              onClick={() => onZoomChange(nextUnifiedZoom(zoom, -1))}
+              onClick={() => changeZoom(nextUnifiedZoom(zoom, -1))}
               className="pointer-events-auto inline-flex h-7 w-7 items-center justify-center rounded-md text-white/85 transition hover:bg-white/10 hover:text-white disabled:opacity-35"
               disabled={zoom <= 0.5}
             >
@@ -394,7 +401,7 @@ export default function PrintUnifiedEditorCanvas({
               title="배율 선택"
               onClick={() => {
                 const idx = PRINT_UNIFIED_ZOOM_LEVELS.indexOf(zoom);
-                onZoomChange(
+                changeZoom(
                   PRINT_UNIFIED_ZOOM_LEVELS[
                     (idx + 1) % PRINT_UNIFIED_ZOOM_LEVELS.length
                   ] ?? 1
@@ -408,7 +415,7 @@ export default function PrintUnifiedEditorCanvas({
               type="button"
               aria-label="캔버스 확대"
               title="확대"
-              onClick={() => onZoomChange(nextUnifiedZoom(zoom, 1))}
+              onClick={() => changeZoom(nextUnifiedZoom(zoom, 1))}
               className="pointer-events-auto inline-flex h-7 w-7 items-center justify-center rounded-md text-white/85 transition hover:bg-white/10 hover:text-white disabled:opacity-35"
               disabled={zoom >= 1.5}
             >

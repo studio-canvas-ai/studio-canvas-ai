@@ -486,8 +486,8 @@ export type PrintWizardState = {
   /** Per-page cover-crop pan so format changes can be reframed. */
   backgroundPansByPage?: PrintBackgroundPan[];
   /**
-   * Screen 26 — free content-group offset (stage fractions, unclamped).
-   * Moves background + overlays together; may leave the page frame.
+   * Screen 26 — stage-world pan in CSS pixels (unclamped).
+   * Applied with zoom on the shared transform so bg + overlays move together.
    */
   contentOffsetByPage?: PrintBackgroundPan[];
   /** Free-form order / prompt (preset injection target). */
