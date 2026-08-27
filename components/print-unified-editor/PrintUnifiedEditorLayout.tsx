@@ -22,7 +22,7 @@ export default function PrintUnifiedEditorLayout({
         <div className="min-h-[320px] lg:min-h-0 lg:h-full lg:overflow-hidden">
           {canvas}
         </div>
-        <div className="relative min-h-0 w-full lg:h-full lg:overflow-y-auto lg:overscroll-contain">
+        <div className="relative flex min-h-0 w-full flex-col lg:h-full lg:overflow-hidden">
           {controls}
         </div>
         <div

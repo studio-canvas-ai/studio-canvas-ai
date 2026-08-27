@@ -5,8 +5,19 @@ import dynamic from "next/dynamic";
 import StudioExportButtonGroup from "@/components/canvas/StudioExportButtonGroup";
 import SpecSettingsPanel from "@/components/print-wizard/SpecSettingsPanel";
 import PrintUnifiedEditorCanvas from "@/components/print-unified-editor/PrintUnifiedEditorCanvas";
+import PrintUnifiedEditorMiniThumbs from "@/components/print-unified-editor/PrintUnifiedEditorMiniThumbs";
 import PrintUnifiedEditorLayout from "@/components/print-unified-editor/PrintUnifiedEditorLayout";
-import PrintUnifiedEditorPageBar from "@/components/print-unified-editor/PrintUnifiedEditorPageBar";
+import {
+  PRINT_UNIFIED_EDITOR_SESSION_KEY,
+  applyUnifiedEditorPageLayout,
+  type PrintUnifiedZoom,
+} from "@/lib/printUnifiedEditor";
+import {
+  editorSlotCount,
+  reconcileLayerTypographyBox,
+  referencePrintStageSize,
+  resizeIndependentPages,
+} from "@/lib/printWizardTextLayers";
 import { usePrintWizardExport } from "@/lib/canvas/usePrintWizardExport";
 import { buildPagePrintAiContext } from "@/lib/printWizardAiContext";
 import {
@@ -19,17 +30,6 @@ import {
   createSymbolLayer,
   resizeDecoPages,
 } from "@/lib/printWizardDecoLayers";
-import {
-  PRINT_UNIFIED_EDITOR_SESSION_KEY,
-  type PrintUnifiedZoom,
-} from "@/lib/printUnifiedEditor";
-import {
-  applySemanticPageLayout,
-  editorSlotCount,
-  reconcileLayerTypographyBox,
-  referencePrintStageSize,
-  resizeIndependentPages,
-} from "@/lib/printWizardTextLayers";
 import { compositePrintWizardPageBlob, printWizardHasExportableFrame } from "@/lib/printWizardComposite";
 import {
   defaultPrintWizardState,
@@ -150,8 +150,19 @@ export default function PrintUnifiedEditor() {
   const overlayLayers = useMemo(() => {
     if (!pageActivated || pageIndex < 0) return [];
     const raw = textLayersByPage[pageIndex] ?? [];
-    return applySemanticPageLayout(raw, pageIndex);
-  }, [textLayersByPage, pageIndex, pageActivated]);
+    return applyUnifiedEditorPageLayout(
+      raw,
+      pageIndex,
+      typographyStage.w,
+      typographyStage.h
+    );
+  }, [
+    textLayersByPage,
+    pageIndex,
+    pageActivated,
+    typographyStage.w,
+    typographyStage.h,
+  ]);
 
   const onTextLayersChange = useCallback(
     (
@@ -162,7 +173,12 @@ export default function PrintUnifiedEditor() {
       const nextLayers =
         options?.applyLayout === false
           ? layers
-          : applySemanticPageLayout(layers, pageIndex);
+          : applyUnifiedEditorPageLayout(
+              layers,
+              pageIndex,
+              typographyStage.w,
+              typographyStage.h
+            );
       setState((prev) => {
         const slots = editorSlotCount(prev.pageCount);
         const pages = resizeIndependentPages(prev.textLayersByPage, slots);
@@ -292,9 +308,15 @@ export default function PrintUnifiedEditor() {
         const slots = editorSlotCount(prev.pageCount);
         const pages = resizeIndependentPages(prev.textLayersByPage, slots);
         const nextPages = [...pages];
-        nextPages[idx] = applySemanticPageLayout(
+        nextPages[idx] = applyUnifiedEditorPageLayout(
           pages[idx]?.length ? pages[idx]! : [],
-          idx
+          idx,
+          referencePrintStageSize(
+            resolvePrintAspect(prev.formatId, prev.customSize)
+          ).w,
+          referencePrintStageSize(
+            resolvePrintAspect(prev.formatId, prev.customSize)
+          ).h
         );
         const next = { ...prev, textLayersByPage: nextPages };
         saveSession(next);
@@ -402,50 +424,69 @@ export default function PrintUnifiedEditor() {
           />
         }
         controls={
-          <SpecSettingsPanel
-            formatId={state.formatId}
-            useId={state.useId}
-            pageCount={state.pageCount}
-            customSize={state.customSize}
-            specPicks={state.specPicks}
-            bgKeyword={state.bgKeyword}
-            bgPresetId={state.bgPresetId}
-            selectedPromptPresetId={state.selectedPromptPresetId}
-            mainPrompt={state.mainPrompt}
-            visualStyle={state.visualStyle}
-            generating={generating}
-            onFormatChange={(id: PrintFormatId) =>
-              patch(markSpecPick({ ...stateRef.current, formatId: id }, "format"))
-            }
-            onCustomSizeApply={(size: PrintCustomSize) =>
-              patch(
-                markSpecPick(
-                  { ...stateRef.current, formatId: "free", customSize: size },
-                  "format"
-                )
-              )
-            }
-            onUseChange={(id: PrintUseId) =>
-              patch(markSpecPick({ ...stateRef.current, useId: id }, "use"))
-            }
-            onPageCountChange={(count: PrintPageCount) => {
-              patch(
-                markSpecPick({ ...stateRef.current, pageCount: count }, "pages")
-              );
-              setCurrentPage((p) => (p > count ? 0 : p));
-            }}
-            onBgKeywordChange={(keyword) => patch({ bgKeyword: keyword })}
-            onBgPresetPick={(id: BgPresetId) => patch({ bgPresetId: id })}
-            onGenerateBackground={() => void onGenerateBackground()}
-            onPromptPresetPick={(id, prompt) =>
-              patch({
-                selectedPromptPresetId: id,
-                mainPrompt: prompt,
-              })
-            }
-            onMainPromptChange={(value) => patch({ mainPrompt: value })}
-            onVisualStyleChange={(visualStyle) => patch({ visualStyle })}
-          />
+          <div className="flex h-full min-h-0 flex-col gap-3">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+              <SpecSettingsPanel
+                formatId={state.formatId}
+                useId={state.useId}
+                pageCount={state.pageCount}
+                customSize={state.customSize}
+                specPicks={state.specPicks}
+                bgKeyword={state.bgKeyword}
+                bgPresetId={state.bgPresetId}
+                selectedPromptPresetId={state.selectedPromptPresetId}
+                mainPrompt={state.mainPrompt}
+                visualStyle={state.visualStyle}
+                generating={generating}
+                onFormatChange={(id: PrintFormatId) =>
+                  patch(
+                    markSpecPick({ ...stateRef.current, formatId: id }, "format")
+                  )
+                }
+                onCustomSizeApply={(size: PrintCustomSize) =>
+                  patch(
+                    markSpecPick(
+                      { ...stateRef.current, formatId: "free", customSize: size },
+                      "format"
+                    )
+                  )
+                }
+                onUseChange={(id: PrintUseId) =>
+                  patch(markSpecPick({ ...stateRef.current, useId: id }, "use"))
+                }
+                onPageCountChange={(count: PrintPageCount) => {
+                  patch(
+                    markSpecPick(
+                      { ...stateRef.current, pageCount: count },
+                      "pages"
+                    )
+                  );
+                  setCurrentPage((p) => (p > count ? 0 : p));
+                }}
+                onBgKeywordChange={(keyword) => patch({ bgKeyword: keyword })}
+                onBgPresetPick={(id: BgPresetId) => patch({ bgPresetId: id })}
+                onGenerateBackground={() => void onGenerateBackground()}
+                onPromptPresetPick={(id, prompt) =>
+                  patch({
+                    selectedPromptPresetId: id,
+                    mainPrompt: prompt,
+                  })
+                }
+                onMainPromptChange={(value) => patch({ mainPrompt: value })}
+                onVisualStyleChange={(visualStyle) => patch({ visualStyle })}
+              />
+            </div>
+            <PrintUnifiedEditorMiniThumbs
+              formatId={state.formatId}
+              customSize={state.customSize}
+              pageCount={state.pageCount}
+              currentPage={currentPage}
+              backgroundUrl={state.backgroundUrl}
+              backgroundUrls={state.backgroundUrls}
+              backgroundPansByPage={state.backgroundPansByPage}
+              onSelectPage={selectPage}
+            />
+          </div>
         }
         designPanel={
           <div className="flex h-full min-h-0 w-full flex-col gap-2">
@@ -479,11 +520,6 @@ export default function PrintUnifiedEditor() {
                 onCanvasSymbolPick={onCanvasSymbolPick}
               />
             </div>
-            <PrintUnifiedEditorPageBar
-              currentPage={currentPage}
-              pageCount={state.pageCount}
-              onSelectPage={selectPage}
-            />
             <div className="shrink-0">
               <StudioExportButtonGroup
                 busy={exportBusy}

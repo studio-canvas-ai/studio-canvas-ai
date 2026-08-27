@@ -10,6 +10,7 @@ import PreviewPhotoOverlay from "@/components/print-wizard/PreviewPhotoOverlay";
 import PreviewTextOverlay from "@/components/print-wizard/PreviewTextOverlay";
 import {
   nextUnifiedZoom,
+  PRINT_UNIFIED_ZOOM_LEVELS,
   type PrintUnifiedZoom,
 } from "@/lib/printUnifiedEditor";
 import { pageBackgroundUrl, bgPanObjectPosition } from "@/lib/printWizardBg";
@@ -108,19 +109,19 @@ export default function PrintUnifiedEditorCanvas({
         )
       : null;
 
-  /** Same sizing as Screen 8 PreviewCanvas — fills the left column via container queries. */
+  /** Same sizing as Screen 8 PreviewCanvas — zoom multiplies layout size (not just visual scale). */
   const pageCardStyle = useMemo(
     () =>
       ({
         aspectRatio: `${aspect}`,
-        width: `min(100cqw, calc(100cqh * ${aspect}))`,
-        height: `min(100cqh, calc(100cqw / ${aspect}))`,
+        width: `min(calc(100cqw * ${zoom}), calc(100cqh * ${aspect} * ${zoom}))`,
+        height: `min(calc(100cqh * ${zoom}), calc(100cqw / ${aspect} * ${zoom}))`,
         maxWidth: "100%",
         maxHeight: "100%",
         transition:
-          "width 280ms ease, height 280ms ease, aspect-ratio 280ms ease, transform 200ms ease",
+          "width 220ms ease, height 220ms ease, aspect-ratio 220ms ease",
       }) as const,
-    [aspect]
+    [aspect, zoom]
   );
 
   const zoomLabel = `${Math.round(zoom * 100)}%`;
@@ -150,21 +151,14 @@ export default function PrintUnifiedEditorCanvas({
           {pageActivated ? (
             <div className="flex h-full min-h-0 w-full items-center justify-center overflow-auto overscroll-contain p-1.5 sm:p-2 [container-type:size]">
               <div
-                className="relative shrink-0"
-                style={{
-                  transform: `scale(${zoom})`,
-                  transformOrigin: "center center",
-                }}
+                data-page-card
+                className="relative shrink-0 overflow-visible rounded-md border border-slate-700/70 bg-[#0B0F19] shadow-[0_12px_36px_rgba(0,0,0,0.4)]"
+                style={pageCardStyle}
               >
                 <div
-                  data-page-card
-                  className="relative overflow-visible rounded-md border border-slate-700/70 bg-[#0B0F19] shadow-[0_12px_36px_rgba(0,0,0,0.4)]"
-                  style={pageCardStyle}
+                  data-page-stage
+                  className="absolute inset-0 overflow-visible"
                 >
-                  <div
-                    data-page-stage
-                    className="absolute inset-0 overflow-visible"
-                  >
                     <div className="absolute inset-0 overflow-hidden rounded-md">
                       {pageBg ? (
                         <>
@@ -223,19 +217,19 @@ export default function PrintUnifiedEditorCanvas({
                       pageIndex={pageIndex}
                       backgroundSrc={pageBg}
                       showEmptyGuideBoxes
+                      hideGuideLabels
                       editOnSingleClick
                     />
                   </div>
                 </div>
-              </div>
             </div>
           ) : (
             <div className="flex h-full min-h-[280px] w-full flex-col items-center justify-center gap-2 px-6 text-center">
               <p className="text-sm font-medium text-white/55">
-                우측 패널에서 편집할 페이지를 선택해 주세요
+                중앙 패널 하단에서 편집할 페이지를 선택해 주세요
               </p>
               <p className="max-w-xs text-[11px] leading-relaxed text-white/35">
-                1~8페이지 탭을 누르면 배경과 점선 가이드 박스가 이곳에
+                1~8페이지 미니 보기를 탭하면 배경과 점선 가이드 박스가
                 표시됩니다
               </p>
             </div>
@@ -259,9 +253,12 @@ export default function PrintUnifiedEditorCanvas({
             aria-label={`캔버스 배율 ${zoomLabel}`}
             title="배율 선택"
             onClick={() => {
-              const order = [0.5, 0.75, 1] as const;
-              const idx = order.indexOf(zoom);
-              onZoomChange(order[(idx + 1) % order.length] ?? 0.75);
+              const idx = PRINT_UNIFIED_ZOOM_LEVELS.indexOf(zoom);
+              onZoomChange(
+                PRINT_UNIFIED_ZOOM_LEVELS[
+                  (idx + 1) % PRINT_UNIFIED_ZOOM_LEVELS.length
+                ] ?? 1
+              );
             }}
             className="pointer-events-auto inline-flex min-w-[3.25rem] items-center justify-center rounded-md px-1.5 py-1 text-[11px] font-bold tabular-nums text-emerald-300 transition hover:bg-white/10"
           >
@@ -273,7 +270,7 @@ export default function PrintUnifiedEditorCanvas({
             title="확대"
             onClick={() => onZoomChange(nextUnifiedZoom(zoom, 1))}
             className="pointer-events-auto inline-flex h-7 w-7 items-center justify-center rounded-md text-white/85 transition hover:bg-white/10 hover:text-white disabled:opacity-35"
-            disabled={zoom >= 1}
+            disabled={zoom >= 1.5}
           >
             <Plus className="h-3.5 w-3.5" aria-hidden />
           </button>

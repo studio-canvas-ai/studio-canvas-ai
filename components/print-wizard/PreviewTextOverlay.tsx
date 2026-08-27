@@ -43,6 +43,8 @@ export type PreviewTextOverlayProps = {
   backgroundSrc?: string | null;
   /** Screen 26 — always render empty zone guide boxes. */
   showEmptyGuideBoxes?: boolean;
+  /** Screen 26 — hide 상단/중간/하단 placeholder labels inside guides. */
+  hideGuideLabels?: boolean;
   /** Screen 26 — single click enters inline edit (not only double-click). */
   editOnSingleClick?: boolean;
 };
@@ -159,6 +161,7 @@ export default function PreviewTextOverlay({
   pageIndex = 0,
   backgroundSrc = null,
   showEmptyGuideBoxes = false,
+  hideGuideLabels = false,
   editOnSingleClick = false,
 }: PreviewTextOverlayProps) {
   const { t } = useI18n();
@@ -667,7 +670,10 @@ export default function PreviewTextOverlay({
                     height={box.height}
                     scale={scale}
                   />
-                  {showEmptyGuideBoxes && !layer.text.trim() && !isEditing ? (
+                  {showEmptyGuideBoxes &&
+                  !hideGuideLabels &&
+                  !layer.text.trim() &&
+                  !isEditing ? (
                     <span className="pointer-events-none absolute inset-0 flex items-center justify-center px-2 text-center text-[11px] font-medium text-white/35">
                       {PAGE_ZONE_LABELS[layerZone(layer)]}
                     </span>
