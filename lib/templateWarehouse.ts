@@ -63,33 +63,202 @@ function layer(
 
 /**
  * Template 01 (단면) card seed — append more entries; modal maps each to a large grid card.
- * Click → applyWarehouseTemplate → Screen 26 loads bg + text1/2/3 (existing apply path).
+ * Click → applyWarehouseTemplate → Screen 26 (existing apply path: bg + text layers).
  */
-export type Template01Card = {
+export type Template01SimpleCard = {
   id: number;
   title: string;
   desc: string;
+  layoutType?: "simple";
   bg: string;
   text1: string;
   text2: string;
   text3: string;
 };
 
+export type Template01StructuredCard = {
+  id: number;
+  title: string;
+  desc: string;
+  layoutType: "structured-grid";
+  headerText: string;
+  gridTexts: string[];
+  footerText: string;
+};
+
+export type Template01Card = Template01SimpleCard | Template01StructuredCard;
+
+export function isStructuredTemplate01(
+  card: Template01Card
+): card is Template01StructuredCard {
+  return card.layoutType === "structured-grid";
+}
+
+/** Soft clinic-style page fill for structured-grid templates (no Screen 26 changes). */
+export function buildStructuredGridBackgroundDataUrl(): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1600" viewBox="0 0 900 1600">
+  <defs>
+    <linearGradient id="page" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#F0FDFA"/>
+      <stop offset="55%" stop-color="#ECFDF5"/>
+      <stop offset="100%" stop-color="#E2E8F0"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="1600" fill="url(#page)"/>
+  <rect x="36" y="36" width="828" height="1528" rx="28" fill="none" stroke="#99F6E4" stroke-width="3"/>
+  <circle cx="780" cy="220" r="120" fill="#CCFBF1" opacity="0.55"/>
+  <circle cx="120" cy="1280" r="160" fill="#A7F3D0" opacity="0.35"/>
+</svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+function boxedLayer(
+  text: string,
+  pos: TextLayer["pos"],
+  geom: {
+    manualX: number;
+    manualY: number;
+    boxW: number;
+    boxH: number;
+    fontSize: number;
+    boxColor: string;
+    color?: TextLayer["color"];
+  }
+): TextLayer {
+  return createLayer({
+    text,
+    pos,
+    layoutLocked: true,
+    boxManual: true,
+    manualX: geom.manualX,
+    manualY: geom.manualY,
+    boxW: geom.boxW,
+    boxH: geom.boxH,
+    maxWidth: geom.boxW,
+    showBox: true,
+    showBoxBorder: true,
+    boxOpacity: 0.94,
+    boxColor: geom.boxColor,
+    color: geom.color ?? "white",
+    fontSize: geom.fontSize,
+    fontWeight: 700,
+    align: "center",
+    lineHeight: 1.25,
+    fontPreset: "pretendard",
+  });
+}
+
+/** Header banner + 2×3 info grid + footer contact — all layoutLocked boxes. */
+export function buildStructuredGridTextLayers(
+  card: Template01StructuredCard
+): TextLayer[] {
+  const margin = 0.05;
+  const gap = 0.025;
+  const cols = 3;
+  const rows = 2;
+  const contentW = 1 - margin * 2;
+  const headerH = 0.11;
+  const footerH = 0.1;
+  const headerY = 0.045;
+  const footerY = 1 - margin - footerH;
+  const gridTop = headerY + headerH + 0.045;
+  const gridBottom = footerY - 0.04;
+  const gridH = Math.max(0.2, gridBottom - gridTop);
+  const cellW = (contentW - gap * (cols - 1)) / cols;
+  const cellH = (gridH - gap * (rows - 1)) / rows;
+  const cells = (card.gridTexts.length ? card.gridTexts : []).slice(0, cols * rows);
+  while (cells.length < cols * rows) {
+    cells.push(`항목 ${cells.length + 1}`);
+  }
+
+  const layers: TextLayer[] = [
+    boxedLayer(card.headerText, "top", {
+      manualX: margin,
+      manualY: headerY,
+      boxW: contentW,
+      boxH: headerH,
+      fontSize: 36,
+      boxColor: "#0F766E",
+      color: "white",
+    }),
+  ];
+
+  cells.forEach((label, index) => {
+    const col = index % cols;
+    const row = Math.floor(index / cols);
+    layers.push(
+      boxedLayer(label, "center", {
+        manualX: margin + col * (cellW + gap),
+        manualY: gridTop + row * (cellH + gap),
+        boxW: cellW,
+        boxH: cellH,
+        fontSize: 26,
+        boxColor: "#FFFFFF",
+        color: "inkBlack",
+      })
+    );
+  });
+
+  layers.push(
+    boxedLayer(card.footerText, "bottom", {
+      manualX: margin,
+      manualY: footerY,
+      boxW: contentW,
+      boxH: footerH,
+      fontSize: 26,
+      boxColor: "#134E4A",
+      color: "white",
+    })
+  );
+
+  return layers;
+}
+
 export const TEMPLATE_01_CARDS: Template01Card[] = [
   {
     id: 1,
     title: "환절기 면역력 관리 포스터",
     desc: "단면 · 세로형 9:16",
+    layoutType: "simple",
     bg: "https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&w=400&q=80",
     text1: "잘 쉬고 있나요?",
     text2: "환절기 면역력을 높이자!",
     text3: "지금 바로 상담하세요 | 010 1234 5678",
+  },
+  {
+    id: 2,
+    title: "환절기 면역력 관리 포스터",
+    desc: "단면 · 세로형 9:16 (구조형 레이아웃)",
+    layoutType: "structured-grid",
+    headerText: "2090 환절기 건강관리 첫걸음",
+    gridTexts: [
+      "면역력 수칙 1",
+      "면역력 수칙 2",
+      "면역력 수칙 3",
+      "손씻기·마스크",
+      "실내 환기",
+      "규칙적 운동",
+    ],
+    footerText: "문의 및 상담 안내 | 010 1234 5678",
   },
 ];
 
 export function template01CardToWarehouse(
   card: Template01Card
 ): WarehouseTemplate {
+  if (isStructuredTemplate01(card)) {
+    return {
+      id: `tpl-single-${card.id}`,
+      tab: "single",
+      title: card.title,
+      subtitle: card.desc,
+      formatId: "ratio-9-16",
+      pageCount: 1,
+      thumbClass: "bg-teal-900",
+      backgroundUrl: buildStructuredGridBackgroundDataUrl(),
+      textLayersByPage: [buildStructuredGridTextLayers(card)],
+    };
+  }
   return {
     id: `tpl-single-${card.id}`,
     tab: "single",

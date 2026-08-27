@@ -9,11 +9,68 @@ import {
   TEMPLATE_01_CARDS,
   TEMPLATE_WAREHOUSE_OPEN_EVENT,
   applyWarehouseTemplate,
+  isStructuredTemplate01,
   template01CardToWarehouse,
   templatesForTab,
+  type Template01Card,
   type WarehouseTabId,
   type WarehouseTemplate,
 } from "@/lib/templateWarehouse";
+
+function Template01CardPreview({ card }: { card: Template01Card }) {
+  if (isStructuredTemplate01(card)) {
+    const cells = [...card.gridTexts];
+    while (cells.length < 6) cells.push("");
+    return (
+      <div className="flex h-full w-full flex-col gap-1.5 bg-gradient-to-b from-teal-50 to-slate-200 p-2 sm:gap-2 sm:p-2.5">
+        <div className="flex shrink-0 items-center justify-center rounded-md bg-teal-700 px-1.5 py-2 text-center">
+          <p className="line-clamp-2 text-[9px] font-bold leading-tight text-white sm:text-[10px]">
+            {card.headerText}
+          </p>
+        </div>
+        <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-2 gap-1 sm:gap-1.5">
+          {cells.slice(0, 6).map((label, i) => (
+            <div
+              key={`${card.id}-cell-${i}`}
+              className="flex items-center justify-center rounded border border-teal-200/80 bg-white px-0.5 py-1 shadow-sm"
+            >
+              <p className="line-clamp-3 text-center text-[8px] font-semibold leading-tight text-slate-800 sm:text-[9px]">
+                {label}
+              </p>
+            </div>
+          ))}
+        </div>
+        <div className="flex shrink-0 items-center justify-center rounded-md bg-teal-900 px-1.5 py-1.5 text-center">
+          <p className="line-clamp-2 text-[8px] font-semibold leading-tight text-white/95 sm:text-[9px]">
+            {card.footerText}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={card.bg}
+        alt=""
+        className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+        loading="lazy"
+        decoding="async"
+      />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/15 to-transparent" />
+      <div className="absolute inset-x-0 bottom-0 space-y-1 p-2.5 sm:p-3">
+        <p className="line-clamp-2 text-[11px] font-semibold leading-snug text-white drop-shadow sm:text-[12px]">
+          {card.text1}
+        </p>
+        <p className="line-clamp-2 text-[10px] leading-snug text-white/85 drop-shadow sm:text-[11px]">
+          {card.text2}
+        </p>
+      </div>
+    </>
+  );
+}
 
 const TABS: Array<{
   id: WarehouseTabId;
@@ -173,23 +230,7 @@ export default function TemplateWarehouseModal() {
                       className="relative aspect-[9/16] w-full overflow-hidden bg-slate-900"
                       aria-hidden
                     >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={card.bg}
-                        alt=""
-                        className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
-                        loading="lazy"
-                        decoding="async"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/15 to-transparent" />
-                      <div className="absolute inset-x-0 bottom-0 space-y-1 p-2.5 sm:p-3">
-                        <p className="line-clamp-2 text-[11px] font-semibold leading-snug text-white drop-shadow sm:text-[12px]">
-                          {card.text1}
-                        </p>
-                        <p className="line-clamp-2 text-[10px] leading-snug text-white/85 drop-shadow sm:text-[11px]">
-                          {card.text2}
-                        </p>
-                      </div>
+                      <Template01CardPreview card={card} />
                     </div>
                     <div className="space-y-1 border-t border-white/8 px-2.5 py-2.5 sm:px-3 sm:py-3">
                       <p className="line-clamp-2 text-[13px] font-semibold leading-snug text-white sm:text-[14px]">
