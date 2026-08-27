@@ -16,6 +16,7 @@ import {
   Sparkles,
   UserRound,
 } from "lucide-react";
+import { PRINT_UNIFIED_EDITOR_PATH } from "@/lib/printUnifiedEditor";
 
 const PRIMARY_LINKS = [
   { href: "/", labelKey: "home" as const, authRequired: false },
@@ -269,6 +270,19 @@ export default function Navbar({ printWizardBack }: NavbarProps = {}) {
                 </Link>
               );
             })}
+            {/* TEMP: Screen 26 unified editor test entry — remove when no longer needed */}
+            <Link
+              href={PRINT_UNIFIED_EDITOR_PATH}
+              data-temp-nav="print-unified-editor-test"
+              title="Screen 26 통합 에디터 (테스트)"
+              className={`shrink-0 rounded-full border px-2.5 py-1.5 text-sm font-semibold transition-colors lg:px-3 ${
+                isActive(PRINT_UNIFIED_EDITOR_PATH)
+                  ? "border-emerald-400/50 bg-emerald-500/15 text-emerald-100"
+                  : "border-emerald-400/35 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20 hover:text-emerald-100"
+              }`}
+            >
+              새 에디터 테스트
+            </Link>
           </div>
 
           <div className="flex min-w-0 shrink-0 items-center gap-2 lg:gap-3">

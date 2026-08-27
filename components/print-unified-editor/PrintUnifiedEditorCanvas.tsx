@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useRef } from "react";
-import { Minus, Plus } from "lucide-react";
+import { Minus, Plus, Trash2 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { fillCanvas } from "@/lib/i18n";
+import CanvasUploadToolbar from "@/components/canvas/CanvasUploadToolbar";
 import PrintBlueprintOverlay from "@/components/print-wizard/PrintBlueprintOverlay";
 import PreviewDecoOverlay from "@/components/print-wizard/PreviewDecoOverlay";
 import PreviewPhotoOverlay from "@/components/print-wizard/PreviewPhotoOverlay";
@@ -29,6 +30,9 @@ import type {
 } from "@/lib/printWizardTypes";
 import { resolvePrintAspect } from "@/lib/printWizardTypes";
 import type { TextLayer } from "@/lib/thumbnailStyles";
+import type { PhotoKind } from "@/lib/canvas/addPhotoLayer";
+import type { RecentProjectNamespace } from "@/lib/canvas/recentProjects";
+import type { StudioCanvasProjectV1 } from "@/lib/canvas/projectFile";
 
 export type PrintUnifiedEditorCanvasProps = {
   formatId: PrintFormatId;
@@ -59,6 +63,13 @@ export type PrintUnifiedEditorCanvasProps = {
   onHideFoldGuides?: () => void;
   zoom: PrintUnifiedZoom;
   onZoomChange: (zoom: PrintUnifiedZoom) => void;
+  exportBusy?: boolean;
+  generating?: boolean;
+  requireSubscription?: () => boolean;
+  onInstallPhoto?: (file: File, mode: PhotoKind) => Promise<void>;
+  onOpenRecentProject?: (project: StudioCanvasProjectV1) => void;
+  onResetWorkspace?: () => void;
+  recentNamespace?: RecentProjectNamespace;
 };
 
 export default function PrintUnifiedEditorCanvas({
@@ -88,6 +99,13 @@ export default function PrintUnifiedEditorCanvas({
   onHideFoldGuides,
   zoom,
   onZoomChange,
+  exportBusy = false,
+  generating = false,
+  requireSubscription,
+  onInstallPhoto,
+  onOpenRecentProject,
+  onResetWorkspace,
+  recentNamespace = "screen_008",
 }: PrintUnifiedEditorCanvasProps) {
   const { t } = useI18n();
   const cs = t.canvasStudio;
@@ -133,13 +151,49 @@ export default function PrintUnifiedEditorCanvas({
   return (
     <section className="flex h-full min-h-0 flex-col gap-1">
       <header className="flex shrink-0 items-center gap-2 px-0.5 leading-none">
-        <h2 className="min-w-0 flex-1 truncate text-[12px] font-semibold tracking-tight text-slate-200 sm:text-[13px]">
+        <h2 className="shrink-0 text-[12px] font-semibold tracking-tight text-slate-200 [word-break:keep-all] sm:text-[13px]">
           {cs.printTitle}
         </h2>
         {pageLabel ? (
           <span className="shrink-0 rounded-md bg-indigo-500/20 px-2 py-0.5 text-[10px] font-bold text-indigo-200">
             {pageLabel}
           </span>
+        ) : null}
+        <div className="min-w-0 flex-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <CanvasUploadToolbar
+            dense
+            nowrap
+            className="justify-start"
+            actions="full"
+            disabled={exportBusy || generating}
+            requireSubscription={requireSubscription}
+            extraDeletable={
+              activePhotoLayerId
+                ? { id: activePhotoLayerId, type: "photo" }
+                : null
+            }
+            onInstallFile={onInstallPhoto}
+            onDeleteObject={(id, type) => {
+              if (type !== "photo" || !onPhotoLayersChange || !photoLayers) return;
+              onPhotoLayersChange(photoLayers.filter((layer) => layer.id !== id));
+              if (activePhotoLayerId === id) onActivePhotoLayerChange?.(null);
+            }}
+            onLoadRecentProject={onOpenRecentProject}
+            recentNamespace={recentNamespace}
+          />
+        </div>
+        {onResetWorkspace ? (
+          <button
+            type="button"
+            onClick={onResetWorkspace}
+            disabled={exportBusy || generating}
+            title={cs.reset}
+            aria-label={cs.reset}
+            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-red-400/40 bg-red-500/10 px-2 text-[10px] font-semibold leading-none text-red-200 transition hover:bg-red-500/20 disabled:opacity-40"
+          >
+            <Trash2 className="h-3 w-3 shrink-0" aria-hidden />
+            <span className="whitespace-nowrap">{cs.reset}</span>
+          </button>
         ) : null}
       </header>
 

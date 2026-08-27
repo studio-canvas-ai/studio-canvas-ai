@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import StudioExportButtonGroup from "@/components/canvas/StudioExportButtonGroup";
+import { useFeedback } from "@/components/FeedbackProvider";
 import SpecSettingsPanel from "@/components/print-wizard/SpecSettingsPanel";
 import PrintUnifiedEditorCanvas from "@/components/print-unified-editor/PrintUnifiedEditorCanvas";
 import PrintUnifiedEditorMiniThumbs from "@/components/print-unified-editor/PrintUnifiedEditorMiniThumbs";
@@ -14,11 +15,15 @@ import {
 } from "@/lib/printUnifiedEditor";
 import {
   editorSlotCount,
+  applySemanticPageLayout,
   reconcileLayerTypographyBox,
   referencePrintStageSize,
   resizeIndependentPages,
 } from "@/lib/printWizardTextLayers";
 import { usePrintWizardExport } from "@/lib/canvas/usePrintWizardExport";
+import { useCanvasStore } from "@/lib/canvas/canvasStore";
+import type { PhotoKind } from "@/lib/canvas/addPhotoLayer";
+import type { StudioCanvasProjectV1 } from "@/lib/canvas/projectFile";
 import { buildPagePrintAiContext } from "@/lib/printWizardAiContext";
 import {
   generatePrintBackgroundPages,
@@ -32,6 +37,10 @@ import {
 } from "@/lib/printWizardDecoLayers";
 import { compositePrintWizardPageBlob, printWizardHasExportableFrame } from "@/lib/printWizardComposite";
 import {
+  createPrintPhotoLayerFromFile,
+  resizePhotoPages,
+} from "@/lib/printWizardPhotoLayers";
+import {
   defaultPrintWizardState,
   formatById,
   markSpecPick,
@@ -42,6 +51,7 @@ import {
   type PrintDecoLayer,
   type PrintFormatId,
   type PrintPageCount,
+  type PrintPhotoLayer,
   type PrintUseId,
   type PrintWizardState,
 } from "@/lib/printWizardTypes";
@@ -94,6 +104,7 @@ function hydrateInitialState(): PrintWizardState {
  * Screen 26 — one-page unified print editor (canvas + specs + design tools).
  */
 export default function PrintUnifiedEditor() {
+  const { showToast } = useFeedback();
   const [state, setState] = useState<PrintWizardState>(defaultPrintWizardState);
   const [hydrated, setHydrated] = useState(false);
   /** 0 until the user clicks a page tab — no canvas guides on first paint. */
@@ -101,6 +112,9 @@ export default function PrintUnifiedEditor() {
   const [zoom, setZoom] = useState<PrintUnifiedZoom>(1);
   const [generating, setGenerating] = useState(false);
   const [activeTextLayerId, setActiveTextLayerId] = useState<string | null>(
+    null
+  );
+  const [activePhotoLayerId, setActivePhotoLayerId] = useState<string | null>(
     null
   );
   const [activeDecoLayerId, setActiveDecoLayerId] = useState<string | null>(
@@ -137,6 +151,11 @@ export default function PrintUnifiedEditor() {
   const decoLayersByPage = useMemo(
     () => resizeDecoPages(state.decoLayersByPage, state.pageCount),
     [state.decoLayersByPage, state.pageCount]
+  );
+
+  const photoLayersByPage = useMemo(
+    () => resizePhotoPages(state.photoLayersByPage, state.pageCount),
+    [state.photoLayersByPage, state.pageCount]
   );
 
   const pageActivated = currentPage > 0;
@@ -214,6 +233,138 @@ export default function PrintUnifiedEditor() {
       });
     },
     []
+  );
+
+  const updatePhotoLayersForPage = useCallback(
+    (idx: number, layers: PrintPhotoLayer[]) => {
+      setState((prev) => {
+        const pages = resizePhotoPages(prev.photoLayersByPage, prev.pageCount);
+        const nextPages = pages.map((pageLayers, i) =>
+          i === idx ? layers : pageLayers
+        );
+        const next = { ...prev, photoLayersByPage: nextPages };
+        saveSession(next);
+        return next;
+      });
+    },
+    []
+  );
+
+  const onInstallPhoto = useCallback(
+    async (file: File, mode: PhotoKind) => {
+      if (!pageActivated) {
+        showToast("페이지를 먼저 선택해 주세요.", "info");
+        return;
+      }
+      const pageIdx = currentPage - 1;
+      const aspect = resolvePrintAspect(
+        stateRef.current.formatId,
+        stateRef.current.customSize
+      );
+      const stageW = 1080;
+      const stageH = Math.max(1, Math.round(stageW / Math.max(aspect, 0.05)));
+      const stackIndex = photoLayersByPage[pageIdx]?.length ?? 0;
+      const layer = await createPrintPhotoLayerFromFile(file, {
+        mode,
+        stageW,
+        stageH,
+        stackIndex,
+      });
+      updatePhotoLayersForPage(pageIdx, [
+        ...(photoLayersByPage[pageIdx] ?? []),
+        layer,
+      ]);
+      setActivePhotoLayerId(layer.id);
+      setActiveTextLayerId(null);
+      setActiveDecoLayerId(null);
+    },
+    [
+      currentPage,
+      pageActivated,
+      photoLayersByPage,
+      showToast,
+      updatePhotoLayersForPage,
+    ]
+  );
+
+  const resetWorkspace = useCallback(() => {
+    const next: PrintWizardState = {
+      ...defaultPrintWizardState(),
+      pageCount: 8 as PrintPageCount,
+      wizardStep: 2,
+    };
+    next.textLayersByPage = resizeIndependentPages(
+      undefined,
+      editorSlotCount(next.pageCount)
+    ).map((page, i) => applySemanticPageLayout(page, i));
+    next.photoLayersByPage = [];
+    next.decoLayersByPage = [];
+    next.backgroundPansByPage = [];
+    saveSession(next);
+    setState(next);
+    setCurrentPage(0);
+    setZoom(1);
+    setGenerating(false);
+    setActiveTextLayerId(null);
+    setActivePhotoLayerId(null);
+    setActiveDecoLayerId(null);
+    useCanvasStore.getState().resetDocument();
+    showToast("편집 상태를 초기화했습니다.", "success");
+  }, [showToast]);
+
+  const onOpenRecentProject = useCallback(
+    (project: StudioCanvasProjectV1) => {
+      const pageIdx = pageActivated ? Math.max(0, currentPage - 1) : 0;
+      const layers = (project.studio.overlayLayers || []).map((l) => ({
+        ...l,
+        ranges: l.ranges?.map((r) => ({ ...r })) ?? [],
+      }));
+      const slots = editorSlotCount(state.pageCount);
+      const textPages = resizeIndependentPages(state.textLayersByPage, slots);
+      if (layers.length) {
+        textPages[pageIdx] = layers;
+      }
+      const bg = project.studio.backgroundUrl;
+      const backgroundUrls = [
+        ...(state.backgroundUrls?.length
+          ? state.backgroundUrls
+          : Array.from({ length: state.pageCount }, () => "")),
+      ];
+      while (backgroundUrls.length < state.pageCount) backgroundUrls.push("");
+      if (bg) backgroundUrls[pageIdx] = bg;
+
+      const next: PrintWizardState = {
+        ...state,
+        backgroundUrl: bg || state.backgroundUrl,
+        backgroundUrls,
+        textLayersByPage: textPages,
+        visualStyle: project.studio.visualStyle ?? state.visualStyle,
+        customSize: project.studio.customPrint
+          ? {
+              unit: project.studio.customPrint.unit,
+              width: project.studio.customPrint.width,
+              height: project.studio.customPrint.height,
+            }
+          : state.customSize,
+        formatId: project.studio.customPrint
+          ? ("free" as const)
+          : state.formatId,
+        wizardStep: 2,
+      };
+      saveSession(next);
+      setState(next);
+      if (pageActivated) {
+        setCurrentPage(pageIdx + 1);
+      }
+      setActiveTextLayerId(null);
+      setActivePhotoLayerId(null);
+      setActiveDecoLayerId(null);
+      showToast(
+        "최근 수정파일을 불러와 편집 상태를 복원했습니다.",
+        "success"
+      );
+    },
+    [currentPage, pageActivated, showToast, state]
   );
 
   const onDecoCatalogPick = useCallback(
@@ -354,6 +505,7 @@ export default function PrintUnifiedEditor() {
     pendingProjectKey: "print_unified_editor",
     recentNamespace: "screen_008",
     overlayLayers,
+    onApplyRecentProject: onOpenRecentProject,
     resolveExportImage: async (quality) => {
       if (!pageActivated || pageIndex < 0) {
         throw new Error("no_page_selected");
@@ -405,6 +557,16 @@ export default function PrintUnifiedEditor() {
             onTextLayersChange={(layers) =>
               onTextLayersChange(layers, { applyLayout: false })
             }
+            photoLayers={
+              pageActivated ? photoLayersByPage[pageIndex] : undefined
+            }
+            onPhotoLayersChange={
+              pageActivated
+                ? (layers) => updatePhotoLayersForPage(pageIndex, layers)
+                : undefined
+            }
+            activePhotoLayerId={activePhotoLayerId}
+            onActivePhotoLayerChange={setActivePhotoLayerId}
             decoLayers={
               pageActivated ? decoLayersByPage[pageIndex] : undefined
             }
@@ -421,6 +583,13 @@ export default function PrintUnifiedEditor() {
             onHideFoldGuides={() => patch({ foldGuidesHidden: true })}
             zoom={zoom}
             onZoomChange={setZoom}
+            exportBusy={exportBusy}
+            generating={generating}
+            requireSubscription={requireSubscription}
+            onInstallPhoto={onInstallPhoto}
+            onOpenRecentProject={onOpenRecentProject}
+            onResetWorkspace={resetWorkspace}
+            recentNamespace="screen_008"
           />
         }
         controls={
