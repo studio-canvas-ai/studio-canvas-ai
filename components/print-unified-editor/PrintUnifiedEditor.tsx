@@ -221,6 +221,20 @@ export default function PrintUnifiedEditor() {
   );
   const stateRef = useRef(state);
   stateRef.current = state;
+  /** Sync target page for layer writes — avoids stale blur/controlled wipes. */
+  const pageIndexRef = useRef(-1);
+  const pageEpochRef = useRef(0);
+  const pageActivatedRef = useRef(false);
+
+  const activatePage = useCallback((page: number) => {
+    pageEpochRef.current += 1;
+    pageIndexRef.current = Math.max(0, page - 1);
+    pageActivatedRef.current = page > 0;
+    setCurrentPage(page);
+    setActiveTextLayerId(null);
+    setActiveDecoLayerId(null);
+    setActivePhotoLayerId(null);
+  }, []);
 
   useEffect(() => {
     setState(hydrateInitialState());
@@ -267,14 +281,11 @@ export default function PrintUnifiedEditor() {
       };
       saveSession(next);
       setState(next);
-      setCurrentPage(1);
-      setActiveTextLayerId(null);
-      setActivePhotoLayerId(null);
-      setActiveDecoLayerId(null);
+      activatePage(1);
       setZoom(1);
       showToast(`템플릿 적용: ${detail.title}`, "success");
     },
-    [showToast]
+    [activatePage, showToast]
   );
 
   /** Template Warehouse → apply seed layout onto this editor (additive listener). */
@@ -321,55 +332,53 @@ export default function PrintUnifiedEditor() {
 
   const pageActivated = currentPage > 0;
   const pageIndex = pageActivated ? currentPage - 1 : -1;
+  pageActivatedRef.current = pageActivated;
+  pageIndexRef.current = pageIndex;
+
   const aspect = resolvePrintAspect(state.formatId, state.customSize);
   const typographyStage = useMemo(
     () => referencePrintStageSize(aspect),
     [aspect]
   );
 
-  const overlayLayers = useMemo(() => {
+  /**
+   * Active page layers from multi-page state — raw, no layout re-seed.
+   * Screen 8/24 parity: empty placeholders stay invisible without showEmptyGuideBoxes;
+   * never filter/write a transformed copy back into pages[i].
+   */
+  const activeTextLayers = useMemo(() => {
     if (!pageActivated || pageIndex < 0) return [];
-    const raw = textLayersByPage[pageIndex] ?? [];
-    // Screen 8/24 parity: never invent empty dashed guide boxes.
-    // Only real text layers render; snap lines appear on drag in PreviewTextOverlay.
-    const withText = raw.filter((l) => String(l.text || "").trim());
-    if (!withText.length) return [];
-    return applyUnifiedEditorPageLayout(
-      withText,
-      pageIndex,
-      typographyStage.w,
-      typographyStage.h
-    );
-  }, [
-    textLayersByPage,
-    pageIndex,
-    pageActivated,
-    typographyStage.w,
-    typographyStage.h,
-  ]);
+    return textLayersByPage[pageIndex] ?? [];
+  }, [textLayersByPage, pageIndex, pageActivated]);
 
   const onTextLayersChange = useCallback(
     (
       layers: TextLayer[],
       options?: { applyLayout?: boolean }
     ) => {
-      if (!pageActivated || pageIndex < 0) return;
+      const idx = pageIndexRef.current;
+      const epoch = pageEpochRef.current;
+      if (!pageActivatedRef.current || idx < 0) return;
+
       const nextLayers =
         options?.applyLayout === false
           ? layers
           : applyUnifiedEditorPageLayout(
               layers,
-              pageIndex,
+              idx,
               typographyStage.w,
               typographyStage.h
             );
+
       setState((prev) => {
+        // Page switched after this write was queued (blur / controlled sync).
+        if (epoch !== pageEpochRef.current || idx !== pageIndexRef.current) {
+          return prev;
+        }
         const pages = resizeBlankIsolatedPages(
           prev.textLayersByPage,
           prev.pageCount
         );
-        // Canvas drag/resize (applyLayout: false) must keep boxW/boxH/manual*
-        // as committed — reconcile would wipe boxManual and snap the box back.
         const savedLayers =
           options?.applyLayout === false
             ? nextLayers
@@ -380,20 +389,22 @@ export default function PrintUnifiedEditor() {
                   typographyStage.h
                 )
               );
-        const nextPages = pages.map((page, idx) =>
-          idx === pageIndex ? savedLayers : page
+        const nextPages = pages.map((page, i) =>
+          i === idx ? savedLayers : page
         );
         const next = { ...prev, textLayersByPage: nextPages };
         saveSession(next);
         return next;
       });
     },
-    [pageIndex, pageActivated, typographyStage.h, typographyStage.w]
+    [typographyStage.h, typographyStage.w]
   );
 
   const updateDecoLayersForPage = useCallback(
     (idx: number, layers: PrintDecoLayer[]) => {
+      const epoch = pageEpochRef.current;
       setState((prev) => {
+        if (epoch !== pageEpochRef.current) return prev;
         const pages = resizeDecoPages(prev.decoLayersByPage, prev.pageCount);
         const nextPages = pages.map((pageLayers, i) =>
           i === idx ? layers : pageLayers
@@ -408,7 +419,9 @@ export default function PrintUnifiedEditor() {
 
   const updatePhotoLayersForPage = useCallback(
     (idx: number, layers: PrintPhotoLayer[]) => {
+      const epoch = pageEpochRef.current;
       setState((prev) => {
+        if (epoch !== pageEpochRef.current) return prev;
         const pages = resizePhotoPages(prev.photoLayersByPage, prev.pageCount);
         const nextPages = pages.map((pageLayers, i) =>
           i === idx ? layers : pageLayers
@@ -556,10 +569,7 @@ export default function PrintUnifiedEditor() {
         };
         saveSession(next);
         setState(next);
-        setCurrentPage(1);
-        setActiveTextLayerId(null);
-        setActivePhotoLayerId(null);
-        setActiveDecoLayerId(null);
+        activatePage(1);
         showToast(
           "최근 수정파일을 불러와 편집 상태를 복원했습니다.",
           "success"
@@ -623,16 +633,13 @@ export default function PrintUnifiedEditor() {
       };
       saveSession(next);
       setState(next);
-      setCurrentPage(pageIdx + 1);
-      setActiveTextLayerId(null);
-      setActivePhotoLayerId(null);
-      setActiveDecoLayerId(null);
+      activatePage(pageIdx + 1);
       showToast(
         "최근 수정파일을 불러와 편집 상태를 복원했습니다.",
         "success"
       );
     },
-    [currentPage, pageActivated, showToast, state]
+    [activatePage, currentPage, pageActivated, showToast, state]
   );
 
   const updateContentOffsetForPage = useCallback(
@@ -735,13 +742,9 @@ export default function PrintUnifiedEditor() {
   const selectPage = useCallback(
     (page: number) => {
       if (page < 1 || page > state.pageCount) return;
-      // Never seed layout into other pages — only switch the active face.
-      setCurrentPage(page);
-      setActiveTextLayerId(null);
-      setActiveDecoLayerId(null);
-      setActivePhotoLayerId(null);
+      activatePage(page);
     },
-    [state.pageCount]
+    [activatePage, state.pageCount]
   );
 
   const backgroundUrl = useMemo(() => {
@@ -771,7 +774,7 @@ export default function PrintUnifiedEditor() {
     studioPath: "/print-unified-editor",
     pendingProjectKey: "print_unified_editor",
     recentNamespace: "screen_008",
-    overlayLayers,
+    overlayLayers: activeTextLayers,
     onApplyRecentProject: onOpenRecentProject,
     depositToSpace4: true,
     buildLookbookSnapshot: () =>
@@ -830,7 +833,7 @@ export default function PrintUnifiedEditor() {
             backgroundUrls={state.backgroundUrls}
             contentOffsetByPage={state.contentOffsetByPage}
             onContentOffsetChange={updateContentOffsetForPage}
-            textLayers={overlayLayers}
+            textLayers={activeTextLayers}
             onTextLayersChange={(layers) =>
               onTextLayersChange(layers, { applyLayout: false })
             }
@@ -966,7 +969,7 @@ export default function PrintUnifiedEditor() {
                 hideAiCommand
                 textLayersHost={hiddenTextHost}
                 initialBackgroundUrl={backgroundUrl}
-                controlledOverlayLayers={overlayLayers}
+                controlledOverlayLayers={activeTextLayers}
                 onControlledOverlayLayersChange={(layers) =>
                   onTextLayersChange(
                     layers.map((layer) =>
