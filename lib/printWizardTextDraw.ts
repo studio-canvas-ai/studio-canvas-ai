@@ -35,6 +35,68 @@ function layerGlyphPad(fontSize: number): { padX: number; padY: number } {
   };
 }
 
+/** Public pad formula — keep canvas paint and edit textarea in sync. */
+export function printLayerGlyphPad(fontSize: number): {
+  padX: number;
+  padY: number;
+} {
+  return layerGlyphPad(fontSize);
+}
+
+/**
+ * CSS padding for the inline edit textarea so glyphs sit on the same origin
+ * as `drawPrintLayerInBox` (pad + vertical center when align is center).
+ */
+export function layerEditTextPadding(
+  layer: TextLayer,
+  boxW: number,
+  boxH: number,
+  scale: number
+): {
+  paddingTop: number;
+  paddingRight: number;
+  paddingBottom: number;
+  paddingLeft: number;
+} {
+  const fontSize = Math.max(8, Math.round((layer.fontSize || 48) * scale));
+  const { padX, padY } = layerGlyphPad(fontSize);
+  const align = layer.align || "center";
+  const text = displayTextForLayer(layer);
+
+  let paddingTop = padY;
+  if (align === "center" && text.trim()) {
+    const lineHeightMul = layer.lineHeight ?? 1.25;
+    const lineHeightPx = fontSize * lineHeightMul;
+    const fontWeight = layer.fontWeight ?? 700;
+    const fontPreset = layer.fontPreset || "pretendard";
+    const letterSpacing =
+      formFieldFromLayerId(layer.id) === "date" ||
+      formFieldFromLayerId(layer.id) === "programs"
+        ? 0
+        : (layer.letterSpacing ?? 0) * scale;
+    const innerW = Math.max(8, boxW - padX * 2);
+
+    let lineCount = Math.max(1, text.split("\n").length);
+    if (typeof document !== "undefined") {
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.font = `${fontWeight} ${fontSize}px ${fontForText(fontPreset, text)}`;
+        lineCount = wrapMultiline(ctx, text, innerW, letterSpacing).length;
+      }
+    }
+    const blockH = lineCount * lineHeightPx;
+    paddingTop = Math.max(padY, (boxH - blockH) / 2);
+  }
+
+  return {
+    paddingTop,
+    paddingRight: padX,
+    paddingBottom: padY,
+    paddingLeft: padX,
+  };
+}
+
 function lineXForAlign(
   align: TextLayer["align"],
   lineW: number,

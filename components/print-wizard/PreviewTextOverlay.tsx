@@ -29,7 +29,7 @@ import {
   removeTextLayer,
   stripLayerPlaceholderPrefix,
 } from "@/lib/printWizardTextLayers";
-import { drawPrintLayerInBox } from "@/lib/printWizardTextDraw";
+import { drawPrintLayerInBox, layerEditTextPadding } from "@/lib/printWizardTextDraw";
 import { colorPresetFill, fontForText, type TextLayer } from "@/lib/thumbnailStyles";
 import { revealTextLayerField } from "@/lib/canvas/textLayerInteraction";
 
@@ -678,7 +678,7 @@ export default function PreviewTextOverlay({
                   onKeyDown={(e) => {
                     if (e.key === "Escape") setEditingId(null);
                   }}
-                  className={`canvas-inline-text-edit h-full w-full resize-none overflow-hidden border-0 bg-transparent p-0 outline-none ${alignClass}`}
+                  className={`canvas-inline-text-edit h-full w-full resize-none overflow-hidden border-0 bg-transparent outline-none ${alignClass}`}
                   style={{
                     color: colorPresetFill(layer.color),
                     fontFamily,
@@ -691,6 +691,13 @@ export default function PreviewTextOverlay({
                     overflowWrap: "anywhere",
                     wordBreak: "break-word",
                     boxSizing: "border-box",
+                    // Match drawPrintLayerInBox glyph origin (pad + vertical center).
+                    ...layerEditTextPadding(
+                      layer,
+                      box.width,
+                      box.height,
+                      scale
+                    ),
                   }}
                 />
               ) : (

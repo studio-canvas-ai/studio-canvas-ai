@@ -36,7 +36,11 @@ import {
   decoLayersByPageFromProject,
   photoLayersByPageFromProject,
 } from "@/lib/canvas/projectFile";
-import { capturePhotoLookbookSnapshot } from "@/lib/photoLookbookProject";
+import {
+  applyPhotoLookbookSnapshot,
+  capturePhotoLookbookSnapshot,
+  isPhotoLookbookSnapshot,
+} from "@/lib/photoLookbookProject";
 import { buildPagePrintAiContext } from "@/lib/printWizardAiContext";
 import {
   generatePrintBackgroundPages,
@@ -57,6 +61,8 @@ import {
   defaultPrintWizardState,
   formatById,
   markSpecPick,
+  normalizeFormatId,
+  PRINT_PAGE_COUNTS,
   resolvePrintAspect,
   useById,
   type BgPresetId,
@@ -76,6 +82,51 @@ const AiTemplateStudio = dynamic(
   () => import("@/components/AiTemplateStudio"),
   { ssr: false }
 );
+
+function coercePrintPageCount(
+  value: unknown,
+  fallback: PrintPageCount
+): PrintPageCount {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  const hit = PRINT_PAGE_COUNTS.find((p) => p.value === n);
+  return hit ? hit.value : fallback;
+}
+
+/** Keep restored layer boxes from being restacked into a single vertical column. */
+function preserveRestoredTextLayer(layer: TextLayer): TextLayer {
+  const next: TextLayer = {
+    ...layer,
+    ranges: layer.ranges?.map((r) => ({ ...r })) ?? [],
+  };
+  const hasManual =
+    typeof next.manualX === "number" &&
+    Number.isFinite(next.manualX) &&
+    typeof next.manualY === "number" &&
+    Number.isFinite(next.manualY);
+  const hasBox =
+    typeof next.boxW === "number" &&
+    next.boxW > 0 &&
+    typeof next.boxH === "number" &&
+    next.boxH > 0;
+  if (!hasManual && !hasBox) return next;
+  return {
+    ...next,
+    layoutLocked: true,
+    boxManual: true,
+  };
+}
+
+function cloneTextPagesFromWizard(
+  pages: TextLayer[][] | undefined,
+  pageCount: PrintPageCount
+): TextLayer[][] {
+  const slots = editorSlotCount(pageCount);
+  const cloned = (pages || []).map((page) =>
+    (page || []).map(preserveRestoredTextLayer)
+  );
+  return resizeIndependentPages(cloned, slots);
+}
 
 function readSession(key: string): PrintWizardState | null {
   if (typeof window === "undefined") return null;
@@ -399,11 +450,91 @@ export default function PrintUnifiedEditor() {
 
   const onOpenRecentProject = useCallback(
     (project: StudioCanvasProjectV1) => {
+      // Prefer full lookbook wizard maps so pages 1–N stay distributed (Screen 24 parity).
+      if (isPhotoLookbookSnapshot(project.lookbook)) {
+        const { wizard } = applyPhotoLookbookSnapshot(project.lookbook);
+        const pageCount = coercePrintPageCount(
+          wizard.pageCount,
+          state.pageCount
+        );
+        const formatId =
+          normalizeFormatId(wizard.formatId) ||
+          (project.studio.customPrint ? ("free" as const) : state.formatId);
+        const backgroundUrls = Array.from({ length: pageCount }, (_, i) => {
+          const fromWizard = wizard.backgroundUrls?.[i];
+          if (typeof fromWizard === "string" && fromWizard.trim()) {
+            return fromWizard;
+          }
+          if (i === 0 && wizard.backgroundUrl?.trim()) {
+            return wizard.backgroundUrl;
+          }
+          return "";
+        });
+        const backgroundUrl =
+          backgroundUrls.find((u) => u.trim()) ||
+          wizard.backgroundUrl ||
+          state.backgroundUrl;
+
+        const next: PrintWizardState = {
+          ...state,
+          ...wizard,
+          pageCount,
+          formatId,
+          useId: wizard.useId || state.useId,
+          customSize: project.studio.customPrint
+            ? {
+                unit: project.studio.customPrint.unit,
+                width: project.studio.customPrint.width,
+                height: project.studio.customPrint.height,
+              }
+            : (wizard.customSize ?? state.customSize),
+          backgroundUrl,
+          backgroundUrls,
+          backgroundPansByPage: resizeBackgroundPans(
+            wizard.backgroundPansByPage,
+            pageCount
+          ),
+          contentOffsetByPage: resizeContentOffsets(
+            wizard.contentOffsetByPage,
+            pageCount
+          ),
+          textLayersByPage: cloneTextPagesFromWizard(
+            wizard.textLayersByPage,
+            pageCount
+          ),
+          photoLayersByPage: resizePhotoPages(
+            wizard.photoLayersByPage,
+            pageCount
+          ),
+          decoLayersByPage: resizeDecoPages(
+            wizard.decoLayersByPage,
+            pageCount
+          ),
+          visualStyle:
+            wizard.visualStyle ??
+            project.studio.visualStyle ??
+            state.visualStyle,
+          inputs: wizard.inputs ?? state.inputs,
+          wizardStep: 2,
+        };
+        saveSession(next);
+        setState(next);
+        setCurrentPage(1);
+        setActiveTextLayerId(null);
+        setActivePhotoLayerId(null);
+        setActiveDecoLayerId(null);
+        showToast(
+          "최근 수정파일을 불러와 편집 상태를 복원했습니다.",
+          "success"
+        );
+        return;
+      }
+
+      // Legacy .sca without lookbook: map overlay + helpers onto current pageCount.
       const pageIdx = pageActivated ? Math.max(0, currentPage - 1) : 0;
-      const layers = (project.studio.overlayLayers || []).map((l) => ({
-        ...l,
-        ranges: l.ranges?.map((r) => ({ ...r })) ?? [],
-      }));
+      const layers = (project.studio.overlayLayers || []).map((l) =>
+        preserveRestoredTextLayer(l)
+      );
       const slots = editorSlotCount(state.pageCount);
       const textPages = resizeIndependentPages(state.textLayersByPage, slots);
       if (layers.length) {
@@ -453,9 +584,7 @@ export default function PrintUnifiedEditor() {
       };
       saveSession(next);
       setState(next);
-      if (pageActivated) {
-        setCurrentPage(pageIdx + 1);
-      }
+      setCurrentPage(pageIdx + 1);
       setActiveTextLayerId(null);
       setActivePhotoLayerId(null);
       setActiveDecoLayerId(null);

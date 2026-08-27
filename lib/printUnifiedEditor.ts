@@ -120,10 +120,10 @@ function applyWideGuideBoxes(
     if (layer.text.trim()) return layer;
 
     const zone = layerZone(layer);
-    const boxW = UNIFIED_GUIDE_BOX_W;
-    const boxH = UNIFIED_GUIDE_BOX_H[zone] ?? 0.05;
+    const defaultW = UNIFIED_GUIDE_BOX_W;
+    const defaultH = UNIFIED_GUIDE_BOX_H[zone] ?? 0.05;
 
-    // Preserve user-dragged guide positions (page 2+ snap-back fix).
+    // Preserve user-dragged / resized guide geometry (page 2+ snap-back + top-handle).
     if (
       layer.boxManual &&
       typeof layer.manualX === "number" &&
@@ -131,6 +131,14 @@ function applyWideGuideBoxes(
       typeof layer.manualY === "number" &&
       Number.isFinite(layer.manualY)
     ) {
+      const boxW =
+        typeof layer.boxW === "number" && layer.boxW > 0
+          ? layer.boxW
+          : defaultW;
+      const boxH =
+        typeof layer.boxH === "number" && layer.boxH > 0
+          ? layer.boxH
+          : defaultH;
       return {
         ...layer,
         layoutLocked: true,
@@ -142,6 +150,8 @@ function applyWideGuideBoxes(
       };
     }
 
+    const boxW = defaultW;
+    const boxH = defaultH;
     const widthPx = boxW * stageW;
     const heightPx = boxH * stageH;
     const x = (stageW - widthPx) / 2;
