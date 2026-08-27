@@ -726,21 +726,6 @@ export default function SpecSettingsPanel({
         />
       )}
 
-      {!isPhotoProduct ? (
-        <aside
-          role="note"
-          className="w-full shrink-0 rounded-xl border border-white/[0.08] bg-[#0E1420]/90 px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
-        >
-          <p className="text-[11px] font-semibold tracking-wide text-slate-400">
-            공개 템플릿 안내
-          </p>
-          <p className="mt-1.5 text-[12px] leading-5 text-slate-300/90 [word-break:keep-all] sm:text-[13px] sm:leading-6">
-            제작된 디자인은 운영자 검수를 거쳐 공개 템플릿(Space 3)으로
-            등록될 수 있으며, 타 유저가 열람 및 수정해 사용할 수 있습니다.
-          </p>
-        </aside>
-      ) : null}
-
       {/* Reserved empty space for future tools */}
       <div className="min-h-0 flex-1" aria-hidden />
     </section>
