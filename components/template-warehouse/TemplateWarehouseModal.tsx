@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Trash2, X } from "lucide-react";
 import { PRINT_UNIFIED_EDITOR_PATH } from "@/lib/printUnifiedEditor";
 import {
+  TEMPLATE_01_A4_ASPECT,
   TEMPLATE_01_CARDS,
   TEMPLATE_WAREHOUSE_OPEN_EVENT,
   applyWarehouseTemplate,
@@ -23,21 +24,27 @@ import {
 
 function Template01CardPreview({ card }: { card: Template01Card }) {
   if (isModularTemplate01(card)) {
+    const textOf = (type: string) =>
+      card.textBlocks.find((b) => b.type === type)?.text ?? "";
+    const circles = ["circle-1", "circle-2", "circle-3"].map(textOf);
+    const steps = ["step-1", "step-2", "step-3", "step-4"].map(textOf);
     return (
       <div className="flex h-full w-full flex-col gap-1 bg-gradient-to-b from-orange-50 to-slate-200 p-2 sm:gap-1.5 sm:p-2.5">
-        <div className="flex shrink-0 flex-col items-center justify-center rounded-md bg-orange-700 px-1.5 py-1.5 text-center">
+        <div className="flex shrink-0 items-center justify-center overflow-hidden rounded-md bg-orange-700 px-1.5 py-1.5 text-center">
           <p className="line-clamp-2 text-[8px] font-bold leading-tight text-white sm:text-[9px]">
-            {card.heroBanner.title}
+            {textOf("hero-title")}
           </p>
-          <p className="mt-0.5 line-clamp-1 text-[7px] text-orange-100 sm:text-[8px]">
-            {card.heroBanner.subtitle}
+        </div>
+        <div className="flex shrink-0 items-center justify-center overflow-hidden rounded-md bg-orange-600 px-1.5 py-1 text-center">
+          <p className="line-clamp-1 text-[7px] font-semibold text-orange-50 sm:text-[8px]">
+            {textOf("hero-sub")}
           </p>
         </div>
         <div className="grid shrink-0 grid-cols-3 gap-1">
-          {card.circularItems.slice(0, 3).map((label) => (
+          {circles.map((label, i) => (
             <div
-              key={label}
-              className="flex aspect-square items-center justify-center rounded-full border border-orange-200 bg-orange-100 px-0.5"
+              key={`c-${i}`}
+              className="flex aspect-square items-center justify-center overflow-hidden rounded-full border border-orange-200 bg-orange-100 px-0.5"
             >
               <p className="line-clamp-3 text-center text-[6px] font-semibold leading-tight text-slate-800 sm:text-[7px]">
                 {label}
@@ -46,28 +53,22 @@ function Template01CardPreview({ card }: { card: Template01Card }) {
           ))}
         </div>
         <div className="grid min-h-0 flex-1 grid-cols-2 gap-1">
-          {card.comparisonCards.slice(0, 2).map((cmp) => (
+          {["card-l-title", "card-r-title"].map((type) => (
             <div
-              key={cmp.title}
-              className="flex flex-col justify-center rounded border border-orange-200 bg-white px-1 py-1 shadow-sm"
+              key={type}
+              className="flex items-center justify-center overflow-hidden rounded border border-orange-200 bg-white px-1 py-1 shadow-sm"
             >
-              <p className="line-clamp-1 text-[7px] font-bold text-slate-800 sm:text-[8px]">
-                {cmp.title}
-              </p>
-              <p className="line-clamp-1 text-[6px] text-orange-700 sm:text-[7px]">
-                {cmp.supportText}
-              </p>
-              <p className="line-clamp-1 text-[7px] font-semibold text-slate-900 sm:text-[8px]">
-                {cmp.amount}
+              <p className="line-clamp-4 text-center text-[6px] font-semibold leading-tight text-slate-800 sm:text-[7px]">
+                {textOf(type)}
               </p>
             </div>
           ))}
         </div>
         <div className="space-y-0.5">
-          {card.stepFlow.slice(0, 4).map((step, i) => (
+          {steps.map((step, i) => (
             <div
-              key={step}
-              className={`rounded px-1 py-0.5 ${
+              key={`s-${i}`}
+              className={`overflow-hidden rounded px-1 py-0.5 ${
                 i % 2 === 0 ? "bg-orange-200/80" : "bg-orange-300/70"
               }`}
             >
@@ -77,9 +78,9 @@ function Template01CardPreview({ card }: { card: Template01Card }) {
             </div>
           ))}
         </div>
-        <div className="flex shrink-0 items-center justify-center rounded-md bg-orange-950 px-1.5 py-1 text-center">
+        <div className="flex shrink-0 items-center justify-center overflow-hidden rounded-md bg-orange-950 px-1.5 py-1 text-center">
           <p className="line-clamp-1 text-[7px] font-semibold text-white/95 sm:text-[8px]">
-            {card.footerText}
+            {textOf("footer")}
           </p>
         </div>
       </div>
@@ -388,7 +389,8 @@ export default function TemplateWarehouseModal() {
                       className="group flex w-full flex-col overflow-hidden rounded-2xl border border-white/12 bg-black/30 text-left transition hover:border-emerald-400/50 hover:bg-emerald-500/10 hover:shadow-[0_12px_40px_rgba(16,185,129,0.12)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400"
                     >
                       <div
-                        className="relative aspect-[9/16] w-full overflow-hidden bg-slate-900"
+                        className="relative w-full overflow-hidden bg-slate-900"
+                        style={{ aspectRatio: String(TEMPLATE_01_A4_ASPECT) }}
                         aria-hidden
                       >
                         <Template01CardPreview card={card} />

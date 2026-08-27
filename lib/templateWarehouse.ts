@@ -103,20 +103,33 @@ export type Template01NestedCard = {
   footerText: string;
 };
 
+export type Template01ModularTextBlock = {
+  id: string;
+  type:
+    | "hero-title"
+    | "hero-sub"
+    | "circle-1"
+    | "circle-2"
+    | "circle-3"
+    | "card-l-title"
+    | "card-r-title"
+    | "step-1"
+    | "step-2"
+    | "step-3"
+    | "step-4"
+    | "footer"
+    | string;
+  text: string;
+};
+
 export type Template01ModularCard = {
   id: number;
   title: string;
   desc: string;
   layoutType: "modular-block-system";
-  heroBanner: { title: string; subtitle: string };
-  circularItems: string[];
-  comparisonCards: Array<{
-    title: string;
-    supportText: string;
-    amount: string;
-  }>;
-  stepFlow: string[];
-  footerText: string;
+  aspectRatio?: "A4";
+  /** Each entry becomes one independent layoutLocked text box on the canvas. */
+  textBlocks: Template01ModularTextBlock[];
 };
 
 export type Template01Card =
@@ -124,6 +137,10 @@ export type Template01Card =
   | Template01StructuredCard
   | Template01NestedCard
   | Template01ModularCard;
+
+/** Template 01 warehouse + canvas use fixed A4 portrait (210∶297 ≈ 1∶1.414). */
+export const TEMPLATE_01_A4_ASPECT = 210 / 297;
+export const TEMPLATE_01_FORMAT_ID = "a4" as const;
 
 export function isStructuredTemplate01(
   card: Template01Card
@@ -205,9 +222,9 @@ export function buildNestedBoxesBackgroundDataUrl(): string {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
-/** Hearing-aid / modular public poster page fill. */
+/** Hearing-aid / modular public poster page fill (A4 210×297). */
 export function buildModularBlockBackgroundDataUrl(): string {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1600" viewBox="0 0 900 1600">
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="794" height="1123" viewBox="0 0 794 1123">
   <defs>
     <linearGradient id="page" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="#FFF7ED"/>
@@ -215,11 +232,11 @@ export function buildModularBlockBackgroundDataUrl(): string {
       <stop offset="100%" stop-color="#E2E8F0"/>
     </linearGradient>
   </defs>
-  <rect width="900" height="1600" fill="url(#page)"/>
-  <rect x="32" y="32" width="836" height="1536" rx="26" fill="none" stroke="#FDBA74" stroke-width="3"/>
-  <circle cx="160" cy="420" r="70" fill="#FED7AA" opacity="0.45"/>
-  <circle cx="450" cy="420" r="70" fill="#FDBA74" opacity="0.35"/>
-  <circle cx="740" cy="420" r="70" fill="#FB923C" opacity="0.28"/>
+  <rect width="794" height="1123" fill="url(#page)"/>
+  <rect x="28" y="28" width="738" height="1067" rx="22" fill="none" stroke="#FDBA74" stroke-width="3"/>
+  <circle cx="140" cy="300" r="58" fill="#FED7AA" opacity="0.45"/>
+  <circle cx="397" cy="300" r="58" fill="#FDBA74" opacity="0.35"/>
+  <circle cx="654" cy="300" r="58" fill="#FB923C" opacity="0.28"/>
 </svg>`;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
@@ -445,105 +462,156 @@ export function buildNestedBoxesTextLayers(
 }
 
 /**
- * Modular block system: hero banner + circular slots + comparison cards +
- * 4-step flow + footer. Each block is its own layoutLocked text layer so Screen 26
- * can move / edit / delete blocks independently via existing layer tools.
+ * Modular block system — one independent layoutLocked box per textBlock.
+ * Screen 26 can move / edit / delete each box via existing layer tools (no Screen 26 edits).
  */
 export function buildModularBlockTextLayers(
   card: Template01ModularCard
 ): TextLayer[] {
-  const margin = 0.045;
-  const gap = 0.02;
+  const margin = 0.05;
+  const gap = 0.018;
   const contentW = 1 - margin * 2;
+  const blocks = card.textBlocks;
+
+  const byType = (type: string) => blocks.find((b) => b.type === type);
   const layers: TextLayer[] = [];
 
-  const heroY = 0.035;
-  const heroH = 0.12;
-  layers.push(
-    boxedLayer(`${card.heroBanner.title}\n${card.heroBanner.subtitle}`, "top", {
+  const push = (
+    block: Template01ModularTextBlock | undefined,
+    geom: Parameters<typeof boxedLayer>[2] & { pos?: TextLayer["pos"] }
+  ) => {
+    if (!block?.text.trim()) return;
+    const { pos = "center", ...rest } = geom;
+    const layer = boxedLayer(block.text, pos, rest);
+    layer.id = `tpl01-mod-${card.id}-${block.id}`;
+    layers.push(layer);
+  };
+
+  const heroTitleY = 0.04;
+  const heroTitleH = 0.08;
+  push(byType("hero-title"), {
+    pos: "top",
+    manualX: margin,
+    manualY: heroTitleY,
+    boxW: contentW,
+    boxH: heroTitleH,
+    fontSize: 30,
+    boxColor: "#C2410C",
+    color: "white",
+  });
+
+  const heroSubY = heroTitleY + heroTitleH + 0.012;
+  const heroSubH = 0.055;
+  push(byType("hero-sub"), {
+    pos: "top",
+    manualX: margin,
+    manualY: heroSubY,
+    boxW: contentW,
+    boxH: heroSubH,
+    fontSize: 22,
+    boxColor: "#EA580C",
+    color: "white",
+  });
+
+  const circleTypes = ["circle-1", "circle-2", "circle-3"] as const;
+  const circleGap = 0.025;
+  const circleW = (contentW - circleGap * 2) / 3;
+  const circleH = 0.1;
+  const circleY = heroSubY + heroSubH + 0.028;
+  circleTypes.forEach((type, index) => {
+    push(byType(type), {
+      manualX: margin + index * (circleW + circleGap),
+      manualY: circleY,
+      boxW: circleW,
+      boxH: circleH,
+      fontSize: 18,
+      boxColor: "#FFEDD5",
+      color: "inkBlack",
+      lineHeight: 1.2,
+    });
+  });
+
+  const cardGap = 0.022;
+  const cardW = (contentW - cardGap) / 2;
+  const cardH = 0.12;
+  const cardY = circleY + circleH + 0.028;
+  push(byType("card-l-title"), {
+    manualX: margin,
+    manualY: cardY,
+    boxW: cardW,
+    boxH: cardH,
+    fontSize: 18,
+    boxColor: "#FFFFFF",
+    color: "inkBlack",
+    lineHeight: 1.3,
+  });
+  push(byType("card-r-title"), {
+    manualX: margin + cardW + cardGap,
+    manualY: cardY,
+    boxW: cardW,
+    boxH: cardH,
+    fontSize: 18,
+    boxColor: "#FFFFFF",
+    color: "inkBlack",
+    lineHeight: 1.3,
+  });
+
+  const stepTypes = ["step-1", "step-2", "step-3", "step-4"] as const;
+  const stepH = 0.065;
+  const stepY0 = cardY + cardH + 0.028;
+  stepTypes.forEach((type, index) => {
+    push(byType(type), {
       manualX: margin,
-      manualY: heroY,
+      manualY: stepY0 + index * (stepH + gap),
       boxW: contentW,
-      boxH: heroH,
-      fontSize: 28,
-      boxColor: "#C2410C",
-      color: "white",
-      lineHeight: 1.3,
-    })
-  );
-
-  const circleCount = Math.min(3, Math.max(1, card.circularItems.length));
-  const circleGap = 0.03;
-  const circleW = (contentW - circleGap * (circleCount - 1)) / circleCount;
-  const circleH = 0.11;
-  const circleY = heroY + heroH + 0.028;
-  card.circularItems.slice(0, circleCount).forEach((label, index) => {
-    layers.push(
-      boxedLayer(label, "center", {
-        manualX: margin + index * (circleW + circleGap),
-        manualY: circleY,
-        boxW: circleW,
-        boxH: circleH,
-        fontSize: 20,
-        boxColor: "#FFEDD5",
-        color: "inkBlack",
-      })
-    );
+      boxH: stepH,
+      fontSize: 18,
+      boxColor: index % 2 === 0 ? "#FED7AA" : "#FDBA74",
+      color: "inkBlack",
+      align: "left",
+    });
   });
 
-  const compareCount = Math.min(2, Math.max(1, card.comparisonCards.length));
-  const compareGap = 0.025;
-  const compareW = (contentW - compareGap * (compareCount - 1)) / compareCount;
-  const compareH = 0.16;
-  const compareY = circleY + circleH + 0.03;
-  card.comparisonCards.slice(0, compareCount).forEach((cmp, index) => {
-    layers.push(
-      boxedLayer(`${cmp.title}\n${cmp.supportText}\n${cmp.amount}`, "center", {
-        manualX: margin + index * (compareW + compareGap),
-        manualY: compareY,
-        boxW: compareW,
-        boxH: compareH,
-        fontSize: 22,
-        boxColor: "#FFFFFF",
-        color: "inkBlack",
-        lineHeight: 1.35,
-      })
-    );
-  });
-
-  const steps = card.stepFlow.slice(0, 4);
-  while (steps.length < 4) steps.push(`0${steps.length + 1}. 단계`);
-  const stepGap = 0.015;
-  const stepH = 0.07;
-  const stepY = compareY + compareH + 0.028;
-  steps.forEach((step, index) => {
-    layers.push(
-      boxedLayer(step, "center", {
-        manualX: margin,
-        manualY: stepY + index * (stepH + stepGap),
-        boxW: contentW,
-        boxH: stepH,
-        fontSize: 20,
-        boxColor: index % 2 === 0 ? "#FED7AA" : "#FDBA74",
-        color: "inkBlack",
-        align: "left",
-      })
-    );
-  });
-
-  const footerH = 0.09;
+  const footerH = 0.08;
   const footerY = 1 - margin - footerH;
-  layers.push(
-    boxedLayer(card.footerText, "bottom", {
+  push(byType("footer"), {
+    pos: "bottom",
+    manualX: margin,
+    manualY: footerY,
+    boxW: contentW,
+    boxH: footerH,
+    fontSize: 22,
+    boxColor: "#7C2D12",
+    color: "white",
+  });
+
+  // Any extra / unknown typed blocks: stack below steps so future data still applies.
+  const known = new Set([
+    "hero-title",
+    "hero-sub",
+    "circle-1",
+    "circle-2",
+    "circle-3",
+    "card-l-title",
+    "card-r-title",
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "footer",
+  ]);
+  const extras = blocks.filter((b) => !known.has(b.type));
+  extras.forEach((block, index) => {
+    push(block, {
       manualX: margin,
-      manualY: footerY,
+      manualY: Math.min(0.78, stepY0 + 4 * (stepH + gap) + index * 0.07),
       boxW: contentW,
-      boxH: footerH,
-      fontSize: 24,
-      boxColor: "#7C2D12",
-      color: "white",
-    })
-  );
+      boxH: 0.06,
+      fontSize: 18,
+      boxColor: "#FFF7ED",
+      color: "inkBlack",
+    });
+  });
 
   return layers;
 }
@@ -553,7 +621,7 @@ export const TEMPLATE_01_CARDS: Template01Card[] = [
   {
     id: 1,
     title: "환절기 면역력 관리 포스터",
-    desc: "단면 · 세로형 9:16",
+    desc: "단면 · A4 세로형",
     layoutType: "simple",
     bg: "https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&w=400&q=80",
     text1: "잘 쉬고 있나요?",
@@ -563,7 +631,7 @@ export const TEMPLATE_01_CARDS: Template01Card[] = [
   {
     id: 2,
     title: "환절기 면역력 관리 포스터",
-    desc: "단면 · 세로형 9:16 (구조형 레이아웃)",
+    desc: "단면 · A4 구조형 레이아웃",
     layoutType: "structured-grid",
     headerText: "2090 환절기 건강관리 첫걸음",
     gridTexts: [
@@ -579,7 +647,7 @@ export const TEMPLATE_01_CARDS: Template01Card[] = [
   {
     id: 3,
     title: "환절기 면역력 관리 포스터",
-    desc: "단면 · 전문가형 구조형 격자",
+    desc: "단면 · A4 전문가형 구조형 격자",
     layoutType: "structured-grid",
     headerText: "2090 환절기 건강관리 첫걸음",
     gridTexts: [
@@ -595,7 +663,7 @@ export const TEMPLATE_01_CARDS: Template01Card[] = [
   {
     id: 4,
     title: "성인 필수 예방접종 안내",
-    desc: "단면 · 전문가형 다중박스 레이아웃",
+    desc: "단면 · A4 전문가형 다중박스 레이아웃",
     layoutType: "nested-boxes",
     badgeText: "18세 이상 성인 필수",
     mainTitle: "예방접종 안내",
@@ -617,32 +685,31 @@ export const TEMPLATE_01_CARDS: Template01Card[] = [
   {
     id: 5,
     title: "보청기 구입 지원금 안내 포스터",
-    desc: "단면 · 모듈형 블록 시스템 (A4)",
+    desc: "단면 · 모듈형 블록 시스템 (A4 고정)",
     layoutType: "modular-block-system",
-    heroBanner: {
-      title: "보청기 구입할 때 지원금 받자",
-      subtitle: "정부 지원금 최대 혜택 안내",
-    },
-    circularItems: ["귓속형 보청기", "오픈형 보청기", "프리미엄형"],
-    comparisonCards: [
+    aspectRatio: "A4",
+    textBlocks: [
+      { id: "b1", type: "hero-title", text: "보청기 구입할 때 지원금 받자" },
+      { id: "b2", type: "hero-sub", text: "정부 지원금 최대 혜택 안내" },
+      { id: "b3", type: "circle-1", text: "귓속형 보청기" },
+      { id: "b4", type: "circle-2", text: "오픈형 보청기" },
+      { id: "b5", type: "circle-3", text: "프리미엄형" },
       {
-        title: "일반형 / 차상위",
-        supportText: "정부 지원금 90%",
-        amount: "111만 9천원",
+        id: "b6",
+        type: "card-l-title",
+        text: "일반형 / 차상위 (정부 지원금 90% / 111만 9천원)",
       },
       {
-        title: "기초수급자",
-        supportText: "정부 지원금 100%",
-        amount: "131만원",
+        id: "b7",
+        type: "card-r-title",
+        text: "기초수급자 (정부 지원금 100% / 131만원)",
       },
+      { id: "b8", type: "step-1", text: "01. 국민건강보험공단 등록" },
+      { id: "b9", type: "step-2", text: "02. 보조기기 처방전 발급" },
+      { id: "b10", type: "step-3", text: "03. 보청기 구입 및 검수" },
+      { id: "b11", type: "step-4", text: "04. 지원금 청구 및 지급" },
+      { id: "b12", type: "footer", text: "빠른 상담 | 1588-0000" },
     ],
-    stepFlow: [
-      "01. 국민건강보험공단 등록",
-      "02. 보조기기 처방전 발급",
-      "03. 보청기 구입 및 검수",
-      "04. 지원금 청구 및 지급",
-    ],
-    footerText: "빠른 상담 | 1588-0000",
   },
 ];
 
@@ -655,7 +722,7 @@ export function template01CardToWarehouse(
       tab: "single",
       title: card.title,
       subtitle: card.desc,
-      formatId: "a4",
+      formatId: TEMPLATE_01_FORMAT_ID,
       pageCount: 1,
       thumbClass: "bg-orange-900",
       backgroundUrl: buildModularBlockBackgroundDataUrl(),
@@ -668,7 +735,7 @@ export function template01CardToWarehouse(
       tab: "single",
       title: card.title,
       subtitle: card.desc,
-      formatId: "ratio-9-16",
+      formatId: TEMPLATE_01_FORMAT_ID,
       pageCount: 1,
       thumbClass: "bg-blue-900",
       backgroundUrl: buildNestedBoxesBackgroundDataUrl(),
@@ -681,7 +748,7 @@ export function template01CardToWarehouse(
       tab: "single",
       title: card.title,
       subtitle: card.desc,
-      formatId: "ratio-9-16",
+      formatId: TEMPLATE_01_FORMAT_ID,
       pageCount: 1,
       thumbClass: "bg-teal-900",
       backgroundUrl: buildStructuredGridBackgroundDataUrl(),
@@ -693,7 +760,7 @@ export function template01CardToWarehouse(
     tab: "single",
     title: card.title,
     subtitle: card.desc,
-    formatId: "ratio-9-16",
+    formatId: TEMPLATE_01_FORMAT_ID,
     pageCount: 1,
     thumbClass: "bg-slate-800",
     backgroundUrl: card.bg,

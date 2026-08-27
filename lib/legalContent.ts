@@ -1,7 +1,14 @@
+export type LegalCallout = {
+  label: string;
+  text: string;
+};
+
 export type LegalSection = {
   title: string;
   paragraphs?: string[];
   bullets?: string[];
+  /** Highlighted legal notice cards (dark-mode callouts). */
+  callouts?: LegalCallout[];
 };
 
 export type LegalDocument = {
@@ -28,9 +35,16 @@ const COMPANY_BLOCK_EN = [
   "Email: studiocanvas.cs@gmail.com",
 ];
 
-const UPDATED_AT = "2026-08-19";
+const UPDATED_AT = "2026-08-27";
 /** Privacy policy revision date (KR/EN privacy documents). */
 const PRIVACY_UPDATED_AT = "2026-08-08";
+
+/** Official content-license clause (KR) — user-created / published works. */
+export const CONTENT_LICENSE_CLAUSE_KR =
+  "유저가 플랫폼 내에서 제작·공개한 콘텐츠에 대하여, 스튜디오캔버스AI는 서비스 운영, 마케팅, 공공 템플릿 제공 및 큐레이션을 위한 비독점적, 무상, 지역 제한 없는 이용허락(라이선스) 및 2차적저작물 작성권을 가집니다.";
+
+export const CONTENT_LICENSE_CLAUSE_EN =
+  "For content that users create or publish on the platform, Studio Canvas AI is granted a non-exclusive, royalty-free, worldwide license (including the right to create derivative works) to use such content for service operation, marketing, public template offerings, and curation.";
 
 export const TERMS_KR: LegalDocument = {
   title: "이용약관",
@@ -91,11 +105,20 @@ export const TERMS_KR: LegalDocument = {
     },
     {
       title: "제7조 (AI 생성물, 지식재산권 및 이용자 책임)",
+      paragraphs: [
+        "본 조는 서비스 내 업로드·제작·공개 콘텐츠의 권리 귀속과 이용허락(라이선스)에 관한 기준을 정합니다.",
+      ],
       bullets: [
         "이용자가 서비스 내에 업로드한 원본 사진 및 콘텐츠의 권리는 원칙적으로 이용자에게 있으며, 이용자는 이에 대한 적법한 권리(저작권, 초상권 등)를 보유하거나 이용 허락을 받았음을 보증합니다.",
         "서비스가 생성한 결과물의 이용 범위는 이용자가 가입한 요금제 및 관련 안내에 따릅니다.",
         "이용자가 타인의 사진, 저작물, 초상권, 상표권 등을 무단으로 도용하거나 허락 없이 업로드하여 에디터로 편집·가공하고, 이를 다운로드(PNG/SCA)하거나 대외적으로 유통·배포하는 행위는 엄격히 금지됩니다.",
         "딥페이크, 불법 촬영물, 음란물, 명예훼손, 기타 관계 법령에 위반되는 콘텐츠를 생성·유통하는 경우, 회사는 사전 통보 없이 계정을 즉시 정지·해지할 수 있으며, 이로 인해 발생하는 모든 민·형사상의 법적 책임은 전적으로 이용자 본인에게 있습니다.",
+      ],
+      callouts: [
+        {
+          label: "콘텐츠의 권리 및 이용허락",
+          text: CONTENT_LICENSE_CLAUSE_KR,
+        },
       ],
     },
     {
@@ -214,6 +237,8 @@ function buildInternationalTerms(input: {
   refundBullets: string[];
   aiTitle: string;
   aiBullets: string[];
+  contentLicenseLabel?: string;
+  contentLicenseText?: string;
   restrictTitle: string;
   restrict: string;
   contactTitle: string;
@@ -252,6 +277,15 @@ function buildInternationalTerms(input: {
       {
         title: input.aiTitle,
         bullets: input.aiBullets,
+        callouts:
+          input.contentLicenseLabel && input.contentLicenseText
+            ? [
+                {
+                  label: input.contentLicenseLabel,
+                  text: input.contentLicenseText,
+                },
+              ]
+            : undefined,
       },
       {
         title: input.restrictTitle,
@@ -306,6 +340,8 @@ export const TERMS_EN: LegalDocument = buildInternationalTerms({
     "Rights to photos uploaded by the user remain with the user.",
     "Unauthorized use of others’ photos, deepfakes, or illegal/obscene content may result in immediate account suspension without prior notice. Legal liability rests with the user.",
   ],
+  contentLicenseLabel: "Content Rights & License",
+  contentLicenseText: CONTENT_LICENSE_CLAUSE_EN,
   restrictTitle: "8. Service Restrictions",
   restrict:
     "The Company may restrict use or suspend accounts if terms violations, abuse, or fraudulent payments are confirmed.",

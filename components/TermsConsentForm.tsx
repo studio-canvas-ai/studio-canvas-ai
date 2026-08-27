@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { safePostConsentPath } from "@/lib/termsConsent";
+import { CONTENT_LICENSE_CLAUSE_KR } from "@/lib/legalContent";
 
 export default function TermsConsentForm({
   nextPath,
@@ -60,6 +61,27 @@ export default function TermsConsentForm({
           계정이 등록됩니다.
         </p>
       </div>
+
+      <aside className="rounded-2xl border border-amber-400/25 bg-gradient-to-br from-amber-500/[0.08] via-white/[0.03] to-transparent p-4 shadow-[0_10px_32px_rgba(0,0,0,0.35)]">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-200/85">
+          콘텐츠의 권리 및 이용허락
+        </p>
+        <p className="mt-2 text-[13px] leading-6 text-white/80 sm:text-sm sm:leading-7">
+          “{CONTENT_LICENSE_CLAUSE_KR}”
+        </p>
+        <p className="mt-2 text-[11px] leading-5 text-white/45">
+          자세한 내용은{" "}
+          <Link
+            href="/terms"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline underline-offset-2 hover:text-white/70"
+          >
+            이용약관 제7조
+          </Link>
+          에서 확인할 수 있습니다.
+        </p>
+      </aside>
 
       <div className="space-y-3">
         <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 transition hover:border-white/20">
