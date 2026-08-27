@@ -9,6 +9,7 @@ import {
   TEMPLATE_01_CARDS,
   TEMPLATE_WAREHOUSE_OPEN_EVENT,
   applyWarehouseTemplate,
+  isNestedTemplate01,
   isStructuredTemplate01,
   template01CardToWarehouse,
   templatesForTab,
@@ -18,6 +19,63 @@ import {
 } from "@/lib/templateWarehouse";
 
 function Template01CardPreview({ card }: { card: Template01Card }) {
+  if (isNestedTemplate01(card)) {
+    const [leftBox, rightBox] = card.subBoxes;
+    return (
+      <div className="flex h-full w-full flex-col gap-1.5 bg-gradient-to-b from-blue-50 to-slate-200 p-2 sm:gap-2 sm:p-2.5">
+        <div className="mx-auto flex shrink-0 items-center justify-center rounded-full bg-blue-700 px-2 py-1 text-center">
+          <p className="line-clamp-1 text-[8px] font-bold text-white sm:text-[9px]">
+            {card.badgeText}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center justify-center rounded-md bg-blue-900 px-1.5 py-2 text-center">
+          <p className="line-clamp-2 text-[9px] font-bold leading-tight text-white sm:text-[10px]">
+            {card.mainTitle}
+          </p>
+        </div>
+        <div className="grid min-h-0 flex-1 grid-cols-2 gap-1 sm:gap-1.5">
+          {[leftBox, rightBox].map((box, i) =>
+            box ? (
+              <div
+                key={`${card.id}-sub-${i}`}
+                className="flex flex-col overflow-hidden rounded-md border border-blue-200 bg-slate-50 shadow-sm"
+              >
+                <div className="shrink-0 bg-blue-100 px-1 py-1 text-center">
+                  <p className="line-clamp-2 text-[7px] font-bold text-blue-900 sm:text-[8px]">
+                    {box.title}
+                  </p>
+                </div>
+                <div className="min-h-0 flex-1 space-y-0.5 p-1">
+                  {box.items?.slice(0, 4).map((item) => (
+                    <p
+                      key={item}
+                      className="line-clamp-1 text-[7px] text-slate-700 sm:text-[8px]"
+                    >
+                      • {item}
+                    </p>
+                  ))}
+                  {box.infoLines?.map((line) => (
+                    <p
+                      key={line}
+                      className="line-clamp-2 text-[7px] leading-tight text-slate-700 sm:text-[8px]"
+                    >
+                      {line}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            ) : null
+          )}
+        </div>
+        <div className="flex shrink-0 items-center justify-center rounded-md bg-slate-900 px-1.5 py-1.5 text-center">
+          <p className="line-clamp-2 text-[8px] font-semibold leading-tight text-white/95 sm:text-[9px]">
+            {card.footerText}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (isStructuredTemplate01(card)) {
     const cells = [...card.gridTexts];
     while (cells.length < 6) cells.push("");

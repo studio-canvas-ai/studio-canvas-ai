@@ -86,12 +86,38 @@ export type Template01StructuredCard = {
   footerText: string;
 };
 
-export type Template01Card = Template01SimpleCard | Template01StructuredCard;
+export type Template01NestedSubBox = {
+  title: string;
+  items?: string[];
+  infoLines?: string[];
+};
+
+export type Template01NestedCard = {
+  id: number;
+  title: string;
+  desc: string;
+  layoutType: "nested-boxes";
+  badgeText: string;
+  mainTitle: string;
+  subBoxes: Template01NestedSubBox[];
+  footerText: string;
+};
+
+export type Template01Card =
+  | Template01SimpleCard
+  | Template01StructuredCard
+  | Template01NestedCard;
 
 export function isStructuredTemplate01(
   card: Template01Card
 ): card is Template01StructuredCard {
   return card.layoutType === "structured-grid";
+}
+
+export function isNestedTemplate01(
+  card: Template01Card
+): card is Template01NestedCard {
+  return card.layoutType === "nested-boxes";
 }
 
 /** Soft clinic-style page fill for structured-grid templates (no Screen 26 changes). */
@@ -110,6 +136,33 @@ export function buildStructuredGridBackgroundDataUrl(): string {
   <circle cx="120" cy="1280" r="160" fill="#A7F3D0" opacity="0.35"/>
 </svg>`;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+/** Medical / public-info page fill for nested-box templates. */
+export function buildNestedBoxesBackgroundDataUrl(): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1600" viewBox="0 0 900 1600">
+  <defs>
+    <linearGradient id="page" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#EFF6FF"/>
+      <stop offset="50%" stop-color="#F8FAFC"/>
+      <stop offset="100%" stop-color="#E2E8F0"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="1600" fill="url(#page)"/>
+  <rect x="40" y="40" width="820" height="1520" rx="24" fill="none" stroke="#BFDBFE" stroke-width="3"/>
+  <rect x="64" y="300" width="772" height="980" rx="20" fill="none" stroke="#93C5FD" stroke-width="2" stroke-dasharray="8 6"/>
+</svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+function formatNestedSubBoxBody(box: Template01NestedSubBox): string {
+  if (box.items?.length) {
+    return box.items.map((item) => `• ${item}`).join("\n");
+  }
+  if (box.infoLines?.length) {
+    return box.infoLines.join("\n");
+  }
+  return "";
 }
 
 function boxedLayer(
@@ -214,6 +267,111 @@ export function buildStructuredGridTextLayers(
   return layers;
 }
 
+/** Badge + title banner + side-by-side nested sub-boxes + footer contact bar. */
+export function buildNestedBoxesTextLayers(
+  card: Template01NestedCard
+): TextLayer[] {
+  const margin = 0.05;
+  const gap = 0.025;
+  const contentW = 1 - margin * 2;
+  const badgeW = 0.62;
+  const badgeH = 0.055;
+  const badgeX = margin + (contentW - badgeW) / 2;
+  const badgeY = 0.042;
+  const titleY = badgeY + badgeH + 0.028;
+  const titleH = 0.105;
+  const subTop = titleY + titleH + 0.035;
+  const footerH = 0.095;
+  const footerY = 1 - margin - footerH;
+  const subH = Math.max(0.36, footerY - subTop - 0.04);
+  const subW = (contentW - gap) / 2;
+  const subBoxes = card.subBoxes.slice(0, 2);
+  while (subBoxes.length < 2) {
+    subBoxes.push({ title: `안내 ${subBoxes.length + 1}`, items: [] });
+  }
+
+  const layers: TextLayer[] = [
+    boxedLayer(card.badgeText, "top", {
+      manualX: badgeX,
+      manualY: badgeY,
+      boxW: badgeW,
+      boxH: badgeH,
+      fontSize: 22,
+      boxColor: "#1D4ED8",
+      color: "white",
+    }),
+    boxedLayer(card.mainTitle, "top", {
+      manualX: margin,
+      manualY: titleY,
+      boxW: contentW,
+      boxH: titleH,
+      fontSize: 38,
+      boxColor: "#1E3A8A",
+      color: "white",
+    }),
+  ];
+
+  subBoxes.forEach((box, index) => {
+    const subX = margin + index * (subW + gap);
+    const innerPad = 0.012;
+    const headerH = 0.065;
+    const bodyY = subTop + headerH + 0.018;
+    const bodyH = subH - headerH - 0.03;
+
+    layers.push(
+      boxedLayer(" ", "center", {
+        manualX: subX,
+        manualY: subTop,
+        boxW: subW,
+        boxH: subH,
+        fontSize: 16,
+        boxColor: "#F8FAFC",
+        color: "inkBlack",
+      })
+    );
+    layers.push(
+      boxedLayer(box.title, "center", {
+        manualX: subX + innerPad,
+        manualY: subTop + innerPad,
+        boxW: subW - innerPad * 2,
+        boxH: headerH,
+        fontSize: 20,
+        boxColor: "#DBEAFE",
+        color: "deepBlue",
+      })
+    );
+    layers.push(
+      boxedLayer(formatNestedSubBoxBody(box), "center", {
+        manualX: subX + innerPad,
+        manualY: bodyY,
+        boxW: subW - innerPad * 2,
+        boxH: bodyH,
+        fontSize: 19,
+        boxColor: "#FFFFFF",
+        boxOpacity: 0.88,
+        color: "inkBlack",
+        align: "left",
+        lineHeight: 1.35,
+      })
+    );
+  });
+
+  layers.push(
+    boxedLayer(card.footerText, "bottom", {
+      manualX: margin,
+      manualY: footerY,
+      boxW: contentW,
+      boxH: footerH,
+      fontSize: 24,
+      boxColor: "#0F172A",
+      color: "white",
+    })
+  );
+
+  return layers;
+}
+
+/** Expert Template 01 catalog — append entries; modal renders large scrollable grid cards. */
 export const TEMPLATE_01_CARDS: Template01Card[] = [
   {
     id: 1,
@@ -241,11 +399,62 @@ export const TEMPLATE_01_CARDS: Template01Card[] = [
     ],
     footerText: "문의 및 상담 안내 | 010 1234 5678",
   },
+  {
+    id: 3,
+    title: "환절기 면역력 관리 포스터",
+    desc: "단면 · 전문가형 구조형 격자",
+    layoutType: "structured-grid",
+    headerText: "2090 환절기 건강관리 첫걸음",
+    gridTexts: [
+      "면역력 수칙 1",
+      "면역력 수칙 2",
+      "면역력 수칙 3",
+      "손씻기·마스크",
+      "실내 환기",
+      "규칙적 운동",
+    ],
+    footerText: "문의 및 상담 안내 | 010 1234 5678",
+  },
+  {
+    id: 4,
+    title: "성인 필수 예방접종 안내",
+    desc: "단면 · 전문가형 다중박스 레이아웃",
+    layoutType: "nested-boxes",
+    badgeText: "18세 이상 성인 필수",
+    mainTitle: "예방접종 안내",
+    subBoxes: [
+      {
+        title: "백신 접종 항목",
+        items: ["A형간염", "B형간염", "파상풍", "인플루엔자", "대상포진", "폐렴구균"],
+      },
+      {
+        title: "이용 안내",
+        infoLines: [
+          "접종 시간: 평일 09:00 ~ 18:00",
+          "문의 전화: 02-000-1234",
+        ],
+      },
+    ],
+    footerText: "미리미리 예방하세요 | 010 1234 5678",
+  },
 ];
 
 export function template01CardToWarehouse(
   card: Template01Card
 ): WarehouseTemplate {
+  if (isNestedTemplate01(card)) {
+    return {
+      id: `tpl-single-${card.id}`,
+      tab: "single",
+      title: card.title,
+      subtitle: card.desc,
+      formatId: "ratio-9-16",
+      pageCount: 1,
+      thumbClass: "bg-blue-900",
+      backgroundUrl: buildNestedBoxesBackgroundDataUrl(),
+      textLayersByPage: [buildNestedBoxesTextLayers(card)],
+    };
+  }
   if (isStructuredTemplate01(card)) {
     return {
       id: `tpl-single-${card.id}`,
