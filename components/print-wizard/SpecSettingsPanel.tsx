@@ -735,7 +735,7 @@ export default function SpecSettingsPanel({
             공개 템플릿 안내
           </p>
           <p className="mt-1.5 text-[12px] leading-5 text-slate-300/90 [word-break:keep-all] sm:text-[13px] sm:leading-6">
-            제작·공개된 디자인은 운영자 검수를 거쳐 공개 템플릿(Space 3)으로
+            제작된 디자인은 운영자 검수를 거쳐 공개 템플릿(Space 3)으로
             등록될 수 있으며, 타 유저가 열람 및 수정해 사용할 수 있습니다.
           </p>
         </aside>
