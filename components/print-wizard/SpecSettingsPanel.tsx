@@ -60,6 +60,8 @@ export type SpecSettingsPanelProps = {
   generatingKind?: "background" | "subject" | null;
   /** Photo wizard shows the short pictorial use list only. */
   productId?: WizardProductId;
+  /** Screen 26: expand to content height (no inner scrollbar / clipped CTA). */
+  fitContent?: boolean;
   onFormatChange: (id: PrintFormatId) => void;
   onCustomSizeApply: (size: PrintCustomSize) => void;
   onUseChange: (id: PrintUseId) => void;
@@ -111,6 +113,7 @@ export default function SpecSettingsPanel({
   generating = false,
   generatingKind = null,
   productId = "print",
+  fitContent = false,
   onFormatChange,
   onCustomSizeApply,
   onUseChange,
@@ -293,7 +296,13 @@ export default function SpecSettingsPanel({
   );
 
   return (
-    <section className="flex h-full min-h-0 flex-col gap-2.5 overflow-y-auto rounded-2xl border border-slate-800 bg-[#121824] p-3 shadow-[0_8px_32px_rgba(0,0,0,0.35)] sm:p-3.5">
+    <section
+      className={
+        fitContent
+          ? "flex w-full flex-col gap-2.5 overflow-visible rounded-2xl border border-slate-800 bg-[#121824] p-3 shadow-[0_8px_32px_rgba(0,0,0,0.35)] sm:p-3.5"
+          : "flex h-full min-h-0 flex-col gap-2.5 overflow-y-auto rounded-2xl border border-slate-800 bg-[#121824] p-3 shadow-[0_8px_32px_rgba(0,0,0,0.35)] sm:p-3.5"
+      }
+    >
       {/* 규격 · 스타일 · 용도 · (인쇄: 장수) · 예시 · (인쇄: 분야) */}
       <div
         data-spec-row

@@ -691,9 +691,10 @@ export default function PrintUnifiedEditor() {
         }
         controls={
           <div className="flex h-full min-h-0 flex-col gap-2">
-            {/* Specs keep natural height; leftover middle space stays empty */}
-            <div className="min-h-0 max-h-[58%] shrink overflow-y-auto overscroll-contain">
+            {/* Specs + AI generate: natural height, no inner scroll / clipped CTA */}
+            <div className="shrink-0 overflow-visible">
               <SpecSettingsPanel
+                fitContent
                 formatId={state.formatId}
                 useId={state.useId}
                 pageCount={state.pageCount}
