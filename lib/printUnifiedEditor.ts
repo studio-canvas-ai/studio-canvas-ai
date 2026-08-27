@@ -47,11 +47,37 @@ export function nextUnifiedZoom(
   return PRINT_UNIFIED_ZOOM_LEVELS[next] ?? current;
 }
 
-const UNIFIED_GUIDE_BOX_W = 0.92;
+/** Free content-group pan (stage fractions). Unclamped — may leave frame. */
+export type PrintContentOffset = { x: number; y: number };
+
+export const DEFAULT_CONTENT_OFFSET: PrintContentOffset = { x: 0, y: 0 };
+
+export function normalizeContentOffset(
+  offset?: Partial<PrintContentOffset> | null
+): PrintContentOffset {
+  const x =
+    typeof offset?.x === "number" && Number.isFinite(offset.x) ? offset.x : 0;
+  const y =
+    typeof offset?.y === "number" && Number.isFinite(offset.y) ? offset.y : 0;
+  return { x, y };
+}
+
+export function resizeContentOffsets(
+  prev: PrintContentOffset[] | undefined,
+  pageCount: number
+): PrintContentOffset[] {
+  const out: PrintContentOffset[] = [];
+  for (let i = 0; i < pageCount; i++) {
+    out.push(normalizeContentOffset(prev?.[i]));
+  }
+  return out;
+}
+
+const UNIFIED_GUIDE_BOX_W = 0.92 * 0.8; // ~80% of prior width
 const UNIFIED_GUIDE_BOX_H: Record<SemanticZone, number> = {
-  top: 0.1,
-  center: 0.14,
-  bottom: 0.1,
+  top: 0.1 * 0.5,
+  center: 0.14 * 0.5,
+  bottom: 0.1 * 0.5,
 };
 
 function unifiedEditorBaseLayers(
@@ -63,6 +89,20 @@ function unifiedEditorBaseLayers(
   }
   if (layers.some((l) => l.text.trim())) {
     return applySemanticPageLayout(layers, pageIndex);
+  }
+  // Keep existing empty layers (drag coords / ids). Only seed when empty.
+  if (layers.length > 0) {
+    // Ensure top/center/bottom zone anchors without wiping geometry.
+    return PAGE_ZONE_ORDER.map((zone, slot) => {
+      const existing = layers[slot];
+      if (existing) {
+        return {
+          ...existing,
+          pos: existing.pos || zone,
+        };
+      }
+      return createPlaceholderLayer(pageIndex, slot);
+    });
   }
   const zones = PAGE_ZONE_ORDER.map((_, slot) =>
     createPlaceholderLayer(pageIndex, slot)
@@ -78,9 +118,30 @@ function applyWideGuideBoxes(
   const inset = printSafeInsetPx(stageW, stageH);
   return layers.map((layer) => {
     if (layer.text.trim()) return layer;
+
     const zone = layerZone(layer);
     const boxW = UNIFIED_GUIDE_BOX_W;
-    const boxH = UNIFIED_GUIDE_BOX_H[zone] ?? 0.1;
+    const boxH = UNIFIED_GUIDE_BOX_H[zone] ?? 0.05;
+
+    // Preserve user-dragged guide positions (page 2+ snap-back fix).
+    if (
+      layer.boxManual &&
+      typeof layer.manualX === "number" &&
+      Number.isFinite(layer.manualX) &&
+      typeof layer.manualY === "number" &&
+      Number.isFinite(layer.manualY)
+    ) {
+      return {
+        ...layer,
+        layoutLocked: true,
+        boxManual: true,
+        boxW,
+        boxH,
+        maxWidth: boxW,
+        align: "center" as const,
+      };
+    }
+
     const widthPx = boxW * stageW;
     const heightPx = boxH * stageH;
     const x = (stageW - widthPx) / 2;

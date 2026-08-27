@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Minus, Plus, Trash2 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { fillCanvas } from "@/lib/i18n";
@@ -10,17 +10,19 @@ import PreviewDecoOverlay from "@/components/print-wizard/PreviewDecoOverlay";
 import PreviewPhotoOverlay from "@/components/print-wizard/PreviewPhotoOverlay";
 import PreviewTextOverlay from "@/components/print-wizard/PreviewTextOverlay";
 import {
+  DEFAULT_CONTENT_OFFSET,
   nextUnifiedZoom,
+  normalizeContentOffset,
   PRINT_UNIFIED_ZOOM_LEVELS,
+  type PrintContentOffset,
   type PrintUnifiedZoom,
 } from "@/lib/printUnifiedEditor";
-import { pageBackgroundUrl, bgPanObjectPosition } from "@/lib/printWizardBg";
+import { pageBackgroundUrl } from "@/lib/printWizardBg";
 import {
   resolvePrintBlueprint,
   shouldShowPrintBlueprint,
 } from "@/lib/printWizardBlueprint";
 import type {
-  PrintBackgroundPan,
   PrintCustomSize,
   PrintDecoLayer,
   PrintFormatId,
@@ -45,8 +47,11 @@ export type PrintUnifiedEditorCanvasProps = {
   pageActivated: boolean;
   backgroundUrl: string | null;
   backgroundUrls: (string | null)[];
-  backgroundPansByPage?: PrintBackgroundPan[];
-  onBackgroundPanChange?: (pageIndex: number, pan: PrintBackgroundPan) => void;
+  contentOffsetByPage?: PrintContentOffset[];
+  onContentOffsetChange?: (
+    pageIndex: number,
+    offset: PrintContentOffset
+  ) => void;
   textLayers: TextLayer[];
   onTextLayersChange: (layers: TextLayer[]) => void;
   photoLayers?: PrintPhotoLayer[];
@@ -72,6 +77,15 @@ export type PrintUnifiedEditorCanvasProps = {
   recentNamespace?: RecentProjectNamespace;
 };
 
+type ContentPanDrag = {
+  pageIndex: number;
+  startX: number;
+  startY: number;
+  origin: PrintContentOffset;
+  frameW: number;
+  frameH: number;
+};
+
 export default function PrintUnifiedEditorCanvas({
   formatId,
   useId,
@@ -81,8 +95,8 @@ export default function PrintUnifiedEditorCanvas({
   pageActivated,
   backgroundUrl,
   backgroundUrls,
-  backgroundPansByPage,
-  onBackgroundPanChange,
+  contentOffsetByPage,
+  onContentOffsetChange,
   textLayers,
   onTextLayersChange,
   photoLayers,
@@ -110,12 +124,16 @@ export default function PrintUnifiedEditorCanvas({
   const { t } = useI18n();
   const cs = t.canvasStudio;
   const viewportRef = useRef<HTMLDivElement>(null);
+  const contentPanRef = useRef<ContentPanDrag | null>(null);
+  const [contentPanning, setContentPanning] = useState(false);
   const pageIndex = Math.max(0, currentPage - 1);
   const aspect = resolvePrintAspect(formatId, customSize);
   const pageBg = pageActivated
     ? pageBackgroundUrl(backgroundUrls, backgroundUrl, pageIndex)
     : null;
-  const pan = pageActivated ? backgroundPansByPage?.[pageIndex] : undefined;
+  const contentOffset = pageActivated
+    ? normalizeContentOffset(contentOffsetByPage?.[pageIndex])
+    : DEFAULT_CONTENT_OFFSET;
   const blueprint =
     pageActivated && shouldShowPrintBlueprint(formatId, useId)
       ? resolvePrintBlueprint(
@@ -148,6 +166,64 @@ export default function PrintUnifiedEditorCanvas({
       ? fillCanvas(cs.pageOf, { page: currentPage, total: pageCount })
       : null;
 
+  const startContentPan = (e: React.PointerEvent<HTMLElement>) => {
+    if (!onContentOffsetChange || !pageActivated) return;
+    if (e.button !== 0 && e.pointerType === "mouse") return;
+    const t = e.target as HTMLElement;
+    if (
+      t.closest("[data-text-layer]") ||
+      t.closest("[data-photo-layer]") ||
+      t.closest("[data-deco-layer]") ||
+      t.closest("[data-blueprint-chrome]")
+    ) {
+      return;
+    }
+    const stage =
+      (e.currentTarget.closest("[data-page-stage]") as HTMLElement | null) ??
+      e.currentTarget;
+    const rect = stage.getBoundingClientRect();
+    if (rect.width < 8 || rect.height < 8) return;
+    e.stopPropagation();
+    if (e.pointerType === "touch") e.preventDefault();
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    contentPanRef.current = {
+      pageIndex,
+      startX: e.clientX,
+      startY: e.clientY,
+      origin: contentOffset,
+      frameW: rect.width,
+      frameH: rect.height,
+    };
+    setContentPanning(true);
+  };
+
+  useEffect(() => {
+    if (!contentPanning) return;
+    const onMove = (e: PointerEvent) => {
+      const drag = contentPanRef.current;
+      if (!drag || !onContentOffsetChange) return;
+      const dx = (e.clientX - drag.startX) / Math.max(1, drag.frameW);
+      const dy = (e.clientY - drag.startY) / Math.max(1, drag.frameH);
+      // 1:1 pan, unclamped — content may leave the page frame.
+      onContentOffsetChange(drag.pageIndex, {
+        x: drag.origin.x + dx,
+        y: drag.origin.y + dy,
+      });
+    };
+    const onUp = () => {
+      contentPanRef.current = null;
+      setContentPanning(false);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, [contentPanning, onContentOffsetChange]);
+
   return (
     <section className="flex h-full min-h-0 flex-col gap-1">
       <header className="flex shrink-0 items-center gap-2 px-0.5 leading-none">
@@ -174,8 +250,11 @@ export default function PrintUnifiedEditorCanvas({
             }
             onInstallFile={onInstallPhoto}
             onDeleteObject={(id, type) => {
-              if (type !== "photo" || !onPhotoLayersChange || !photoLayers) return;
-              onPhotoLayersChange(photoLayers.filter((layer) => layer.id !== id));
+              if (type !== "photo" || !onPhotoLayersChange || !photoLayers)
+                return;
+              onPhotoLayersChange(
+                photoLayers.filter((layer) => layer.id !== id)
+              );
               if (activePhotoLayerId === id) onActivePhotoLayerChange?.(null);
             }}
             onLoadRecentProject={onOpenRecentProject}
@@ -206,30 +285,36 @@ export default function PrintUnifiedEditorCanvas({
             <div className="flex h-full min-h-0 w-full items-center justify-center overflow-auto overscroll-contain p-1.5 sm:p-2 [container-type:size]">
               <div
                 data-page-card
-                className="relative shrink-0 overflow-visible rounded-md border border-slate-700/70 bg-[#0B0F19] shadow-[0_12px_36px_rgba(0,0,0,0.4)]"
+                className="relative shrink-0 overflow-hidden rounded-md border border-slate-700/70 bg-[#0B0F19] shadow-[0_12px_36px_rgba(0,0,0,0.4)]"
                 style={pageCardStyle}
               >
                 <div
                   data-page-stage
-                  className="absolute inset-0 overflow-visible"
+                  className={`absolute inset-0 overflow-hidden ${
+                    contentPanning ? "cursor-grabbing" : "cursor-grab"
+                  }`}
+                  onPointerDown={startContentPan}
                 >
-                    <div className="absolute inset-0 overflow-hidden rounded-md">
+                  {/* Background + overlays pan as one group (unclamped). */}
+                  <div
+                    data-content-group
+                    className="absolute inset-0 will-change-transform"
+                    style={{
+                      transform: `translate(${contentOffset.x * 100}%, ${contentOffset.y * 100}%)`,
+                    }}
+                  >
+                    <div className="absolute inset-0 overflow-visible">
                       {pageBg ? (
-                        <>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={pageBg}
-                            alt=""
-                            draggable={false}
-                            className="pointer-events-none absolute inset-0 h-full w-full object-cover"
-                            style={{
-                              objectPosition: pan
-                                ? bgPanObjectPosition(pan)
-                                : "50% 50%",
-                              animation: "pw-fade-in 0.45s ease forwards",
-                            }}
-                          />
-                        </>
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={pageBg}
+                          alt=""
+                          draggable={false}
+                          className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+                          style={{
+                            animation: "pw-fade-in 0.45s ease forwards",
+                          }}
+                        />
                       ) : (
                         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(99,102,241,0.22),transparent_55%),radial-gradient(ellipse_at_80%_80%,rgba(16,185,129,0.12),transparent_50%),linear-gradient(160deg,#121824,#0B0F19)]" />
                       )}
@@ -276,6 +361,7 @@ export default function PrintUnifiedEditorCanvas({
                     />
                   </div>
                 </div>
+              </div>
             </div>
           ) : (
             <div className="flex h-full min-h-[280px] w-full flex-col items-center justify-center gap-2 px-6 text-center">
@@ -292,43 +378,43 @@ export default function PrintUnifiedEditorCanvas({
 
         {pageActivated ? (
           <div className="pointer-events-none absolute bottom-3 right-3 z-20 flex items-center gap-1 rounded-lg border border-white/10 bg-black/70 p-0.5 shadow-lg backdrop-blur-sm">
-          <button
-            type="button"
-            aria-label="캔버스 축소"
-            title="축소"
-            onClick={() => onZoomChange(nextUnifiedZoom(zoom, -1))}
-            className="pointer-events-auto inline-flex h-7 w-7 items-center justify-center rounded-md text-white/85 transition hover:bg-white/10 hover:text-white disabled:opacity-35"
-            disabled={zoom <= 0.5}
-          >
-            <Minus className="h-3.5 w-3.5" aria-hidden />
-          </button>
-          <button
-            type="button"
-            aria-label={`캔버스 배율 ${zoomLabel}`}
-            title="배율 선택"
-            onClick={() => {
-              const idx = PRINT_UNIFIED_ZOOM_LEVELS.indexOf(zoom);
-              onZoomChange(
-                PRINT_UNIFIED_ZOOM_LEVELS[
-                  (idx + 1) % PRINT_UNIFIED_ZOOM_LEVELS.length
-                ] ?? 1
-              );
-            }}
-            className="pointer-events-auto inline-flex min-w-[3.25rem] items-center justify-center rounded-md px-1.5 py-1 text-[11px] font-bold tabular-nums text-emerald-300 transition hover:bg-white/10"
-          >
-            {zoomLabel}
-          </button>
-          <button
-            type="button"
-            aria-label="캔버스 확대"
-            title="확대"
-            onClick={() => onZoomChange(nextUnifiedZoom(zoom, 1))}
-            className="pointer-events-auto inline-flex h-7 w-7 items-center justify-center rounded-md text-white/85 transition hover:bg-white/10 hover:text-white disabled:opacity-35"
-            disabled={zoom >= 1.5}
-          >
-            <Plus className="h-3.5 w-3.5" aria-hidden />
-          </button>
-        </div>
+            <button
+              type="button"
+              aria-label="캔버스 축소"
+              title="축소"
+              onClick={() => onZoomChange(nextUnifiedZoom(zoom, -1))}
+              className="pointer-events-auto inline-flex h-7 w-7 items-center justify-center rounded-md text-white/85 transition hover:bg-white/10 hover:text-white disabled:opacity-35"
+              disabled={zoom <= 0.5}
+            >
+              <Minus className="h-3.5 w-3.5" aria-hidden />
+            </button>
+            <button
+              type="button"
+              aria-label={`캔버스 배율 ${zoomLabel}`}
+              title="배율 선택"
+              onClick={() => {
+                const idx = PRINT_UNIFIED_ZOOM_LEVELS.indexOf(zoom);
+                onZoomChange(
+                  PRINT_UNIFIED_ZOOM_LEVELS[
+                    (idx + 1) % PRINT_UNIFIED_ZOOM_LEVELS.length
+                  ] ?? 1
+                );
+              }}
+              className="pointer-events-auto inline-flex min-w-[3.25rem] items-center justify-center rounded-md px-1.5 py-1 text-[11px] font-bold tabular-nums text-emerald-300 transition hover:bg-white/10"
+            >
+              {zoomLabel}
+            </button>
+            <button
+              type="button"
+              aria-label="캔버스 확대"
+              title="확대"
+              onClick={() => onZoomChange(nextUnifiedZoom(zoom, 1))}
+              className="pointer-events-auto inline-flex h-7 w-7 items-center justify-center rounded-md text-white/85 transition hover:bg-white/10 hover:text-white disabled:opacity-35"
+              disabled={zoom >= 1.5}
+            >
+              <Plus className="h-3.5 w-3.5" aria-hidden />
+            </button>
+          </div>
         ) : null}
       </div>
     </section>

@@ -322,7 +322,8 @@ export function layerToBox(
     width = Math.max(8, layer.boxW! * stageW);
     const storedHPx =
       layer.boxH && layer.boxH > 0 ? Math.max(8, layer.boxH * stageH) : 0;
-    height = storedHPx > 0 ? Math.max(natural.height, storedHPx) : natural.height;
+    // Respect the user-resized height exactly (do not force natural glyph height).
+    height = storedHPx > 0 ? storedHPx : natural.height;
   } else if (layer.layoutLocked) {
     width = natural.width;
     height = natural.height;
@@ -361,6 +362,8 @@ export function reconcileLayerTypographyBox(
   stageH: number
 ): TextLayer {
   if (!layer.layoutLocked) return layer;
+  // User-resized / user-dragged box — keep geometry; text draws inside the box.
+  if (layer.boxManual) return layer;
   const box = typographySyncedBox(layer, stageW, stageH);
   const w = Math.max(1, stageW);
   const h = Math.max(1, stageH);

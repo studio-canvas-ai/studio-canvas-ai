@@ -11,6 +11,8 @@ import PrintUnifiedEditorLayout from "@/components/print-unified-editor/PrintUni
 import {
   PRINT_UNIFIED_EDITOR_SESSION_KEY,
   applyUnifiedEditorPageLayout,
+  resizeContentOffsets,
+  type PrintContentOffset,
   type PrintUnifiedZoom,
 } from "@/lib/printUnifiedEditor";
 import {
@@ -201,16 +203,20 @@ export default function PrintUnifiedEditor() {
       setState((prev) => {
         const slots = editorSlotCount(prev.pageCount);
         const pages = resizeIndependentPages(prev.textLayersByPage, slots);
-        const nextPages = pages.map((page, idx) =>
-          idx === pageIndex
-            ? nextLayers.map((layer) =>
+        // Canvas drag/resize (applyLayout: false) must keep boxW/boxH/manual*
+        // as committed — reconcile would wipe boxManual and snap the box back.
+        const savedLayers =
+          options?.applyLayout === false
+            ? nextLayers
+            : nextLayers.map((layer) =>
                 reconcileLayerTypographyBox(
                   layer,
                   typographyStage.w,
                   typographyStage.h
                 )
-              )
-            : page
+              );
+        const nextPages = pages.map((page, idx) =>
+          idx === pageIndex ? savedLayers : page
         );
         const next = { ...prev, textLayersByPage: nextPages };
         saveSession(next);
@@ -300,6 +306,7 @@ export default function PrintUnifiedEditor() {
     next.photoLayersByPage = [];
     next.decoLayersByPage = [];
     next.backgroundPansByPage = [];
+    next.contentOffsetByPage = [];
     saveSession(next);
     setState(next);
     setCurrentPage(0);
@@ -365,6 +372,22 @@ export default function PrintUnifiedEditor() {
       );
     },
     [currentPage, pageActivated, showToast, state]
+  );
+
+  const updateContentOffsetForPage = useCallback(
+    (idx: number, offset: PrintContentOffset) => {
+      setState((prev) => {
+        const pages = resizeContentOffsets(
+          prev.contentOffsetByPage,
+          prev.pageCount
+        );
+        const nextPages = pages.map((item, i) => (i === idx ? offset : item));
+        const next = { ...prev, contentOffsetByPage: nextPages };
+        saveSession(next);
+        return next;
+      });
+    },
+    []
   );
 
   const onDecoCatalogPick = useCallback(
@@ -552,7 +575,8 @@ export default function PrintUnifiedEditor() {
             pageActivated={pageActivated}
             backgroundUrl={state.backgroundUrl}
             backgroundUrls={state.backgroundUrls}
-            backgroundPansByPage={state.backgroundPansByPage}
+            contentOffsetByPage={state.contentOffsetByPage}
+            onContentOffsetChange={updateContentOffsetForPage}
             textLayers={overlayLayers}
             onTextLayersChange={(layers) =>
               onTextLayersChange(layers, { applyLayout: false })
@@ -593,8 +617,9 @@ export default function PrintUnifiedEditor() {
           />
         }
         controls={
-          <div className="flex h-full min-h-0 flex-col gap-3">
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <div className="flex h-full min-h-0 flex-col gap-2">
+            {/* Specs keep natural height; leftover middle space stays empty */}
+            <div className="min-h-0 max-h-[58%] shrink overflow-y-auto overscroll-contain">
               <SpecSettingsPanel
                 formatId={state.formatId}
                 useId={state.useId}
@@ -624,12 +649,16 @@ export default function PrintUnifiedEditor() {
                   patch(markSpecPick({ ...stateRef.current, useId: id }, "use"))
                 }
                 onPageCountChange={(count: PrintPageCount) => {
-                  patch(
-                    markSpecPick(
+                  patch({
+                    ...markSpecPick(
                       { ...stateRef.current, pageCount: count },
                       "pages"
-                    )
-                  );
+                    ),
+                    contentOffsetByPage: resizeContentOffsets(
+                      stateRef.current.contentOffsetByPage,
+                      count
+                    ),
+                  });
                   setCurrentPage((p) => (p > count ? 0 : p));
                 }}
                 onBgKeywordChange={(keyword) => patch({ bgKeyword: keyword })}
@@ -645,16 +674,20 @@ export default function PrintUnifiedEditor() {
                 onVisualStyleChange={(visualStyle) => patch({ visualStyle })}
               />
             </div>
-            <PrintUnifiedEditorMiniThumbs
-              formatId={state.formatId}
-              customSize={state.customSize}
-              pageCount={state.pageCount}
-              currentPage={currentPage}
-              backgroundUrl={state.backgroundUrl}
-              backgroundUrls={state.backgroundUrls}
-              backgroundPansByPage={state.backgroundPansByPage}
-              onSelectPage={selectPage}
-            />
+            {/* Empty flex space — do not stretch mini thumbs into the middle */}
+            <div className="min-h-0 flex-1" aria-hidden />
+            <div className="mt-auto shrink-0">
+              <PrintUnifiedEditorMiniThumbs
+                formatId={state.formatId}
+                customSize={state.customSize}
+                pageCount={state.pageCount}
+                currentPage={currentPage}
+                backgroundUrl={state.backgroundUrl}
+                backgroundUrls={state.backgroundUrls}
+                backgroundPansByPage={state.backgroundPansByPage}
+                onSelectPage={selectPage}
+              />
+            </div>
           </div>
         }
         designPanel={

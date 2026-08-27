@@ -134,21 +134,30 @@ function applyResize(
   dy: number,
   handle: ResizeHandle
 ): { x: number; y: number; width: number; height: number } {
-  let { x, y, width, height } = start;
+  const minW = 48;
+  const minH = 16;
+  let width = start.width;
+  let height = start.height;
+  let x = start.x;
+  let y = start.y;
 
-  if (handle.includes("e")) width = start.width + dx;
+  if (handle.includes("e")) {
+    width = Math.max(minW, start.width + dx);
+  }
   if (handle.includes("w")) {
-    width = start.width - dx;
-    x = start.x + dx;
+    width = Math.max(minW, start.width - dx);
+    // Keep the right edge anchored when hitting min width.
+    x = start.x + start.width - width;
   }
-  if (handle.includes("s")) height = start.height + dy;
+  if (handle.includes("s")) {
+    height = Math.max(minH, start.height + dy);
+  }
   if (handle.includes("n")) {
-    height = start.height - dy;
-    y = start.y + dy;
+    height = Math.max(minH, start.height - dy);
+    // Keep the bottom edge anchored when hitting min height.
+    y = start.y + start.height - height;
   }
 
-  width = Math.max(48, width);
-  height = Math.max(16, height);
   return { x, y, width, height };
 }
 
@@ -319,28 +328,36 @@ export default function PreviewTextOverlay({
         nextBox = applyResize(drag.startBox, dx, dy, drag.handle);
       }
 
-      const anchors = getBoxes().filter((a) => a.id !== drag.layerId);
-      const targets = collectSnapTargets(
-        drag.stageW,
-        drag.stageH,
-        anchors,
-        drag.layerId
-      );
-      const { deltaX, deltaY, guides } = snapLayerRect(
-        rectFromBox(nextBox),
-        targets.vertical,
-        targets.horizontal,
-        Math.max(SNAP_THRESHOLD_PX, Math.min(drag.stageW, drag.stageH) * 0.025)
-      );
-      nextBox = {
-        ...nextBox,
-        x: nextBox.x + deltaX,
-        y: nextBox.y + deltaY,
-      };
+      if (drag.kind === "move") {
+        const anchors = getBoxes().filter((a) => a.id !== drag.layerId);
+        const targets = collectSnapTargets(
+          drag.stageW,
+          drag.stageH,
+          anchors,
+          drag.layerId
+        );
+        const { deltaX, deltaY, guides } = snapLayerRect(
+          rectFromBox(nextBox),
+          targets.vertical,
+          targets.horizontal,
+          Math.max(
+            SNAP_THRESHOLD_PX,
+            Math.min(drag.stageW, drag.stageH) * 0.025
+          )
+        );
+        nextBox = {
+          ...nextBox,
+          x: nextBox.x + deltaX,
+          y: nextBox.y + deltaY,
+        };
+        setSnapGuides(guides);
+      } else {
+        // Resize follows the pointer 1:1 — no snap, avoids height/width jumps.
+        setSnapGuides({ vertical: [], horizontal: [] });
+      }
       nextBox = clampBoxAllowOverflow(nextBox, drag.stageW, drag.stageH);
       drag.liveBox = nextBox;
       setLiveBox({ id: drag.layerId, box: nextBox });
-      setSnapGuides(guides);
     };
 
     const onUp = () => {

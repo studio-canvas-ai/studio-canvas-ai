@@ -27,7 +27,7 @@ export type PrintUnifiedEditorMiniThumbsProps = {
 const THUMB_PAGES = Array.from({ length: EDITOR_PAGE_SLOTS }, (_, i) => i + 1);
 
 /**
- * Middle-column 8-page mini thumbnail strip — always visible, tap to switch canvas.
+ * Compact 8-page mini strip — ~half prior height, pinned to column bottom.
  */
 export default function PrintUnifiedEditorMiniThumbs({
   formatId,
@@ -46,21 +46,24 @@ export default function PrintUnifiedEditorMiniThumbs({
   const thumbStyle = useMemo(
     () => ({
       aspectRatio: `${aspect}`,
+      height: "3.25rem",
+      width: "auto",
+      maxWidth: "100%",
     }),
     [aspect]
   );
 
   return (
-    <div className="shrink-0 rounded-xl border border-white/10 bg-black/30 p-2.5">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="text-[11px] font-semibold text-white/75">
+    <div className="w-full shrink-0 rounded-lg border border-white/10 bg-black/30 px-1.5 py-1">
+      <div className="mb-1 flex items-center justify-between gap-1.5">
+        <p className="text-[10px] font-semibold leading-none text-white/70">
           {fillCanvas(cs.miniView, { label: "8페이지" })}
         </p>
-        <span className="text-[10px] tabular-nums text-white/40">
-          {pageCount}면 프로젝트
+        <span className="text-[9px] tabular-nums leading-none text-white/35">
+          {pageCount}면
         </span>
       </div>
-      <div className="grid grid-cols-4 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-4 gap-1">
         {THUMB_PAGES.map((page) => {
           const index = page - 1;
           const disabled = page > pageCount;
@@ -78,7 +81,7 @@ export default function PrintUnifiedEditorMiniThumbs({
               onClick={() => onSelectPage(page)}
               aria-label={`${page}페이지`}
               aria-current={active ? "page" : undefined}
-              className={`group flex min-w-0 flex-col gap-1 rounded-lg p-1 transition ${
+              className={`group min-w-0 rounded p-0.5 transition ${
                 disabled
                   ? "cursor-not-allowed opacity-35"
                   : active
@@ -87,7 +90,7 @@ export default function PrintUnifiedEditorMiniThumbs({
               }`}
             >
               <div
-                className={`relative w-full overflow-hidden rounded-md border bg-[#0B0F19] ${
+                className={`relative mx-auto overflow-hidden rounded border bg-[#0B0F19] ${
                   active
                     ? "border-emerald-400/55 shadow-[0_0_0_1px_rgba(52,211,153,0.2)]"
                     : "border-slate-700/80 group-hover:border-slate-500"
@@ -110,7 +113,7 @@ export default function PrintUnifiedEditorMiniThumbs({
                   <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(99,102,241,0.18),transparent_55%),linear-gradient(160deg,#1a2234,#0B0F19)]" />
                 )}
                 <span
-                  className={`absolute bottom-0.5 left-0.5 z-[1] rounded px-1 py-px text-[8px] font-bold ${
+                  className={`absolute bottom-px left-px z-[1] rounded px-0.5 text-[7px] font-bold leading-tight ${
                     active
                       ? "bg-emerald-600/90 text-white"
                       : "bg-black/60 text-white/85"
@@ -119,13 +122,6 @@ export default function PrintUnifiedEditorMiniThumbs({
                   {page}
                 </span>
               </div>
-              <span
-                className={`truncate text-center text-[9px] font-medium ${
-                  active ? "text-emerald-200" : "text-white/50"
-                }`}
-              >
-                {page}페이지
-              </span>
             </button>
           );
         })}

@@ -485,6 +485,11 @@ export type PrintWizardState = {
   backgroundUrls: string[];
   /** Per-page cover-crop pan so format changes can be reframed. */
   backgroundPansByPage?: PrintBackgroundPan[];
+  /**
+   * Screen 26 — free content-group offset (stage fractions, unclamped).
+   * Moves background + overlays together; may leave the page frame.
+   */
+  contentOffsetByPage?: PrintBackgroundPan[];
   /** Free-form order / prompt (preset injection target). */
   mainPrompt: string;
   selectedPromptPresetId: string | null;
