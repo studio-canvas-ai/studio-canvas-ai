@@ -6,8 +6,10 @@ import { usePathname, useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import { PRINT_UNIFIED_EDITOR_PATH } from "@/lib/printUnifiedEditor";
 import {
+  TEMPLATE_01_CARDS,
   TEMPLATE_WAREHOUSE_OPEN_EVENT,
   applyWarehouseTemplate,
+  template01CardToWarehouse,
   templatesForTab,
   type WarehouseTabId,
   type WarehouseTemplate,
@@ -77,7 +79,7 @@ export default function TemplateWarehouseModal() {
   if (!mounted || !open) return null;
 
   const list =
-    tab === "space4"
+    tab === "space4" || tab === "single"
       ? []
       : templatesForTab(tab as Exclude<WarehouseTabId, "space4">);
 
@@ -106,7 +108,9 @@ export default function TemplateWarehouseModal() {
         role="dialog"
         aria-modal="true"
         aria-label="템플릿창고"
-        className="relative z-[1] flex max-h-[min(88vh,720px)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-600/60 bg-[#121824] shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
+        className={`relative z-[1] flex max-h-[min(90vh,820px)] w-full flex-col overflow-hidden rounded-2xl border border-slate-600/60 bg-[#121824] shadow-[0_24px_80px_rgba(0,0,0,0.55)] ${
+          tab === "single" ? "max-w-5xl" : "max-w-3xl"
+        }`}
       >
         <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-5">
           <div>
@@ -153,8 +157,53 @@ export default function TemplateWarehouseModal() {
           ))}
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
-          {tab === "space4" ? null : (
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-5">
+          {tab === "space4" ? null : tab === "single" ? (
+            <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
+              {TEMPLATE_01_CARDS.map((card) => (
+                <li key={card.id}>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      pickTemplate(template01CardToWarehouse(card))
+                    }
+                    className="group flex w-full flex-col overflow-hidden rounded-2xl border border-white/12 bg-black/30 text-left transition hover:border-emerald-400/50 hover:bg-emerald-500/10 hover:shadow-[0_12px_40px_rgba(16,185,129,0.12)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400"
+                  >
+                    <div
+                      className="relative aspect-[9/16] w-full overflow-hidden bg-slate-900"
+                      aria-hidden
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={card.bg}
+                        alt=""
+                        className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/15 to-transparent" />
+                      <div className="absolute inset-x-0 bottom-0 space-y-1 p-2.5 sm:p-3">
+                        <p className="line-clamp-2 text-[11px] font-semibold leading-snug text-white drop-shadow sm:text-[12px]">
+                          {card.text1}
+                        </p>
+                        <p className="line-clamp-2 text-[10px] leading-snug text-white/85 drop-shadow sm:text-[11px]">
+                          {card.text2}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="space-y-1 border-t border-white/8 px-2.5 py-2.5 sm:px-3 sm:py-3">
+                      <p className="line-clamp-2 text-[13px] font-semibold leading-snug text-white sm:text-[14px]">
+                        {card.title}
+                      </p>
+                      <p className="truncate text-[11px] text-white/45">
+                        {card.desc}
+                      </p>
+                    </div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
             <ul className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
               {list.map((tpl) => (
                 <li key={tpl.id}>

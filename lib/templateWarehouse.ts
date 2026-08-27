@@ -61,42 +61,56 @@ function layer(
   });
 }
 
-/** Built-in reference templates (client catalog). */
-export const WAREHOUSE_TEMPLATES: WarehouseTemplate[] = [
+/**
+ * Template 01 (단면) card seed — append more entries; modal maps each to a large grid card.
+ * Click → applyWarehouseTemplate → Screen 26 loads bg + text1/2/3 (existing apply path).
+ */
+export type Template01Card = {
+  id: number;
+  title: string;
+  desc: string;
+  bg: string;
+  text1: string;
+  text2: string;
+  text3: string;
+};
+
+export const TEMPLATE_01_CARDS: Template01Card[] = [
   {
-    id: "tpl-single-flyer-a4",
-    tab: "single",
-    title: "A4 전단 · 봄 프로모션",
-    subtitle: "단면 · 상단 타이틀 + 하단 CTA",
-    formatId: "a4",
-    pageCount: 1,
-    thumbClass:
-      "bg-[radial-gradient(ellipse_at_30%_20%,rgba(251,191,36,0.45),transparent_55%),linear-gradient(160deg,#1e293b,#0f172a)]",
-    textLayersByPage: [
-      [
-        layer("봄맞이 특별전", "top", { fontSize: 56 }),
-        layer("전 품목 20% 할인", "center", { fontSize: 40 }),
-        layer("지금 바로 방문하세요", "bottom", { fontSize: 32 }),
-      ],
-    ],
+    id: 1,
+    title: "환절기 면역력 관리 포스터",
+    desc: "단면 · 세로형 9:16",
+    bg: "https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&w=400&q=80",
+    text1: "잘 쉬고 있나요?",
+    text2: "환절기 면역력을 높이자!",
+    text3: "지금 바로 상담하세요 | 010 1234 5678",
   },
-  {
-    id: "tpl-single-poster-916",
+];
+
+export function template01CardToWarehouse(
+  card: Template01Card
+): WarehouseTemplate {
+  return {
+    id: `tpl-single-${card.id}`,
     tab: "single",
-    title: "9:16 포스터 · 공연 안내",
-    subtitle: "단면 · 세로형 이벤트",
+    title: card.title,
+    subtitle: card.desc,
     formatId: "ratio-9-16",
     pageCount: 1,
-    thumbClass:
-      "bg-[radial-gradient(ellipse_at_70%_30%,rgba(168,85,247,0.4),transparent_50%),linear-gradient(180deg,#312e81,#0f172a)]",
+    thumbClass: "bg-slate-800",
+    backgroundUrl: card.bg,
     textLayersByPage: [
       [
-        layer("LIVE CONCERT", "top", { fontSize: 44, color: "white" }),
-        layer("오늘 밤 8시", "center", { fontSize: 52, color: "white" }),
-        layer("입장권 현장 판매", "bottom", { fontSize: 28, color: "white" }),
+        layer(card.text1, "top", { fontSize: 48, color: "white" }),
+        layer(card.text2, "center", { fontSize: 44, color: "white" }),
+        layer(card.text3, "bottom", { fontSize: 28, color: "white" }),
       ],
     ],
-  },
+  };
+}
+
+/** Built-in reference templates (Template 02 / 03). Template 01 uses TEMPLATE_01_CARDS. */
+export const WAREHOUSE_TEMPLATES: WarehouseTemplate[] = [
   {
     id: "tpl-double-invite",
     tab: "double",
@@ -175,18 +189,32 @@ export const WAREHOUSE_TEMPLATES: WarehouseTemplate[] = [
   },
 ];
 
+function cloneTemplatePages(
+  pages: TextLayer[][],
+  maskPii: boolean
+): TextLayer[][] {
+  return pages.map((page) =>
+    page.map((l) => ({
+      ...l,
+      text: maskPii ? maskTemplatePii(l.text) : l.text,
+      ranges: l.ranges?.map((r) => ({ ...r })) ?? [],
+    }))
+  );
+}
+
 export function templatesForTab(
   tab: Exclude<WarehouseTabId, "space4">
 ): WarehouseTemplate[] {
+  if (tab === "single") {
+    return TEMPLATE_01_CARDS.map(template01CardToWarehouse).map((t) => ({
+      ...t,
+      textLayersByPage: cloneTemplatePages(t.textLayersByPage, false),
+    }));
+  }
+  const maskPii = tab === "public";
   return WAREHOUSE_TEMPLATES.filter((t) => t.tab === tab).map((t) => ({
     ...t,
-    textLayersByPage: t.textLayersByPage.map((page) =>
-      page.map((l) => ({
-        ...l,
-        text: maskTemplatePii(l.text),
-        ranges: l.ranges?.map((r) => ({ ...r })) ?? [],
-      }))
-    ),
+    textLayersByPage: cloneTemplatePages(t.textLayersByPage, maskPii),
   }));
 }
 
