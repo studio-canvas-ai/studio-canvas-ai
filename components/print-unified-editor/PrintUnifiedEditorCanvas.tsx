@@ -137,16 +137,32 @@ export default function PrintUnifiedEditorCanvas({
   const pan = pageActivated
     ? normalizeContentOffset(contentOffsetByPage?.[pageIndex])
     : DEFAULT_CONTENT_OFFSET;
-  const blueprint =
-    pageActivated && shouldShowPrintBlueprint(formatId, useId)
-      ? resolvePrintBlueprint(
-          formatId,
-          useId,
-          pageCount as PrintPageCount,
-          pageIndex,
-          customSize
-        )
-      : null;
+  const blueprint = useMemo(() => {
+    if (!pageActivated || !shouldShowPrintBlueprint(formatId, useId)) {
+      return null;
+    }
+    const raw = resolvePrintBlueprint(
+      formatId,
+      useId,
+      pageCount as PrintPageCount,
+      pageIndex,
+      customSize
+    );
+    if (!raw) return null;
+    // Fold lines are sheet-level — show only on the cover face so pages 2–N
+    // are not stamped with the same vertical guides.
+    if (pageIndex > 0) {
+      return { ...raw, foldLines: [] };
+    }
+    return raw;
+  }, [
+    pageActivated,
+    formatId,
+    useId,
+    pageCount,
+    pageIndex,
+    customSize,
+  ]);
 
   /** Logical page size at 100% — zoom is transform:scale on the parent world. */
   const stageStyle = useMemo(

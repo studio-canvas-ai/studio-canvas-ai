@@ -11,6 +11,7 @@ import PrintUnifiedEditorLayout from "@/components/print-unified-editor/PrintUni
 import {
   PRINT_UNIFIED_EDITOR_SESSION_KEY,
   applyUnifiedEditorPageLayout,
+  resizeBlankIsolatedPages,
   resizeContentOffsets,
   type PrintContentOffset,
   type PrintUnifiedZoom,
@@ -21,11 +22,8 @@ import {
   type WarehouseTemplate,
 } from "@/lib/templateWarehouse";
 import {
-  editorSlotCount,
-  applySemanticPageLayout,
   reconcileLayerTypographyBox,
   referencePrintStageSize,
-  resizeIndependentPages,
 } from "@/lib/printWizardTextLayers";
 import { usePrintWizardExport } from "@/lib/canvas/usePrintWizardExport";
 import { useCanvasStore } from "@/lib/canvas/canvasStore";
@@ -121,11 +119,10 @@ function cloneTextPagesFromWizard(
   pages: TextLayer[][] | undefined,
   pageCount: PrintPageCount
 ): TextLayer[][] {
-  const slots = editorSlotCount(pageCount);
   const cloned = (pages || []).map((page) =>
     (page || []).map(preserveRestoredTextLayer)
   );
-  return resizeIndependentPages(cloned, slots);
+  return resizeBlankIsolatedPages(cloned, pageCount);
 }
 
 function readSession(key: string): PrintWizardState | null {
@@ -154,13 +151,48 @@ function saveSession(state: PrintWizardState) {
 
 function hydrateInitialState(): PrintWizardState {
   const unified = readSession(PRINT_UNIFIED_EDITOR_SESSION_KEY);
-  if (unified) return unified;
-  const wizard = readSession(PRINT_WIZARD_SESSION_KEY);
-  if (wizard) return { ...wizard, wizardStep: 2 };
+  const wizard = unified
+    ? unified
+    : (() => {
+        const fromWizard = readSession(PRINT_WIZARD_SESSION_KEY);
+        return fromWizard ? { ...fromWizard, wizardStep: 2 as const } : null;
+      })();
+  if (wizard) {
+    const pageCount = coercePrintPageCount(wizard.pageCount, 8);
+    // Drop all-empty placeholder pages left by the old cross-page seed bug.
+    const textLayersByPage = resizeBlankIsolatedPages(
+      wizard.textLayersByPage,
+      pageCount
+    ).map((page) =>
+      page.length && page.every((l) => !String(l.text || "").trim()) ? [] : page
+    );
+    return {
+      ...wizard,
+      pageCount,
+      wizardStep: 2,
+      textLayersByPage,
+      photoLayersByPage: resizePhotoPages(wizard.photoLayersByPage, pageCount),
+      decoLayersByPage: resizeDecoPages(wizard.decoLayersByPage, pageCount),
+      backgroundUrls: Array.from({ length: pageCount }, (_, i) =>
+        wizard.backgroundUrls?.[i] ||
+        (i === 0 && wizard.backgroundUrl ? wizard.backgroundUrl : "") ||
+        ""
+      ),
+      contentOffsetByPage: resizeContentOffsets(
+        wizard.contentOffsetByPage,
+        pageCount
+      ),
+    };
+  }
+  const pageCount = 8 as PrintPageCount;
   return {
     ...defaultPrintWizardState(),
-    pageCount: 8 as PrintPageCount,
+    pageCount,
     wizardStep: 2,
+    textLayersByPage: resizeBlankIsolatedPages(undefined, pageCount),
+    photoLayersByPage: Array.from({ length: pageCount }, () => []),
+    decoLayersByPage: Array.from({ length: pageCount }, () => []),
+    backgroundUrls: Array.from({ length: pageCount }, () => ""),
   };
 }
 
@@ -199,14 +231,15 @@ export default function PrintUnifiedEditor() {
     (detail: WarehouseTemplate) => {
       if (!detail?.id) return;
       const pageCount = detail.pageCount;
-      const slots = editorSlotCount(pageCount);
-      const textPages = resizeIndependentPages(
+      const stage = referencePrintStageSize(
+        resolvePrintAspect(detail.formatId, null)
+      );
+      // Only template pages get layers — other faces stay blank (no clone).
+      const textPages = resizeBlankIsolatedPages(
         detail.textLayersByPage,
-        slots
+        pageCount
       ).map((page, i) => {
-        const stage = referencePrintStageSize(
-          resolvePrintAspect(detail.formatId, null)
-        );
+        if (!page.length) return [];
         return applyUnifiedEditorPageLayout(page, i, stage.w, stage.h);
       });
       const next: PrintWizardState = {
@@ -220,10 +253,11 @@ export default function PrintUnifiedEditor() {
           i === 0 ? detail.backgroundUrl || "" : ""
         ),
         textLayersByPage: textPages,
-        photoLayersByPage: [],
-        decoLayersByPage: [],
-        backgroundPansByPage: [],
+        photoLayersByPage: Array.from({ length: pageCount }, () => []),
+        decoLayersByPage: Array.from({ length: pageCount }, () => []),
+        backgroundPansByPage: resizeBackgroundPans(undefined, pageCount),
         contentOffsetByPage: resizeContentOffsets(undefined, pageCount),
+        foldGuidesHidden: false,
         specPicks: {
           format: true,
           style: Boolean(stateRef.current.visualStyle?.imageStyleId),
@@ -271,11 +305,7 @@ export default function PrintUnifiedEditor() {
   }, []);
 
   const textLayersByPage = useMemo(
-    () =>
-      resizeIndependentPages(
-        state.textLayersByPage,
-        editorSlotCount(state.pageCount)
-      ),
+    () => resizeBlankIsolatedPages(state.textLayersByPage, state.pageCount),
     [state.textLayersByPage, state.pageCount]
   );
 
@@ -300,6 +330,7 @@ export default function PrintUnifiedEditor() {
   const overlayLayers = useMemo(() => {
     if (!pageActivated || pageIndex < 0) return [];
     const raw = textLayersByPage[pageIndex] ?? [];
+    // Layout is display-only for the active face — never written to other pages.
     return applyUnifiedEditorPageLayout(
       raw,
       pageIndex,
@@ -330,8 +361,10 @@ export default function PrintUnifiedEditor() {
               typographyStage.h
             );
       setState((prev) => {
-        const slots = editorSlotCount(prev.pageCount);
-        const pages = resizeIndependentPages(prev.textLayersByPage, slots);
+        const pages = resizeBlankIsolatedPages(
+          prev.textLayersByPage,
+          prev.pageCount
+        );
         // Canvas drag/resize (applyLayout: false) must keep boxW/boxH/manual*
         // as committed — reconcile would wipe boxManual and snap the box back.
         const savedLayers =
@@ -423,19 +456,20 @@ export default function PrintUnifiedEditor() {
   );
 
   const resetWorkspace = useCallback(() => {
+    const pageCount = 8 as PrintPageCount;
     const next: PrintWizardState = {
       ...defaultPrintWizardState(),
-      pageCount: 8 as PrintPageCount,
+      pageCount,
       wizardStep: 2,
+      textLayersByPage: resizeBlankIsolatedPages(undefined, pageCount),
+      photoLayersByPage: Array.from({ length: pageCount }, () => []),
+      decoLayersByPage: Array.from({ length: pageCount }, () => []),
+      backgroundUrls: Array.from({ length: pageCount }, () => ""),
+      backgroundUrl: null,
+      backgroundPansByPage: resizeBackgroundPans(undefined, pageCount),
+      contentOffsetByPage: resizeContentOffsets(undefined, pageCount),
+      foldGuidesHidden: false,
     };
-    next.textLayersByPage = resizeIndependentPages(
-      undefined,
-      editorSlotCount(next.pageCount)
-    ).map((page, i) => applySemanticPageLayout(page, i));
-    next.photoLayersByPage = [];
-    next.decoLayersByPage = [];
-    next.backgroundPansByPage = [];
-    next.contentOffsetByPage = [];
     saveSession(next);
     setState(next);
     setCurrentPage(0);
@@ -535,8 +569,10 @@ export default function PrintUnifiedEditor() {
       const layers = (project.studio.overlayLayers || []).map((l) =>
         preserveRestoredTextLayer(l)
       );
-      const slots = editorSlotCount(state.pageCount);
-      const textPages = resizeIndependentPages(state.textLayersByPage, slots);
+      const textPages = resizeBlankIsolatedPages(
+        state.textLayersByPage,
+        state.pageCount
+      );
       if (layers.length) {
         textPages[pageIdx] = layers;
       }
@@ -696,28 +732,11 @@ export default function PrintUnifiedEditor() {
   const selectPage = useCallback(
     (page: number) => {
       if (page < 1 || page > state.pageCount) return;
+      // Never seed layout into other pages — only switch the active face.
       setCurrentPage(page);
       setActiveTextLayerId(null);
       setActiveDecoLayerId(null);
-      const idx = page - 1;
-      setState((prev) => {
-        const slots = editorSlotCount(prev.pageCount);
-        const pages = resizeIndependentPages(prev.textLayersByPage, slots);
-        const nextPages = [...pages];
-        nextPages[idx] = applyUnifiedEditorPageLayout(
-          pages[idx]?.length ? pages[idx]! : [],
-          idx,
-          referencePrintStageSize(
-            resolvePrintAspect(prev.formatId, prev.customSize)
-          ).w,
-          referencePrintStageSize(
-            resolvePrintAspect(prev.formatId, prev.customSize)
-          ).h
-        );
-        const next = { ...prev, textLayersByPage: nextPages };
-        saveSession(next);
-        return next;
-      });
+      setActivePhotoLayerId(null);
     },
     [state.pageCount]
   );

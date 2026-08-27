@@ -190,3 +190,23 @@ export function applyUnifiedEditorPageLayout(
     stageH
   );
 }
+
+/**
+ * Screen 26 page isolation: pad to `pageCount` with empty arrays.
+ * Never seed default zone placeholders onto idle faces (unlike
+ * `resizeIndependentPages`, which fills every missing page).
+ */
+export function resizeBlankIsolatedPages(
+  prev: TextLayer[][] | undefined,
+  pageCount: number
+): TextLayer[][] {
+  const n = Math.max(0, Math.floor(pageCount));
+  const out: TextLayer[][] = [];
+  for (let i = 0; i < n; i++) {
+    const page = prev?.[i];
+    out.push(
+      page && page.length > 0 ? page.map((layer) => ({ ...layer })) : []
+    );
+  }
+  return out;
+}
