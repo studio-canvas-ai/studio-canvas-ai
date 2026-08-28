@@ -48,6 +48,11 @@ export type PreviewTextOverlayProps = {
   /** Screen 26 — single click enters inline edit (not only double-click). */
   editOnSingleClick?: boolean;
   /**
+   * When true, non-editing text boxes ignore pointer events so photo hit targets
+   * stacked above text can receive drag/resize while pixels stay behind text.
+   */
+  photoInteractionMode?: boolean;
+  /**
    * CSS transform scale on an ancestor stage world.
    * Pointer deltas are divided by this so drag/resize stay 1:1 with the cursor.
    */
@@ -177,6 +182,7 @@ export default function PreviewTextOverlay({
   showEmptyGuideBoxes = false,
   hideGuideLabels = false,
   editOnSingleClick = false,
+  photoInteractionMode = false,
   viewScale = 1,
 }: PreviewTextOverlayProps) {
   const { t } = useI18n();
@@ -518,7 +524,7 @@ export default function PreviewTextOverlay({
         className="pointer-events-none absolute inset-0 z-[20]"
       />
 
-      {interactive && activeLayerId ? (
+      {interactive && activeLayerId && !photoInteractionMode ? (
         <div
           role="presentation"
           data-overlay-deselect
@@ -570,11 +576,16 @@ export default function PreviewTextOverlay({
             ? 0
             : (layer.letterSpacing ?? 0) * scale;
 
+        const layerPointerEvents =
+          photoInteractionMode && !isActive && !isEditing
+            ? "pointer-events-none"
+            : "pointer-events-auto";
+
         return (
           <div
             key={layer.id}
             data-text-layer={layer.id}
-            className={`pointer-events-auto absolute z-[5] touch-none select-none ${
+            className={`${layerPointerEvents} absolute z-[5] touch-none select-none ${
               interactive && !isEditing
                 ? "cursor-grab active:cursor-grabbing"
                 : ""

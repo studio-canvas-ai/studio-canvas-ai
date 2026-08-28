@@ -101,6 +101,10 @@ export type PreviewPhotoOverlayProps = {
   onActiveLayerChange?: (id: string | null) => void;
   /** Ancestor CSS scale — pointer deltas are divided by this. */
   viewScale?: number;
+  /** Paint-only layer (no hit targets) — pair with hitTestOnly overlay above text. */
+  displayOnly?: boolean;
+  /** Invisible pixels; keeps selection chrome and drag/resize hits above text. */
+  hitTestOnly?: boolean;
 };
 
 export default function PreviewPhotoOverlay({
@@ -110,6 +114,8 @@ export default function PreviewPhotoOverlay({
   activeLayerId = null,
   onActiveLayerChange,
   viewScale = 1,
+  displayOnly = false,
+  hitTestOnly = false,
 }: PreviewPhotoOverlayProps) {
   const { t } = useI18n();
   const cs = t.canvasStudio;
@@ -284,14 +290,19 @@ export default function PreviewPhotoOverlay({
         const box = liveBox?.id === layer.id ? liveBox.box : measured;
         const isActive = activeLayerId === layer.id;
         const isHover = hoverId === layer.id;
-        const showChrome = interactive && (isActive || isHover || dragging);
+        const showChrome =
+          interactive && !displayOnly && (isActive || isHover || dragging);
+        const layerPointerEvents =
+          displayOnly || !interactive ? "pointer-events-none" : "pointer-events-auto";
 
         return (
           <div
             key={layer.id}
             data-photo-layer={layer.id}
-            className={`pointer-events-auto absolute z-[1] touch-none select-none ${
-              interactive ? "cursor-grab active:cursor-grabbing" : ""
+            className={`${layerPointerEvents} absolute z-[1] touch-none select-none ${
+              interactive && !displayOnly
+                ? "cursor-grab active:cursor-grabbing"
+                : ""
             } ${isActive ? "z-[2]" : ""}`}
             style={{
               left: box.x,
@@ -303,10 +314,20 @@ export default function PreviewPhotoOverlay({
             onMouseLeave={() =>
               setHoverId((id) => (id === layer.id ? null : id))
             }
-            onPointerDown={(e) => handlePointerDown(e, layer.id, "move")}
-            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => {
+              if (displayOnly) return;
+              handlePointerDown(e, layer.id, "move");
+            }}
+            onClick={(e) => {
+              if (displayOnly) return;
+              e.stopPropagation();
+            }}
           >
-            <div className="relative flex h-full w-full items-center justify-center overflow-hidden">
+            <div
+              className={`relative flex h-full w-full items-center justify-center overflow-hidden ${
+                hitTestOnly ? "invisible" : ""
+              }`}
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={layer.src}
@@ -326,7 +347,7 @@ export default function PreviewPhotoOverlay({
                 }
               />
             </div>
-            {interactive ? (
+            {interactive && !displayOnly ? (
               <button
                 type="button"
                 title={cs.delete}

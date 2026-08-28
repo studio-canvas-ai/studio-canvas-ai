@@ -343,21 +343,42 @@ export default function PrintUnifiedEditorCanvas({
                     Stack: photo (back) → text → deco (front). Screen 24 PreviewCanvas parity.
                   */}
                   {photoLayers?.length && onPhotoLayersChange ? (
-                    <div
-                      data-photo-overlay
-                      className="pointer-events-none absolute inset-0 z-[1] overflow-visible"
-                    >
-                      <PreviewPhotoOverlay
-                        key={`photo-${pageIndex}`}
-                        layers={photoLayers}
-                        onLayersChange={(layers) =>
-                          onPhotoLayersChange(pageIndex, layers)
-                        }
-                        activeLayerId={activePhotoLayerId ?? null}
-                        onActiveLayerChange={onActivePhotoLayerChange}
-                        viewScale={zoom}
-                      />
-                    </div>
+                    <>
+                      <div
+                        data-photo-overlay
+                        className="pointer-events-none absolute inset-0 z-[1] overflow-visible"
+                      >
+                        <PreviewPhotoOverlay
+                          key={`photo-${pageIndex}-${activePhotoLayerId ? "visual" : "main"}`}
+                          layers={photoLayers}
+                          onLayersChange={(layers) =>
+                            onPhotoLayersChange(pageIndex, layers)
+                          }
+                          displayOnly={Boolean(activePhotoLayerId)}
+                          activeLayerId={activePhotoLayerId ?? null}
+                          onActiveLayerChange={onActivePhotoLayerChange}
+                          viewScale={zoom}
+                        />
+                      </div>
+                      {activePhotoLayerId ? (
+                        <div
+                          data-photo-hit-overlay
+                          className="pointer-events-none absolute inset-0 z-[7] overflow-visible"
+                        >
+                          <PreviewPhotoOverlay
+                            key={`photo-hit-${pageIndex}`}
+                            layers={photoLayers}
+                            onLayersChange={(layers) =>
+                              onPhotoLayersChange(pageIndex, layers)
+                            }
+                            hitTestOnly
+                            activeLayerId={activePhotoLayerId}
+                            onActiveLayerChange={onActivePhotoLayerChange}
+                            viewScale={zoom}
+                          />
+                        </div>
+                      ) : null}
+                    </>
                   ) : null}
 
                   <div
@@ -376,6 +397,7 @@ export default function PrintUnifiedEditorCanvas({
                       pageIndex={pageIndex}
                       backgroundSrc={pageBg}
                       editOnSingleClick
+                      photoInteractionMode={Boolean(activePhotoLayerId)}
                       viewScale={zoom}
                     />
                   </div>
