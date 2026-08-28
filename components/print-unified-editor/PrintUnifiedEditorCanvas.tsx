@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Minus, Plus, Trash2 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
-import { fillCanvas } from "@/lib/i18n";
 import CanvasUploadToolbar from "@/components/canvas/CanvasUploadToolbar";
 import PrintBlueprintOverlay from "@/components/print-wizard/PrintBlueprintOverlay";
 import PreviewDecoOverlay from "@/components/print-wizard/PreviewDecoOverlay";
@@ -181,10 +180,6 @@ export default function PrintUnifiedEditorCanvas({
   );
 
   const zoomLabel = `${Math.round(zoom * 100)}%`;
-  const pageLabel =
-    pageActivated && currentPage > 0
-      ? fillCanvas(cs.pageOf, { page: currentPage, total: pageCount })
-      : null;
 
   const changeZoom = (next: PrintUnifiedZoom) => {
     setZoomAnimating(true);
@@ -246,11 +241,6 @@ export default function PrintUnifiedEditorCanvas({
         <h2 className="shrink-0 text-[12px] font-semibold tracking-tight text-slate-200 [word-break:keep-all] sm:text-[13px]">
           {cs.printTitle}
         </h2>
-        {pageLabel ? (
-          <span className="shrink-0 rounded-md bg-indigo-500/20 px-2 py-0.5 text-[10px] font-bold text-indigo-200">
-            {pageLabel}
-          </span>
-        ) : null}
         <div className="min-w-0 flex-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <CanvasUploadToolbar
             dense
