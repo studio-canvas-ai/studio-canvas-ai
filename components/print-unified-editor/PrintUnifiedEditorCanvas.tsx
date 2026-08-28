@@ -181,6 +181,32 @@ export default function PrintUnifiedEditorCanvas({
 
   const zoomLabel = `${Math.round(zoom * 100)}%`;
 
+  const isCanvasLayerHit = (target: EventTarget | null) => {
+    if (!(target instanceof HTMLElement)) return false;
+    return Boolean(
+      target.closest("[data-text-layer]") ||
+        target.closest("[data-photo-layer]") ||
+        target.closest("[data-deco-layer]") ||
+        target.closest("[data-overlay-deselect]")
+    );
+  };
+
+  const clearCanvasSelection = () => {
+    if (!activeTextLayerId && !activePhotoLayerId && !activeDecoLayerId) {
+      return;
+    }
+    onActiveTextLayerChange?.(null);
+    onActivePhotoLayerChange?.(null);
+    onActiveDecoLayerChange?.(null);
+  };
+
+  const handlePageBackgroundPointerDown = (
+    e: React.PointerEvent<HTMLElement>
+  ) => {
+    if (isCanvasLayerHit(e.target)) return;
+    clearCanvasSelection();
+  };
+
   const changeZoom = (next: PrintUnifiedZoom) => {
     setZoomAnimating(true);
     onZoomChange(next);
@@ -191,13 +217,10 @@ export default function PrintUnifiedEditorCanvas({
     if (!onContentOffsetChange || !pageActivated) return;
     if (e.button !== 0 && e.pointerType === "mouse") return;
     const target = e.target as HTMLElement;
-    if (
-      target.closest("[data-text-layer]") ||
-      target.closest("[data-photo-layer]") ||
-      target.closest("[data-deco-layer]")
-    ) {
+    if (isCanvasLayerHit(target)) {
       return;
     }
+    clearCanvasSelection();
     e.stopPropagation();
     if (e.pointerType === "touch") e.preventDefault();
     e.currentTarget.setPointerCapture?.(e.pointerId);
@@ -310,6 +333,7 @@ export default function PrintUnifiedEditorCanvas({
                   data-page-card
                   className="relative overflow-hidden rounded-md border border-slate-700/70 bg-[#0B0F19] shadow-[0_12px_36px_rgba(0,0,0,0.4)]"
                   style={stageStyle}
+                  onPointerDown={handlePageBackgroundPointerDown}
                 >
                   {/* Background plate */}
                   <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-md">

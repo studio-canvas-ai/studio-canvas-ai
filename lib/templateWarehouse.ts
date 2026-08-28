@@ -112,7 +112,11 @@ export type Template01ModularTextBlock = {
     | "circle-2"
     | "circle-3"
     | "card-l-title"
+    | "card-l-support"
+    | "card-l-amount"
     | "card-r-title"
+    | "card-r-support"
+    | "card-r-amount"
     | "step-1"
     | "step-2"
     | "step-3"
@@ -122,14 +126,26 @@ export type Template01ModularTextBlock = {
   text: string;
 };
 
+export type Template01ComparisonCard = {
+  title: string;
+  supportText?: string;
+  amount?: string;
+};
+
 export type Template01ModularCard = {
   id: number;
   title: string;
   desc: string;
   layoutType: "modular-block-system";
   aspectRatio?: "A4";
-  /** Each entry becomes one independent layoutLocked text box on the canvas. */
-  textBlocks: Template01ModularTextBlock[];
+  /** Legacy flat block list — used when structured fields are omitted. */
+  textBlocks?: Template01ModularTextBlock[];
+  /** Structured module schema (preferred for new templates). */
+  heroBanner?: { title: string; subtitle?: string };
+  circularItems?: string[];
+  comparisonCards?: Template01ComparisonCard[];
+  stepFlow?: string[];
+  footerText?: string;
 };
 
 export type Template01Card =
@@ -222,23 +238,117 @@ export function buildNestedBoxesBackgroundDataUrl(): string {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
-/** Hearing-aid / modular public poster page fill (A4 210×297). */
+/** Hearing-aid / modular public poster page fill (A4 210×297) — navy & gold pro palette. */
 export function buildModularBlockBackgroundDataUrl(): string {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="794" height="1123" viewBox="0 0 794 1123">
   <defs>
     <linearGradient id="page" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#FFF7ED"/>
-      <stop offset="45%" stop-color="#FFFBEB"/>
+      <stop offset="0%" stop-color="#F8FAFC"/>
+      <stop offset="40%" stop-color="#F1F5F9"/>
       <stop offset="100%" stop-color="#E2E8F0"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#C9A227" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#D4AF37" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#C9A227" stop-opacity="0"/>
     </linearGradient>
   </defs>
   <rect width="794" height="1123" fill="url(#page)"/>
-  <rect x="28" y="28" width="738" height="1067" rx="22" fill="none" stroke="#FDBA74" stroke-width="3"/>
-  <circle cx="140" cy="300" r="58" fill="#FED7AA" opacity="0.45"/>
-  <circle cx="397" cy="300" r="58" fill="#FDBA74" opacity="0.35"/>
-  <circle cx="654" cy="300" r="58" fill="#FB923C" opacity="0.28"/>
+  <rect x="24" y="24" width="746" height="1075" rx="20" fill="none" stroke="#CBD5E1" stroke-width="2"/>
+  <rect x="24" y="24" width="746" height="6" rx="3" fill="url(#gold)"/>
+  <rect x="48" y="72" width="698" height="140" rx="14" fill="#0F172A" opacity="0.06"/>
+  <circle cx="132" cy="340" r="52" fill="#F8FAFC" stroke="#C9A227" stroke-width="2" opacity="0.9"/>
+  <circle cx="397" cy="340" r="52" fill="#F8FAFC" stroke="#C9A227" stroke-width="2" opacity="0.85"/>
+  <circle cx="662" cy="340" r="52" fill="#F8FAFC" stroke="#C9A227" stroke-width="2" opacity="0.8"/>
 </svg>`;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+/**
+ * Normalize structured modular data → independent text blocks for the canvas engine.
+ * Supports legacy textBlocks-only cards and heroBanner / comparisonCards schemas.
+ */
+export function resolveModularCardBlocks(
+  card: Template01ModularCard
+): Template01ModularTextBlock[] {
+  const hasStructured =
+    Boolean(card.heroBanner) ||
+    Boolean(card.circularItems?.length) ||
+    Boolean(card.comparisonCards?.length) ||
+    Boolean(card.stepFlow?.length) ||
+    Boolean(card.footerText);
+
+  if (!hasStructured && card.textBlocks?.length) {
+    return card.textBlocks;
+  }
+
+  const blocks: Template01ModularTextBlock[] = [];
+
+  if (card.heroBanner?.title) {
+    blocks.push({
+      id: `mod-${card.id}-hero-t`,
+      type: "hero-title",
+      text: card.heroBanner.title,
+    });
+    if (card.heroBanner.subtitle) {
+      blocks.push({
+        id: `mod-${card.id}-hero-s`,
+        type: "hero-sub",
+        text: card.heroBanner.subtitle,
+      });
+    }
+  }
+
+  (card.circularItems ?? []).slice(0, 6).forEach((text, index) => {
+    blocks.push({
+      id: `mod-${card.id}-circle-${index + 1}`,
+      type: `circle-${index + 1}`,
+      text,
+    });
+  });
+
+  (card.comparisonCards ?? []).slice(0, 4).forEach((cmp, index) => {
+    const side = index === 0 ? "l" : index === 1 ? "r" : `${index}`;
+    const prefix = typeof side === "string" && side.length === 1 ? `card-${side}` : `card-${side}`;
+    blocks.push({
+      id: `mod-${card.id}-cmp-${index}-t`,
+      type: `${prefix}-title`,
+      text: cmp.title,
+    });
+    if (cmp.supportText) {
+      blocks.push({
+        id: `mod-${card.id}-cmp-${index}-s`,
+        type: `${prefix}-support`,
+        text: cmp.supportText,
+      });
+    }
+    if (cmp.amount) {
+      blocks.push({
+        id: `mod-${card.id}-cmp-${index}-a`,
+        type: `${prefix}-amount`,
+        text: cmp.amount,
+      });
+    }
+  });
+
+  (card.stepFlow ?? []).slice(0, 8).forEach((text, index) => {
+    blocks.push({
+      id: `mod-${card.id}-step-${index + 1}`,
+      type: `step-${index + 1}`,
+      text,
+    });
+  });
+
+  if (card.footerText) {
+    blocks.push({
+      id: `mod-${card.id}-footer`,
+      type: "footer",
+      text: card.footerText,
+    });
+  }
+
+  if (blocks.length) return blocks;
+  return card.textBlocks ?? [];
 }
 
 function formatNestedSubBoxBody(box: Template01NestedSubBox): string {
@@ -265,9 +375,10 @@ function boxedLayer(
     boxOpacity?: number;
     align?: TextLayer["align"];
     lineHeight?: number;
+    fontWeight?: number;
   }
 ): TextLayer {
-  const { color, boxOpacity, align, lineHeight, ...boxGeom } = geom;
+  const { color, boxOpacity, align, lineHeight, fontWeight, ...boxGeom } = geom;
   return createLayer({
     text,
     pos,
@@ -284,7 +395,7 @@ function boxedLayer(
     boxColor: boxGeom.boxColor,
     color: color ?? "white",
     fontSize: boxGeom.fontSize,
-    fontWeight: 700,
+    fontWeight: fontWeight ?? 700,
     align: align ?? "center",
     lineHeight: lineHeight ?? 1.25,
     fontPreset: "pretendard",
@@ -468,13 +579,19 @@ export function buildNestedBoxesTextLayers(
 export function buildModularBlockTextLayers(
   card: Template01ModularCard
 ): TextLayer[] {
-  const margin = 0.05;
-  const gap = 0.018;
+  const margin = 0.055;
+  const gap = 0.016;
   const contentW = 1 - margin * 2;
-  const blocks = card.textBlocks;
+  const blocks = resolveModularCardBlocks(card);
+  const layers: TextLayer[] = [];
+
+  const NAVY = "#0F172A";
+  const NAVY_MID = "#1E293B";
+  const GOLD_LIGHT = "#F5E6B8";
+  const GRAY_BG = "#F8FAFC";
+  const GRAY_MID = "#E2E8F0";
 
   const byType = (type: string) => blocks.find((b) => b.type === type);
-  const layers: TextLayer[] = [];
 
   const push = (
     block: Template01ModularTextBlock | undefined,
@@ -487,21 +604,21 @@ export function buildModularBlockTextLayers(
     layers.push(layer);
   };
 
-  const heroTitleY = 0.04;
-  const heroTitleH = 0.08;
+  const heroTitleY = 0.038;
+  const heroTitleH = 0.085;
   push(byType("hero-title"), {
     pos: "top",
     manualX: margin,
     manualY: heroTitleY,
     boxW: contentW,
     boxH: heroTitleH,
-    fontSize: 30,
-    boxColor: "#C2410C",
+    fontSize: 32,
+    boxColor: NAVY,
     color: "white",
   });
 
-  const heroSubY = heroTitleY + heroTitleH + 0.012;
-  const heroSubH = 0.055;
+  const heroSubY = heroTitleY + heroTitleH + gap;
+  const heroSubH = 0.052;
   push(byType("hero-sub"), {
     pos: "top",
     manualX: margin,
@@ -509,70 +626,138 @@ export function buildModularBlockTextLayers(
     boxW: contentW,
     boxH: heroSubH,
     fontSize: 22,
-    boxColor: "#EA580C",
-    color: "white",
+    boxColor: GOLD_LIGHT,
+    color: "inkBlack",
   });
 
-  const circleTypes = ["circle-1", "circle-2", "circle-3"] as const;
-  const circleGap = 0.025;
-  const circleW = (contentW - circleGap * 2) / 3;
-  const circleH = 0.1;
-  const circleY = heroSubY + heroSubH + 0.028;
-  circleTypes.forEach((type, index) => {
-    push(byType(type), {
+  const circleBlocks = blocks.filter((b) => /^circle-\d+$/.test(b.type));
+  const circleCount = Math.max(3, Math.min(6, circleBlocks.length || 3));
+  const circleGap = 0.022;
+  const circleW = (contentW - circleGap * (circleCount - 1)) / circleCount;
+  const circleH = 0.095;
+  const circleY = heroSubY + heroSubH + 0.026;
+  circleBlocks.slice(0, circleCount).forEach((block, index) => {
+    push(block, {
       manualX: margin + index * (circleW + circleGap),
       manualY: circleY,
       boxW: circleW,
       boxH: circleH,
-      fontSize: 18,
-      boxColor: "#FFEDD5",
+      fontSize: 17,
+      boxColor: "#FFFFFF",
       color: "inkBlack",
       lineHeight: 1.2,
     });
   });
 
+  const hasSplitCards =
+    Boolean(byType("card-l-support")) ||
+    Boolean(byType("card-r-support")) ||
+    Boolean(
+      blocks.some(
+        (b) => b.type.endsWith("-support") || b.type.endsWith("-amount")
+      )
+    );
+
   const cardGap = 0.022;
   const cardW = (contentW - cardGap) / 2;
-  const cardH = 0.12;
   const cardY = circleY + circleH + 0.028;
-  push(byType("card-l-title"), {
-    manualX: margin,
-    manualY: cardY,
-    boxW: cardW,
-    boxH: cardH,
-    fontSize: 18,
-    boxColor: "#FFFFFF",
-    color: "inkBlack",
-    lineHeight: 1.3,
-  });
-  push(byType("card-r-title"), {
-    manualX: margin + cardW + cardGap,
-    manualY: cardY,
-    boxW: cardW,
-    boxH: cardH,
-    fontSize: 18,
-    boxColor: "#FFFFFF",
-    color: "inkBlack",
-    lineHeight: 1.3,
-  });
 
-  const stepTypes = ["step-1", "step-2", "step-3", "step-4"] as const;
-  const stepH = 0.065;
-  const stepY0 = cardY + cardH + 0.028;
-  stepTypes.forEach((type, index) => {
-    push(byType(type), {
+  if (hasSplitCards) {
+    const sides: Array<"l" | "r"> = ["l", "r"];
+    sides.forEach((side, index) => {
+      const cardX = margin + index * (cardW + cardGap);
+      const titleH = 0.048;
+      const supportH = 0.042;
+      const amountH = 0.048;
+      const frameH = titleH + supportH + amountH + gap * 2 + 0.012;
+
+      layers.push(
+        boxedLayer(" ", "center", {
+          manualX: cardX,
+          manualY: cardY,
+          boxW: cardW,
+          boxH: frameH,
+          fontSize: 12,
+          boxColor: GRAY_BG,
+          color: "inkBlack",
+          boxOpacity: 0.92,
+        })
+      );
+      const frameLayer = layers[layers.length - 1]!;
+      frameLayer.id = `tpl01-mod-${card.id}-frame-${side}`;
+      frameLayer.layoutLocked = true;
+
+      push(byType(`card-${side}-title`), {
+        manualX: cardX + 0.008,
+        manualY: cardY + 0.008,
+        boxW: cardW - 0.016,
+        boxH: titleH,
+        fontSize: 17,
+        boxColor: NAVY_MID,
+        color: "white",
+      });
+      push(byType(`card-${side}-support`), {
+        manualX: cardX + 0.008,
+        manualY: cardY + 0.008 + titleH + gap,
+        boxW: cardW - 0.016,
+        boxH: supportH,
+        fontSize: 15,
+        boxColor: GRAY_MID,
+        color: "inkBlack",
+      });
+      push(byType(`card-${side}-amount`), {
+        manualX: cardX + 0.008,
+        manualY: cardY + 0.008 + titleH + gap + supportH + gap,
+        boxW: cardW - 0.016,
+        boxH: amountH,
+        fontSize: 20,
+        boxColor: GOLD_LIGHT,
+        color: "inkBlack",
+        fontWeight: 800,
+      });
+    });
+  } else {
+    push(byType("card-l-title"), {
+      manualX: margin,
+      manualY: cardY,
+      boxW: cardW,
+      boxH: 0.13,
+      fontSize: 16,
+      boxColor: "#FFFFFF",
+      color: "inkBlack",
+      lineHeight: 1.3,
+    });
+    push(byType("card-r-title"), {
+      manualX: margin + cardW + cardGap,
+      manualY: cardY,
+      boxW: cardW,
+      boxH: 0.13,
+      fontSize: 16,
+      boxColor: "#FFFFFF",
+      color: "inkBlack",
+      lineHeight: 1.3,
+    });
+  }
+
+  const cardBlockH = hasSplitCards ? 0.16 : 0.13;
+  const stepBlocks = blocks.filter((b) => /^step-\d+$/.test(b.type));
+  const stepH = 0.058;
+  const stepY0 = cardY + cardBlockH + 0.026;
+  stepBlocks.forEach((block, index) => {
+    const stepIndex = Number(block.type.replace("step-", "")) || index + 1;
+    push(block, {
       manualX: margin,
       manualY: stepY0 + index * (stepH + gap),
       boxW: contentW,
       boxH: stepH,
-      fontSize: 18,
-      boxColor: index % 2 === 0 ? "#FED7AA" : "#FDBA74",
+      fontSize: 17,
+      boxColor: stepIndex % 2 === 1 ? GRAY_MID : GRAY_BG,
       color: "inkBlack",
       align: "left",
     });
   });
 
-  const footerH = 0.08;
+  const footerH = 0.078;
   const footerY = 1 - margin - footerH;
   push(byType("footer"), {
     pos: "bottom",
@@ -581,34 +766,33 @@ export function buildModularBlockTextLayers(
     boxW: contentW,
     boxH: footerH,
     fontSize: 22,
-    boxColor: "#7C2D12",
+    boxColor: NAVY,
     color: "white",
   });
 
-  // Any extra / unknown typed blocks: stack below steps so future data still applies.
   const known = new Set([
     "hero-title",
     "hero-sub",
-    "circle-1",
-    "circle-2",
-    "circle-3",
     "card-l-title",
+    "card-l-support",
+    "card-l-amount",
     "card-r-title",
-    "step-1",
-    "step-2",
-    "step-3",
-    "step-4",
+    "card-r-support",
+    "card-r-amount",
     "footer",
+    ...blocks
+      .filter((b) => /^circle-\d+$/.test(b.type) || /^step-\d+$/.test(b.type))
+      .map((b) => b.type),
   ]);
   const extras = blocks.filter((b) => !known.has(b.type));
   extras.forEach((block, index) => {
     push(block, {
       manualX: margin,
-      manualY: Math.min(0.78, stepY0 + 4 * (stepH + gap) + index * 0.07),
+      manualY: Math.min(0.78, stepY0 + stepBlocks.length * (stepH + gap) + index * 0.065),
       boxW: contentW,
-      boxH: 0.06,
-      fontSize: 18,
-      boxColor: "#FFF7ED",
+      boxH: 0.055,
+      fontSize: 16,
+      boxColor: GRAY_BG,
       color: "inkBlack",
     });
   });
@@ -685,31 +869,33 @@ export const TEMPLATE_01_CARDS: Template01Card[] = [
   {
     id: 5,
     title: "보청기 구입 지원금 안내 포스터",
-    desc: "단면 · 모듈형 블록 시스템 (A4 고정)",
+    desc: "단면 · 모듈형 블록 시스템 (A4)",
     layoutType: "modular-block-system",
     aspectRatio: "A4",
-    textBlocks: [
-      { id: "b1", type: "hero-title", text: "보청기 구입할 때 지원금 받자" },
-      { id: "b2", type: "hero-sub", text: "정부 지원금 최대 혜택 안내" },
-      { id: "b3", type: "circle-1", text: "귓속형 보청기" },
-      { id: "b4", type: "circle-2", text: "오픈형 보청기" },
-      { id: "b5", type: "circle-3", text: "프리미엄형" },
+    heroBanner: {
+      title: "보청기 구입할 때 지원금 받자",
+      subtitle: "정부 지원금 최대 혜택 안내",
+    },
+    circularItems: ["귓속형 보청기", "오픈형 보청기", "프리미엄형"],
+    comparisonCards: [
       {
-        id: "b6",
-        type: "card-l-title",
-        text: "일반형 / 차상위 (정부 지원금 90% / 111만 9천원)",
+        title: "일반형 / 차상위",
+        supportText: "정부 지원금 90%",
+        amount: "111만 9천원",
       },
       {
-        id: "b7",
-        type: "card-r-title",
-        text: "기초수급자 (정부 지원금 100% / 131만원)",
+        title: "기초수급자",
+        supportText: "정부 지원금 100%",
+        amount: "131만원",
       },
-      { id: "b8", type: "step-1", text: "01. 국민건강보험공단 등록" },
-      { id: "b9", type: "step-2", text: "02. 보조기기 처방전 발급" },
-      { id: "b10", type: "step-3", text: "03. 보청기 구입 및 검수" },
-      { id: "b11", type: "step-4", text: "04. 지원금 청구 및 지급" },
-      { id: "b12", type: "footer", text: "빠른 상담 | 1588-0000" },
     ],
+    stepFlow: [
+      "01. 국민건강보험공단 등록",
+      "02. 보조기기 처방전 발급",
+      "03. 보청기 구입 및 검수",
+      "04. 지원금 청구 및 지급",
+    ],
+    footerText: "빠른 상담 | 1588-0000",
   },
 ];
 
@@ -724,7 +910,7 @@ export function template01CardToWarehouse(
       subtitle: card.desc,
       formatId: TEMPLATE_01_FORMAT_ID,
       pageCount: 1,
-      thumbClass: "bg-orange-900",
+      thumbClass: "bg-slate-900",
       backgroundUrl: buildModularBlockBackgroundDataUrl(),
       textLayersByPage: [buildModularBlockTextLayers(card)],
     };
