@@ -57,19 +57,19 @@ export default function StudioExportButtonGroup({
   const highParts = splitQuotaLabel(highLabel);
 
   const downloadClass = unified
-    ? "inline-flex w-full min-h-0 items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-white disabled:opacity-50"
+    ? "inline-flex w-full min-h-[2.85rem] items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-white disabled:opacity-50"
     : compact
       ? "inline-flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[11px] font-semibold text-white disabled:opacity-50"
       : "inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-lg disabled:opacity-50";
 
   const secondaryClass = unified
-    ? "inline-flex w-full flex-col items-center justify-center gap-0.5 rounded-lg border border-white/15 bg-white/5 px-1 py-1.5 text-[9px] font-medium leading-tight text-white/85 hover:bg-white/10 disabled:opacity-50 [word-break:keep-all] text-center"
+    ? "inline-flex w-full flex-row items-center justify-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2 py-2.5 text-[12px] font-semibold leading-none text-white hover:bg-white/10 disabled:opacity-50 [word-break:keep-all] whitespace-nowrap"
     : compact
       ? "inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-[#0E1420] px-3 py-2 text-[11px] font-medium text-slate-200 hover:bg-slate-800/60 disabled:opacity-50"
       : "inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-white/85 hover:bg-white/10 disabled:opacity-50";
 
   const iconClass = unified
-    ? "h-3 w-3 shrink-0"
+    ? "h-4 w-4 shrink-0"
     : compact
       ? "h-3.5 w-3.5"
       : "h-4 w-4 shrink-0";
@@ -79,15 +79,15 @@ export default function StudioExportButtonGroup({
       ? "px-0.5 text-center text-[10px] leading-snug text-slate-400"
       : "text-center text-xs leading-snug text-white/45";
   const labelClass = unified
-    ? "inline-flex min-w-0 items-baseline gap-0.5 whitespace-nowrap leading-none"
+    ? "inline-flex min-w-0 max-w-full items-baseline gap-1 whitespace-nowrap leading-none"
     : compact
       ? "min-w-0 text-center text-[10px] font-semibold leading-tight [word-break:keep-all]"
       : "min-w-0 text-center text-[12px] font-semibold leading-tight [word-break:keep-all] sm:text-sm";
   const downloadTitleClass = unified
-    ? "truncate text-[10px] font-semibold"
+    ? "truncate text-[13px] font-bold sm:text-[14px]"
     : "";
   const downloadQuotaClass = unified
-    ? "shrink-0 text-[9px] font-medium opacity-90"
+    ? "shrink-0 text-[11px] font-semibold sm:text-[12px]"
     : "";
 
   const renderDownloadLabel = (
@@ -113,7 +113,7 @@ export default function StudioExportButtonGroup({
             : "mt-auto grid shrink-0 gap-2 border-t border-white/10 pt-4"
       }
     >
-      <div className="grid grid-cols-2 gap-1.5">
+      <div className={`grid grid-cols-2 ${unified ? "gap-2" : "gap-1.5"}`}>
         <button
           type="button"
           onClick={onDownloadStandard}
@@ -144,18 +144,18 @@ export default function StudioExportButtonGroup({
         </p>
       ) : null}
       {unified && onLoadFromGallery ? (
-        <div className="grid grid-cols-3 gap-1">
+        <div className="grid grid-cols-3 gap-1.5">
           <button
             type="button"
             onClick={onLoadProjectClick}
             disabled={busy}
             className={secondaryClass}
           >
-            <FolderOpen className={iconClass} />
-            {cs.loadEditFile}
+            <FolderOpen className={iconClass} aria-hidden />
+            <span className="min-w-0 truncate">{cs.loadEditFile}</span>
           </button>
           <ScaGalleryLoadButton
-            compact={unified}
+            compact={false}
             disabled={busy}
             requireSubscription={requireSubscription}
             onLoadProject={onLoadFromGallery}
@@ -167,8 +167,8 @@ export default function StudioExportButtonGroup({
             disabled={busy}
             className={secondaryClass}
           >
-            <Share2 className={iconClass} />
-            {cs.share}
+            <Share2 className={iconClass} aria-hidden />
+            <span className="min-w-0 truncate">{cs.share}</span>
           </button>
         </div>
       ) : (

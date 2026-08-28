@@ -164,8 +164,8 @@ export default function ScaGalleryLoadButton({
         }}
         className={className || btnClass}
       >
-        <Images className={iconClass} />
-        {cs.loadFromGallery}
+        <Images className={iconClass} aria-hidden />
+        <span className="min-w-0 truncate">{cs.loadFromGallery}</span>
       </button>
       {menu}
     </>
