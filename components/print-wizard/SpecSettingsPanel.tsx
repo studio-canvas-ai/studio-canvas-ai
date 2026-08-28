@@ -598,7 +598,7 @@ export default function SpecSettingsPanel({
                   <p className="mb-1.5 text-[11px] font-bold tracking-wide text-indigo-200/90 [word-break:keep-all]">
                     {group.labelKo}
                   </p>
-                  <div className="flex flex-row flex-wrap gap-2">
+                  <div className="flex flex-row flex-wrap gap-1.5">
                     {group.presets.map((preset) => {
                       const on = isBgExamplePresetSelected(
                         bgKeyword,
@@ -614,16 +614,16 @@ export default function SpecSettingsPanel({
                             );
                             setOpenKey(null);
                           }}
-                          className={`min-w-[7.5rem] flex-[1_1_30%] rounded-lg border px-3 py-2.5 text-left shadow-sm transition pointer-coarse:min-h-10 [word-break:keep-all] ${
+                          className={`min-w-[9.5rem] flex-[1_1_45%] rounded-lg border px-2 py-1 text-left shadow-sm transition [word-break:keep-all] ${
                             on
-                              ? "border-2 border-indigo-500 bg-white text-gray-900 shadow-md ring-2 ring-indigo-400/35"
-                              : "border border-gray-200 bg-white text-gray-900 hover:border-gray-300 hover:shadow"
+                              ? "border-2 border-indigo-500 bg-white shadow-md ring-2 ring-indigo-400/35"
+                              : "border border-gray-200 bg-white hover:border-gray-300 hover:shadow"
                           }`}
                         >
-                          <span className="block text-[11px] font-semibold leading-snug text-gray-900 sm:text-[12px]">
+                          <span className="line-clamp-2 block text-[14px] font-bold leading-[1.2] text-black sm:text-[15px]">
                             {preset.titleKo}
                           </span>
-                          <span className="mt-1 block text-[10px] font-medium leading-relaxed text-gray-600 sm:text-[11px]">
+                          <span className="mt-0.5 line-clamp-1 block text-[13px] font-semibold leading-[1.2] text-blue-700 sm:text-[14px]">
                             ({preset.hintKo})
                           </span>
                         </button>
