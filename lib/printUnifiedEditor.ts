@@ -177,6 +177,41 @@ function applyWideGuideBoxes(
   });
 }
 
+/** True when the page has no user text and is safe to (re)seed guide boxes. */
+export function isBlankUnifiedTextPage(layers: TextLayer[]): boolean {
+  if (!layers.length) return true;
+  if (
+    layers.some(
+      (layer) => Boolean(String(layer.text || "").replace(/\u200B/g, "").trim())
+    )
+  ) {
+    return false;
+  }
+  // Warehouse templates use filled boxes or multi-layer layouts — never re-seed.
+  if (layers.some((layer) => layer.showBox)) return false;
+  if (layers.length > PAGE_ZONE_ORDER.length) return false;
+  return true;
+}
+
+/** Seed Screen 24–style top / center / bottom wide dashed guide boxes. */
+export function createDefaultUnifiedGuideLayers(
+  pageIndex: number,
+  stageW: number,
+  stageH: number
+): TextLayer[] {
+  return applyUnifiedEditorPageLayout([], pageIndex, stageW, stageH);
+}
+
+export function ensureUnifiedGuideLayers(
+  layers: TextLayer[],
+  pageIndex: number,
+  stageW: number,
+  stageH: number
+): TextLayer[] {
+  if (!isBlankUnifiedTextPage(layers)) return layers;
+  return createDefaultUnifiedGuideLayers(pageIndex, stageW, stageH);
+}
+
 /** Warehouse / boxed templates — every layer carries absolute normalized geometry. */
 export function isAbsoluteWarehouseLayoutPage(layers: TextLayer[]): boolean {
   if (!layers.length) return false;

@@ -11,6 +11,8 @@ import PrintUnifiedEditorLayout from "@/components/print-unified-editor/PrintUni
 import {
   PRINT_UNIFIED_EDITOR_SESSION_KEY,
   applyUnifiedEditorPageLayout,
+  createDefaultUnifiedGuideLayers,
+  isBlankUnifiedTextPage,
   resizeBlankIsolatedPages,
   resizeContentOffsets,
   type PrintContentOffset,
@@ -163,8 +165,6 @@ function hydrateInitialState(): PrintWizardState {
     const textLayersByPage = resizeBlankIsolatedPages(
       wizard.textLayersByPage,
       pageCount
-    ).map((page) =>
-      page.length && page.every((l) => !String(l.text || "").trim()) ? [] : page
     );
     return {
       ...wizard,
@@ -221,13 +221,45 @@ export default function PrintUnifiedEditor() {
   );
   const stateRef = useRef(state);
   stateRef.current = state;
+  const formatSeedKeyRef = useRef("");
+
+  const seedGuideLayersForPage = useCallback((pageIndexToSeed: number) => {
+    if (pageIndexToSeed < 0) return;
+    setState((prev) => {
+      const pages = resizeBlankIsolatedPages(
+        prev.textLayersByPage,
+        prev.pageCount
+      );
+      if (pageIndexToSeed >= pages.length) return prev;
+      const existing = pages[pageIndexToSeed] ?? [];
+      if (!isBlankUnifiedTextPage(existing)) return prev;
+
+      const stage = referencePrintStageSize(
+        resolvePrintAspect(prev.formatId, prev.customSize)
+      );
+      const seeded = createDefaultUnifiedGuideLayers(
+        pageIndexToSeed,
+        stage.w,
+        stage.h
+      );
+      const nextPages = pages.map((page, i) =>
+        i === pageIndexToSeed ? seeded : page
+      );
+      const next = { ...prev, textLayersByPage: nextPages };
+      saveSession(next);
+      return next;
+    });
+  }, []);
 
   const activatePage = useCallback((page: number) => {
     setCurrentPage(page);
     setActiveTextLayerId(null);
     setActiveDecoLayerId(null);
     setActivePhotoLayerId(null);
-  }, []);
+    if (page > 0) {
+      seedGuideLayersForPage(page - 1);
+    }
+  }, [seedGuideLayersForPage]);
 
   useEffect(() => {
     setState(hydrateInitialState());
@@ -743,6 +775,38 @@ export default function PrintUnifiedEditor() {
     },
     [activatePage, state.pageCount]
   );
+
+  const formatSeedKey = `${state.formatId}|${state.customSize?.width ?? ""}|${state.customSize?.height ?? ""}|${state.customSize?.unit ?? ""}`;
+
+  useEffect(() => {
+    if (!pageActivated || pageIndex < 0) return;
+    if (!formatSeedKeyRef.current) {
+      formatSeedKeyRef.current = formatSeedKey;
+      return;
+    }
+    if (formatSeedKeyRef.current === formatSeedKey) return;
+    formatSeedKeyRef.current = formatSeedKey;
+
+    setState((prev) => {
+      const pages = resizeBlankIsolatedPages(
+        prev.textLayersByPage,
+        prev.pageCount
+      );
+      const stage = referencePrintStageSize(
+        resolvePrintAspect(prev.formatId, prev.customSize)
+      );
+      let changed = false;
+      const nextPages = pages.map((page, i) => {
+        if (!isBlankUnifiedTextPage(page)) return page;
+        changed = true;
+        return createDefaultUnifiedGuideLayers(i, stage.w, stage.h);
+      });
+      if (!changed) return prev;
+      const next = { ...prev, textLayersByPage: nextPages };
+      saveSession(next);
+      return next;
+    });
+  }, [formatSeedKey, pageActivated, pageIndex]);
 
   const backgroundUrl = useMemo(() => {
     const raw = pageBackgroundUrl(state.backgroundUrls, state.backgroundUrl, 0);

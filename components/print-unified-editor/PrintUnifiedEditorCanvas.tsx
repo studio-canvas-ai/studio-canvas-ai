@@ -416,6 +416,7 @@ export default function PrintUnifiedEditorCanvas({
                         onTextLayersChange(pageIndex, layers)
                       }
                       interactive
+                      showEmptyGuideBoxes
                       activeLayerId={activeTextLayerId ?? null}
                       onActiveLayerChange={onActiveTextLayerChange}
                       pageIndex={pageIndex}
