@@ -573,15 +573,89 @@ export function buildNestedBoxesTextLayers(
 }
 
 /**
+ * Vertical stack aligned with Template01ModularPreview (flex column + aspect-square circles).
+ * Fractions are normalized to A4 portrait stage height/width.
+ */
+function computeModularPosterLayout(
+  aspect: number = TEMPLATE_01_A4_ASPECT,
+  stepCount = 4
+) {
+  const margin = 0.025;
+  const sectionGap = 0.012;
+  const contentW = 1 - margin * 2;
+  const circleGap = 0.018;
+  const circleW = (contentW - circleGap * 2) / 3;
+  const circleH = circleW * aspect;
+
+  const heroTitleH = 0.088;
+  const heroSubH = 0.048;
+
+  let cursor = margin;
+  const heroTitleY = cursor;
+  cursor += heroTitleH + sectionGap;
+  const heroSubY = cursor;
+  cursor += heroSubH + sectionGap;
+  const circleY = cursor;
+  cursor += circleH + sectionGap;
+
+  const footerH = 0.068;
+  const footerY = 1 - margin - footerH;
+
+  const stepH = 0.052;
+  const stepGap = 0.008;
+  const stepsBlockH =
+    stepCount > 0
+      ? stepCount * stepH + Math.max(0, stepCount - 1) * stepGap
+      : 0;
+  const stepY0 = footerY - sectionGap - stepsBlockH;
+
+  const cardGap = 0.018;
+  const cardW = (contentW - cardGap) / 2;
+  const cardY = cursor;
+  const cardBlockH = Math.max(0.14, stepY0 - sectionGap - cardY);
+
+  const cardPad = 0.01;
+  const innerGap = 0.008;
+  const titleH = cardBlockH * 0.22;
+  const supportH = cardBlockH * 0.34;
+  const amountH = cardBlockH * 0.26;
+
+  return {
+    margin,
+    sectionGap,
+    contentW,
+    circleGap,
+    circleW,
+    circleH,
+    heroTitleY,
+    heroTitleH,
+    heroSubY,
+    heroSubH,
+    circleY,
+    cardGap,
+    cardW,
+    cardY,
+    cardBlockH,
+    cardPad,
+    innerGap,
+    titleH,
+    supportH,
+    amountH,
+    stepH,
+    stepGap,
+    stepY0,
+    footerH,
+    footerY,
+  };
+}
+
+/**
  * Modular block system — one independent layoutLocked box per textBlock.
  * Screen 26 can move / edit / delete each box via existing layer tools (no Screen 26 edits).
  */
 export function buildModularBlockTextLayers(
   card: Template01ModularCard
 ): TextLayer[] {
-  const margin = 0.055;
-  const gap = 0.016;
-  const contentW = 1 - margin * 2;
   const blocks = resolveModularCardBlocks(card);
   const layers: TextLayer[] = [];
 
@@ -604,8 +678,38 @@ export function buildModularBlockTextLayers(
     layers.push(layer);
   };
 
-  const heroTitleY = 0.038;
-  const heroTitleH = 0.085;
+  const stepBlocks = blocks.filter((b) => /^step-\d+$/.test(b.type));
+  const layout = computeModularPosterLayout(
+    TEMPLATE_01_A4_ASPECT,
+    Math.max(4, stepBlocks.length || 4)
+  );
+  const {
+    margin,
+    contentW,
+    circleGap,
+    circleW,
+    circleH,
+    heroTitleY,
+    heroTitleH,
+    heroSubY,
+    heroSubH,
+    circleY,
+    cardGap,
+    cardW,
+    cardY,
+    cardBlockH,
+    cardPad,
+    innerGap,
+    titleH,
+    supportH,
+    amountH,
+    stepH,
+    stepGap,
+    stepY0,
+    footerH,
+    footerY,
+  } = layout;
+
   push(byType("hero-title"), {
     pos: "top",
     manualX: margin,
@@ -617,8 +721,6 @@ export function buildModularBlockTextLayers(
     color: "white",
   });
 
-  const heroSubY = heroTitleY + heroTitleH + gap;
-  const heroSubH = 0.052;
   push(byType("hero-sub"), {
     pos: "top",
     manualX: margin,
@@ -632,16 +734,15 @@ export function buildModularBlockTextLayers(
 
   const circleBlocks = blocks.filter((b) => /^circle-\d+$/.test(b.type));
   const circleCount = Math.max(3, Math.min(6, circleBlocks.length || 3));
-  const circleGap = 0.022;
-  const circleW = (contentW - circleGap * (circleCount - 1)) / circleCount;
-  const circleH = 0.095;
-  const circleY = heroSubY + heroSubH + 0.026;
+  const circleSlotW =
+    (contentW - circleGap * (circleCount - 1)) / circleCount;
+  const circleSlotH = circleSlotW * TEMPLATE_01_A4_ASPECT;
   circleBlocks.slice(0, circleCount).forEach((block, index) => {
     push(block, {
-      manualX: margin + index * (circleW + circleGap),
-      manualY: circleY,
-      boxW: circleW,
-      boxH: circleH,
+      manualX: margin + index * (circleSlotW + circleGap),
+      manualY: circleY + Math.max(0, (circleH - circleSlotH) / 2),
+      boxW: circleSlotW,
+      boxH: circleSlotH,
       fontSize: 17,
       boxColor: "#FFFFFF",
       color: "inkBlack",
@@ -656,27 +757,20 @@ export function buildModularBlockTextLayers(
       blocks.some(
         (b) => b.type.endsWith("-support") || b.type.endsWith("-amount")
       )
-    );
-
-  const cardGap = 0.022;
-  const cardW = (contentW - cardGap) / 2;
-  const cardY = circleY + circleH + 0.028;
+    ) ||
+    Boolean(card.comparisonCards?.length);
 
   if (hasSplitCards) {
     const sides: Array<"l" | "r"> = ["l", "r"];
     sides.forEach((side, index) => {
       const cardX = margin + index * (cardW + cardGap);
-      const titleH = 0.048;
-      const supportH = 0.042;
-      const amountH = 0.048;
-      const frameH = titleH + supportH + amountH + gap * 2 + 0.012;
 
       layers.push(
         boxedLayer(" ", "center", {
           manualX: cardX,
           manualY: cardY,
           boxW: cardW,
-          boxH: frameH,
+          boxH: cardBlockH,
           fontSize: 12,
           boxColor: GRAY_BG,
           color: "inkBlack",
@@ -688,27 +782,27 @@ export function buildModularBlockTextLayers(
       frameLayer.layoutLocked = true;
 
       push(byType(`card-${side}-title`), {
-        manualX: cardX + 0.008,
-        manualY: cardY + 0.008,
-        boxW: cardW - 0.016,
+        manualX: cardX + cardPad,
+        manualY: cardY + cardPad,
+        boxW: cardW - cardPad * 2,
         boxH: titleH,
         fontSize: 17,
         boxColor: NAVY_MID,
         color: "white",
       });
       push(byType(`card-${side}-support`), {
-        manualX: cardX + 0.008,
-        manualY: cardY + 0.008 + titleH + gap,
-        boxW: cardW - 0.016,
+        manualX: cardX + cardPad,
+        manualY: cardY + cardPad + titleH + innerGap,
+        boxW: cardW - cardPad * 2,
         boxH: supportH,
         fontSize: 15,
         boxColor: GRAY_MID,
         color: "inkBlack",
       });
       push(byType(`card-${side}-amount`), {
-        manualX: cardX + 0.008,
-        manualY: cardY + 0.008 + titleH + gap + supportH + gap,
-        boxW: cardW - 0.016,
+        manualX: cardX + cardPad,
+        manualY: cardY + cardPad + titleH + innerGap + supportH + innerGap,
+        boxW: cardW - cardPad * 2,
         boxH: amountH,
         fontSize: 20,
         boxColor: GOLD_LIGHT,
@@ -721,7 +815,7 @@ export function buildModularBlockTextLayers(
       manualX: margin,
       manualY: cardY,
       boxW: cardW,
-      boxH: 0.13,
+      boxH: cardBlockH,
       fontSize: 16,
       boxColor: "#FFFFFF",
       color: "inkBlack",
@@ -731,7 +825,7 @@ export function buildModularBlockTextLayers(
       manualX: margin + cardW + cardGap,
       manualY: cardY,
       boxW: cardW,
-      boxH: 0.13,
+      boxH: cardBlockH,
       fontSize: 16,
       boxColor: "#FFFFFF",
       color: "inkBlack",
@@ -739,15 +833,11 @@ export function buildModularBlockTextLayers(
     });
   }
 
-  const cardBlockH = hasSplitCards ? 0.16 : 0.13;
-  const stepBlocks = blocks.filter((b) => /^step-\d+$/.test(b.type));
-  const stepH = 0.058;
-  const stepY0 = cardY + cardBlockH + 0.026;
   stepBlocks.forEach((block, index) => {
     const stepIndex = Number(block.type.replace("step-", "")) || index + 1;
     push(block, {
       manualX: margin,
-      manualY: stepY0 + index * (stepH + gap),
+      manualY: stepY0 + index * (stepH + stepGap),
       boxW: contentW,
       boxH: stepH,
       fontSize: 17,
@@ -757,8 +847,6 @@ export function buildModularBlockTextLayers(
     });
   });
 
-  const footerH = 0.078;
-  const footerY = 1 - margin - footerH;
   push(byType("footer"), {
     pos: "bottom",
     manualX: margin,
@@ -788,7 +876,10 @@ export function buildModularBlockTextLayers(
   extras.forEach((block, index) => {
     push(block, {
       manualX: margin,
-      manualY: Math.min(0.78, stepY0 + stepBlocks.length * (stepH + gap) + index * 0.065),
+      manualY: Math.min(
+        0.78,
+        stepY0 + stepBlocks.length * (stepH + stepGap) + index * 0.065
+      ),
       boxW: contentW,
       boxH: 0.055,
       fontSize: 16,

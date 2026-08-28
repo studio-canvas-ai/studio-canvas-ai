@@ -699,7 +699,8 @@ function pruneEmptyDefaultZoneExtras(layers: TextLayer[]): TextLayer[] {
       const keep =
         index === 0 ||
         layer.text.trim().length > 0 ||
-        /-layer-/.test(layer.id);
+        /-layer-/.test(layer.id) ||
+        (layer.layoutLocked && layer.boxManual);
       if (keep) kept.push(layer);
     });
   }

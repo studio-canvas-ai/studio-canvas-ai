@@ -177,6 +177,24 @@ function applyWideGuideBoxes(
   });
 }
 
+/** Warehouse / boxed templates — every layer carries absolute normalized geometry. */
+export function isAbsoluteWarehouseLayoutPage(layers: TextLayer[]): boolean {
+  if (!layers.length) return false;
+  return layers.every(
+    (layer) =>
+      layer.layoutLocked &&
+      layer.boxManual &&
+      typeof layer.manualX === "number" &&
+      Number.isFinite(layer.manualX) &&
+      typeof layer.manualY === "number" &&
+      Number.isFinite(layer.manualY) &&
+      typeof layer.boxW === "number" &&
+      layer.boxW > 0 &&
+      typeof layer.boxH === "number" &&
+      layer.boxH > 0
+  );
+}
+
 /** Screen 26 — wide horizontal guide boxes (top / center / bottom). */
 export function applyUnifiedEditorPageLayout(
   layers: TextLayer[],
@@ -184,6 +202,9 @@ export function applyUnifiedEditorPageLayout(
   stageW: number,
   stageH: number
 ): TextLayer[] {
+  if (isAbsoluteWarehouseLayoutPage(layers)) {
+    return layers;
+  }
   return applyWideGuideBoxes(
     unifiedEditorBaseLayers(layers, pageIndex),
     stageW,
