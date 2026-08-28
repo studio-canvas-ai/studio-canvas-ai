@@ -25,10 +25,10 @@ import {
 } from "@/lib/printWizardTypes";
 import type { WizardProductId } from "@/lib/wizard/wizardProduct";
 import {
+  applyBgExamplePreset,
   BG_EXAMPLE_CATEGORIES,
+  findSelectedBgExamplePreset,
   isBgExamplePresetSelected,
-  selectedBgExampleLabels,
-  toggleBgExamplePrompt,
 } from "@/lib/aiBackgroundExamplePresets";
 import {
   PHOTO_LOOKBOOK_EXAMPLE_HINT,
@@ -212,7 +212,7 @@ export default function SpecSettingsPanel({
   };
 
   const specPicks = specPicksProp ?? emptySpecPicks();
-  const pickedBgExampleLabels = selectedBgExampleLabels(bgKeyword);
+  const selectedBgExample = findSelectedBgExamplePreset(bgKeyword);
   const selectedPhotoExample = isPhotoProduct
     ? getPhotoLookbookExampleCategories({
         useId,
@@ -241,7 +241,15 @@ export default function SpecSettingsPanel({
           ? `${bgKeyword.trim().slice(0, 22)}…`
           : bgKeyword.trim()
         : ""
-    : pickedBgExampleLabels.join(" · ");
+    : selectedBgExample
+      ? selectedBgExample.labelKo.length > 22
+        ? `${selectedBgExample.labelKo.slice(0, 22)}…`
+        : selectedBgExample.labelKo
+      : bgKeyword.trim()
+        ? bgKeyword.trim().length > 22
+          ? `${bgKeyword.trim().slice(0, 22)}…`
+          : bgKeyword.trim()
+        : "";
   const specTags = [
     specPicks.format && formatValueLabel
       ? { label: cs.specFormat, value: formatValueLabel }
@@ -602,13 +610,14 @@ export default function SpecSettingsPanel({
                           type="button"
                           onClick={() => {
                             onBgKeywordChange(
-                              toggleBgExamplePrompt(bgKeyword, preset.promptEn)
+                              applyBgExamplePreset(preset.promptEn)
                             );
+                            setOpenKey(null);
                           }}
-                          className={`min-w-[7rem] flex-[1_1_30%] rounded-lg border px-2 py-1.5 text-left text-[10px] font-semibold leading-snug [word-break:keep-all] transition pointer-coarse:min-h-9 sm:text-[11px] ${
+                          className={`min-w-[7rem] flex-[1_1_30%] rounded-lg border-2 px-2 py-1.5 text-left text-[10px] font-bold leading-snug text-white [word-break:keep-all] transition pointer-coarse:min-h-9 sm:text-[11px] ${
                             on
-                              ? "border-indigo-400/60 bg-indigo-500/25 text-indigo-50 ring-1 ring-indigo-400/40"
-                              : "border-slate-700 bg-[#0E1420] text-slate-300 hover:border-slate-500 hover:text-white"
+                              ? "border-indigo-400 bg-indigo-600/45 text-white shadow-[0_0_0_1px_rgba(129,140,248,0.6)] ring-2 ring-indigo-400/50"
+                              : "border-slate-600 bg-[#1a2235] text-white hover:border-indigo-300/80 hover:bg-[#243047]"
                           }`}
                         >
                           {preset.labelKo}

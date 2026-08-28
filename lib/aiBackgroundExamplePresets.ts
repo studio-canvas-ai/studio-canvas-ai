@@ -968,52 +968,42 @@ export const BG_EXAMPLE_CATEGORIES: readonly BgExampleCategory[] = [
   },
 ] as const;
 
-/** Flat lookup for all presets */
-export const BG_EXAMPLE_PRESETS_BY_PROMPT = new Map<string, BgExamplePreset>(
-  BG_EXAMPLE_CATEGORIES.flatMap((cat) =>
-    cat.presets.map((preset) => [preset.promptEn, preset] as const)
-  )
-);
-
-export function selectedBgExamplePrompts(current: string): Set<string> {
-  return new Set(
-    current
-      .split(",")
-      .map((part) => part.trim())
-      .filter(Boolean)
-  );
+/** Single-select: set preset prompt with trailing comma-space for continued typing. */
+export function applyBgExamplePreset(promptEn: string): string {
+  const next = promptEn.trim();
+  if (!next) return "";
+  return `${next}, `;
 }
 
-export function toggleBgExamplePrompt(current: string, promptEn: string): string {
-  const next = promptEn.trim();
-  if (!next) return current;
-  const parts = current
-    .split(",")
-    .map((part) => part.trim())
-    .filter(Boolean);
-  if (parts.includes(next)) {
-    return parts.filter((part) => part !== next).join(", ");
+export function findSelectedBgExamplePreset(
+  bgKeyword: string
+): BgExamplePreset | null {
+  const trimmed = bgKeyword.trimStart();
+  if (!trimmed) return null;
+
+  for (const category of BG_EXAMPLE_CATEGORIES) {
+    for (const preset of category.presets) {
+      const prompt = preset.promptEn;
+      if (
+        trimmed === prompt ||
+        trimmed.startsWith(`${prompt}, `) ||
+        trimmed.startsWith(`${prompt},`)
+      ) {
+        return preset;
+      }
+    }
   }
-  return parts.length ? `${parts.join(", ")}, ${next}` : next;
+  return null;
 }
 
 export function isBgExamplePresetSelected(
   bgKeyword: string,
   promptEn: string
 ): boolean {
-  return selectedBgExamplePrompts(bgKeyword).has(promptEn.trim());
+  return findSelectedBgExamplePreset(bgKeyword)?.promptEn === promptEn.trim();
 }
 
-/** Korean labels for active presets (for dropdown value chip). */
-export function selectedBgExampleLabels(bgKeyword: string): string[] {
-  const active = selectedBgExamplePrompts(bgKeyword);
-  const labels: string[] = [];
-  for (const category of BG_EXAMPLE_CATEGORIES) {
-    for (const preset of category.presets) {
-      if (active.has(preset.promptEn)) {
-        labels.push(preset.labelKo);
-      }
-    }
-  }
-  return labels;
+/** Korean label for the active single-select preset (dropdown value chip). */
+export function selectedBgExampleLabel(bgKeyword: string): string | null {
+  return findSelectedBgExamplePreset(bgKeyword)?.labelKo ?? null;
 }

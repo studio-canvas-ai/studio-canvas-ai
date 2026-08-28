@@ -226,7 +226,7 @@ export const canvasStudioKr: CanvasStudioCopy = {
   bgGenerate: "AI 배경 생성하기",
   bgGenerating: "AI 배경 생성 중…",
   bgGenerateTitle: "AI 배경 생성",
-  bgPlaceholder: "원하는대로 단어를 수정하셔도 됩니다",
+  bgPlaceholder: "수정하거나, 원하는 단어를 뒤에 적어도 됩니다.",
   bgHint:
     "상단 [예시]에서 키워드를 누르면 입력창에 추가됩니다. 규격·스타일·용도·장수·분야와 함께 하나의 컨텍스트로 생성되며, 입력창에서 직접 수정·삭제할 수 있습니다.",
   pageFillHint1: "각페이지를 클릭해서 내용을 채우고,",
