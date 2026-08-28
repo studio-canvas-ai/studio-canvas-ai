@@ -343,32 +343,6 @@ export default function PrintUnifiedEditorCanvas({
                     Without a page key, the shared instance swaps layers→[] on navigate
                     and a late blur/commit writes that empty payload onto the prior page.
                   */}
-                  {photoLayers?.length && onPhotoLayersChange ? (
-                    <PreviewPhotoOverlay
-                      key={`photo-${pageIndex}`}
-                      layers={photoLayers}
-                      onLayersChange={(layers) =>
-                        onPhotoLayersChange(pageIndex, layers)
-                      }
-                      activeLayerId={activePhotoLayerId ?? null}
-                      onActiveLayerChange={onActivePhotoLayerChange}
-                      viewScale={zoom}
-                    />
-                  ) : null}
-
-                  {decoLayers?.length && onDecoLayersChange ? (
-                    <PreviewDecoOverlay
-                      key={`deco-${pageIndex}`}
-                      layers={decoLayers}
-                      onLayersChange={(layers) =>
-                        onDecoLayersChange(pageIndex, layers)
-                      }
-                      activeLayerId={activeDecoLayerId ?? null}
-                      onActiveLayerChange={onActiveDecoLayerChange}
-                      viewScale={zoom}
-                    />
-                  ) : null}
-
                   <PreviewTextOverlay
                     key={`text-${pageIndex}`}
                     layers={textLayers}
@@ -383,6 +357,42 @@ export default function PrintUnifiedEditorCanvas({
                     editOnSingleClick
                     viewScale={zoom}
                   />
+
+                  {photoLayers?.length && onPhotoLayersChange ? (
+                    <div
+                      data-photo-overlay
+                      className="pointer-events-none absolute inset-0 z-[8] overflow-visible"
+                    >
+                      <PreviewPhotoOverlay
+                        key={`photo-${pageIndex}`}
+                        layers={photoLayers}
+                        onLayersChange={(layers) =>
+                          onPhotoLayersChange(pageIndex, layers)
+                        }
+                        activeLayerId={activePhotoLayerId ?? null}
+                        onActiveLayerChange={onActivePhotoLayerChange}
+                        viewScale={zoom}
+                      />
+                    </div>
+                  ) : null}
+
+                  {decoLayers?.length && onDecoLayersChange ? (
+                    <div
+                      data-deco-overlay
+                      className="pointer-events-none absolute inset-0 z-[9] overflow-visible"
+                    >
+                      <PreviewDecoOverlay
+                        key={`deco-${pageIndex}`}
+                        layers={decoLayers}
+                        onLayersChange={(layers) =>
+                          onDecoLayersChange(pageIndex, layers)
+                        }
+                        activeLayerId={activeDecoLayerId ?? null}
+                        onActiveLayerChange={onActiveDecoLayerChange}
+                        viewScale={zoom}
+                      />
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>

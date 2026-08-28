@@ -843,7 +843,13 @@ export default function PrintUnifiedEditor() {
                 : undefined
             }
             activePhotoLayerId={activePhotoLayerId}
-            onActivePhotoLayerChange={setActivePhotoLayerId}
+            onActivePhotoLayerChange={(id) => {
+              setActivePhotoLayerId(id);
+              if (id) {
+                setActiveTextLayerId(null);
+                setActiveDecoLayerId(null);
+              }
+            }}
             decoLayers={
               pageActivated ? decoLayersByPage[pageIndex] : undefined
             }
@@ -853,7 +859,13 @@ export default function PrintUnifiedEditor() {
                 : undefined
             }
             activeTextLayerId={activeTextLayerId}
-            onActiveTextLayerChange={setActiveTextLayerId}
+            onActiveTextLayerChange={(id) => {
+              setActiveTextLayerId(id);
+              if (id) {
+                setActivePhotoLayerId(null);
+                setActiveDecoLayerId(null);
+              }
+            }}
             activeDecoLayerId={activeDecoLayerId}
             onActiveDecoLayerChange={setActiveDecoLayerId}
             foldGuidesHidden={state.foldGuidesHidden}
