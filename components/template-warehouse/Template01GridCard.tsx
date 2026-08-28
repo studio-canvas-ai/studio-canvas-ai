@@ -1,6 +1,6 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import {
   TEMPLATE_01_A4_ASPECT,
   type Template01Card,
@@ -10,7 +10,10 @@ import Template01CardPreview from "@/components/template-warehouse/Template01Car
 export type Template01GridCardProps = {
   card: Template01Card;
   removing?: boolean;
+  /** Admin-only: duplicate (+) and trash controls. */
+  canManage?: boolean;
   onPick: () => void;
+  onDuplicate: () => void;
   onRemove: () => void;
 };
 
@@ -18,7 +21,9 @@ export type Template01GridCardProps = {
 export default function Template01GridCard({
   card,
   removing = false,
+  canManage = false,
   onPick,
+  onDuplicate,
   onRemove,
 }: Template01GridCardProps) {
   return (
@@ -29,18 +34,34 @@ export default function Template01GridCard({
           : "scale-100 opacity-100"
       }`}
     >
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onRemove();
-        }}
-        className="absolute right-2.5 top-2.5 z-[3] inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/15 bg-black/55 text-white/70 opacity-0 shadow-lg backdrop-blur-md transition-all duration-200 group-hover:opacity-100 hover:scale-105 hover:border-rose-400/60 hover:bg-rose-500/90 hover:text-white focus-visible:opacity-100"
-        aria-label={`${card.title} 삭제`}
-        title="템플릿 삭제"
-      >
-        <Trash2 className="h-3.5 w-3.5" />
-      </button>
+      {canManage ? (
+        <>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDuplicate();
+            }}
+            className="absolute left-2.5 top-2.5 z-[3] inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/15 bg-black/55 text-white/70 opacity-0 shadow-lg backdrop-blur-md transition-all duration-200 group-hover:opacity-100 hover:scale-105 hover:border-emerald-400/60 hover:bg-emerald-500/90 hover:text-white focus-visible:opacity-100"
+            aria-label={`${card.title} 복사`}
+            title="템플릿 복사"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
+            className="absolute right-2.5 top-2.5 z-[3] inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/15 bg-black/55 text-white/70 opacity-0 shadow-lg backdrop-blur-md transition-all duration-200 group-hover:opacity-100 hover:scale-105 hover:border-rose-400/60 hover:bg-rose-500/90 hover:text-white focus-visible:opacity-100"
+            aria-label={`${card.title} 삭제`}
+            title="템플릿 삭제"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </>
+      ) : null}
       <button
         type="button"
         onClick={onPick}

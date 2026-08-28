@@ -4,12 +4,18 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePathname, useRouter } from "next/navigation";
 import { X } from "lucide-react";
+import { useCredits } from "@/components/CreditsProvider";
 import { PRINT_UNIFIED_EDITOR_PATH } from "@/lib/printUnifiedEditor";
 import {
   TEMPLATE_01_CARDS,
   TEMPLATE_WAREHOUSE_OPEN_EVENT,
   applyWarehouseTemplate,
-  loadRemovedTemplate01Ids,
+  buildTemplate01WarehouseList,
+  cloneTemplate01Card,
+  isBuiltinTemplate01Id,
+  loadCustomTemplate01Cards,
+  nextTemplate01CardId,
+  saveCustomTemplate01Cards,
   saveRemovedTemplate01Ids,
   template01CardToWarehouse,
   templatesForTab,
@@ -55,6 +61,7 @@ const REMOVE_ANIM_MS = 280;
 export default function TemplateWarehouseModal() {
   const router = useRouter();
   const pathname = usePathname() || "/";
+  const { isAdmin } = useCredits();
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<WarehouseTabId>("single");
   const [mounted, setMounted] = useState(false);
@@ -65,12 +72,7 @@ export default function TemplateWarehouseModal() {
 
   useEffect(() => {
     setMounted(true);
-    const removed = new Set(loadRemovedTemplate01Ids());
-    if (removed.size > 0) {
-      setTemplate01Cards(
-        TEMPLATE_01_CARDS.filter((card) => !removed.has(card.id))
-      );
-    }
+    setTemplate01Cards(buildTemplate01WarehouseList());
     return () => {
       removeTimers.current.forEach((timer) => window.clearTimeout(timer));
       removeTimers.current.clear();
@@ -112,15 +114,22 @@ export default function TemplateWarehouseModal() {
   };
 
   const removeTemplate01Card = (cardId: number) => {
+    if (!isAdmin) return;
     if (removingIds.has(cardId)) return;
     setRemovingIds((prev) => new Set(prev).add(cardId));
     const timer = window.setTimeout(() => {
       setTemplate01Cards((prev) => {
         const next = prev.filter((card) => card.id !== cardId);
-        const removed = TEMPLATE_01_CARDS.filter(
-          (card) => !next.some((n) => n.id === card.id)
-        ).map((card) => card.id);
-        saveRemovedTemplate01Ids(removed);
+        if (isBuiltinTemplate01Id(cardId)) {
+          const removed = TEMPLATE_01_CARDS.filter(
+            (card) => !next.some((n) => n.id === card.id)
+          ).map((card) => card.id);
+          saveRemovedTemplate01Ids(removed);
+        } else {
+          saveCustomTemplate01Cards(
+            loadCustomTemplate01Cards().filter((card) => card.id !== cardId)
+          );
+        }
         return next;
       });
       setRemovingIds((prev) => {
@@ -131,6 +140,19 @@ export default function TemplateWarehouseModal() {
       removeTimers.current.delete(cardId);
     }, REMOVE_ANIM_MS);
     removeTimers.current.set(cardId, timer);
+  };
+
+  const duplicateTemplate01Card = (card: Template01Card) => {
+    if (!isAdmin) return;
+    setTemplate01Cards((prev) => {
+      const newId = nextTemplate01CardId(prev);
+      const copy = cloneTemplate01Card(card, newId);
+      const next = [...prev, copy];
+      saveCustomTemplate01Cards(
+        next.filter((item) => !isBuiltinTemplate01Id(item.id))
+      );
+      return next;
+    });
   };
 
   const goSpace4 = () => {
@@ -211,10 +233,12 @@ export default function TemplateWarehouseModal() {
                   <Template01GridCard
                     key={card.id}
                     card={card}
+                    canManage={isAdmin}
                     removing={removingIds.has(card.id)}
                     onPick={() =>
                       pickTemplate(template01CardToWarehouse(card))
                     }
+                    onDuplicate={() => duplicateTemplate01Card(card)}
                     onRemove={() => removeTemplate01Card(card.id)}
                   />
                 ))}

@@ -869,7 +869,36 @@ export const TEMPLATE_01_CARDS: Template01Card[] = [
   {
     id: 5,
     title: "보청기 구입 지원금 안내 포스터",
-    desc: "단면 · 모듈형 블록 시스템 (A4)",
+    desc: "단면 · 모듈형 블록 시스템 (A4 고정)",
+    layoutType: "modular-block-system",
+    aspectRatio: "A4",
+    textBlocks: [
+      { id: "b1", type: "hero-title", text: "보청기 구입할 때 지원금 받자" },
+      { id: "b2", type: "hero-sub", text: "정부 지원금 최대 혜택 안내" },
+      { id: "b3", type: "circle-1", text: "귓속형 보청기" },
+      { id: "b4", type: "circle-2", text: "오픈형 보청기" },
+      { id: "b5", type: "circle-3", text: "프리미엄형" },
+      {
+        id: "b6",
+        type: "card-l-title",
+        text: "일반형 / 차상위 (정부 지원금 90% / 111만 9천원)",
+      },
+      {
+        id: "b7",
+        type: "card-r-title",
+        text: "기초수급자 (정부 지원금 100% / 131만원)",
+      },
+      { id: "b8", type: "step-1", text: "01. 국민건강보험공단 등록" },
+      { id: "b9", type: "step-2", text: "02. 보조기기 처방전 발급" },
+      { id: "b10", type: "step-3", text: "03. 보청기 구입 및 검수" },
+      { id: "b11", type: "step-4", text: "04. 지원금 청구 및 지급" },
+      { id: "b12", type: "footer", text: "빠른 상담 | 1588-0000" },
+    ],
+  },
+  {
+    id: 6,
+    title: "보청기 구입 지원금 안내 포스터",
+    desc: "단면 · 모듈형 블록 시스템 (A4 · 전문가형)",
     layoutType: "modular-block-system",
     aspectRatio: "A4",
     heroBanner: {
@@ -898,6 +927,62 @@ export const TEMPLATE_01_CARDS: Template01Card[] = [
     footerText: "빠른 상담 | 1588-0000",
   },
 ];
+
+export const TEMPLATE_01_CUSTOM_KEY = "sca_warehouse_tpl01_custom_v1";
+
+export function isBuiltinTemplate01Id(id: number): boolean {
+  return TEMPLATE_01_CARDS.some((card) => card.id === id);
+}
+
+export function loadCustomTemplate01Cards(): Template01Card[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(TEMPLATE_01_CUSTOM_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed as Template01Card[];
+  } catch {
+    return [];
+  }
+}
+
+export function saveCustomTemplate01Cards(cards: Template01Card[]) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(TEMPLATE_01_CUSTOM_KEY, JSON.stringify(cards));
+  } catch {
+    /* ignore quota */
+  }
+}
+
+/** Built-in (minus removed) + admin-duplicated custom cards. */
+export function buildTemplate01WarehouseList(): Template01Card[] {
+  const removed = new Set(loadRemovedTemplate01Ids());
+  const builtIn = TEMPLATE_01_CARDS.filter((card) => !removed.has(card.id));
+  const custom = loadCustomTemplate01Cards();
+  return [...builtIn, ...custom];
+}
+
+export function nextTemplate01CardId(cards: Template01Card[]): number {
+  return cards.reduce((max, card) => Math.max(max, card.id), 0) + 1;
+}
+
+export function cloneTemplate01Card(
+  card: Template01Card,
+  newId: number
+): Template01Card {
+  const copy = JSON.parse(JSON.stringify(card)) as Template01Card;
+  copy.id = newId;
+  copy.title = `${card.title} (복사)`;
+  if (isModularTemplate01(copy) && copy.textBlocks?.length) {
+    copy.textBlocks = copy.textBlocks.map((block, index) => ({
+      ...block,
+      id: `copy-${newId}-${index + 1}`,
+    }));
+  }
+  return copy;
+}
 
 export function template01CardToWarehouse(
   card: Template01Card
