@@ -5,6 +5,7 @@ import {
   applyDurableQuotaToUser,
   loadDurableQuota,
   saveDurableQuota,
+  type DurableQuotaSnapshot,
 } from "@/lib/db/durableQuota";
 import {
   readQuotaCookie,
@@ -119,7 +120,7 @@ function toSnapshotLike(
 export function mergePlanUsageFromSnapshots(
   user: UserRecord,
   cookie: QuotaCookiePayload | null,
-  durable: QuotaSnapshotLike | null
+  durable: DurableQuotaSnapshot | null
 ): void {
   const cookieSnap = toSnapshotLike(cookie);
   const durableSnap = toSnapshotLike(durable);
@@ -133,7 +134,7 @@ export function mergePlanUsageFromSnapshots(
 function guardedPersistValues(
   user: UserRecord,
   existingCookie: QuotaCookiePayload | null,
-  existingDurable: QuotaSnapshotLike | null
+  existingDurable: DurableQuotaSnapshot | null
 ): { fhdRemaining: number; uhd4kRemaining: number; quotaPeriodStart: number } {
   const limits = limitsFor(user);
   const periodStart = user.quotaPeriodStart ?? user.currentPeriodStart ?? 0;
