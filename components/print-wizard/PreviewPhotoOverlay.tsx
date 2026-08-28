@@ -37,6 +37,12 @@ type DragState = {
 const DRAG_THRESHOLD_PX = 4;
 const MIN_BOX = 24;
 
+/** Visual dot size; outer wrapper carries the enlarged hit-test area (Screen 26). */
+const RESIZE_HANDLE_HIT_CLASS =
+  "h-5 w-5 pointer-events-auto pointer-coarse:h-6 pointer-coarse:w-6";
+const RESIZE_HANDLE_DOT_CLASS =
+  "h-1.5 w-1.5 shrink-0 rounded-[1px] border border-indigo-500 bg-white shadow pointer-coarse:h-2 pointer-coarse:w-2";
+
 const CORNERS: Array<{
   id: CornerHandle;
   className: string;
@@ -101,6 +107,8 @@ export type PreviewPhotoOverlayProps = {
   onActiveLayerChange?: (id: string | null) => void;
   /** Ancestor CSS scale — pointer deltas are divided by this. */
   viewScale?: number;
+  /** Screen 26 — larger invisible hit area around resize handles. */
+  enlargedResizeHandles?: boolean;
   /** Paint-only layer (no hit targets) — pair with hitTestOnly overlay above text. */
   displayOnly?: boolean;
   /** Invisible pixels; keeps selection chrome and drag/resize hits above text. */
@@ -114,6 +122,7 @@ export default function PreviewPhotoOverlay({
   activeLayerId = null,
   onActiveLayerChange,
   viewScale = 1,
+  enlargedResizeHandles = false,
   displayOnly = false,
   hitTestOnly = false,
 }: PreviewPhotoOverlayProps) {
@@ -123,6 +132,12 @@ export default function PreviewPhotoOverlay({
   const dragRef = useRef<DragState | null>(null);
   const draggingRef = useRef(false);
   const capturePointerIdRef = useRef<number | null>(null);
+  const captureElRef = useRef<HTMLElement | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const pendingLiveBoxRef = useRef<{
+    id: string;
+    box: PrintPhotoBox;
+  } | null>(null);
   const layersRef = useRef(layers);
   const [size, setSize] = useState({ w: 1, h: 1 });
   const [hoverId, setHoverId] = useState<string | null>(null);
@@ -179,6 +194,21 @@ export default function PreviewPhotoOverlay({
     setHoverId((id) => (id === layerId ? null : id));
   };
 
+  const flushPendingLiveBox = useCallback(() => {
+    rafRef.current = null;
+    const pending = pendingLiveBoxRef.current;
+    if (pending) setLiveBox(pending);
+  }, []);
+
+  const scheduleLiveBox = useCallback(
+    (next: { id: string; box: PrintPhotoBox }) => {
+      pendingLiveBoxRef.current = next;
+      if (rafRef.current != null) return;
+      rafRef.current = requestAnimationFrame(flushPendingLiveBox);
+    },
+    [flushPendingLiveBox]
+  );
+
   const handlePointerDown = (
     e: ReactPointerEvent<HTMLElement>,
     layerId: string,
@@ -205,17 +235,27 @@ export default function PreviewPhotoOverlay({
       stageW: stage.w,
       stageH: stage.h,
     };
+    pendingLiveBoxRef.current = { id: layerId, box };
     setLiveBox({ id: layerId, box });
     draggingRef.current = kind !== "move";
     setPointerActive(true);
     if (kind === "resize") setDragging(true);
     capturePointerIdRef.current = e.pointerId;
+    captureElRef.current = e.currentTarget as HTMLElement;
     (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-    hostRef.current?.setPointerCapture?.(e.pointerId);
   };
 
   const endDrag = useCallback(
     (pointerId?: number) => {
+      if (rafRef.current != null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      const pending = pendingLiveBoxRef.current;
+      if (pending) {
+        setLiveBox(pending);
+        pendingLiveBoxRef.current = null;
+      }
       const drag = dragRef.current;
       if (drag) {
         const moved =
@@ -234,14 +274,16 @@ export default function PreviewPhotoOverlay({
       setPointerActive(false);
       setLiveBox(null);
       const pid = pointerId ?? capturePointerIdRef.current;
-      if (pid != null) {
+      const el = captureElRef.current;
+      if (pid != null && el) {
         try {
-          hostRef.current?.releasePointerCapture?.(pid);
+          el.releasePointerCapture?.(pid);
         } catch {
           /* capture may already be released */
         }
       }
       capturePointerIdRef.current = null;
+      captureElRef.current = null;
     },
     [commitBox]
   );
@@ -252,9 +294,16 @@ export default function PreviewPhotoOverlay({
     const onMove = (e: PointerEvent) => {
       const drag = dragRef.current;
       if (!drag) return;
+      // Prefer coalesced samples for smoother high-frequency pointers.
+      const samples =
+        typeof e.getCoalescedEvents === "function" &&
+        e.getCoalescedEvents().length > 0
+          ? e.getCoalescedEvents()
+          : [e];
+      const last = samples[samples.length - 1]!;
       const inv = 1 / Math.max(0.001, viewScale);
-      const screenDx = e.clientX - drag.startClientX;
-      const screenDy = e.clientY - drag.startClientY;
+      const screenDx = last.clientX - drag.startClientX;
+      const screenDy = last.clientY - drag.startClientY;
       const dx = screenDx * inv;
       const dy = screenDy * inv;
       const dist = Math.hypot(screenDx, screenDy);
@@ -285,7 +334,7 @@ export default function PreviewPhotoOverlay({
 
       nextBox = clampPhotoBoxToStage(nextBox, drag.stageW, drag.stageH);
       drag.liveBox = nextBox;
-      setLiveBox({ id: drag.layerId, box: nextBox });
+      scheduleLiveBox({ id: drag.layerId, box: nextBox });
     };
 
     const onUp = (e: PointerEvent) => {
@@ -296,18 +345,24 @@ export default function PreviewPhotoOverlay({
       if (dragRef.current) endDrag(e.pointerId);
     };
 
-    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointermove", onMove, { passive: true });
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
-    const host = hostRef.current;
-    host?.addEventListener("lostpointercapture", onLostCapture);
+    const captureEl = captureElRef.current;
+    captureEl?.addEventListener("lostpointercapture", onLostCapture);
     return () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
-      host?.removeEventListener("lostpointercapture", onLostCapture);
+      captureEl?.removeEventListener("lostpointercapture", onLostCapture);
     };
-  }, [pointerActive, endDrag, viewScale]);
+  }, [pointerActive, endDrag, scheduleLiveBox, viewScale]);
+
+  useEffect(() => {
+    return () => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
 
   if (!layers.length) return null;
 
@@ -412,14 +467,23 @@ export default function PreviewPhotoOverlay({
               ? CORNERS.map((h) => (
                   <span
                     key={h.id}
+                    data-resize-handle
                     role="presentation"
                     aria-hidden
                     onPointerDown={(e) =>
                       handlePointerDown(e, layer.id, "resize", h.id)
                     }
-                    className={`absolute z-[9] h-1.5 w-1.5 touch-none rounded-[1px] border border-indigo-500 bg-white shadow pointer-events-auto pointer-coarse:h-2.5 pointer-coarse:w-2.5 ${h.className}`}
+                    className={`absolute z-[9] flex touch-none items-center justify-center ${
+                      enlargedResizeHandles
+                        ? RESIZE_HANDLE_HIT_CLASS
+                        : "h-1.5 w-1.5 rounded-[1px] border border-indigo-500 bg-white shadow pointer-events-auto pointer-coarse:h-2.5 pointer-coarse:w-2.5"
+                    } ${h.className}`}
                     style={{ cursor: h.cursor }}
-                  />
+                  >
+                    {enlargedResizeHandles ? (
+                      <span className={RESIZE_HANDLE_DOT_CLASS} />
+                    ) : null}
+                  </span>
                 ))
               : null}
           </div>

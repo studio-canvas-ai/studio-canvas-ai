@@ -380,6 +380,7 @@ export default function PrintUnifiedEditorCanvas({
                             onPhotoLayersChange(pageIndex, layers)
                           }
                           displayOnly
+                          enlargedResizeHandles
                           activeLayerId={activePhotoLayerId ?? null}
                           onActiveLayerChange={onActivePhotoLayerChange}
                           viewScale={zoom}
@@ -396,6 +397,7 @@ export default function PrintUnifiedEditorCanvas({
                             onPhotoLayersChange(pageIndex, layers)
                           }
                           hitTestOnly
+                          enlargedResizeHandles
                           activeLayerId={activePhotoLayerId ?? null}
                           onActiveLayerChange={onActivePhotoLayerChange}
                           viewScale={zoom}
