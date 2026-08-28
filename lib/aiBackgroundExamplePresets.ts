@@ -14,6 +14,10 @@ export type BgExamplePreset = {
   id: string;
   /** UI button label, e.g. "내추럴 한지 파이버 (전통 한지 질감)" */
   labelKo: string;
+  /** Main button title */
+  titleKo: string;
+  /** Parenthetical Korean hint */
+  hintKo: string;
   /** English prompt appended to AI background input */
   promptEn: string;
 };
@@ -31,6 +35,8 @@ const p = (
   promptEn: string
 ): BgExamplePreset => ({
   id,
+  titleKo: title,
+  hintKo: hint,
   labelKo: `${title} (${hint})`,
   promptEn,
 });

@@ -598,7 +598,7 @@ export default function SpecSettingsPanel({
                   <p className="mb-1.5 text-[11px] font-bold tracking-wide text-indigo-200/90 [word-break:keep-all]">
                     {group.labelKo}
                   </p>
-                  <div className="flex flex-row flex-wrap gap-1.5">
+                  <div className="flex flex-row flex-wrap gap-2">
                     {group.presets.map((preset) => {
                       const on = isBgExamplePresetSelected(
                         bgKeyword,
@@ -614,13 +614,18 @@ export default function SpecSettingsPanel({
                             );
                             setOpenKey(null);
                           }}
-                          className={`min-w-[7rem] flex-[1_1_30%] rounded-lg border-2 px-2 py-1.5 text-left text-[10px] font-bold leading-snug text-white [word-break:keep-all] transition pointer-coarse:min-h-9 sm:text-[11px] ${
+                          className={`min-w-[7.5rem] flex-[1_1_30%] rounded-lg border px-3 py-2.5 text-left shadow-sm transition pointer-coarse:min-h-10 [word-break:keep-all] ${
                             on
-                              ? "border-indigo-400 bg-indigo-600/45 text-white shadow-[0_0_0_1px_rgba(129,140,248,0.6)] ring-2 ring-indigo-400/50"
-                              : "border-slate-600 bg-[#1a2235] text-white hover:border-indigo-300/80 hover:bg-[#243047]"
+                              ? "border-2 border-indigo-500 bg-white text-gray-900 shadow-md ring-2 ring-indigo-400/35"
+                              : "border border-gray-200 bg-white text-gray-900 hover:border-gray-300 hover:shadow"
                           }`}
                         >
-                          {preset.labelKo}
+                          <span className="block text-[11px] font-semibold leading-snug text-gray-900 sm:text-[12px]">
+                            {preset.titleKo}
+                          </span>
+                          <span className="mt-1 block text-[10px] font-medium leading-relaxed text-gray-600 sm:text-[11px]">
+                            ({preset.hintKo})
+                          </span>
                         </button>
                       );
                     })}
