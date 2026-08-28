@@ -121,6 +121,8 @@ export default function PreviewPhotoOverlay({
   const cs = t.canvasStudio;
   const hostRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
+  const draggingRef = useRef(false);
+  const capturePointerIdRef = useRef<number | null>(null);
   const layersRef = useRef(layers);
   const [size, setSize] = useState({ w: 1, h: 1 });
   const [hoverId, setHoverId] = useState<string | null>(null);
@@ -204,10 +206,45 @@ export default function PreviewPhotoOverlay({
       stageH: stage.h,
     };
     setLiveBox({ id: layerId, box });
+    draggingRef.current = kind !== "move";
     setPointerActive(true);
     if (kind === "resize") setDragging(true);
+    capturePointerIdRef.current = e.pointerId;
     (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+    hostRef.current?.setPointerCapture?.(e.pointerId);
   };
+
+  const endDrag = useCallback(
+    (pointerId?: number) => {
+      const drag = dragRef.current;
+      if (drag) {
+        const moved =
+          drag.kind === "resize" ||
+          Math.hypot(
+            drag.liveBox.x - drag.startBox.x,
+            drag.liveBox.y - drag.startBox.y
+          ) > DRAG_THRESHOLD_PX;
+        if (moved) {
+          commitBox(drag.layerId, drag.liveBox, drag.stageW, drag.stageH);
+        }
+      }
+      dragRef.current = null;
+      draggingRef.current = false;
+      setDragging(false);
+      setPointerActive(false);
+      setLiveBox(null);
+      const pid = pointerId ?? capturePointerIdRef.current;
+      if (pid != null) {
+        try {
+          hostRef.current?.releasePointerCapture?.(pid);
+        } catch {
+          /* capture may already be released */
+        }
+      }
+      capturePointerIdRef.current = null;
+    },
+    [commitBox]
+  );
 
   useEffect(() => {
     if (!pointerActive) return;
@@ -221,10 +258,13 @@ export default function PreviewPhotoOverlay({
       const dx = screenDx * inv;
       const dy = screenDy * inv;
       const dist = Math.hypot(screenDx, screenDy);
-      if (drag.kind === "move" && !dragging && dist < DRAG_THRESHOLD_PX) {
+      if (drag.kind === "move" && !draggingRef.current && dist < DRAG_THRESHOLD_PX) {
         return;
       }
-      if (drag.kind === "move" && !dragging) setDragging(true);
+      if (drag.kind === "move" && !draggingRef.current) {
+        draggingRef.current = true;
+        setDragging(true);
+      }
 
       let nextBox: PrintPhotoBox =
         drag.kind === "move"
@@ -248,34 +288,26 @@ export default function PreviewPhotoOverlay({
       setLiveBox({ id: drag.layerId, box: nextBox });
     };
 
-    const onUp = () => {
-      const drag = dragRef.current;
-      if (drag) {
-        const moved =
-          drag.kind === "resize" ||
-          Math.hypot(
-            drag.liveBox.x - drag.startBox.x,
-            drag.liveBox.y - drag.startBox.y
-          ) > DRAG_THRESHOLD_PX;
-        if (moved) {
-          commitBox(drag.layerId, drag.liveBox, drag.stageW, drag.stageH);
-        }
-      }
-      dragRef.current = null;
-      setDragging(false);
-      setPointerActive(false);
-      setLiveBox(null);
+    const onUp = (e: PointerEvent) => {
+      endDrag(e.pointerId);
+    };
+
+    const onLostCapture = (e: PointerEvent) => {
+      if (dragRef.current) endDrag(e.pointerId);
     };
 
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
+    const host = hostRef.current;
+    host?.addEventListener("lostpointercapture", onLostCapture);
     return () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
+      host?.removeEventListener("lostpointercapture", onLostCapture);
     };
-  }, [pointerActive, commitBox, dragging, viewScale]);
+  }, [pointerActive, endDrag, viewScale]);
 
   if (!layers.length) return null;
 

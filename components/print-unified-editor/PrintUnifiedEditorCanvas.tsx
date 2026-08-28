@@ -185,6 +185,7 @@ export default function PrintUnifiedEditorCanvas({
     if (!(target instanceof HTMLElement)) return false;
     return Boolean(
       target.closest("[data-text-layer]") ||
+        target.closest("[data-resize-handle]") ||
         target.closest("[data-photo-layer]") ||
         target.closest("[data-deco-layer]") ||
         target.closest("[data-overlay-deselect]")
@@ -200,7 +201,7 @@ export default function PrintUnifiedEditorCanvas({
     onActiveDecoLayerChange?.(null);
   };
 
-  const handlePageBackgroundPointerDown = (
+  const handleCanvasBlankPointerDown = (
     e: React.PointerEvent<HTMLElement>
   ) => {
     if (isCanvasLayerHit(e.target)) return;
@@ -333,7 +334,7 @@ export default function PrintUnifiedEditorCanvas({
                   data-page-card
                   className="relative overflow-hidden rounded-md border border-slate-700/70 bg-[#0B0F19] shadow-[0_12px_36px_rgba(0,0,0,0.4)]"
                   style={stageStyle}
-                  onPointerDown={handlePageBackgroundPointerDown}
+                  onPointerDown={handleCanvasBlankPointerDown}
                 >
                   {/* Background plate */}
                   <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-md">
@@ -373,35 +374,33 @@ export default function PrintUnifiedEditorCanvas({
                         className="pointer-events-none absolute inset-0 z-[1] overflow-visible"
                       >
                         <PreviewPhotoOverlay
-                          key={`photo-${pageIndex}-${activePhotoLayerId ? "visual" : "main"}`}
+                          key={`photo-display-${pageIndex}`}
                           layers={photoLayers}
                           onLayersChange={(layers) =>
                             onPhotoLayersChange(pageIndex, layers)
                           }
-                          displayOnly={Boolean(activePhotoLayerId)}
+                          displayOnly
                           activeLayerId={activePhotoLayerId ?? null}
                           onActiveLayerChange={onActivePhotoLayerChange}
                           viewScale={zoom}
                         />
                       </div>
-                      {activePhotoLayerId ? (
-                        <div
-                          data-photo-hit-overlay
-                          className="pointer-events-none absolute inset-0 z-[7] overflow-visible"
-                        >
-                          <PreviewPhotoOverlay
-                            key={`photo-hit-${pageIndex}`}
-                            layers={photoLayers}
-                            onLayersChange={(layers) =>
-                              onPhotoLayersChange(pageIndex, layers)
-                            }
-                            hitTestOnly
-                            activeLayerId={activePhotoLayerId}
-                            onActiveLayerChange={onActivePhotoLayerChange}
-                            viewScale={zoom}
-                          />
-                        </div>
-                      ) : null}
+                      <div
+                        data-photo-hit-overlay
+                        className="pointer-events-none absolute inset-0 z-[7] overflow-visible"
+                      >
+                        <PreviewPhotoOverlay
+                          key={`photo-hit-${pageIndex}`}
+                          layers={photoLayers}
+                          onLayersChange={(layers) =>
+                            onPhotoLayersChange(pageIndex, layers)
+                          }
+                          hitTestOnly
+                          activeLayerId={activePhotoLayerId ?? null}
+                          onActiveLayerChange={onActivePhotoLayerChange}
+                          viewScale={zoom}
+                        />
+                      </div>
                     </>
                   ) : null}
 
@@ -417,6 +416,7 @@ export default function PrintUnifiedEditorCanvas({
                       }
                       interactive
                       showEmptyGuideBoxes
+                      enlargedResizeHandles
                       activeLayerId={activeTextLayerId ?? null}
                       onActiveLayerChange={onActiveTextLayerChange}
                       pageIndex={pageIndex}

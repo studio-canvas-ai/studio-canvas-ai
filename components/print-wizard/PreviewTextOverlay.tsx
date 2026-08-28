@@ -47,6 +47,8 @@ export type PreviewTextOverlayProps = {
   hideGuideLabels?: boolean;
   /** Screen 26 — single click enters inline edit (not only double-click). */
   editOnSingleClick?: boolean;
+  /** Screen 26 — larger invisible hit area around resize handles. */
+  enlargedResizeHandles?: boolean;
   /**
    * When true, non-editing text boxes ignore pointer events so photo hit targets
    * stacked above text can receive drag/resize while pixels stay behind text.
@@ -79,6 +81,11 @@ type DragState = {
 const DRAG_THRESHOLD_PX = 4;
 const CONTRAST_DARK_COLOR = "white" as const;
 const CONTRAST_LIGHT_COLOR = "inkBlack" as const;
+/** Visual dot size; outer wrapper carries the enlarged hit-test area. */
+const RESIZE_HANDLE_HIT_CLASS =
+  "h-5 w-5 pointer-coarse:h-6 pointer-coarse:w-6";
+const RESIZE_HANDLE_DOT_CLASS =
+  "h-1.5 w-1.5 shrink-0 rounded-full border border-indigo-400/90 bg-white/95 shadow-sm pointer-coarse:h-2 pointer-coarse:w-2";
 
 function textAlignClass(align: TextLayer["align"]): string {
   if (align === "left") return "justify-start text-left";
@@ -182,6 +189,7 @@ export default function PreviewTextOverlay({
   showEmptyGuideBoxes = false,
   hideGuideLabels = false,
   editOnSingleClick = false,
+  enlargedResizeHandles = false,
   photoInteractionMode = false,
   viewScale = 1,
 }: PreviewTextOverlayProps) {
@@ -220,6 +228,13 @@ export default function PreviewTextOverlay({
     setLiveBox(null);
     setSnapGuides({ vertical: [], horizontal: [] });
   }, [pageIndex]);
+
+  useEffect(() => {
+    if (!activeLayerId) {
+      setEditingId(null);
+      setHoverId(null);
+    }
+  }, [activeLayerId]);
 
   const measureStage = () => {
     const el = hostRef.current;
@@ -524,14 +539,13 @@ export default function PreviewTextOverlay({
         className="pointer-events-none absolute inset-0 z-[20]"
       />
 
-      {interactive && activeLayerId && !photoInteractionMode ? (
+      {interactive && (activeLayerId || editingId) && !photoInteractionMode ? (
         <div
           role="presentation"
           data-overlay-deselect
           className="pointer-events-auto absolute inset-0 z-[4]"
           onPointerDown={(e) => {
             if (e.target !== e.currentTarget) return;
-            // Deco/photo overlays sit above this sheet and own their hits.
             e.stopPropagation();
             onActiveLayerChange?.(null);
             setEditingId(null);
@@ -556,12 +570,16 @@ export default function PreviewTextOverlay({
         ) {
           return null;
         }
-        const showChrome =
-          interactive &&
-          (isActive ||
-            isHover ||
-            isEditing ||
-            (showEmptyGuideBoxes && !layer.text.trim()));
+        const showSelectionChrome =
+          interactive && (isActive || isHover || isEditing);
+        const showIdleGuide =
+          showEmptyGuideBoxes &&
+          !layer.text.replace(/\u200B/g, "").trim() &&
+          !activeLayerId &&
+          !isHover &&
+          !isEditing;
+        const showOutline = showSelectionChrome || showIdleGuide;
+        const showControls = showSelectionChrome;
         const fontSize = Math.max(
           8,
           Math.round((layer.fontSize || 48) * scale)
@@ -615,7 +633,7 @@ export default function PreviewTextOverlay({
               setEditingId(layer.id);
             }}
           >
-            {showChrome ? (
+            {showControls ? (
               <div className="absolute -top-3.5 left-0 right-0 z-[8] flex items-center justify-between gap-0.5">
                 <div className="flex shrink-0 items-center gap-0.5">
                   <button
@@ -663,13 +681,20 @@ export default function PreviewTextOverlay({
 
             <div
               className={`relative h-full w-full rounded-[2px] ${
-                showChrome
-                  ? "bg-violet-500/5 shadow-[0_0_0_1px_#818cf8]"
+                showOutline
+                  ? showSelectionChrome
+                    ? "bg-violet-500/5 shadow-[0_0_0_1px_#818cf8]"
+                    : "bg-violet-500/[0.03]"
                   : "bg-transparent"
               }`}
               style={
-                showChrome
-                  ? { outline: "1px dashed #6366f1", outlineOffset: 0 }
+                showOutline
+                  ? {
+                      outline: showSelectionChrome
+                        ? "1px dashed #6366f1"
+                        : "1px dashed rgba(99,102,241,0.45)",
+                      outlineOffset: 0,
+                    }
                   : undefined
               }
             >
@@ -749,18 +774,27 @@ export default function PreviewTextOverlay({
                 </>
               )}
 
-              {showChrome
+              {showControls
                 ? HANDLES.map((h) => (
                     <span
                       key={h.id}
+                      data-resize-handle
                       role="presentation"
                       aria-hidden
                       onPointerDown={(e) =>
                         handlePointerDown(e, layer.id, "resize", h.id)
                       }
-                      className={`absolute z-[9] h-1 w-1 touch-none rounded-full border border-indigo-400/90 bg-white/95 shadow-sm pointer-coarse:h-1.5 pointer-coarse:w-1.5 ${h.className}`}
+                      className={`absolute z-[9] flex touch-none items-center justify-center ${
+                        enlargedResizeHandles
+                          ? RESIZE_HANDLE_HIT_CLASS
+                          : "h-1 w-1 rounded-full border border-indigo-400/90 bg-white/95 shadow-sm pointer-coarse:h-1.5 pointer-coarse:w-1.5"
+                      } ${h.className}`}
                       style={{ cursor: h.cursor }}
-                    />
+                    >
+                      {enlargedResizeHandles ? (
+                        <span className={RESIZE_HANDLE_DOT_CLASS} />
+                      ) : null}
+                    </span>
                   ))
                 : null}
             </div>

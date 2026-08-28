@@ -271,6 +271,7 @@ export default function PreviewDecoOverlay({
   const hostRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
   const draggingRef = useRef(false);
+  const capturePointerIdRef = useRef<number | null>(null);
   const layersRef = useRef(layers);
   const [size, setSize] = useState({ w: 1, h: 1 });
   const [hoverId, setHoverId] = useState<string | null>(null);
@@ -385,8 +386,50 @@ export default function PreviewDecoOverlay({
     setLiveRotation({ id: layerId, rotation: startRotation });
     setPointerActive(true);
     if (kind === "resize" || kind === "rotate") setDragging(true);
+    capturePointerIdRef.current = e.pointerId;
     (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+    hostRef.current?.setPointerCapture?.(e.pointerId);
   };
+
+  const endDrag = useCallback(
+    (pointerId?: number) => {
+      const drag = dragRef.current;
+      if (drag) {
+        if (drag.kind === "rotate") {
+          commitLayer(
+            drag.layerId,
+            drag.liveBox,
+            drag.stageW,
+            drag.stageH,
+            drag.liveRotation
+          );
+        } else if (boxChanged(drag.startBox, drag.liveBox)) {
+          commitLayer(
+            drag.layerId,
+            drag.liveBox,
+            drag.stageW,
+            drag.stageH
+          );
+        }
+      }
+      dragRef.current = null;
+      draggingRef.current = false;
+      setDragging(false);
+      setPointerActive(false);
+      setLiveBox(null);
+      setLiveRotation(null);
+      const pid = pointerId ?? capturePointerIdRef.current;
+      if (pid != null) {
+        try {
+          hostRef.current?.releasePointerCapture?.(pid);
+        } catch {
+          /* capture may already be released */
+        }
+      }
+      capturePointerIdRef.current = null;
+    },
+    [commitLayer]
+  );
 
   useEffect(() => {
     if (!pointerActive) return;
@@ -444,43 +487,26 @@ export default function PreviewDecoOverlay({
       setLiveBox({ id: drag.layerId, box: nextBox });
     };
 
-    const onUp = () => {
-      const drag = dragRef.current;
-      if (drag) {
-        if (drag.kind === "rotate") {
-          commitLayer(
-            drag.layerId,
-            drag.liveBox,
-            drag.stageW,
-            drag.stageH,
-            drag.liveRotation
-          );
-        } else if (boxChanged(drag.startBox, drag.liveBox)) {
-          commitLayer(
-            drag.layerId,
-            drag.liveBox,
-            drag.stageW,
-            drag.stageH
-          );
-        }
-      }
-      dragRef.current = null;
-      draggingRef.current = false;
-      setDragging(false);
-      setPointerActive(false);
-      setLiveBox(null);
-      setLiveRotation(null);
+    const onUp = (e: PointerEvent) => {
+      endDrag(e.pointerId);
+    };
+
+    const onLostCapture = (e: PointerEvent) => {
+      if (dragRef.current) endDrag(e.pointerId);
     };
 
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
+    const host = hostRef.current;
+    host?.addEventListener("lostpointercapture", onLostCapture);
     return () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
+      host?.removeEventListener("lostpointercapture", onLostCapture);
     };
-  }, [pointerActive, commitLayer, viewScale]);
+  }, [pointerActive, endDrag, viewScale]);
 
   if (!layers.length) return null;
 

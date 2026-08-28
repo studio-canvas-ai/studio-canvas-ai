@@ -931,7 +931,13 @@ export default function PrintUnifiedEditor() {
               }
             }}
             activeDecoLayerId={activeDecoLayerId}
-            onActiveDecoLayerChange={setActiveDecoLayerId}
+            onActiveDecoLayerChange={(id) => {
+              setActiveDecoLayerId(id);
+              if (id) {
+                setActiveTextLayerId(null);
+                setActivePhotoLayerId(null);
+              }
+            }}
             foldGuidesHidden={state.foldGuidesHidden}
             onHideFoldGuides={() => patch({ foldGuidesHidden: true })}
             zoom={zoom}
