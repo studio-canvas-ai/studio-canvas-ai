@@ -25,11 +25,11 @@ import {
 } from "@/lib/printWizardTypes";
 import type { WizardProductId } from "@/lib/wizard/wizardProduct";
 import {
-  KEYWORD_TAG_CATEGORIES,
-  toggleKeywordTag,
-  selectedKeywordTags,
-  type KeywordTagCategoryId,
-} from "@/lib/printWizardKeywordTags";
+  BG_EXAMPLE_CATEGORIES,
+  isBgExamplePresetSelected,
+  selectedBgExampleLabels,
+  toggleBgExamplePrompt,
+} from "@/lib/aiBackgroundExamplePresets";
 import {
   PHOTO_LOOKBOOK_EXAMPLE_HINT,
   getPhotoLookbookExampleCategories,
@@ -80,21 +80,6 @@ type OpenKey = "format" | "style" | "use" | "pages" | "prompt" | "bg" | null;
 
 const PRINT_PRESET_FORMATS = PRINT_FORMATS.filter((f) => f.id !== "free");
 const PHOTO_PRESET_FORMATS = PHOTO_FORMATS.filter((f) => f.id !== "free");
-
-function exampleCategoryLabel(
-  id: KeywordTagCategoryId,
-  cs: {
-    tagCatBackground: string;
-    tagCatMood: string;
-    tagCatEvent: string;
-    tagCatProduct: string;
-  }
-): string {
-  if (id === "background") return cs.tagCatBackground;
-  if (id === "mood") return cs.tagCatMood;
-  if (id === "event") return cs.tagCatEvent;
-  return cs.tagCatProduct;
-}
 
 /**
  * Center panel: compact option row + Adobe-inspired AI background prompt bar.
@@ -227,7 +212,7 @@ export default function SpecSettingsPanel({
   };
 
   const specPicks = specPicksProp ?? emptySpecPicks();
-  const pickedExampleTags = selectedKeywordTags(bgKeyword);
+  const pickedBgExampleLabels = selectedBgExampleLabels(bgKeyword);
   const selectedPhotoExample = isPhotoProduct
     ? getPhotoLookbookExampleCategories({
         useId,
@@ -256,7 +241,7 @@ export default function SpecSettingsPanel({
           ? `${bgKeyword.trim().slice(0, 22)}…`
           : bgKeyword.trim()
         : ""
-    : [...pickedExampleTags].join(" · ");
+    : pickedBgExampleLabels.join(" · ");
   const specTags = [
     specPicks.format && formatValueLabel
       ? { label: cs.specFormat, value: formatValueLabel }
@@ -599,32 +584,34 @@ export default function SpecSettingsPanel({
               ))}
             </div>
           ) : (
-            <div className="flex flex-col gap-2.5 p-2 sm:p-2.5">
-              {KEYWORD_TAG_CATEGORIES.map((group) => (
-                <div
-                  key={group.id}
-                  className="flex flex-col gap-1.5 sm:flex-row sm:items-start"
-                >
-                  <p className="w-[7.5rem] shrink-0 pt-1 text-[11px] font-bold tracking-wide text-indigo-200/90 [word-break:keep-all]">
-                    {exampleCategoryLabel(group.id, cs)}
+            <div className="max-h-[min(60vh,28rem)] overflow-y-auto overscroll-contain p-2 sm:p-2.5">
+              {BG_EXAMPLE_CATEGORIES.map((group) => (
+                <div key={group.id} className="mb-3 last:mb-0">
+                  <p className="mb-1.5 text-[11px] font-bold tracking-wide text-indigo-200/90 [word-break:keep-all]">
+                    {group.labelKo}
                   </p>
-                  <div className="flex min-w-0 flex-1 flex-row flex-wrap gap-1.5">
-                    {group.tags.map((tag) => {
-                      const on = pickedExampleTags.has(tag);
+                  <div className="flex flex-row flex-wrap gap-1.5">
+                    {group.presets.map((preset) => {
+                      const on = isBgExamplePresetSelected(
+                        bgKeyword,
+                        preset.promptEn
+                      );
                       return (
                         <button
-                          key={tag}
+                          key={preset.id}
                           type="button"
                           onClick={() => {
-                            onBgKeywordChange(toggleKeywordTag(bgKeyword, tag));
+                            onBgKeywordChange(
+                              toggleBgExamplePrompt(bgKeyword, preset.promptEn)
+                            );
                           }}
-                          className={`rounded-full border px-2.5 py-1.5 text-[11px] font-semibold [word-break:keep-all] transition pointer-coarse:min-h-9 pointer-coarse:px-3 ${
+                          className={`min-w-[7rem] flex-[1_1_30%] rounded-lg border px-2 py-1.5 text-left text-[10px] font-semibold leading-snug [word-break:keep-all] transition pointer-coarse:min-h-9 sm:text-[11px] ${
                             on
-                              ? "border-indigo-400/50 bg-indigo-500/20 text-indigo-100"
+                              ? "border-indigo-400/60 bg-indigo-500/25 text-indigo-50 ring-1 ring-indigo-400/40"
                               : "border-slate-700 bg-[#0E1420] text-slate-300 hover:border-slate-500 hover:text-white"
                           }`}
                         >
-                          {tag}
+                          {preset.labelKo}
                         </button>
                       );
                     })}
