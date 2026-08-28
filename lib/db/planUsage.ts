@@ -9,7 +9,15 @@ import {
 import {
   readQuotaCookie,
   writeQuotaCookie,
+  type QuotaCookiePayload,
 } from "@/lib/quotaCookie";
+import {
+  alignUserPeriodFromSnapshot,
+  billingPeriodExpired,
+  pickPreferredQuotaSnapshot,
+  quotaPeriodCompatible,
+  type QuotaSnapshotLike,
+} from "@/lib/quotaPeriod";
 
 export type DownloadQuotaKind = "fhd" | "uhd4k";
 
@@ -34,37 +42,52 @@ export function snapshotPlanUsage(user: UserRecord): PlanUsageSnapshot {
 export function ensurePlanUsage(user: UserRecord): void {
   const limits = limitsFor(user);
   const periodStart = user.currentPeriodStart ?? 0;
+  const hasRemaining =
+    user.fhdRemaining != null && user.uhd4kRemaining != null;
   const rolled =
     user.quotaPeriodStart == null || user.quotaPeriodStart !== periodStart;
-  if (rolled || user.fhdRemaining == null || user.uhd4kRemaining == null) {
+
+  if (!hasRemaining) {
     user.quotaPeriodStart = periodStart;
     user.fhdRemaining = limits.fhd;
     user.uhd4kRemaining = limits.uhd4k;
-  } else {
-    user.fhdRemaining = Math.min(limits.fhd, Math.max(0, user.fhdRemaining));
-    user.uhd4kRemaining = Math.min(
-      limits.uhd4k,
-      Math.max(0, user.uhd4kRemaining)
-    );
+    return;
   }
+
+  if (rolled) {
+    if (billingPeriodExpired(user)) {
+      user.quotaPeriodStart = periodStart;
+      user.fhdRemaining = limits.fhd;
+      user.uhd4kRemaining = limits.uhd4k;
+      return;
+    }
+    // Cold start moved currentPeriodStart — keep restored counts, align key only.
+    user.quotaPeriodStart = periodStart;
+  }
+
+  user.fhdRemaining = Math.min(limits.fhd, Math.max(0, user.fhdRemaining!));
+  user.uhd4kRemaining = Math.min(
+    limits.uhd4k,
+    Math.max(0, user.uhd4kRemaining!)
+  );
 }
 
 export function applyQuotaCookieToUser(
   user: UserRecord,
-  cookie: {
-    userId: string;
-    fhdRemaining: number;
-    uhd4kRemaining: number;
-    quotaPeriodStart: number;
-  } | null
+  cookie: QuotaCookiePayload | null
 ): void {
   if (!cookie || cookie.userId !== user.id) return;
-  const periodStart = user.currentPeriodStart ?? 0;
-  if (cookie.quotaPeriodStart !== periodStart) return;
+  if (
+    !quotaPeriodCompatible(
+      user,
+      cookie.quotaPeriodStart,
+      cookie.quotaPeriodEnd
+    )
+  ) {
+    return;
+  }
   const limits = limitsFor(user);
-  user.quotaPeriodStart = periodStart;
-  // Prefer the lower remaining so a stale cookie cannot undo a fresh spend,
-  // and a cold DB reset cannot ignore a lower cookie value.
+  user.quotaPeriodStart = user.currentPeriodStart ?? cookie.quotaPeriodStart;
   user.fhdRemaining = Math.min(
     limits.fhd,
     Math.max(0, cookie.fhdRemaining),
@@ -77,6 +100,71 @@ export function applyQuotaCookieToUser(
   );
 }
 
+function toSnapshotLike(
+  source: QuotaCookiePayload | QuotaSnapshotLike | null
+): QuotaSnapshotLike | null {
+  if (!source) return null;
+  return {
+    userId: source.userId,
+    fhdRemaining: source.fhdRemaining,
+    uhd4kRemaining: source.uhd4kRemaining,
+    quotaPeriodStart: source.quotaPeriodStart,
+    quotaPeriodEnd:
+      "quotaPeriodEnd" in source ? source.quotaPeriodEnd : undefined,
+    updatedAt: "updatedAt" in source ? source.updatedAt : undefined,
+  };
+}
+
+/** Restore cookie/R2 first, then fill gaps — shared by hydrate and consume. */
+export function mergePlanUsageFromSnapshots(
+  user: UserRecord,
+  cookie: QuotaCookiePayload | null,
+  durable: QuotaSnapshotLike | null
+): void {
+  const cookieSnap = toSnapshotLike(cookie);
+  const durableSnap = toSnapshotLike(durable);
+  const preferred = pickPreferredQuotaSnapshot(cookieSnap, durableSnap);
+  alignUserPeriodFromSnapshot(user, preferred);
+  applyQuotaCookieToUser(user, cookie);
+  applyDurableQuotaToUser(user, durable);
+  ensurePlanUsage(user);
+}
+
+function guardedPersistValues(
+  user: UserRecord,
+  existingCookie: QuotaCookiePayload | null,
+  existingDurable: QuotaSnapshotLike | null
+): { fhdRemaining: number; uhd4kRemaining: number; quotaPeriodStart: number } {
+  const limits = limitsFor(user);
+  const periodStart = user.quotaPeriodStart ?? user.currentPeriodStart ?? 0;
+  let fhd = Math.max(0, user.fhdRemaining ?? 0);
+  let uhd = Math.max(0, user.uhd4kRemaining ?? 0);
+
+  const guard = (stored: QuotaSnapshotLike | QuotaCookiePayload | null) => {
+    if (!stored || stored.userId !== user.id) return;
+    if (
+      !quotaPeriodCompatible(
+        user,
+        stored.quotaPeriodStart,
+        "quotaPeriodEnd" in stored ? stored.quotaPeriodEnd : undefined
+      )
+    ) {
+      return;
+    }
+    fhd = Math.min(fhd, Math.max(0, stored.fhdRemaining));
+    uhd = Math.min(uhd, Math.max(0, stored.uhd4kRemaining));
+  };
+
+  guard(existingCookie);
+  guard(existingDurable);
+
+  return {
+    fhdRemaining: Math.min(limits.fhd, fhd),
+    uhd4kRemaining: Math.min(limits.uhd4k, uhd),
+    quotaPeriodStart: periodStart,
+  };
+}
+
 export async function hydrateUserPlanUsage(
   user: UserRecord
 ): Promise<UserRecord> {
@@ -87,9 +175,7 @@ export async function hydrateUserPlanUsage(
   const updated = await withDbLock((db) => {
     const row = db.users[user.id];
     if (!row) return user;
-    ensurePlanUsage(row);
-    applyQuotaCookieToUser(row, cookie);
-    applyDurableQuotaToUser(row, durable);
+    mergePlanUsageFromSnapshots(row, cookie, durable);
     return row;
   });
   await persistUserPlanUsage(updated);
@@ -97,13 +183,22 @@ export async function hydrateUserPlanUsage(
 }
 
 export async function persistUserPlanUsage(user: UserRecord): Promise<void> {
-  ensurePlanUsage(user);
+  const [existingCookie, existingDurable] = await Promise.all([
+    readQuotaCookie(user.id),
+    loadDurableQuota(user.id),
+  ]);
+  const guarded = guardedPersistValues(user, existingCookie, existingDurable);
+  user.fhdRemaining = guarded.fhdRemaining;
+  user.uhd4kRemaining = guarded.uhd4kRemaining;
+  user.quotaPeriodStart = guarded.quotaPeriodStart;
+
   await Promise.all([
     writeQuotaCookie({
       userId: user.id,
-      fhdRemaining: user.fhdRemaining ?? 0,
-      uhd4kRemaining: user.uhd4kRemaining ?? 0,
-      quotaPeriodStart: user.quotaPeriodStart ?? user.currentPeriodStart ?? 0,
+      fhdRemaining: guarded.fhdRemaining,
+      uhd4kRemaining: guarded.uhd4kRemaining,
+      quotaPeriodStart: guarded.quotaPeriodStart,
+      quotaPeriodEnd: user.currentPeriodEnd ?? null,
       updatedAt: Date.now(),
     }),
     saveDurableQuota(user),
@@ -128,9 +223,7 @@ export async function consumeDownloadQuota(params: {
     if (!user) {
       return { ok: false as const, reason: "not_found" as const, remaining: 0 };
     }
-    ensurePlanUsage(user);
-    applyQuotaCookieToUser(user, cookie);
-    applyDurableQuotaToUser(user, durable);
+    mergePlanUsageFromSnapshots(user, cookie, durable);
     const key = params.kind === "uhd4k" ? "uhd4kRemaining" : "fhdRemaining";
     const remaining = user[key] ?? 0;
     if (remaining < 1) {

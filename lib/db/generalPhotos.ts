@@ -4,7 +4,7 @@ import {
   applyDurableQuotaToUser,
   loadDurableQuota,
 } from "@/lib/db/durableQuota";
-import { persistUserPlanUsage, applyQuotaCookieToUser, ensurePlanUsage } from "@/lib/db/planUsage";
+import { persistUserPlanUsage, mergePlanUsageFromSnapshots } from "@/lib/db/planUsage";
 import { readQuotaCookie } from "@/lib/quotaCookie";
 import {
   createR2Client,
@@ -181,9 +181,7 @@ export async function getGeneralPhotoDownloadCount(userId: string): Promise<numb
   await withDbLock((db) => {
     const user = db.users[userId];
     if (!user) return;
-    ensurePlanUsage(user);
-    applyQuotaCookieToUser(user, cookie);
-    applyDurableQuotaToUser(user, durable);
+    mergePlanUsageFromSnapshots(user, cookie, durable);
   });
   return getDb().users[userId]?.generalPhotoDownloadCount ?? 0;
 }
@@ -198,9 +196,7 @@ export async function incrementGeneralPhotoDownloadCount(
   const count = await withDbLock((db) => {
     const user = db.users[userId];
     if (!user) return 0;
-    ensurePlanUsage(user);
-    applyQuotaCookieToUser(user, cookie);
-    applyDurableQuotaToUser(user, durable);
+    mergePlanUsageFromSnapshots(user, cookie, durable);
     user.generalPhotoDownloadCount = (user.generalPhotoDownloadCount ?? 0) + 1;
     user.updatedAt = Date.now();
     return user.generalPhotoDownloadCount;

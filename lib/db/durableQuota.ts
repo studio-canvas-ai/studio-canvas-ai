@@ -1,5 +1,6 @@
 import type { UserRecord } from "@/lib/db/types";
 import { getPlanUsageLimits } from "@/lib/planQuotas";
+import { quotaPeriodCompatible } from "@/lib/quotaPeriod";
 import {
   createR2Client,
   getR2Config,
@@ -13,6 +14,7 @@ export type DurableQuotaSnapshot = {
   userId: string;
   updatedAt: number;
   quotaPeriodStart: number;
+  quotaPeriodEnd?: number;
   fhdRemaining: number;
   uhd4kRemaining: number;
   generalPhotoDownloadCount: number;
@@ -37,6 +39,8 @@ export async function loadDurableQuota(
     const fhdRemaining = Number(parsed.fhdRemaining);
     const uhd4kRemaining = Number(parsed.uhd4kRemaining);
     const quotaPeriodStart = Number(parsed.quotaPeriodStart);
+    const quotaPeriodEnd =
+      parsed.quotaPeriodEnd != null ? Number(parsed.quotaPeriodEnd) : undefined;
     const generalPhotoDownloadCount = Number(parsed.generalPhotoDownloadCount);
     if (
       !Number.isFinite(fhdRemaining) ||
@@ -50,6 +54,7 @@ export async function loadDurableQuota(
       updatedAt:
         typeof parsed.updatedAt === "number" ? parsed.updatedAt : Date.now(),
       quotaPeriodStart,
+      ...(Number.isFinite(quotaPeriodEnd) ? { quotaPeriodEnd } : {}),
       fhdRemaining: Math.max(0, Math.floor(fhdRemaining)),
       uhd4kRemaining: Math.max(0, Math.floor(uhd4kRemaining)),
       generalPhotoDownloadCount: Number.isFinite(generalPhotoDownloadCount)
@@ -70,6 +75,9 @@ export async function saveDurableQuota(user: UserRecord): Promise<void> {
     userId: user.id,
     updatedAt: Date.now(),
     quotaPeriodStart: user.quotaPeriodStart ?? user.currentPeriodStart ?? 0,
+    ...(typeof user.currentPeriodEnd === "number"
+      ? { quotaPeriodEnd: user.currentPeriodEnd }
+      : {}),
     fhdRemaining: Math.max(0, user.fhdRemaining ?? 0),
     uhd4kRemaining: Math.max(0, user.uhd4kRemaining ?? 0),
     generalPhotoDownloadCount: Math.max(0, user.generalPhotoDownloadCount ?? 0),
@@ -95,9 +103,14 @@ export function applyDurableQuotaToUser(
   if (!snapshot || snapshot.userId !== user.id) return;
 
   const limits = getPlanUsageLimits(user.planId, user.billingInterval ?? "monthly");
-  const periodStart = user.quotaPeriodStart ?? user.currentPeriodStart ?? 0;
 
-  if (snapshot.quotaPeriodStart === periodStart) {
+  if (
+    quotaPeriodCompatible(
+      user,
+      snapshot.quotaPeriodStart,
+      snapshot.quotaPeriodEnd
+    )
+  ) {
     user.fhdRemaining = Math.min(
       limits.fhd,
       user.fhdRemaining ?? limits.fhd,

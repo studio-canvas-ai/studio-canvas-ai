@@ -30,16 +30,22 @@ export type QuotaCookiePayload = {
   fhdRemaining: number;
   uhd4kRemaining: number;
   quotaPeriodStart: number;
+  quotaPeriodEnd?: number | null;
   updatedAt: number;
 };
 
 export function encodeQuotaCookie(payload: QuotaCookiePayload): string {
+  const periodEnd =
+    payload.quotaPeriodEnd != null && Number.isFinite(payload.quotaPeriodEnd)
+      ? Math.floor(payload.quotaPeriodEnd)
+      : "";
   const body = [
     payload.userId,
     Math.max(0, Math.floor(payload.fhdRemaining)),
     Math.max(0, Math.floor(payload.uhd4kRemaining)),
     payload.quotaPeriodStart,
     payload.updatedAt,
+    periodEnd,
   ].join("|");
   return `${body}.${sign(body)}`;
 }
@@ -53,12 +59,15 @@ export function decodeQuotaCookie(
   const body = raw.slice(0, dot);
   const sig = raw.slice(dot + 1);
   if (!sig || !safeEqual(sign(body), sig)) return null;
-  const [userId, fhdRaw, uhdRaw, periodRaw, updatedAtRaw] = body.split("|");
+  const parts = body.split("|");
+  const [userId, fhdRaw, uhdRaw, periodRaw, updatedAtRaw, periodEndRaw] = parts;
   if (!userId) return null;
   const fhdRemaining = Number(fhdRaw);
   const uhd4kRemaining = Number(uhdRaw);
   const quotaPeriodStart = Number(periodRaw);
   const updatedAt = Number(updatedAtRaw);
+  const quotaPeriodEnd =
+    periodEndRaw != null && periodEndRaw !== "" ? Number(periodEndRaw) : undefined;
   if (
     !Number.isFinite(fhdRemaining) ||
     !Number.isFinite(uhd4kRemaining) ||
@@ -72,6 +81,7 @@ export function decodeQuotaCookie(
     fhdRemaining: Math.max(0, Math.floor(fhdRemaining)),
     uhd4kRemaining: Math.max(0, Math.floor(uhd4kRemaining)),
     quotaPeriodStart,
+    ...(Number.isFinite(quotaPeriodEnd) ? { quotaPeriodEnd } : {}),
     updatedAt,
   };
 }

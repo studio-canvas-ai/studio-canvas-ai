@@ -1,7 +1,7 @@
 import type { BillingInterval } from "@/lib/data";
 import type { PlanId, UserRecord } from "@/lib/db/types";
 import { subscriptionPeriodEndMs } from "@/lib/subscriptionPeriod";
-import { ensurePlanUsage } from "@/lib/db/planUsage";
+import { billingPeriodExpired } from "@/lib/quotaPeriod";
 
 export type TestAccountSetup = {
   email: string;
@@ -85,10 +85,10 @@ export function applyTestAccountSubscription(
   user.legacyCreditsWiped = true;
 
   if (!periodMatchesSetup(user, setup, now)) {
+    const periodExpired = billingPeriodExpired(user, now);
+
     user.planId = setup.planId;
     user.billingInterval = setup.interval;
-    user.currentPeriodStart = now;
-    user.currentPeriodEnd = subscriptionPeriodEndMs(now, setup.interval);
     user.autoRenew = true;
     user.subscriptionLifecycle = "ACTIVE";
     user.subscriptionStatus = "active";
@@ -96,12 +96,23 @@ export function applyTestAccountSubscription(
     delete user.cancelReason;
     delete user.scheduledCancelAt;
     delete user.cancelledAt;
-    user.quotaPeriodStart = undefined;
-    user.fhdRemaining = undefined;
-    user.uhd4kRemaining = undefined;
+
+    if (periodExpired) {
+      user.currentPeriodStart = now;
+      user.currentPeriodEnd = subscriptionPeriodEndMs(now, setup.interval);
+      user.quotaPeriodStart = undefined;
+      user.fhdRemaining = undefined;
+      user.uhd4kRemaining = undefined;
+    } else if (typeof user.currentPeriodEnd !== "number") {
+      // Cold start reprovision — set subscription window; quota restored via cookie/R2.
+      user.currentPeriodStart = user.currentPeriodStart ?? now;
+      user.currentPeriodEnd = subscriptionPeriodEndMs(
+        user.currentPeriodStart,
+        setup.interval
+      );
+    }
   }
 
-  ensurePlanUsage(user);
   user.updatedAt = now;
   return true;
 }
