@@ -162,7 +162,7 @@ export default function ScaGalleryLoadButton({
           if (requireSubscription && !requireSubscription()) return;
           setOpen((v) => !v);
         }}
-        className={`${btnClass} ${className}`}
+        className={className || btnClass}
       >
         <Images className={iconClass} />
         {cs.loadFromGallery}

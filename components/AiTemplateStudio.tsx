@@ -780,6 +780,8 @@ export type AiTemplateStudioProps = {
   onDecoCatalogPick?: (decoId: string) => void;
   /** Print wizard — insert emoji/symbol as independent canvas object. */
   onCanvasSymbolPick?: (symbol: string) => void;
+  /** Screen 26 — show symbol/font tools even before any text layer exists. */
+  alwaysShowStylePanel?: boolean;
   heading?: string;
   /** Isolated pending-project hand-off key (print vs photo wizard). */
   pendingProjectKey?: string;
@@ -808,6 +810,7 @@ export default function AiTemplateStudio({
   onBackToPlanning,
   onDecoCatalogPick,
   onCanvasSymbolPick,
+  alwaysShowStylePanel = false,
   heading,
   pendingProjectKey,
   recentNamespace = "screen_007",
@@ -1002,6 +1005,19 @@ export default function AiTemplateStudio({
 
   overlayLayersRef.current = overlayLayers;
 
+  const idleStylePanelLayer = useMemo(
+    () =>
+      createLayer({
+        id: "__panel-idle-style__",
+        text: "",
+        pos: "center",
+        fontSize: 48,
+        fontPreset: "pretendard",
+        showBox: false,
+      }),
+    []
+  );
+
   const activeLayerBase = activeLayerId
     ? (overlayLayers.find((l) => l.id === activeLayerId) ?? null)
     : null;
@@ -1010,9 +1026,11 @@ export default function AiTemplateStudio({
       ? { ...activeLayerBase, ...styleDraft }
       : activeLayerBase
     : null;
-  /** SCREEN-024: keep style tools live even when canvas selection is cleared. */
+  /** SCREEN-024/026: keep style tools live even when canvas selection is cleared. */
   const stylePanelLayer =
-    activeLayer ?? (panelOnly ? overlayLayers[0] ?? null : null);
+    activeLayer ??
+    (panelOnly ? overlayLayers[0] ?? null : null) ??
+    (alwaysShowStylePanel ? idleStylePanelLayer : null);
 
   useEffect(() => {
     if (!overlayLayers[0]) return;

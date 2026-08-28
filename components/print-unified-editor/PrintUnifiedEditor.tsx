@@ -977,6 +977,7 @@ export default function PrintUnifiedEditor() {
                 panelOnly
                 hideExport
                 hideAiCommand
+                alwaysShowStylePanel
                 textLayersHost={hiddenTextHost}
                 initialBackgroundUrl={backgroundUrl}
                 controlledOverlayLayers={activeTextLayers}
@@ -1015,7 +1016,7 @@ export default function PrintUnifiedEditor() {
                 onShare={() => void sharePreview()}
                 fileInputRef={projectFileInputRef}
                 onFileChange={(file) => void loadProjectFile(file)}
-                variant="studio"
+                variant="unified"
                 showHint
               />
             </div>
