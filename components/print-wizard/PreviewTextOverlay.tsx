@@ -547,7 +547,8 @@ export default function PreviewTextOverlay({
         const isHover = hoverId === layer.id;
         const isEditing = editingId === layer.id;
         if (
-          !layer.text.trim() &&
+          !layer.text.replace(/\u200B/g, "").trim() &&
+          !layer.showBox &&
           !isActive &&
           !isHover &&
           !isEditing &&

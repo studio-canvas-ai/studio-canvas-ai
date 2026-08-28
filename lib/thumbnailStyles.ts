@@ -169,6 +169,10 @@ export type TextLayer = {
   boxOpacity?: number;
   /** Background box fill (#RRGGBB). Defaults to black when omitted. */
   boxColor?: string;
+  /** Optional box stroke (#RRGGBB) — used by warehouse template injection. */
+  boxBorderColor?: string;
+  /** Corner radius as a fraction of min(boxW, boxH); 0.5 = circle on a square slot. */
+  boxRadius?: number;
   /** User manually placed this layer — keep manualX/Y over auto anchors. */
   layoutLocked?: boolean;
   /** Normalized top-left X (0–1) when layoutLocked. */
@@ -676,8 +680,11 @@ export function colorAtIndex(layer: TextLayer, index: number): ColorPreset {
   return layer.color;
 }
 
-/** Resolve fill hex for a preset (never throws if a stale key slips in). */
+/** Resolve fill hex for a preset or raw #RRGGBB (warehouse template injection). */
 export function colorPresetFill(color: ColorPreset | string | undefined): string {
+  if (typeof color === "string" && /^#[0-9A-Fa-f]{3,8}$/.test(color)) {
+    return color;
+  }
   if (color && color in COLOR_PRESETS) {
     return COLOR_PRESETS[color as ColorPreset].fill;
   }

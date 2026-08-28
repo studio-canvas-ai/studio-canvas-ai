@@ -164,7 +164,7 @@ export function drawPrintLayerInBox(
   scale: number
 ): void {
   const text = displayTextForLayer(layer);
-  if (!text.trim()) return;
+  const paintableText = text.replace(/\u200B/g, "").trim();
 
   const fontSize = Math.max(8, Math.round((layer.fontSize || 48) * scale));
   const fontWeight = layer.fontWeight ?? 700;
@@ -185,10 +185,16 @@ export function drawPrintLayerInBox(
   ctx.shadowBlur = 0;
   ctx.shadowColor = "transparent";
 
-  const opacity = Math.max(0.15, Math.min(0.9, layer.boxOpacity ?? 0.55));
+  const opacity = Math.max(0.15, Math.min(1, layer.boxOpacity ?? 0.55));
   if (layer.showBox) {
     ctx.fillStyle = hexToRgba(layer.boxColor || "#000000", opacity);
-    const r = Math.min(14, fontSize * 0.28);
+    const radiusFrac =
+      typeof layer.boxRadius === "number" && layer.boxRadius > 0
+        ? Math.min(0.5, layer.boxRadius)
+        : null;
+    const r = radiusFrac
+      ? Math.min(boxW, boxH) * radiusFrac
+      : Math.min(14, fontSize * 0.28);
     ctx.beginPath();
     ctx.moveTo(r, 0);
     ctx.arcTo(boxW, 0, boxW, boxH, r);
@@ -198,10 +204,19 @@ export function drawPrintLayerInBox(
     ctx.closePath();
     ctx.fill();
     if (layer.showBoxBorder) {
-      ctx.strokeStyle = hexToRgba("#ffffff", 0.35);
-      ctx.lineWidth = Math.max(1, fontSize * 0.04);
+      const borderHex = layer.boxBorderColor || "#ffffff";
+      ctx.strokeStyle = hexToRgba(borderHex, borderHex === "#ffffff" ? 0.35 : 0.92);
+      ctx.lineWidth = Math.max(
+        1,
+        radiusFrac ? Math.min(boxW, boxH) * 0.04 : fontSize * 0.04
+      );
       ctx.stroke();
     }
+  }
+
+  if (!paintableText) {
+    ctx.restore();
+    return;
   }
 
   ctx.fillStyle = fill;
@@ -247,8 +262,8 @@ export function drawPrintLayerInBox(
     }
   }
 
-  ctx.font = `${fontWeight} ${fontSize}px ${fontForText(fontPreset, text)}`;
-  const lines = wrapMultiline(ctx, text, innerW, letterSpacing);
+  ctx.font = `${fontWeight} ${fontSize}px ${fontForText(fontPreset, paintableText)}`;
+  const lines = wrapMultiline(ctx, paintableText, innerW, letterSpacing);
   const blockH = lines.length * lineHeightPx;
   let y = padY;
   if (align === "center") {

@@ -361,6 +361,25 @@ function formatNestedSubBoxBody(box: Template01NestedSubBox): string {
   return "";
 }
 
+/** Invisible glyph so box-only warehouse layers still paint backgrounds. */
+const TPL_BOX_ONLY = "\u200B";
+
+/** Template 01 modular poster palette — mirrors Template01ModularPreview. */
+const MODULAR_PALETTE = {
+  navy: "#0F172A",
+  navyMid: "#1E293B",
+  gold: "#D4AF37",
+  goldLight: "#F5E6B8",
+  goldDark: "#B8860B",
+  goldBorder: "#C9A227",
+  grayBg: "#F8FAFC",
+  grayMid: "#E2E8F0",
+  grayText: "#64748B",
+  slateText: "#334155",
+  slateBorder: "#E2E8F0",
+  white: "#FFFFFF",
+} as const;
+
 function boxedLayer(
   text: string,
   pos: TextLayer["pos"],
@@ -371,14 +390,29 @@ function boxedLayer(
     boxH: number;
     fontSize: number;
     boxColor: string;
-    color?: TextLayer["color"];
+    color?: TextLayer["color"] | string;
     boxOpacity?: number;
     align?: TextLayer["align"];
     lineHeight?: number;
     fontWeight?: number;
+    boxBorderColor?: string;
+    boxRadius?: number;
+    showBoxBorder?: boolean;
+    showBox?: boolean;
   }
 ): TextLayer {
-  const { color, boxOpacity, align, lineHeight, fontWeight, ...boxGeom } = geom;
+  const {
+    color,
+    boxOpacity,
+    align,
+    lineHeight,
+    fontWeight,
+    boxBorderColor,
+    boxRadius,
+    showBoxBorder,
+    showBox,
+    ...boxGeom
+  } = geom;
   return createLayer({
     text,
     pos,
@@ -389,11 +423,13 @@ function boxedLayer(
     boxW: boxGeom.boxW,
     boxH: boxGeom.boxH,
     maxWidth: boxGeom.boxW,
-    showBox: true,
-    showBoxBorder: true,
-    boxOpacity: boxOpacity ?? 0.94,
+    showBox: showBox ?? true,
+    showBoxBorder: showBoxBorder ?? Boolean(boxBorderColor),
+    boxOpacity: boxOpacity ?? 1,
     boxColor: boxGeom.boxColor,
-    color: color ?? "white",
+    boxBorderColor,
+    boxRadius,
+    color: (color ?? "white") as TextLayer["color"],
     fontSize: boxGeom.fontSize,
     fontWeight: fontWeight ?? 700,
     align: align ?? "center",
@@ -520,13 +556,13 @@ export function buildNestedBoxesTextLayers(
     const bodyH = subH - headerH - 0.03;
 
     layers.push(
-      boxedLayer(" ", "center", {
+      boxedLayer(TPL_BOX_ONLY, "center", {
         manualX: subX,
         manualY: subTop,
         boxW: subW,
         boxH: subH,
         fontSize: 16,
-        boxColor: "#F8FAFC",
+        boxColor: MODULAR_PALETTE.grayBg,
         color: "inkBlack",
       })
     );
@@ -658,12 +694,7 @@ export function buildModularBlockTextLayers(
 ): TextLayer[] {
   const blocks = resolveModularCardBlocks(card);
   const layers: TextLayer[] = [];
-
-  const NAVY = "#0F172A";
-  const NAVY_MID = "#1E293B";
-  const GOLD_LIGHT = "#F5E6B8";
-  const GRAY_BG = "#F8FAFC";
-  const GRAY_MID = "#E2E8F0";
+  const P = MODULAR_PALETTE;
 
   const byType = (type: string) => blocks.find((b) => b.type === type);
 
@@ -678,6 +709,16 @@ export function buildModularBlockTextLayers(
     layers.push(layer);
   };
 
+  const pushDecor = (
+    id: string,
+    geom: Parameters<typeof boxedLayer>[2] & { pos?: TextLayer["pos"] }
+  ) => {
+    const { pos = "center", ...rest } = geom;
+    const layer = boxedLayer(TPL_BOX_ONLY, pos, rest);
+    layer.id = `tpl01-mod-${card.id}-${id}`;
+    layers.push(layer);
+  };
+
   const stepBlocks = blocks.filter((b) => /^step-\d+$/.test(b.type));
   const layout = computeModularPosterLayout(
     TEMPLATE_01_A4_ASPECT,
@@ -687,7 +728,6 @@ export function buildModularBlockTextLayers(
     margin,
     contentW,
     circleGap,
-    circleW,
     circleH,
     heroTitleY,
     heroTitleH,
@@ -710,15 +750,19 @@ export function buildModularBlockTextLayers(
     footerY,
   } = layout;
 
+  const stepAccentW = 0.005;
+  const stepTextInset = 0.014;
+
   push(byType("hero-title"), {
     pos: "top",
     manualX: margin,
     manualY: heroTitleY,
     boxW: contentW,
     boxH: heroTitleH,
-    fontSize: 32,
-    boxColor: NAVY,
+    fontSize: 34,
+    boxColor: P.navy,
     color: "white",
+    boxRadius: 0.12,
   });
 
   push(byType("hero-sub"), {
@@ -727,9 +771,12 @@ export function buildModularBlockTextLayers(
     manualY: heroSubY,
     boxW: contentW,
     boxH: heroSubH,
-    fontSize: 22,
-    boxColor: GOLD_LIGHT,
-    color: "inkBlack",
+    fontSize: 24,
+    boxColor: P.goldLight,
+    color: P.navyMid,
+    boxRadius: 0.1,
+    boxBorderColor: P.goldBorder,
+    showBoxBorder: true,
   });
 
   const circleBlocks = blocks.filter((b) => /^circle-\d+$/.test(b.type));
@@ -743,10 +790,13 @@ export function buildModularBlockTextLayers(
       manualY: circleY + Math.max(0, (circleH - circleSlotH) / 2),
       boxW: circleSlotW,
       boxH: circleSlotH,
-      fontSize: 17,
-      boxColor: "#FFFFFF",
-      color: "inkBlack",
+      fontSize: 18,
+      boxColor: P.white,
+      color: P.slateText,
       lineHeight: 1.2,
+      boxRadius: 0.5,
+      boxBorderColor: P.goldBorder,
+      showBoxBorder: true,
     });
   });
 
@@ -765,48 +815,62 @@ export function buildModularBlockTextLayers(
     sides.forEach((side, index) => {
       const cardX = margin + index * (cardW + cardGap);
 
-      layers.push(
-        boxedLayer(" ", "center", {
-          manualX: cardX,
-          manualY: cardY,
-          boxW: cardW,
-          boxH: cardBlockH,
-          fontSize: 12,
-          boxColor: GRAY_BG,
-          color: "inkBlack",
-          boxOpacity: 0.92,
-        })
-      );
-      const frameLayer = layers[layers.length - 1]!;
-      frameLayer.id = `tpl01-mod-${card.id}-frame-${side}`;
-      frameLayer.layoutLocked = true;
+      pushDecor(`frame-${side}`, {
+        manualX: cardX,
+        manualY: cardY,
+        boxW: cardW,
+        boxH: cardBlockH,
+        fontSize: 12,
+        boxColor: P.white,
+        color: "inkBlack",
+        boxBorderColor: P.slateBorder,
+        showBoxBorder: true,
+        boxRadius: 0.08,
+      });
+
+      const bodyY = cardY + cardPad + titleH + innerGap;
+      const bodyH = cardBlockH - cardPad * 2 - titleH - innerGap;
+
+      pushDecor(`body-${side}`, {
+        manualX: cardX + cardPad,
+        manualY: bodyY,
+        boxW: cardW - cardPad * 2,
+        boxH: bodyH,
+        fontSize: 12,
+        boxColor: P.grayBg,
+        color: "inkBlack",
+        boxRadius: 0.06,
+      });
 
       push(byType(`card-${side}-title`), {
         manualX: cardX + cardPad,
         manualY: cardY + cardPad,
         boxW: cardW - cardPad * 2,
         boxH: titleH,
-        fontSize: 17,
-        boxColor: NAVY_MID,
+        fontSize: 18,
+        boxColor: P.navyMid,
         color: "white",
+        boxRadius: 0.06,
       });
       push(byType(`card-${side}-support`), {
         manualX: cardX + cardPad,
-        manualY: cardY + cardPad + titleH + innerGap,
+        manualY: bodyY + innerGap,
         boxW: cardW - cardPad * 2,
         boxH: supportH,
-        fontSize: 15,
-        boxColor: GRAY_MID,
-        color: "inkBlack",
+        fontSize: 16,
+        showBox: false,
+        boxColor: P.grayBg,
+        color: P.grayText,
       });
       push(byType(`card-${side}-amount`), {
         manualX: cardX + cardPad,
-        manualY: cardY + cardPad + titleH + innerGap + supportH + innerGap,
+        manualY: bodyY + innerGap + supportH + innerGap * 0.5,
         boxW: cardW - cardPad * 2,
         boxH: amountH,
-        fontSize: 20,
-        boxColor: GOLD_LIGHT,
-        color: "inkBlack",
+        fontSize: 22,
+        showBox: false,
+        boxColor: P.grayBg,
+        color: P.goldDark,
         fontWeight: 800,
       });
     });
@@ -816,34 +880,54 @@ export function buildModularBlockTextLayers(
       manualY: cardY,
       boxW: cardW,
       boxH: cardBlockH,
-      fontSize: 16,
-      boxColor: "#FFFFFF",
-      color: "inkBlack",
+      fontSize: 17,
+      boxColor: P.white,
+      color: P.slateText,
       lineHeight: 1.3,
+      boxBorderColor: P.slateBorder,
+      showBoxBorder: true,
+      boxRadius: 0.08,
     });
     push(byType("card-r-title"), {
       manualX: margin + cardW + cardGap,
       manualY: cardY,
       boxW: cardW,
       boxH: cardBlockH,
-      fontSize: 16,
-      boxColor: "#FFFFFF",
-      color: "inkBlack",
+      fontSize: 17,
+      boxColor: P.white,
+      color: P.slateText,
       lineHeight: 1.3,
+      boxBorderColor: P.slateBorder,
+      showBoxBorder: true,
+      boxRadius: 0.08,
     });
   }
 
   stepBlocks.forEach((block, index) => {
     const stepIndex = Number(block.type.replace("step-", "")) || index + 1;
-    push(block, {
+    const stepY = stepY0 + index * (stepH + stepGap);
+    const rowBg = stepIndex % 2 === 1 ? P.grayMid : P.grayBg;
+
+    pushDecor(`step-accent-${stepIndex}`, {
       manualX: margin,
-      manualY: stepY0 + index * (stepH + stepGap),
-      boxW: contentW,
+      manualY: stepY + stepH * 0.15,
+      boxW: stepAccentW,
+      boxH: stepH * 0.7,
+      fontSize: 8,
+      boxColor: P.goldBorder,
+      boxRadius: 0.5,
+    });
+
+    push(block, {
+      manualX: margin + stepTextInset,
+      manualY: stepY,
+      boxW: contentW - stepTextInset,
       boxH: stepH,
-      fontSize: 17,
-      boxColor: stepIndex % 2 === 1 ? GRAY_MID : GRAY_BG,
-      color: "inkBlack",
+      fontSize: 18,
+      boxColor: rowBg,
+      color: P.navyMid,
       align: "left",
+      boxRadius: 0.08,
     });
   });
 
@@ -853,9 +937,11 @@ export function buildModularBlockTextLayers(
     manualY: footerY,
     boxW: contentW,
     boxH: footerH,
-    fontSize: 22,
-    boxColor: NAVY,
-    color: "white",
+    fontSize: 24,
+    boxColor: P.navy,
+    color: P.gold,
+    fontWeight: 700,
+    boxRadius: 0.1,
   });
 
   const known = new Set([
@@ -883,8 +969,8 @@ export function buildModularBlockTextLayers(
       boxW: contentW,
       boxH: 0.055,
       fontSize: 16,
-      boxColor: GRAY_BG,
-      color: "inkBlack",
+      boxColor: P.grayBg,
+      color: P.slateText,
     });
   });
 
