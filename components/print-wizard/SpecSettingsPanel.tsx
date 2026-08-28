@@ -595,7 +595,7 @@ export default function SpecSettingsPanel({
             <div className="max-h-[min(60vh,28rem)] overflow-y-auto overscroll-contain p-2 sm:p-2.5">
               {BG_EXAMPLE_CATEGORIES.map((group) => (
                 <div key={group.id} className="mb-3 last:mb-0">
-                  <p className="mb-1.5 text-[11px] font-bold tracking-wide text-indigo-200/90 [word-break:keep-all]">
+                  <p className="mb-2 text-[16px] font-bold tracking-wide text-white sm:text-[17px] [word-break:keep-all]">
                     {group.labelKo}
                   </p>
                   <div className="flex flex-row flex-wrap gap-1.5">
@@ -612,12 +612,11 @@ export default function SpecSettingsPanel({
                             onBgKeywordChange(
                               applyBgExamplePreset(preset.promptEn)
                             );
-                            setOpenKey(null);
                           }}
-                          className={`min-w-[9.5rem] flex-[1_1_45%] rounded-lg border px-2 py-1 text-left shadow-sm transition [word-break:keep-all] ${
+                          className={`min-w-[9.5rem] flex-[1_1_45%] rounded-lg text-left shadow-sm transition [word-break:keep-all] ${
                             on
-                              ? "border-2 border-indigo-500 bg-white shadow-md ring-2 ring-indigo-400/35"
-                              : "border border-gray-200 bg-white hover:border-gray-300 hover:shadow"
+                              ? "border-[3px] border-indigo-500 bg-indigo-50 px-[5px] py-[2px] shadow-md ring-2 ring-indigo-400/60"
+                              : "border border-gray-200 bg-white px-2 py-1 hover:border-gray-300 hover:shadow"
                           }`}
                         >
                           <span className="line-clamp-2 block text-[14px] font-bold leading-[1.2] text-black sm:text-[15px]">

@@ -756,6 +756,9 @@ export default function PrintUnifiedEditor() {
         backgroundUrl: urls[0] ?? null,
         backgroundPansByPage: resizeBackgroundPans(undefined, s.pageCount),
       });
+      // Load page 1 onto the main canvas so editing can start immediately
+      // (mini thumbs alone leave currentPage at 0 → blank center stage).
+      activatePage(1);
     } catch (err) {
       console.error("[unified-editor] AI background failed", err);
       window.alert(
@@ -766,7 +769,7 @@ export default function PrintUnifiedEditor() {
     } finally {
       setGenerating(false);
     }
-  }, [generating, patch]);
+  }, [activatePage, generating, patch]);
 
   const selectPage = useCallback(
     (page: number) => {
