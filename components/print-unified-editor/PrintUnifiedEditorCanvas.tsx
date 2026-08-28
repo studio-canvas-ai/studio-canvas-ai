@@ -340,28 +340,12 @@ export default function PrintUnifiedEditorCanvas({
 
                   {/*
                     Remount overlays per page (Screen 24 keeps one instance per face).
-                    Without a page key, the shared instance swaps layers→[] on navigate
-                    and a late blur/commit writes that empty payload onto the prior page.
+                    Stack: photo (back) → text → deco (front). Screen 24 PreviewCanvas parity.
                   */}
-                  <PreviewTextOverlay
-                    key={`text-${pageIndex}`}
-                    layers={textLayers}
-                    onLayersChange={(layers) =>
-                      onTextLayersChange(pageIndex, layers)
-                    }
-                    interactive
-                    activeLayerId={activeTextLayerId ?? null}
-                    onActiveLayerChange={onActiveTextLayerChange}
-                    pageIndex={pageIndex}
-                    backgroundSrc={pageBg}
-                    editOnSingleClick
-                    viewScale={zoom}
-                  />
-
                   {photoLayers?.length && onPhotoLayersChange ? (
                     <div
                       data-photo-overlay
-                      className="pointer-events-none absolute inset-0 z-[8] overflow-visible"
+                      className="pointer-events-none absolute inset-0 z-[1] overflow-visible"
                     >
                       <PreviewPhotoOverlay
                         key={`photo-${pageIndex}`}
@@ -376,10 +360,30 @@ export default function PrintUnifiedEditorCanvas({
                     </div>
                   ) : null}
 
+                  <div
+                    data-text-overlay
+                    className="pointer-events-none absolute inset-0 z-[2] overflow-visible"
+                  >
+                    <PreviewTextOverlay
+                      key={`text-${pageIndex}`}
+                      layers={textLayers}
+                      onLayersChange={(layers) =>
+                        onTextLayersChange(pageIndex, layers)
+                      }
+                      interactive
+                      activeLayerId={activeTextLayerId ?? null}
+                      onActiveLayerChange={onActiveTextLayerChange}
+                      pageIndex={pageIndex}
+                      backgroundSrc={pageBg}
+                      editOnSingleClick
+                      viewScale={zoom}
+                    />
+                  </div>
+
                   {decoLayers?.length && onDecoLayersChange ? (
                     <div
                       data-deco-overlay
-                      className="pointer-events-none absolute inset-0 z-[9] overflow-visible"
+                      className="pointer-events-none absolute inset-0 z-[8] overflow-visible"
                     >
                       <PreviewDecoOverlay
                         key={`deco-${pageIndex}`}
