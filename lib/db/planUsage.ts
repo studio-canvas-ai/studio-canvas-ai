@@ -2,6 +2,11 @@ import { getDb, withDbLock } from "@/lib/db/store";
 import type { UserRecord } from "@/lib/db/types";
 import { getPlanUsageLimits, type PlanUsageSnapshot } from "@/lib/planQuotas";
 import {
+  applyDurableQuotaToUser,
+  loadDurableQuota,
+  saveDurableQuota,
+} from "@/lib/db/durableQuota";
+import {
   readQuotaCookie,
   writeQuotaCookie,
 } from "@/lib/quotaCookie";
@@ -75,12 +80,16 @@ export function applyQuotaCookieToUser(
 export async function hydrateUserPlanUsage(
   user: UserRecord
 ): Promise<UserRecord> {
-  const cookie = await readQuotaCookie(user.id);
+  const [cookie, durable] = await Promise.all([
+    readQuotaCookie(user.id),
+    loadDurableQuota(user.id),
+  ]);
   const updated = await withDbLock((db) => {
     const row = db.users[user.id];
     if (!row) return user;
     ensurePlanUsage(row);
     applyQuotaCookieToUser(row, cookie);
+    applyDurableQuotaToUser(row, durable);
     return row;
   });
   await persistUserPlanUsage(updated);
@@ -89,13 +98,16 @@ export async function hydrateUserPlanUsage(
 
 export async function persistUserPlanUsage(user: UserRecord): Promise<void> {
   ensurePlanUsage(user);
-  await writeQuotaCookie({
-    userId: user.id,
-    fhdRemaining: user.fhdRemaining ?? 0,
-    uhd4kRemaining: user.uhd4kRemaining ?? 0,
-    quotaPeriodStart: user.quotaPeriodStart ?? user.currentPeriodStart ?? 0,
-    updatedAt: Date.now(),
-  });
+  await Promise.all([
+    writeQuotaCookie({
+      userId: user.id,
+      fhdRemaining: user.fhdRemaining ?? 0,
+      uhd4kRemaining: user.uhd4kRemaining ?? 0,
+      quotaPeriodStart: user.quotaPeriodStart ?? user.currentPeriodStart ?? 0,
+      updatedAt: Date.now(),
+    }),
+    saveDurableQuota(user),
+  ]);
 }
 
 export type ConsumeQuotaResult =
@@ -107,7 +119,10 @@ export async function consumeDownloadQuota(params: {
   userId: string;
   kind: DownloadQuotaKind;
 }): Promise<ConsumeQuotaResult> {
-  const cookie = await readQuotaCookie(params.userId);
+  const [cookie, durable] = await Promise.all([
+    readQuotaCookie(params.userId),
+    loadDurableQuota(params.userId),
+  ]);
   const result = await withDbLock((db) => {
     const user = db.users[params.userId];
     if (!user) {
@@ -115,6 +130,7 @@ export async function consumeDownloadQuota(params: {
     }
     ensurePlanUsage(user);
     applyQuotaCookieToUser(user, cookie);
+    applyDurableQuotaToUser(user, durable);
     const key = params.kind === "uhd4k" ? "uhd4kRemaining" : "fhdRemaining";
     const remaining = user[key] ?? 0;
     if (remaining < 1) {

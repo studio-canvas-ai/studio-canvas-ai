@@ -1,6 +1,12 @@
 import { getDb, newId, withDbLock } from "@/lib/db/store";
 import type { GeneralPhotoRecord } from "@/lib/db/types";
 import {
+  applyDurableQuotaToUser,
+  loadDurableQuota,
+} from "@/lib/db/durableQuota";
+import { persistUserPlanUsage, applyQuotaCookieToUser, ensurePlanUsage } from "@/lib/db/planUsage";
+import { readQuotaCookie } from "@/lib/quotaCookie";
+import {
   createR2Client,
   deleteR2Object,
   getR2Config,
@@ -168,17 +174,38 @@ export async function deleteUserGeneralPhoto(
 }
 
 export async function getGeneralPhotoDownloadCount(userId: string): Promise<number> {
+  const [cookie, durable] = await Promise.all([
+    readQuotaCookie(userId),
+    loadDurableQuota(userId),
+  ]);
+  await withDbLock((db) => {
+    const user = db.users[userId];
+    if (!user) return;
+    ensurePlanUsage(user);
+    applyQuotaCookieToUser(user, cookie);
+    applyDurableQuotaToUser(user, durable);
+  });
   return getDb().users[userId]?.generalPhotoDownloadCount ?? 0;
 }
 
 export async function incrementGeneralPhotoDownloadCount(
   userId: string
 ): Promise<number> {
-  return withDbLock((db) => {
+  const [cookie, durable] = await Promise.all([
+    readQuotaCookie(userId),
+    loadDurableQuota(userId),
+  ]);
+  const count = await withDbLock((db) => {
     const user = db.users[userId];
     if (!user) return 0;
+    ensurePlanUsage(user);
+    applyQuotaCookieToUser(user, cookie);
+    applyDurableQuotaToUser(user, durable);
     user.generalPhotoDownloadCount = (user.generalPhotoDownloadCount ?? 0) + 1;
     user.updatedAt = Date.now();
     return user.generalPhotoDownloadCount;
   });
+  const user = getDb().users[userId];
+  if (user) await persistUserPlanUsage(user);
+  return count;
 }

@@ -45,32 +45,49 @@ import type { PlanUsageSnapshot } from "@/lib/planQuotas";
 
 const PLAN_USAGE_CACHE_KEY = "sca_plan_usage_v1";
 
+type CachedPlanUsagePayload = PlanUsageSnapshot & {
+  quotaPeriodStart?: number;
+};
+
 function readCachedPlanUsage(): PlanUsageSnapshot | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = localStorage.getItem(PLAN_USAGE_CACHE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as PlanUsageSnapshot;
+    const parsed = JSON.parse(raw) as CachedPlanUsagePayload;
     if (
       typeof parsed?.fhdRemaining !== "number" ||
       typeof parsed?.uhd4kRemaining !== "number"
     ) {
       return null;
     }
-    return parsed;
+    return {
+      fhdRemaining: parsed.fhdRemaining,
+      fhdLimit: parsed.fhdLimit ?? 0,
+      uhd4kRemaining: parsed.uhd4kRemaining,
+      uhd4kLimit: parsed.uhd4kLimit ?? 0,
+      galleryLimit: parsed.galleryLimit ?? 0,
+    };
   } catch {
     return null;
   }
 }
 
-function writeCachedPlanUsage(usage: PlanUsageSnapshot | null) {
+function writeCachedPlanUsage(
+  usage: PlanUsageSnapshot | null,
+  quotaPeriodStart?: number
+) {
   if (typeof window === "undefined") return;
   try {
     if (!usage) {
       localStorage.removeItem(PLAN_USAGE_CACHE_KEY);
       return;
     }
-    localStorage.setItem(PLAN_USAGE_CACHE_KEY, JSON.stringify(usage));
+    const payload: CachedPlanUsagePayload = {
+      ...usage,
+      ...(typeof quotaPeriodStart === "number" ? { quotaPeriodStart } : {}),
+    };
+    localStorage.setItem(PLAN_USAGE_CACHE_KEY, JSON.stringify(payload));
   } catch {
     /* ignore quota */
   }
@@ -217,9 +234,10 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
   const [socialProviders, setSocialProviders] = useState<SocialProviderId[]>([]);
   const [socialProvidersLoaded, setSocialProvidersLoaded] = useState(false);
   const [planUsage, setPlanUsageState] = useState<PlanUsageSnapshot | null>(null);
+  const quotaPeriodStartRef = useRef<number | null>(null);
   const setPlanUsage = useCallback((usage: PlanUsageSnapshot | null) => {
     setPlanUsageState(usage);
-    writeCachedPlanUsage(usage);
+    writeCachedPlanUsage(usage, quotaPeriodStartRef.current ?? undefined);
   }, []);
   const [portraits, setPortraits] = useState<Record<string, PortraitRetouchState>>({});
   const [dailyRetouchCount, setDailyRetouchCount] = useState(0);
@@ -317,6 +335,7 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
           maxCredits: number;
           planId: PlanId;
           billingInterval?: BillingInterval | null;
+          currentPeriodStart?: number | null;
           isAdmin?: boolean;
           usage?: PlanUsageSnapshot | null;
         } | null;
@@ -338,6 +357,10 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
         setMaxCredits(0);
         setPlanId(data.user.planId);
         setBillingInterval(data.user.billingInterval ?? "monthly");
+        quotaPeriodStartRef.current =
+          typeof data.user.currentPeriodStart === "number"
+            ? data.user.currentPeriodStart
+            : null;
         if (data.user.usage) setPlanUsage(data.user.usage);
         patchAccountMeta({
           lastLoginAt: Date.now(),
@@ -432,6 +455,7 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
     setCredits(FREE_CREDITS);
     setMaxCredits(FREE_CREDITS);
     setPlanUsage(null);
+    quotaPeriodStartRef.current = null;
     setPlanId("free");
     setBillingInterval("monthly");
     setPromoWallet(null);
