@@ -62,6 +62,8 @@ export type CanvasUploadToolbarProps = {
   recentNamespace?: RecentProjectNamespace;
   /** Larger padding / type for photo wizard header after uploads moved away. */
   roomy?: boolean;
+  /** Light surface (Screen 26 left canvas) vs default dark chrome. */
+  tone?: "dark" | "light";
 };
 
 type MenuCoords = {
@@ -94,6 +96,7 @@ export default function CanvasUploadToolbar({
   showFormatHint = true,
   recentNamespace = "screen_007",
   roomy = false,
+  tone = "dark",
 }: CanvasUploadToolbarProps) {
   const { showToast } = useFeedback();
   const { t } = useI18n();
@@ -131,6 +134,22 @@ export default function CanvasUploadToolbar({
     : dense
       ? "h-3 w-3 shrink-0"
       : "h-3.5 w-3.5 shrink-0";
+  const isLight = tone === "light";
+  const recentBtn = isLight
+    ? `${btn} border-amber-400/60 bg-amber-50 text-amber-900 hover:bg-amber-100`
+    : `${btn} border-amber-400/35 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20`;
+  const deleteBtn = isLight
+    ? `${btn} border-red-300 bg-red-50 text-red-700 hover:bg-red-100`
+    : `${btn} border-red-400/40 bg-red-500/10 text-red-200 hover:bg-red-500/20`;
+  const uploadBtn = isLight
+    ? `${btn} border-slate-300 bg-white text-slate-800 hover:bg-slate-50`
+    : `${btn} border-white/15 bg-white/5 text-white/80 hover:bg-white/10`;
+  const cutoutBtn = isLight
+    ? `${btn} border-indigo-300 bg-indigo-50 px-2.5 pr-3 text-indigo-800 hover:bg-indigo-100`
+    : `${btn} border-indigo-400/35 bg-indigo-500/10 px-2.5 pr-3 text-indigo-100 hover:bg-indigo-500/20`;
+  const formatHintCls = isLight
+    ? "text-[8px] font-semibold tracking-tight text-pink-600"
+    : "text-[8px] font-semibold tracking-tight text-pink-400";
 
   const refreshRecent = async () => {
     try {
@@ -420,7 +439,7 @@ export default function CanvasUploadToolbar({
             if (requireSubscription && !requireSubscription()) return;
             setMenuOpen((v) => !v);
           }}
-          className={`${btn} border-amber-400/35 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20`}
+          className={recentBtn}
           title={fillCanvas(cs.recentDrawerHint, { max: RECENT_PROJECTS_MAX })}
         >
           <Clock3 className={iconCls} />
@@ -441,7 +460,7 @@ export default function CanvasUploadToolbar({
         type="button"
         disabled={disabled || !canDelete || Boolean(busy)}
         onClick={deleteSelected}
-        className={`${btn} border-red-400/40 bg-red-500/10 text-red-200 hover:bg-red-500/20`}
+        className={deleteBtn}
         title={cs.delete}
       >
         <Trash2 className={iconCls} />
@@ -453,7 +472,7 @@ export default function CanvasUploadToolbar({
         type="button"
         disabled={disabled || Boolean(busy)}
         onClick={() => originalInputRef.current?.click()}
-        className={`${btn} border-white/15 bg-white/5 text-white/80 hover:bg-white/10`}
+        className={uploadBtn}
         title={cs.uploadOriginal}
       >
         <Upload className={iconCls} />
@@ -462,7 +481,7 @@ export default function CanvasUploadToolbar({
             {busy === "original" ? cs.uploadOriginalBusy : cs.uploadOriginal}
           </span>
           {showFormatHint && busy !== "original" ? (
-            <span className="text-[8px] font-semibold tracking-tight text-pink-400">
+            <span className={formatHintCls}>
               {PRINT_PHOTO_FORMAT_HINT}
             </span>
           ) : null}
@@ -472,7 +491,7 @@ export default function CanvasUploadToolbar({
         type="button"
         disabled={disabled || Boolean(busy)}
         onClick={() => cutoutInputRef.current?.click()}
-        className={`${btn} border-indigo-400/35 bg-indigo-500/10 px-2.5 pr-3 text-indigo-100 hover:bg-indigo-500/20`}
+        className={cutoutBtn}
         title={cs.uploadCutout}
       >
         {busy === "cutout" ? (
@@ -485,7 +504,7 @@ export default function CanvasUploadToolbar({
             {busy === "cutout" ? cs.uploadCutoutBusy : cs.uploadCutout}
           </span>
           {showFormatHint && busy !== "cutout" ? (
-            <span className="text-[8px] font-semibold tracking-tight text-pink-400">
+            <span className={formatHintCls}>
               {PRINT_PHOTO_FORMAT_HINT}
             </span>
           ) : null}

@@ -260,15 +260,16 @@ export default function PrintUnifiedEditorCanvas({
   }, [stagePanning, onContentOffsetChange]);
 
   return (
-    <section className="flex h-full min-h-0 flex-col gap-1 p-1.5 sm:p-2">
+    <section className="flex h-full min-h-0 flex-col gap-1 bg-slate-100 p-1.5 sm:p-2">
       <header className="flex shrink-0 items-center gap-2 px-0.5 leading-none">
-        <h2 className="shrink-0 text-[12px] font-semibold tracking-tight text-slate-200 [word-break:keep-all] sm:text-[13px]">
+        <h2 className="shrink-0 text-[12px] font-semibold tracking-tight text-slate-800 [word-break:keep-all] sm:text-[13px]">
           {cs.printTitle}
         </h2>
         <div className="min-w-0 flex-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <CanvasUploadToolbar
             dense
             nowrap
+            tone="light"
             className="justify-start"
             actions="full"
             disabled={exportBusy || generating}
@@ -299,7 +300,7 @@ export default function PrintUnifiedEditorCanvas({
             disabled={exportBusy || generating}
             title={cs.reset}
             aria-label={cs.reset}
-            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-red-400/40 bg-red-500/10 px-2 text-[10px] font-semibold leading-none text-red-200 transition hover:bg-red-500/20 disabled:opacity-40"
+            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-red-300 bg-red-50 px-2 text-[10px] font-semibold leading-none text-red-700 transition hover:bg-red-100 disabled:opacity-40"
           >
             <Trash2 className="h-3 w-3 shrink-0" aria-hidden />
             <span className="whitespace-nowrap">{cs.reset}</span>
@@ -307,8 +308,8 @@ export default function PrintUnifiedEditorCanvas({
         ) : null}
       </header>
 
-      <div className="relative flex min-h-0 flex-1 flex-col rounded-xl border border-slate-700/60 bg-slate-900/50 p-1.5 shadow-inner sm:gap-2 sm:p-2">
-        <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-slate-700/50 bg-slate-950/80">
+      <div className="relative flex min-h-0 flex-1 flex-col rounded-xl border border-slate-200/90 bg-slate-100 p-1.5 shadow-inner sm:gap-2 sm:p-2">
+        <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
           {pageActivated ? (
             <div
               className={`absolute inset-0 flex items-center justify-center overflow-hidden p-1.5 sm:p-2 [container-type:size] ${
@@ -332,11 +333,11 @@ export default function PrintUnifiedEditorCanvas({
                 <div
                   data-page-stage
                   data-page-card
-                  className="relative overflow-hidden rounded-md border border-slate-600/70 bg-slate-950 shadow-[0_12px_36px_rgba(15,23,42,0.55)]"
+                  className="relative overflow-hidden rounded-md border border-slate-300 bg-white shadow-[0_10px_28px_rgba(15,23,42,0.12)]"
                   style={stageStyle}
                   onPointerDown={handleCanvasBlankPointerDown}
                 >
-                  {/* Background plate */}
+                  {/* Background plate — white paper when empty */}
                   <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-md">
                     {pageBg ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -350,7 +351,7 @@ export default function PrintUnifiedEditorCanvas({
                         }}
                       />
                     ) : (
-                      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(99,102,241,0.2),transparent_55%),radial-gradient(ellipse_at_80%_80%,rgba(16,185,129,0.1),transparent_50%),linear-gradient(160deg,#1e293b,#0f172a)]" />
+                      <div className="absolute inset-0 bg-white" />
                     )}
 
                     {blueprint ? (
@@ -451,10 +452,10 @@ export default function PrintUnifiedEditorCanvas({
             </div>
           ) : (
             <div className="flex h-full min-h-[280px] w-full flex-col items-center justify-center gap-2 px-6 text-center">
-              <p className="text-sm font-medium text-white/55">
+              <p className="text-sm font-medium text-slate-700">
                 중앙 패널 하단에서 편집할 페이지를 선택해 주세요
               </p>
-              <p className="max-w-xs text-[11px] leading-relaxed text-white/35">
+              <p className="max-w-xs text-[11px] leading-relaxed text-slate-500">
                 1~8페이지 미니 보기를 탭하면 해당 페이지 캔버스가 활성화됩니다
               </p>
             </div>
@@ -462,13 +463,13 @@ export default function PrintUnifiedEditorCanvas({
         </div>
 
         {pageActivated ? (
-          <div className="pointer-events-none absolute bottom-3 right-3 z-20 flex items-center gap-1 rounded-lg border border-slate-600/70 bg-slate-900/90 p-0.5 shadow-lg backdrop-blur-md">
+          <div className="pointer-events-none absolute bottom-3 right-3 z-20 flex items-center gap-1 rounded-lg border border-slate-300 bg-white/95 p-0.5 shadow-md backdrop-blur-md">
             <button
               type="button"
               aria-label="캔버스 축소"
               title="축소"
               onClick={() => changeZoom(nextUnifiedZoom(zoom, -1))}
-              className="pointer-events-auto inline-flex h-7 w-7 items-center justify-center rounded-md text-white/85 transition hover:bg-white/10 hover:text-white disabled:opacity-35"
+              className="pointer-events-auto inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-700 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-35"
               disabled={zoom <= 0.5}
             >
               <Minus className="h-3.5 w-3.5" aria-hidden />
@@ -485,7 +486,7 @@ export default function PrintUnifiedEditorCanvas({
                   ] ?? 1
                 );
               }}
-              className="pointer-events-auto inline-flex min-w-[3.25rem] items-center justify-center rounded-md px-1.5 py-1 text-[11px] font-bold tabular-nums text-emerald-300 transition hover:bg-white/10"
+              className="pointer-events-auto inline-flex min-w-[3.25rem] items-center justify-center rounded-md px-1.5 py-1 text-[11px] font-bold tabular-nums text-emerald-700 transition hover:bg-slate-100"
             >
               {zoomLabel}
             </button>
@@ -494,7 +495,7 @@ export default function PrintUnifiedEditorCanvas({
               aria-label="캔버스 확대"
               title="확대"
               onClick={() => changeZoom(nextUnifiedZoom(zoom, 1))}
-              className="pointer-events-auto inline-flex h-7 w-7 items-center justify-center rounded-md text-white/85 transition hover:bg-white/10 hover:text-white disabled:opacity-35"
+              className="pointer-events-auto inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-700 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-35"
               disabled={zoom >= 1.5}
             >
               <Plus className="h-3.5 w-3.5" aria-hidden />
