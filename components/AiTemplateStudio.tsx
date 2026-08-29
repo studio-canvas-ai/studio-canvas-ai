@@ -956,6 +956,7 @@ export default function AiTemplateStudio({
   const styleDraftRef = useRef<Partial<TextLayer> | null>(null);
   const styleCommitRafRef = useRef<number | null>(null);
   const [commandInput, setCommandInput] = useState("");
+  const [quickTextDraft, setQuickTextDraft] = useState("");
   const [commandBusy, setCommandBusy] = useState(false);
   const [commandLog, setCommandLog] = useState<
     Array<{ role: "user" | "assistant"; text: string }>
@@ -2391,6 +2392,37 @@ export default function AiTemplateStudio({
     });
     selectionClearedRef.current = false;
     setActiveLayerId(next.id);
+  };
+
+  /** Screen 26 — quick bar: insert text onto canvas without a side layer list. */
+  const addQuickTextLayer = () => {
+    const text = quickTextDraft.trim() || PLACEHOLDER_TEXT;
+    const next = makeDefaultLayer(overlayLayers.length);
+    const source =
+      (activeLayerId
+        ? overlayLayers.find((l) => l.id === activeLayerId)
+        : null) ??
+      overlayLayers[overlayLayers.length - 1] ??
+      null;
+    const placed: TextLayer = {
+      ...next,
+      text,
+      color: source?.color ?? next.color,
+      fontPreset: source?.fontPreset ?? next.fontPreset,
+      fontSize: source?.fontSize ?? next.fontSize,
+      fontWeight: source?.fontWeight ?? next.fontWeight,
+      letterSpacing: source ? layerLetterSpacing(source) : next.letterSpacing,
+      lineHeight: source ? layerLineHeight(source) : next.lineHeight,
+      align: source?.align ?? next.align,
+      showBox: source?.showBox ?? false,
+      showBoxBorder: source?.showBoxBorder ?? false,
+      boxOpacity: source?.boxOpacity ?? next.boxOpacity,
+      boxColor: source?.boxColor ?? next.boxColor,
+    };
+    setOverlayLayers((prev) => [...prev, placed]);
+    selectionClearedRef.current = false;
+    setActiveLayerId(placed.id);
+    setQuickTextDraft("");
   };
 
   const removeLayer = (id: string) => {
@@ -4112,6 +4144,35 @@ export default function AiTemplateStudio({
         <section className={panelSectionClass}>
           {stylePanelLayer ? (
             <>
+              {isLight && panelOnly && alwaysShowStylePanel ? (
+                <div>
+                  <p className={styleSectionTitleChip}>{cs.textLayers}</p>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      value={quickTextDraft}
+                      onChange={(e) => setQuickTextDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter") return;
+                        e.preventDefault();
+                        addQuickTextLayer();
+                      }}
+                      placeholder={cs.layerPlaceholder}
+                      aria-label={cs.textLayers}
+                      className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm font-semibold text-slate-900 shadow-sm outline-none placeholder:font-medium placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20"
+                    />
+                    <button
+                      type="button"
+                      onClick={addQuickTextLayer}
+                      aria-label={cs.addTextLayer}
+                      title={cs.addTextLayer}
+                      className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-amber-200/80 bg-yellow-50 text-slate-800 shadow-sm transition hover:border-amber-300 hover:bg-yellow-100/80"
+                    >
+                      <Plus className="h-4 w-4" aria-hidden />
+                    </button>
+                  </div>
+                </div>
+              ) : null}
               <div>
                 <p className={styleSectionTitleChip}>
                   {t.thumbnail.symbolsLabel}

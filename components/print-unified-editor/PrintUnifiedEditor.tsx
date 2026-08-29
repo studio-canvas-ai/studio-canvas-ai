@@ -1140,9 +1140,13 @@ export default function PrintUnifiedEditor() {
                 textLayersHost={hiddenTextHost}
                 initialBackgroundUrl={backgroundUrl}
                 controlledOverlayLayers={activeTextLayers}
-                onControlledOverlayLayersChange={(layers) =>
+                onControlledOverlayLayersChange={(layers) => {
+                  const idx = currentPage > 0 ? currentPage - 1 : 0;
+                  if (currentPage <= 0) {
+                    setCurrentPage(1);
+                  }
                   onTextLayersChange(
-                    pageIndex,
+                    idx,
                     layers.map((layer) =>
                       reconcileLayerTypographyBox(
                         layer,
@@ -1151,8 +1155,8 @@ export default function PrintUnifiedEditor() {
                       )
                     ),
                     { applyLayout: false }
-                  )
-                }
+                  );
+                }}
                 controlledActiveLayerId={activeTextLayerId}
                 onControlledActiveLayerChange={setActiveTextLayerId}
                 formFields={{ ...state.inputs }}
