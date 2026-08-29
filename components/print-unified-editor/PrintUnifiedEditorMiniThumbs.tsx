@@ -54,7 +54,7 @@ export default function PrintUnifiedEditorMiniThumbs({
   );
 
   return (
-    <div className="w-full shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-1.5 py-1.5 shadow-sm">
+    <div className="w-full shrink-0 rounded-xl border border-sky-200 bg-sky-50 px-1.5 py-1.5 shadow-sm">
       <div className="mb-1 flex items-center justify-between gap-1.5">
         <p className="text-[10px] font-semibold leading-none text-slate-800">
           {fillCanvas(cs.miniView, { label: "8페이지" })}
