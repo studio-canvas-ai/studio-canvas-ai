@@ -650,16 +650,13 @@ export default function SpecSettingsPanel({
             menuMaxWidth={640}
             menuAnchorSelector="[data-spec-row]"
           >
-            <div className="flex flex-col gap-2.5 p-2 sm:p-2.5">
+            <div className="max-h-[min(60vh,28rem)] overflow-y-auto overscroll-contain p-2 sm:p-2.5">
               {FIELD_CATEGORIES.map((group) => (
-                <div
-                  key={group.id}
-                  className="flex flex-col gap-1.5 sm:flex-row sm:items-start"
-                >
-                  <p className="w-[7.5rem] shrink-0 pt-1 text-[11px] font-bold tracking-wide text-indigo-200/90 [word-break:keep-all]">
+                <div key={group.id} className="mb-3 last:mb-0">
+                  <p className="mb-2 text-[16px] font-bold tracking-wide text-white sm:text-[17px] [word-break:keep-all]">
                     {cs.fieldGroups[group.id]}
                   </p>
-                  <div className="flex min-w-0 flex-1 flex-row flex-wrap gap-1.5">
+                  <div className="flex flex-row flex-wrap gap-1.5">
                     {group.items.map((item) => {
                       const on = bgPresetId === item.id;
                       const title = cs.bgPresets[item.id] ?? item.label;
@@ -671,13 +668,18 @@ export default function SpecSettingsPanel({
                             onBgPresetPick(item.id as BgPresetId);
                             setOpenKey(null);
                           }}
-                          className={`rounded-full border px-2.5 py-1.5 text-[11px] font-semibold [word-break:keep-all] transition pointer-coarse:min-h-9 pointer-coarse:px-3 ${
+                          className={`min-w-[9.5rem] flex-[1_1_45%] rounded-lg text-left shadow-sm transition [word-break:keep-all] pointer-coarse:min-h-10 ${
                             on
-                              ? "border-indigo-400/50 bg-indigo-500/20 text-indigo-100"
-                              : "border-slate-600/70 bg-slate-800/70 text-slate-200 hover:border-slate-500 hover:text-white"
+                              ? "border-[3px] border-indigo-500 bg-indigo-50 px-[5px] py-[2px] shadow-md ring-2 ring-indigo-400/60"
+                              : "border border-gray-200 bg-white px-2 py-1 hover:border-indigo-300 hover:shadow"
                           }`}
                         >
-                          {title}
+                          <span className="line-clamp-2 block text-[14px] font-bold leading-[1.2] text-black sm:text-[15px]">
+                            {title}
+                          </span>
+                          <span className="mt-0.5 line-clamp-1 block text-[13px] font-semibold leading-[1.2] text-blue-700 sm:text-[14px]">
+                            ({item.hint})
+                          </span>
                         </button>
                       );
                     })}

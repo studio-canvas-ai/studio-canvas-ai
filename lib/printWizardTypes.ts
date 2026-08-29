@@ -154,10 +154,13 @@ export type PrintPageCount = (typeof PRINT_PAGE_COUNTS)[number]["value"];
 
 export type FieldGroupId =
   | "event"
+  | "specialty"
   | "corporate"
   | "dining"
   | "wedding"
-  | "education";
+  | "education"
+  | "realestate"
+  | "lifestyle";
 
 export type FieldLayoutKind =
   | "poster-bold"
@@ -175,11 +178,15 @@ export type FieldLayoutKind =
   | "party"
   | "education"
   | "realestate"
-  | "invitation";
+  | "invitation"
+  | "specialty"
+  | "lifestyle";
 
 export type FieldItem = {
   id: string;
   label: string;
+  /** Short blue subtitle under the card title (UI). */
+  hint: string;
   keyword: string;
   layout: FieldLayoutKind;
 };
@@ -194,11 +201,12 @@ export type FieldCategory = {
 export const FIELD_CATEGORIES: readonly FieldCategory[] = [
   {
     id: "event",
-    label: "행사용",
+    label: "행사·축제·공연",
     items: [
       {
         id: "event-sports",
         label: "체육대회·운동회",
+        hint: "운동장·경기장",
         keyword:
           "energetic outdoor sports field, school athletic meet, stadium banners, sunlight, print poster background, no text, no letters",
         layout: "poster-bold",
@@ -206,6 +214,7 @@ export const FIELD_CATEGORIES: readonly FieldCategory[] = [
       {
         id: "event-festival",
         label: "지역축제·공연",
+        hint: "야외 스테이지",
         keyword:
           "regional festival night, outdoor stage lights, cultural performance, festive atmosphere, print poster background, no text",
         layout: "festival",
@@ -213,26 +222,107 @@ export const FIELD_CATEGORIES: readonly FieldCategory[] = [
       {
         id: "event-alumni",
         label: "동문회·향우회",
+        hint: "모임·연회",
         keyword:
           "warm alumni reunion gathering, nostalgic banquet hall, class reunion flyer background, no text",
         layout: "formal",
       },
       {
+        id: "event-fashion",
+        label: "모델 선발대회·패션쇼",
+        hint: "런웨이·무대",
+        keyword:
+          "fashion show runway, model contest stage lights, glamorous spotlight, print poster background, no text",
+        layout: "festival",
+      },
+      {
         id: "event-seminar",
         label: "학술·세미나·총회",
+        hint: "컨퍼런스홀",
         keyword:
           "academic conference hall, seminar auditorium, clean professional lighting, program booklet background, no text",
         layout: "seminar",
+      },
+      {
+        id: "event-culture",
+        label: "문화예술·전시회",
+        hint: "갤러리·전시",
+        keyword:
+          "art exhibition gallery, cultural arts showcase, museum lighting, print poster background, no text",
+        layout: "festival",
+      },
+      {
+        id: "event-other",
+        label: "기타",
+        hint: "행사 일반",
+        keyword:
+          "versatile event celebration atmosphere, clean festive print poster background, no text, no letters",
+        layout: "poster-bold",
+      },
+    ],
+  },
+  {
+    id: "specialty",
+    label: "지역특산물·농수축산",
+    items: [
+      {
+        id: "specialty-direct",
+        label: "농산물·특산물 직거래",
+        hint: "직거래 장터",
+        keyword:
+          "fresh farm produce market, regional specialty direct sales, rustic harvest atmosphere, print flyer background, no text",
+        layout: "specialty",
+      },
+      {
+        id: "specialty-traditional",
+        label: "전통식품·장류 홍보",
+        hint: "장류·전통맛",
+        keyword:
+          "traditional Korean fermented foods, soy sauce jars, warm rustic kitchen, print promo background, no text",
+        layout: "specialty",
+      },
+      {
+        id: "specialty-expo",
+        label: "지역 농특산물 박람회",
+        hint: "박람회 부스",
+        keyword:
+          "regional agricultural specialty expo booth, harvest fair hall, festive market lights, print poster background, no text",
+        layout: "specialty",
+      },
+      {
+        id: "specialty-localfood",
+        label: "로컬푸드 직매장",
+        hint: "로컬푸드",
+        keyword:
+          "local food direct store, farm-to-table shelves, fresh produce display, print flyer background, no text",
+        layout: "specialty",
+      },
+      {
+        id: "specialty-farm",
+        label: "귀농·귀촌 영농 안내",
+        hint: "귀농·영농",
+        keyword:
+          "rural farming countryside, returning to farm lifestyle, peaceful fields, print brochure background, no text",
+        layout: "specialty",
+      },
+      {
+        id: "specialty-other",
+        label: "기타",
+        hint: "특산물 일반",
+        keyword:
+          "regional specialty agriculture theme, clean farm produce print background, no text, no letters",
+        layout: "specialty",
       },
     ],
   },
   {
     id: "corporate",
-    label: "기업·홍보용",
+    label: "기업·비즈니스",
     items: [
       {
         id: "corporate-branding",
         label: "회사소개·브랜딩",
+        hint: "기업 브로슈어",
         keyword:
           "modern corporate branding, premium office, clean brochure background, no text",
         layout: "corporate",
@@ -240,6 +330,7 @@ export const FIELD_CATEGORIES: readonly FieldCategory[] = [
       {
         id: "corporate-product",
         label: "제품·서비스 홍보",
+        hint: "제품 쇼케이스",
         keyword:
           "product launch showcase, commercial studio, service promo print background, no text",
         layout: "product",
@@ -247,19 +338,45 @@ export const FIELD_CATEGORIES: readonly FieldCategory[] = [
       {
         id: "corporate-public",
         label: "공공기관·정책 홍보",
+        hint: "공공·정책",
         keyword:
           "public institution campaign, civic official print, policy poster background, no text",
         layout: "public",
+      },
+      {
+        id: "corporate-startup",
+        label: "스타트업·IR 피칭",
+        hint: "피칭·IR",
+        keyword:
+          "startup pitch deck atmosphere, modern coworking, investor presentation print background, no text",
+        layout: "corporate",
+      },
+      {
+        id: "corporate-sales",
+        label: "세일즈·프로모션",
+        hint: "세일·프로모션",
+        keyword:
+          "sales promotion campaign, bold commercial offer, retail print flyer background, no text",
+        layout: "product",
+      },
+      {
+        id: "corporate-other",
+        label: "기타",
+        hint: "비즈니스 일반",
+        keyword:
+          "versatile business corporate print background, clean professional atmosphere, no text, no letters",
+        layout: "corporate",
       },
     ],
   },
   {
     id: "dining",
-    label: "식당·카페용",
+    label: "외식·푸드·카페",
     items: [
       {
         id: "dining-korean",
         label: "한식·고깃집·전문점",
+        hint: "맛집 메뉴",
         keyword:
           "Korean restaurant, barbecue, warm gourmet table setting, menu print background, no text",
         layout: "menu",
@@ -267,6 +384,7 @@ export const FIELD_CATEGORIES: readonly FieldCategory[] = [
       {
         id: "dining-cafe",
         label: "카페·베이커리·디저트",
+        hint: "카페·디저트",
         keyword:
           "cafe bakery dessert, cozy natural light, pastry display, print menu background, no text",
         layout: "cafe",
@@ -274,56 +392,210 @@ export const FIELD_CATEGORIES: readonly FieldCategory[] = [
       {
         id: "dining-bar",
         label: "주점·요리주점",
+        hint: "분위기 주점",
         keyword:
           "izakaya gastropub, moody warm night lighting, bar menu print background, no text",
         layout: "bar",
+      },
+      {
+        id: "dining-franchise",
+        label: "프랜차이즈·창업",
+        hint: "창업·가맹",
+        keyword:
+          "franchise restaurant branding, clean storefront concept, business startup print background, no text",
+        layout: "cafe",
+      },
+      {
+        id: "dining-foodtruck",
+        label: "푸드트럭·팝업스토어",
+        hint: "팝업·트럭",
+        keyword:
+          "food truck popup store, street food festival vibe, colorful outdoor print flyer background, no text",
+        layout: "menu",
+      },
+      {
+        id: "dining-other",
+        label: "기타",
+        hint: "외식 일반",
+        keyword:
+          "versatile food dining print menu background, appetizing table setting, no text, no letters",
+        layout: "menu",
       },
     ],
   },
   {
     id: "wedding",
-    label: "웨딩·초청",
+    label: "웨딩·파티·기념일",
     items: [
       {
         id: "wedding-invitation",
         label: "결혼식 청첩장",
+        hint: "웨딩 초청",
         keyword:
           "romantic wedding invitation, soft pastel flowers, elegant print background, no text",
         layout: "wedding",
       },
       {
         id: "wedding-celebration",
-        label: "돌잔치·환갑·고스락",
+        label: "돌잔치·환갑·칠순",
+        hint: "기념 잔치",
         keyword:
-          "Korean first birthday doljanchi, 60th hwangap celebration, festive invitation background, no text",
+          "Korean first birthday doljanchi, 60th hwangap and 70th chilsoon celebration, festive invitation background, no text",
         layout: "celebration",
       },
       {
         id: "wedding-party",
         label: "파티·모임 초대장",
+        hint: "파티 초대",
         keyword:
           "party gathering invitation, cheerful celebration, print invite background, no text",
         layout: "party",
+      },
+      {
+        id: "wedding-propose",
+        label: "프로포즈·기념일 이벤트",
+        hint: "프로포즈",
+        keyword:
+          "romantic proposal anniversary event, candlelight soft roses, intimate celebration print background, no text",
+        layout: "wedding",
+      },
+      {
+        id: "wedding-other",
+        label: "기타",
+        hint: "기념일 일반",
+        keyword:
+          "versatile celebration invitation print background, soft festive atmosphere, no text, no letters",
+        layout: "invitation",
       },
     ],
   },
   {
     id: "education",
-    label: "교육·기타",
+    label: "교육·학원·아카데미",
     items: [
       {
         id: "education-academy",
         label: "학원·교육·강좌",
+        hint: "학원 홍보",
         keyword:
           "academy classroom, education lecture, clean study atmosphere, print flyer background, no text",
         layout: "education",
       },
       {
-        id: "education-realestate",
+        id: "education-exam",
+        label: "입시·특강·설명회",
+        hint: "입시·특강",
+        keyword:
+          "entrance exam lecture briefing, academic seminar hall, focused study lights, print flyer background, no text",
+        layout: "education",
+      },
+      {
+        id: "education-cert",
+        label: "자격증·취업 스터디",
+        hint: "자격·취업",
+        keyword:
+          "certification job study group, professional learning desk, career academy print background, no text",
+        layout: "education",
+      },
+      {
+        id: "education-kids",
+        label: "키즈·놀이학교",
+        hint: "키즈 교육",
+        keyword:
+          "kids play school, colorful children's classroom, cheerful education print flyer background, no text",
+        layout: "education",
+      },
+      {
+        id: "education-other",
+        label: "기타",
+        hint: "교육 일반",
+        keyword:
+          "versatile education academy print flyer background, clean learning atmosphere, no text, no letters",
+        layout: "education",
+      },
+    ],
+  },
+  {
+    id: "realestate",
+    label: "부동산·분양·인테리어",
+    items: [
+      {
+        id: "realestate-sales",
         label: "부동산·분양 홍보",
+        hint: "분양·매물",
         keyword:
           "real estate sales, apartment model house, property brochure background, no text",
         layout: "realestate",
+      },
+      {
+        id: "realestate-interior",
+        label: "인테리어·리모델링",
+        hint: "인테리어",
+        keyword:
+          "interior remodeling showcase, modern living room renovation, design brochure background, no text",
+        layout: "realestate",
+      },
+      {
+        id: "realestate-construction",
+        label: "건축·시공 안내",
+        hint: "건축·시공",
+        keyword:
+          "architecture construction site, building project blueprint mood, contractor print brochure background, no text",
+        layout: "realestate",
+      },
+      {
+        id: "realestate-other",
+        label: "기타",
+        hint: "부동산 일반",
+        keyword:
+          "versatile real estate property print brochure background, clean modern architecture, no text, no letters",
+        layout: "realestate",
+      },
+    ],
+  },
+  {
+    id: "lifestyle",
+    label: "라이프스타일·뷰티·건강",
+    items: [
+      {
+        id: "lifestyle-beauty",
+        label: "뷰티·헤어·네일샵",
+        hint: "뷰티샵",
+        keyword:
+          "beauty salon hair nail studio, soft glamorous lighting, spa print flyer background, no text",
+        layout: "lifestyle",
+      },
+      {
+        id: "lifestyle-fitness",
+        label: "피트니스·헬스·요가",
+        hint: "운동·웰니스",
+        keyword:
+          "fitness gym yoga studio, energetic healthy lifestyle, workout print flyer background, no text",
+        layout: "lifestyle",
+      },
+      {
+        id: "lifestyle-clinic",
+        label: "병원·클리닉·건강검진",
+        hint: "메디컬",
+        keyword:
+          "medical clinic health checkup, clean hospital corridor, trustworthy healthcare print background, no text",
+        layout: "lifestyle",
+      },
+      {
+        id: "lifestyle-pet",
+        label: "반려동물·펫샵",
+        hint: "펫·동물",
+        keyword:
+          "pet shop animal care, cute pets friendly store, warm pet flyer print background, no text",
+        layout: "lifestyle",
+      },
+      {
+        id: "lifestyle-other",
+        label: "기타",
+        hint: "라이프 일반",
+        keyword:
+          "versatile lifestyle wellness print flyer background, clean modern living atmosphere, no text, no letters",
+        layout: "lifestyle",
       },
     ],
   },
@@ -334,6 +606,7 @@ export const BG_PRESETS = FIELD_CATEGORIES.flatMap((group) =>
   group.items.map((item) => ({
     id: item.id,
     label: item.label,
+    hint: item.hint,
     keyword: item.keyword,
     groupId: group.id,
     layout: item.layout,
@@ -348,6 +621,7 @@ const LEGACY_FIELD_IDS: Record<string, BgPresetId> = {
   event: "event-festival",
   corporate: "corporate-branding",
   wedding: "wedding-invitation",
+  "education-realestate": "realestate-sales",
 };
 
 export function normalizeFieldId(id: unknown): BgPresetId | null {
