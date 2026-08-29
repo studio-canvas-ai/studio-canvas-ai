@@ -117,8 +117,17 @@ export default function TemplateWarehouseModal() {
   }, []);
 
   useEffect(() => {
-    const onOpen = () => {
-      setTab("single");
+    const onOpen = (event: Event) => {
+      const detail = (event as CustomEvent<{ tab?: WarehouseTabId }>).detail;
+      const nextTab = detail?.tab;
+      setTab(
+        nextTab === "single" ||
+          nextTab === "double" ||
+          nextTab === "public" ||
+          nextTab === "space4"
+          ? nextTab
+          : "single"
+      );
       setOpen(true);
     };
     window.addEventListener(TEMPLATE_WAREHOUSE_OPEN_EVENT, onOpen);

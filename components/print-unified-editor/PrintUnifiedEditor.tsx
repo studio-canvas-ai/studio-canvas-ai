@@ -23,6 +23,7 @@ import {
 import {
   TEMPLATE_WAREHOUSE_APPLY_EVENT,
   consumePendingWarehouseTemplate,
+  openTemplateWarehouse,
   type WarehouseTemplate,
 } from "@/lib/templateWarehouse";
 import {
@@ -920,7 +921,11 @@ export default function PrintUnifiedEditor() {
       }
       clearSpace4AdminReview();
       setSpace4Review(null);
-      showToast("Template 03 공개 템플릿으로 발행했습니다.", "success");
+      showToast(
+        "Template 03 공개 템플릿으로 발행했습니다. 템플릿 창고를 엽니다.",
+        "success"
+      );
+      window.setTimeout(() => openTemplateWarehouse("public"), 350);
     } finally {
       setPublishingSpace4(false);
     }

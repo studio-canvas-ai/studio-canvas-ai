@@ -1344,9 +1344,13 @@ export function templatesForTab(
   return [...base, ...extras];
 }
 
-export function openTemplateWarehouse() {
+export function openTemplateWarehouse(tab?: WarehouseTabId) {
   if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent(TEMPLATE_WAREHOUSE_OPEN_EVENT));
+  window.dispatchEvent(
+    new CustomEvent(TEMPLATE_WAREHOUSE_OPEN_EVENT, {
+      detail: tab ? { tab } : undefined,
+    })
+  );
 }
 
 export function stashPendingWarehouseTemplate(template: WarehouseTemplate) {
