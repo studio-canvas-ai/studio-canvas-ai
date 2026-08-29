@@ -59,6 +59,8 @@ export interface Translations {
     promoCode: string;
     promoBalance: string;
     creditsBadge: string;
+    /** Official nav CTA → /print-unified-editor */
+    designGenerator: string;
   };
   hero: {
     badge: string;
@@ -67,6 +69,12 @@ export interface Translations {
     titleLine2: string;
     titleLine3: string;
     description: string;
+    /** Primary home CTA → /print-unified-editor */
+    ctaDesignGenerator: string;
+    ctaDesignGeneratorLine1: string;
+    ctaDesignGeneratorLine2: string;
+    /** Label for incomplete CTAs demoted below the fold */
+    labComingSoon: string;
     ctaStart: string;
     ctaExplore: string;
     /** Home CTA → /template-studio */
