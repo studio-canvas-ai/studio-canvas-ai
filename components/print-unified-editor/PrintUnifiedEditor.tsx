@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import StudioExportButtonGroup from "@/components/canvas/StudioExportButtonGroup";
+import { useCredits } from "@/components/CreditsProvider";
 import { useFeedback } from "@/components/FeedbackProvider";
 import SpecSettingsPanel from "@/components/print-wizard/SpecSettingsPanel";
 import PrintUnifiedEditorCanvas from "@/components/print-unified-editor/PrintUnifiedEditorCanvas";
 import PrintUnifiedEditorMiniThumbs from "@/components/print-unified-editor/PrintUnifiedEditorMiniThumbs";
 import PrintUnifiedEditorLayout from "@/components/print-unified-editor/PrintUnifiedEditorLayout";
+import Space4AdminReviewBar from "@/components/print-unified-editor/Space4AdminReviewBar";
 import {
   PRINT_UNIFIED_EDITOR_SESSION_KEY,
   applyUnifiedEditorPageLayout,
@@ -23,6 +25,14 @@ import {
   consumePendingWarehouseTemplate,
   type WarehouseTemplate,
 } from "@/lib/templateWarehouse";
+import {
+  SPACE4_ADMIN_REVIEW_APPLY_EVENT,
+  clearSpace4AdminReview,
+  getSpace4AdminReview,
+  takeSpace4ReviewProject,
+  type Space4AdminReviewSession,
+} from "@/lib/space4AdminReview";
+import { publishSpace4ReviewToTemplate03 } from "@/lib/space4Client";
 import {
   reconcileLayerTypographyBox,
   referencePrintStageSize,
@@ -201,6 +211,7 @@ function hydrateInitialState(): PrintWizardState {
  */
 export default function PrintUnifiedEditor() {
   const { showToast } = useFeedback();
+  const { isAdmin } = useCredits();
   const [state, setState] = useState<PrintWizardState>(defaultPrintWizardState);
   const [hydrated, setHydrated] = useState(false);
   /** 0 until the user clicks a page tab — no canvas guides on first paint. */
@@ -219,6 +230,9 @@ export default function PrintUnifiedEditor() {
   const [hiddenTextHost, setHiddenTextHost] = useState<HTMLDivElement | null>(
     null
   );
+  const [space4Review, setSpace4Review] =
+    useState<Space4AdminReviewSession | null>(null);
+  const [publishingSpace4, setPublishingSpace4] = useState(false);
   const stateRef = useRef(state);
   stateRef.current = state;
   const formatSeedKeyRef = useRef("");
@@ -671,6 +685,27 @@ export default function PrintUnifiedEditor() {
     [activatePage, currentPage, pageActivated, showToast, state]
   );
 
+  const applySpace4ReviewProject = useCallback(() => {
+    const review = getSpace4AdminReview();
+    if (!review) return;
+    setSpace4Review(review);
+    const pending = takeSpace4ReviewProject();
+    if (pending) onOpenRecentProject(pending);
+  }, [onOpenRecentProject]);
+
+  useEffect(() => {
+    if (!hydrated || !isAdmin) return;
+    applySpace4ReviewProject();
+  }, [hydrated, isAdmin, applySpace4ReviewProject]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const onApply = () => applySpace4ReviewProject();
+    window.addEventListener(SPACE4_ADMIN_REVIEW_APPLY_EVENT, onApply);
+    return () =>
+      window.removeEventListener(SPACE4_ADMIN_REVIEW_APPLY_EVENT, onApply);
+  }, [isAdmin, applySpace4ReviewProject]);
+
   const updateContentOffsetForPage = useCallback(
     (idx: number, offset: PrintContentOffset) => {
       setState((prev) => {
@@ -825,6 +860,7 @@ export default function PrintUnifiedEditor() {
     busy: exportBusy,
     projectFileInputRef,
     downloadWithProject,
+    buildCurrentProject,
     loadProjectFile,
     loadProjectFromGallery,
     sharePreview,
@@ -869,6 +905,38 @@ export default function PrintUnifiedEditor() {
     },
   });
 
+  const onPublishSpace4Review = useCallback(async () => {
+    if (!space4Review || publishingSpace4) return;
+    setPublishingSpace4(true);
+    try {
+      const project = buildCurrentProject();
+      const result = await publishSpace4ReviewToTemplate03({
+        space4Id: space4Review.space4Id,
+        project,
+      });
+      if (!result.ok) {
+        showToast("공개(03) 발행에 실패했습니다.", "error");
+        return;
+      }
+      clearSpace4AdminReview();
+      setSpace4Review(null);
+      showToast("Template 03 공개 템플릿으로 발행했습니다.", "success");
+    } finally {
+      setPublishingSpace4(false);
+    }
+  }, [
+    buildCurrentProject,
+    publishingSpace4,
+    showToast,
+    space4Review,
+  ]);
+
+  const onCancelSpace4Review = useCallback(() => {
+    clearSpace4AdminReview();
+    setSpace4Review(null);
+    showToast("Template 04 검수 세션을 종료했습니다.", "info");
+  }, [showToast]);
+
   if (!hydrated) {
     return (
       <div className="flex h-full min-h-[200px] items-center justify-center text-sm text-white/60">
@@ -884,7 +952,19 @@ export default function PrintUnifiedEditor() {
         className="pointer-events-none absolute h-0 w-0 overflow-hidden opacity-0"
         aria-hidden
       />
-      <PrintUnifiedEditorLayout
+      <div className="flex h-full min-h-0 flex-col overflow-hidden">
+        {isAdmin && space4Review ? (
+          <div className="shrink-0 px-3 pt-1 sm:px-4">
+            <Space4AdminReviewBar
+              label={space4Review.label}
+              publishing={publishingSpace4}
+              onPublish={() => void onPublishSpace4Review()}
+              onCancel={onCancelSpace4Review}
+            />
+          </div>
+        ) : null}
+        <div className="min-h-0 flex-1">
+          <PrintUnifiedEditorLayout
         canvas={
           <PrintUnifiedEditorCanvas
             formatId={state.formatId}
@@ -1096,6 +1176,8 @@ export default function PrintUnifiedEditor() {
           </div>
         }
       />
+        </div>
+      </div>
       {exportPremiumModal}
     </>
   );

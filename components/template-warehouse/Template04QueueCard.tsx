@@ -1,19 +1,19 @@
 "use client";
 
-import { Loader2, ShieldCheck } from "lucide-react";
+import { ExternalLink, Loader2 } from "lucide-react";
 import type { Space4VaultMeta } from "@/lib/space4Client";
 
 export type Template04QueueCardProps = {
   item: Space4VaultMeta;
-  promoting?: boolean;
-  onPromote: () => void;
+  opening?: boolean;
+  onOpenInEditor: () => void;
 };
 
-/** Template 04 admin queue card — download deposit with promote-to-03 action. */
+/** Template 04 admin queue card — open in Screen 26 for manual review & publish. */
 export default function Template04QueueCard({
   item,
-  promoting = false,
-  onPromote,
+  opening = false,
+  onOpenInEditor,
 }: Template04QueueCardProps) {
   const when = new Date(item.createdAt).toLocaleString("ko-KR", {
     month: "short",
@@ -49,16 +49,16 @@ export default function Template04QueueCard({
         <p className="truncate text-[9px] text-white/40 tabular-nums">{when}</p>
         <button
           type="button"
-          disabled={promoting}
-          onClick={onPromote}
-          className="inline-flex w-full items-center justify-center gap-1 rounded-md border border-emerald-400/50 bg-emerald-500/20 px-1.5 py-1.5 text-[10px] font-bold leading-tight text-emerald-100 transition hover:bg-emerald-500/35 disabled:opacity-50 [word-break:keep-all]"
+          disabled={opening}
+          onClick={onOpenInEditor}
+          className="inline-flex w-full items-center justify-center gap-1 rounded-md border border-sky-400/50 bg-sky-500/20 px-1.5 py-1.5 text-[10px] font-bold leading-tight text-sky-100 transition hover:bg-sky-500/35 disabled:opacity-50 [word-break:keep-all]"
         >
-          {promoting ? (
+          {opening ? (
             <Loader2 className="h-3 w-3 shrink-0 animate-spin" aria-hidden />
           ) : (
-            <ShieldCheck className="h-3 w-3 shrink-0" aria-hidden />
+            <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
           )}
-          <span>공개 템플릿(03)으로 승인 및 전송</span>
+          <span>에디터에서 열기 및 수정 후 공개(03) 발행</span>
         </button>
       </div>
     </li>

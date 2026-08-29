@@ -1,6 +1,6 @@
 /**
  * Template 03 — public warehouse templates promoted from Template 04 (Space 4).
- * PII is masked at promote time. Readable by all clients; write is admin-only.
+ * Admin manual review in Screen 26; no automatic PII masking at publish time.
  */
 
 import type { PrintFormatId, PrintPageCount } from "@/lib/printWizardTypes";

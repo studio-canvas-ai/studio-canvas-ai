@@ -7,10 +7,7 @@ import {
   removeSpace4Record,
 } from "@/lib/space4Vault";
 import { upsertTemplate03Public } from "@/lib/template03Public";
-import {
-  cloneTemplatePages,
-  maskTemplatePii,
-} from "@/lib/templateWarehouse";
+import { cloneTemplatePages } from "@/lib/templateWarehouse";
 import type { PrintFormatId, PrintPageCount } from "@/lib/printWizardTypes";
 import type { TextLayer } from "@/lib/thumbnailStyles";
 
@@ -24,9 +21,35 @@ function isPageCount(v: unknown): v is PrintPageCount {
   return typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= 10;
 }
 
+function resolveBackgroundUrl(
+  project: ReturnType<typeof parseStudioProject>,
+  vaultThumb: string | null | undefined
+): string | null {
+  const wizard = project.lookbook?.wizard;
+  const bg =
+    project.studio.backgroundUrl ||
+    wizard?.backgroundUrl ||
+    wizard?.backgroundUrls?.find((u) => typeof u === "string" && u.trim()) ||
+    vaultThumb ||
+    null;
+  return typeof bg === "string" && bg.startsWith("http") ? bg : null;
+}
+
+function resolveThumbSrc(
+  project: ReturnType<typeof parseStudioProject>,
+  vaultThumb: string | null | undefined
+): string | null {
+  const bg = resolveBackgroundUrl(project, vaultThumb);
+  if (typeof vaultThumb === "string" && vaultThumb.startsWith("http")) {
+    return vaultThumb.slice(0, 500);
+  }
+  return bg ? bg.slice(0, 500) : null;
+}
+
 /**
- * POST — admin promotes a Template 04 (Space 4) vault item into Template 03 public.
- * Masks PII in text layers, then removes the source vault entry (move semantics).
+ * POST — admin publishes a Template 04 vault item into Template 03 public.
+ * When `project` is supplied (manual Screen 26 review), layers are stored as-is
+ * with no automatic PII masking. Removes the source vault entry (move semantics).
  */
 export async function POST(req: Request) {
   const admin = await getAdminSession();
@@ -52,16 +75,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "not_found" }, { status: 404 });
     }
 
-    const raw = await importSecureProject(vault.sealedContent);
-    const project = parseStudioProject(raw);
-    const wizard = project.lookbook?.wizard;
+    let project: ReturnType<typeof parseStudioProject>;
+    if (body.project && typeof body.project === "object") {
+      project = parseStudioProject(body.project);
+    } else {
+      const raw = await importSecureProject(vault.sealedContent);
+      project = parseStudioProject(raw);
+    }
 
+    const wizard = project.lookbook?.wizard;
     const pages: TextLayer[][] =
       wizard?.textLayersByPage?.length
         ? (wizard.textLayersByPage as TextLayer[][])
         : [project.studio.overlayLayers ?? []];
-
-    const maskedPages = cloneTemplatePages(pages, true);
 
     const formatId: PrintFormatId = isPrintFormatId(wizard?.formatId)
       ? wizard!.formatId
@@ -70,12 +96,9 @@ export async function POST(req: Request) {
       ? wizard!.pageCount
       : 1;
 
-    const bg =
-      project.studio.backgroundUrl ||
-      wizard?.backgroundUrl ||
-      wizard?.backgroundUrls?.find((u) => typeof u === "string" && u.trim()) ||
-      vault.thumbSrc ||
-      null;
+    const backgroundUrl = resolveBackgroundUrl(project, vault.thumbSrc);
+    const thumbSrc = resolveThumbSrc(project, vault.thumbSrc);
+    const manualReview = Boolean(body.project);
 
     const publicId = `tpl03_${Date.now().toString(36)}_${Math.random()
       .toString(36)
@@ -83,21 +106,17 @@ export async function POST(req: Request) {
 
     const record = await upsertTemplate03Public({
       id: publicId,
-      title: maskTemplatePii(vault.label || "공개 템플릿"),
-      subtitle: "관리자 승인 · 개인정보 마스킹",
+      title: vault.label?.trim() || "공개 템플릿",
+      subtitle: manualReview
+        ? "관리자 검수 · 수동 편집"
+        : "관리자 승인",
       formatId,
       pageCount,
       thumbClass: "bg-slate-800",
-      textLayersByPage: maskedPages,
-      backgroundUrl:
-        typeof bg === "string" && bg.startsWith("http") ? bg : null,
-      thumbSrc:
-        typeof vault.thumbSrc === "string" && vault.thumbSrc.startsWith("http")
-          ? vault.thumbSrc
-          : typeof bg === "string" && bg.startsWith("http")
-            ? bg.slice(0, 500)
-            : null,
-      maskedNote: "연락처·이메일 마스킹 적용",
+      textLayersByPage: cloneTemplatePages(pages, false),
+      backgroundUrl,
+      thumbSrc,
+      maskedNote: manualReview ? "관리자 검수 완료" : undefined,
       promotedFromSpace4Id: space4Id,
       createdAt: Date.now(),
     });

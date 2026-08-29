@@ -4,6 +4,12 @@
 
 import type { StudioCanvasProjectV1 } from "@/lib/canvas/projectFile";
 import { exportSecureProject } from "@/lib/projectStorage";
+import {
+  dispatchSpace4AdminReviewApply,
+  parseSealedSpace4Project,
+  stashSpace4AdminReview,
+  stashSpace4ReviewProject,
+} from "@/lib/space4AdminReview";
 
 export type Space4VaultMeta = {
   id: string;
@@ -80,15 +86,83 @@ export async function fetchSpace4VaultMeta(
   }
 }
 
-export async function promoteSpace4ToTemplate03(
+export async function fetchSpace4SealedRecord(
   id: string
-): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+): Promise<
+  | {
+      ok: true;
+      label: string;
+      thumbSrc: string | null;
+      sealedContent: string;
+    }
+  | { ok: false; error: string }
+> {
+  try {
+    const res = await fetch(`/api/admin/space4/${encodeURIComponent(id)}`, {
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      return { ok: false, error: data.error || "fetch_failed" };
+    }
+    const data = (await res.json()) as {
+      label?: string;
+      thumbSrc?: string | null;
+      sealedContent?: string;
+    };
+    if (!data.sealedContent) {
+      return { ok: false, error: "no_content" };
+    }
+    return {
+      ok: true,
+      label: data.label?.trim() || "검수 작업물",
+      thumbSrc:
+        typeof data.thumbSrc === "string" && data.thumbSrc.startsWith("http")
+          ? data.thumbSrc
+          : null,
+      sealedContent: data.sealedContent,
+    };
+  } catch {
+    return { ok: false, error: "network" };
+  }
+}
+
+/** Load a Space 4 item into Screen 26 for manual admin review. */
+export async function openSpace4InEditorForReview(
+  item: Space4VaultMeta
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const fetched = await fetchSpace4SealedRecord(item.id);
+  if (!fetched.ok) return fetched;
+
+  try {
+    const project = await parseSealedSpace4Project(fetched.sealedContent);
+    stashSpace4ReviewProject(project);
+    stashSpace4AdminReview({
+      space4Id: item.id,
+      label: fetched.label || item.label,
+      startedAt: Date.now(),
+    });
+    dispatchSpace4AdminReviewApply();
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "parse_failed" };
+  }
+}
+
+export async function publishSpace4ReviewToTemplate03(opts: {
+  space4Id: string;
+  project: StudioCanvasProjectV1;
+}): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   try {
     const res = await fetch("/api/admin/space4/promote", {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
+      body: JSON.stringify({
+        id: opts.space4Id,
+        project: opts.project,
+      }),
     });
     if (!res.ok) {
       const data = (await res.json().catch(() => ({}))) as { error?: string };

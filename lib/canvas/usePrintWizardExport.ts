@@ -277,6 +277,7 @@ export function usePrintWizardExport({
     busy,
     projectFileInputRef,
     downloadWithProject,
+    buildCurrentProject: buildStep2Project,
     loadProjectFile,
     loadProjectFromGallery,
     sharePreview,

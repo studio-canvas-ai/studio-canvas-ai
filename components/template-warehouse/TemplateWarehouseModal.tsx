@@ -28,7 +28,7 @@ import {
 import type { Template03PublicRecord } from "@/lib/template03Public";
 import {
   fetchSpace4VaultMeta,
-  promoteSpace4ToTemplate03,
+  openSpace4InEditorForReview,
   type Space4VaultMeta,
 } from "@/lib/space4Client";
 import Template01GridCard from "@/components/template-warehouse/Template01GridCard";
@@ -102,7 +102,7 @@ export default function TemplateWarehouseModal() {
   >([]);
   const [space4Items, setSpace4Items] = useState<Space4VaultMeta[]>([]);
   const [space4Loading, setSpace4Loading] = useState(false);
-  const [promotingId, setPromotingId] = useState<string | null>(null);
+  const [openingId, setOpeningId] = useState<string | null>(null);
   const removeTimers = useRef<Map<number, number>>(new Map());
 
   const baseFallbackCards = BASE_A4_TEMPLATE_CARDS;
@@ -220,18 +220,20 @@ export default function TemplateWarehouseModal() {
     });
   };
 
-  const onPromote = async (id: string) => {
-    if (!isAdmin || promotingId) return;
-    setPromotingId(id);
-    const result = await promoteSpace4ToTemplate03(id);
-    setPromotingId(null);
+  const onOpenInEditor = async (item: Space4VaultMeta) => {
+    if (!isAdmin || openingId) return;
+    setOpeningId(item.id);
+    const result = await openSpace4InEditorForReview(item);
+    setOpeningId(null);
     if (!result.ok) {
-      showToast("공개 템플릿 승인에 실패했습니다.", "error");
+      showToast("에디터에서 작업물을 여는 데 실패했습니다.", "error");
       return;
     }
-    showToast("Template 03 공개 템플릿으로 승인·전송했습니다.", "success");
-    setSpace4Items((prev) => prev.filter((item) => item.id !== id));
-    void refreshPublic();
+    showToast("Screen 26 에디터에서 검수·수정을 진행해 주세요.", "success");
+    setOpen(false);
+    if (!pathname.startsWith(PRINT_UNIFIED_EDITOR_PATH)) {
+      router.push(PRINT_UNIFIED_EDITOR_PATH);
+    }
   };
 
   const renderBaseGrid = (
@@ -411,8 +413,8 @@ export default function TemplateWarehouseModal() {
                         <Template04QueueCard
                           key={item.id}
                           item={item}
-                          promoting={promotingId === item.id}
-                          onPromote={() => void onPromote(item.id)}
+                          opening={openingId === item.id}
+                          onOpenInEditor={() => void onOpenInEditor(item)}
                         />
                       ))}
                     </ul>
