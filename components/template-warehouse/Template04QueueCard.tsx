@@ -24,9 +24,9 @@ export default function Template04QueueCard({
   const hasThumb = Boolean(item.thumbSrc?.trim());
 
   return (
-    <li className="flex flex-col overflow-hidden rounded-xl border border-amber-300/35 bg-gradient-to-b from-amber-500/[0.12] to-slate-950/90 shadow-[0_8px_24px_rgba(0,0,0,0.35)] ring-1 ring-white/10">
+    <li className="flex flex-col overflow-hidden rounded-xl border border-amber-200 bg-gradient-to-b from-amber-50 to-white shadow-sm ring-1 ring-amber-100">
       <div
-        className="relative w-full overflow-hidden border-b border-white/15 bg-white p-1"
+        className="relative w-full overflow-hidden border-b border-slate-100 bg-white p-1"
         style={{ aspectRatio: String(210 / 297) }}
         aria-hidden
       >
@@ -48,16 +48,16 @@ export default function Template04QueueCard({
           )}
         </div>
       </div>
-      <div className="space-y-1 border-t border-slate-700/60 bg-slate-950/40 px-2 py-1.5">
-        <p className="line-clamp-2 text-[11px] font-semibold leading-snug text-white">
+      <div className="space-y-1 border-t border-slate-100 bg-white px-2 py-1.5">
+        <p className="line-clamp-2 text-[11px] font-semibold leading-snug text-slate-900">
           {item.label}
         </p>
-        <p className="truncate text-[9px] text-white/50 tabular-nums">{when}</p>
+        <p className="truncate text-[9px] text-slate-500 tabular-nums">{when}</p>
         <button
           type="button"
           disabled={opening}
           onClick={onOpenInEditor}
-          className="inline-flex w-full items-center justify-center gap-1 rounded-md border border-sky-400/50 bg-sky-500/20 px-1.5 py-1.5 text-[10px] font-bold leading-tight text-sky-100 transition hover:bg-sky-500/35 disabled:opacity-50 [word-break:keep-all]"
+          className="inline-flex w-full items-center justify-center gap-1 rounded-md border border-sky-300 bg-sky-50 px-1.5 py-1.5 text-[10px] font-bold leading-tight text-sky-900 transition hover:bg-sky-100 disabled:opacity-50 [word-break:keep-all]"
         >
           {opening ? (
             <Loader2 className="h-3 w-3 shrink-0 animate-spin" aria-hidden />

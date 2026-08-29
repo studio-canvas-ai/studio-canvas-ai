@@ -65,10 +65,10 @@ export default function Template01GridCard({
       <button
         type="button"
         onClick={onPick}
-        className="flex w-full flex-col overflow-hidden rounded-xl border border-white/10 bg-gradient-to-b from-white/[0.06] to-black/20 text-left shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-emerald-400/45 hover:shadow-[0_12px_32px_rgba(16,185,129,0.16)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400"
+        className="flex w-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-left shadow-sm transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-emerald-400 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400"
       >
         <div
-          className="relative w-full overflow-hidden bg-slate-900"
+          className="relative w-full overflow-hidden bg-slate-100"
           style={{ aspectRatio: String(TEMPLATE_01_A4_ASPECT) }}
           aria-hidden
         >
@@ -76,11 +76,11 @@ export default function Template01GridCard({
             <Template01CardPreview card={card} />
           </div>
         </div>
-        <div className="space-y-0.5 border-t border-white/8 px-2 py-1.5 sm:px-2.5 sm:py-2">
-          <p className="line-clamp-2 text-[11px] font-semibold leading-snug text-white sm:text-[12px]">
+        <div className="space-y-0.5 border-t border-slate-100 px-2 py-1.5 sm:px-2.5 sm:py-2">
+          <p className="line-clamp-2 text-[11px] font-semibold leading-snug text-slate-900 sm:text-[12px]">
             {card.title}
           </p>
-          <p className="truncate text-[9px] text-white/45 sm:text-[10px]">
+          <p className="truncate text-[9px] text-slate-500 sm:text-[10px]">
             {card.desc}
           </p>
         </div>

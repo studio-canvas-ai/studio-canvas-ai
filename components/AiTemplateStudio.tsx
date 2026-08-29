@@ -768,6 +768,8 @@ export type AiTemplateStudioProps = {
   layout?: "default" | "print-wizard-step2";
   /** Edit panel only — no header, no Konva preview (print wizard Step 2 right column). */
   panelOnly?: boolean;
+  /** Screen 26 panelOnly path — light chrome; full studio stays dark when omitted/dark. */
+  tone?: "dark" | "light";
   /** Hide built-in download stack (parent provides export). */
   hideExport?: boolean;
   /** Hide conversational AI command box (print wizard Step 2). */
@@ -804,6 +806,7 @@ export default function AiTemplateStudio({
   embedded = false,
   layout = "default",
   panelOnly = false,
+  tone = "dark",
   hideExport = false,
   hideAiCommand = false,
   textLayersHost = null,
@@ -3050,6 +3053,8 @@ export default function AiTemplateStudio({
     return key;
   };
 
+  const isLight = tone === "light";
+
   const alignBtn = (
     value: TextAlign,
     Icon: typeof AlignLeft,
@@ -3061,9 +3066,13 @@ export default function AiTemplateStudio({
       title={label}
       onClick={() => updateActive({ align: value })}
       className={`flex flex-1 items-center justify-center gap-1 py-2 text-xs transition ${
-        stylePanelLayer?.align === value
-          ? "bg-white/15 text-white"
-          : "text-white/45 hover:bg-white/5 hover:text-white/80"
+        isLight
+          ? stylePanelLayer?.align === value
+            ? "bg-slate-200 text-slate-900"
+            : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+          : stylePanelLayer?.align === value
+            ? "bg-white/15 text-white"
+            : "text-white/45 hover:bg-white/5 hover:text-white/80"
       }`}
     >
       <Icon className="h-3.5 w-3.5" />
@@ -3258,15 +3267,30 @@ export default function AiTemplateStudio({
     : isPrintWizardStep2
       ? "lg:grid-cols-2 [&>section:first-child]:lg:row-span-2 [&>section:nth-child(2)]:lg:col-start-2 [&>section:nth-child(2)]:lg:row-start-1 [&>section:nth-child(3)]:lg:col-start-2 [&>section:nth-child(3)]:lg:row-start-2"
       : "lg:grid-cols-3";
-  const panelSectionClass = isPanelOnly
-    ? "flex min-h-0 flex-col gap-4 rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4 backdrop-blur-sm"
-    : "flex min-h-0 flex-col gap-4 rounded-2xl border border-white/10 bg-black/35 p-4 lg:overflow-y-auto";
+  const panelSectionClass =
+    isPanelOnly && isLight
+      ? "flex min-h-0 flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+      : isPanelOnly
+        ? "flex min-h-0 flex-col gap-4 rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4 backdrop-blur-sm"
+        : "flex min-h-0 flex-col gap-4 rounded-2xl border border-white/10 bg-black/35 p-4 lg:overflow-y-auto";
+
+  const styleMutedLabel = isLight
+    ? "text-xs font-medium text-slate-500"
+    : "text-xs font-medium text-white/60";
+  const styleRowLabel = isLight
+    ? "text-xs text-slate-500"
+    : "text-xs text-white/60";
+  const styleValueText = isLight
+    ? "tabular-nums text-slate-700"
+    : "tabular-nums text-white/80";
 
   return (
     <div
       className={`flex ${shellHeightClass} flex-col ${
         isPanelOnly
-          ? "overflow-visible text-white"
+          ? isLight
+            ? "overflow-visible text-slate-800"
+            : "overflow-visible text-white"
           : "overflow-hidden bg-[#0b0d12] text-white"
       }`}
     >
@@ -4083,7 +4107,7 @@ export default function AiTemplateStudio({
           {stylePanelLayer ? (
             <>
               <div>
-                <p className="mb-2 text-xs font-medium text-white/60">
+                <p className={`mb-2 ${styleMutedLabel}`}>
                   {t.thumbnail.symbolsLabel}
                 </p>
                 <div className="flex flex-wrap items-center gap-1.5">
@@ -4092,7 +4116,11 @@ export default function AiTemplateStudio({
                       key={s}
                       type="button"
                       onClick={() => insertSymbol(s)}
-                      className="font-emoji rounded-lg border border-white/10 px-2.5 py-1.5 text-sm text-white/80 transition hover:border-white/25 hover:bg-white/5"
+                      className={`font-emoji rounded-lg border px-2.5 py-1.5 text-sm transition ${
+                        isLight
+                          ? "border-slate-200 text-slate-700 hover:bg-slate-50"
+                          : "border-white/10 text-white/80 hover:border-white/25 hover:bg-white/5"
+                      }`}
                     >
                       {s}
                     </button>
@@ -4100,6 +4128,7 @@ export default function AiTemplateStudio({
                   <EmojiMoreDropdown
                     label={t.thumbnail.symbolsMoreLabel}
                     onPick={insertSymbol}
+                    tone={tone}
                   />
                 </div>
               </div>
@@ -4109,15 +4138,19 @@ export default function AiTemplateStudio({
                   label={t.thumbnail.stickers}
                   selectedId={stylePanelLayer.stickerId}
                   onPick={insertSticker}
+                  tone={tone}
                 />
               </div>
 
               {onDecoCatalogPick ? (
-                <DecoToolCatalogDropdown onPick={onDecoCatalogPick} />
+                <DecoToolCatalogDropdown
+                  onPick={onDecoCatalogPick}
+                  tone={tone}
+                />
               ) : null}
 
               <div>
-                <p className="mb-2 text-xs font-medium text-white/60">
+                <p className={`mb-2 ${styleMutedLabel}`}>
                   {t.thumbnail.fontLabel}
                 </p>
                 <div className="flex flex-wrap gap-1.5">
@@ -4128,8 +4161,12 @@ export default function AiTemplateStudio({
                       onClick={() => updateActive({ fontPreset: fp })}
                       className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition ${
                         stylePanelLayer.fontPreset === fp
-                          ? "bg-white text-black"
-                          : "bg-black/25 text-white/45 hover:text-white/80"
+                          ? isLight
+                            ? "bg-slate-900 text-white"
+                            : "bg-white text-black"
+                          : isLight
+                            ? "bg-slate-100 text-slate-500 hover:text-slate-800"
+                            : "bg-black/25 text-white/45 hover:text-white/80"
                       }`}
                       style={{
                         fontFamily: `"${FONT_PRESET_PRIMARY[fp]}", ${fontForText(fp, "가A")}`,
@@ -4143,9 +4180,11 @@ export default function AiTemplateStudio({
               </div>
 
               <div>
-                <div className="mb-1.5 flex items-center justify-between text-xs text-white/60">
+                <div
+                  className={`mb-1.5 flex items-center justify-between ${styleRowLabel}`}
+                >
                   <span>{t.thumbnail.sizeLabel}</span>
-                  <span className="tabular-nums text-white/80">
+                  <span className={styleValueText}>
                     {stylePanelLayer.fontSize}px
                   </span>
                 </div>
@@ -4167,9 +4206,11 @@ export default function AiTemplateStudio({
               </div>
 
               <div>
-                <div className="mb-1.5 flex items-center justify-between text-xs text-white/60">
+                <div
+                  className={`mb-1.5 flex items-center justify-between ${styleRowLabel}`}
+                >
                   <span>{t.thumbnail.fontWeightLabel}</span>
-                  <span className="tabular-nums text-white/80">
+                  <span className={styleValueText}>
                     {clampFontWeight(
                       stylePanelLayer.fontWeight ?? SHORTS_FONT_WEIGHT_DEFAULT
                     )}
@@ -4195,9 +4236,11 @@ export default function AiTemplateStudio({
               </div>
 
               <div>
-                <div className="mb-1.5 flex items-center justify-between text-xs text-white/60">
+                <div
+                  className={`mb-1.5 flex items-center justify-between ${styleRowLabel}`}
+                >
                   <span>{t.thumbnail.letterSpacingLabel}</span>
-                  <span className="tabular-nums text-white/80">
+                  <span className={styleValueText}>
                     {layerLetterSpacing(stylePanelLayer)}px
                   </span>
                 </div>
@@ -4218,9 +4261,11 @@ export default function AiTemplateStudio({
               </div>
 
               <div>
-                <div className="mb-1.5 flex items-center justify-between text-xs text-white/60">
+                <div
+                  className={`mb-1.5 flex items-center justify-between ${styleRowLabel}`}
+                >
                   <span>{t.thumbnail.lineHeightLabel}</span>
-                  <span className="tabular-nums text-white/80">
+                  <span className={styleValueText}>
                     {layerLineHeight(stylePanelLayer).toFixed(2)}
                   </span>
                 </div>
@@ -4242,10 +4287,16 @@ export default function AiTemplateStudio({
               </div>
 
               <div>
-                <p className="mb-2 text-xs font-medium text-white/60">
+                <p className={`mb-2 ${styleMutedLabel}`}>
                   {t.thumbnail.alignLabel}
                 </p>
-                <div className="flex overflow-hidden rounded-xl border border-white/10 bg-black/25">
+                <div
+                  className={`flex overflow-hidden rounded-xl border ${
+                    isLight
+                      ? "border-slate-200 bg-slate-50"
+                      : "border-white/10 bg-black/25"
+                  }`}
+                >
                   {alignBtn("left", AlignLeft, t.thumbnail.alignLeft)}
                   {alignBtn("center", AlignCenter, t.thumbnail.alignCenter)}
                   {alignBtn("right", AlignRight, t.thumbnail.alignRight)}
@@ -4253,7 +4304,7 @@ export default function AiTemplateStudio({
               </div>
 
               <div>
-                <p className="mb-2.5 text-xs font-medium text-white/60">
+                <p className={`mb-2.5 ${styleMutedLabel}`}>
                   {t.thumbnail.colorLabel}
                 </p>
                 <div className="grid grid-cols-6 gap-2 sm:grid-cols-6">
@@ -4271,8 +4322,12 @@ export default function AiTemplateStudio({
                         }
                         className={`aspect-square w-full max-w-[2rem] justify-self-center rounded-full transition duration-150 ease-out hover:scale-110 hover:opacity-95 active:scale-95 ${
                           selected
-                            ? "scale-110 ring-2 ring-white ring-offset-2 ring-offset-[#0b0d12]"
-                            : "ring-1 ring-white/10 hover:ring-white/35"
+                            ? isLight
+                              ? "scale-110 ring-2 ring-slate-800 ring-offset-2 ring-offset-white"
+                              : "scale-110 ring-2 ring-white ring-offset-2 ring-offset-[#0b0d12]"
+                            : isLight
+                              ? "ring-1 ring-slate-200 hover:ring-slate-400"
+                              : "ring-1 ring-white/10 hover:ring-white/35"
                         }`}
                         style={{
                           backgroundColor: fill,
@@ -4287,11 +4342,15 @@ export default function AiTemplateStudio({
               </div>
 
               <div>
-                <p className="mb-2 text-xs font-medium text-white/60">
+                <p className={`mb-2 ${styleMutedLabel}`}>
                   {t.thumbnail.bgColorLabel}
                 </p>
                 <div className="flex flex-col gap-2">
-                  <label className="inline-flex cursor-pointer items-center gap-2 text-[11px] text-white/70">
+                  <label
+                    className={`inline-flex cursor-pointer items-center gap-2 text-[11px] ${
+                      isLight ? "text-slate-600" : "text-white/70"
+                    }`}
+                  >
                     <input
                       type="checkbox"
                       checked={Boolean(stylePanelLayer.showBox)}
@@ -4311,6 +4370,7 @@ export default function AiTemplateStudio({
                         showBox: true,
                       })
                     }
+                    tone={tone}
                   />
                 </div>
               </div>

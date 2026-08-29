@@ -54,12 +54,12 @@ export default function PrintUnifiedEditorMiniThumbs({
   );
 
   return (
-    <div className="w-full shrink-0 rounded-xl border border-slate-700/60 bg-slate-800/50 px-1.5 py-1.5 backdrop-blur-sm">
+    <div className="w-full shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-1.5 py-1.5 shadow-sm">
       <div className="mb-1 flex items-center justify-between gap-1.5">
-        <p className="text-[10px] font-semibold leading-none text-slate-200">
+        <p className="text-[10px] font-semibold leading-none text-slate-800">
           {fillCanvas(cs.miniView, { label: "8페이지" })}
         </p>
-        <span className="text-[9px] tabular-nums leading-none text-slate-400">
+        <span className="text-[9px] tabular-nums leading-none text-slate-500">
           {pageCount}면
         </span>
       </div>
@@ -85,15 +85,15 @@ export default function PrintUnifiedEditorMiniThumbs({
                 disabled
                   ? "cursor-not-allowed opacity-35"
                   : active
-                    ? "bg-emerald-500/15 ring-1 ring-emerald-400/50"
-                    : "hover:bg-white/5"
+                    ? "bg-emerald-50 ring-1 ring-emerald-400/60"
+                    : "hover:bg-slate-100"
               }`}
             >
               <div
-                className={`relative mx-auto overflow-hidden rounded border bg-slate-950 ${
+                className={`relative mx-auto overflow-hidden rounded border bg-white ${
                   active
-                    ? "border-emerald-400/55 shadow-[0_0_0_1px_rgba(52,211,153,0.2)]"
-                    : "border-slate-600/80 group-hover:border-slate-500"
+                    ? "border-emerald-400 shadow-sm"
+                    : "border-slate-200 group-hover:border-slate-300"
                 }`}
                 style={thumbStyle}
               >
@@ -110,13 +110,13 @@ export default function PrintUnifiedEditorMiniThumbs({
                     }}
                   />
                 ) : (
-                  <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(99,102,241,0.18),transparent_55%),linear-gradient(160deg,#334155,#0f172a)]" />
+                  <div className="absolute inset-0 bg-gradient-to-br from-slate-100 via-white to-slate-200" />
                 )}
                 <span
                   className={`absolute bottom-px left-px z-[1] rounded px-0.5 text-[7px] font-bold leading-tight ${
                     active
-                      ? "bg-emerald-600/90 text-white"
-                      : "bg-slate-900/75 text-slate-100"
+                      ? "bg-emerald-600 text-white"
+                      : "bg-slate-800/80 text-white"
                   }`}
                 >
                   {page}

@@ -59,15 +59,15 @@ export default function PhotoLookbookPromptPanel({
   };
 
   const fieldShell =
-    "w-full rounded-xl border border-slate-700 bg-[#0E1420] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]";
+    "w-full rounded-xl border border-slate-200 bg-white shadow-sm";
   const titleClass =
-    "border-b border-slate-800/80 px-3 py-1.5 text-[12px] font-semibold text-slate-100 [word-break:keep-all]";
+    "border-b border-slate-200 px-3 py-1.5 text-[12px] font-semibold text-slate-900 [word-break:keep-all]";
   const guideClass =
-    "shrink-0 border-b border-slate-800/50 px-3 py-2 text-[13px] leading-snug text-gray-500 [word-break:keep-all]";
+    "shrink-0 border-b border-slate-100 px-3 py-2 text-[13px] leading-snug text-slate-500 [word-break:keep-all]";
   const btnClass =
     "inline-flex h-11 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-indigo-500 px-3 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(99,102,241,0.28)] transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-45";
   const areaClass =
-    "box-border block w-full resize-y bg-transparent px-3 py-2.5 text-sm leading-relaxed text-slate-100 outline-none";
+    "box-border block w-full resize-y bg-white px-3 py-2.5 text-sm leading-relaxed text-slate-900 outline-none";
 
   return (
     <div className="flex w-full flex-col gap-3">
@@ -88,14 +88,14 @@ export default function PhotoLookbookPromptPanel({
             style={{ height: 148, minHeight: 148 }}
           />
           {specTags.length ? (
-            <div className="flex flex-wrap items-center gap-1 border-t border-slate-800/80 px-2.5 py-1.5">
+            <div className="flex flex-wrap items-center gap-1 border-t border-slate-200 px-2.5 py-1.5">
               {specTags.map((tag) => (
                 <span
                   key={tag.label}
-                  className="inline-flex max-w-full items-center gap-0.5 rounded-full border border-pink-400/40 bg-pink-500/10 px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-pink-300 [word-break:keep-all]"
+                  className="inline-flex max-w-full items-center gap-0.5 rounded-full border border-pink-200 bg-pink-50 px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-pink-800 [word-break:keep-all]"
                 >
-                  <span className="text-pink-400/80">{tag.label}</span>
-                  <span className="truncate text-pink-200">{tag.value}</span>
+                  <span className="text-pink-600">{tag.label}</span>
+                  <span className="truncate text-pink-900">{tag.value}</span>
                 </span>
               ))}
             </div>

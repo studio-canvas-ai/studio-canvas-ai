@@ -93,8 +93,8 @@ export default function AiBackgroundPromptBar({
   const toolBtn = (active: boolean) =>
     `inline-flex h-7 w-7 items-center justify-center rounded-full border transition ${
       active
-        ? "border-indigo-400/45 bg-indigo-500/15 text-indigo-200"
-        : "border-slate-700/80 bg-[#0E1420] text-slate-400 hover:border-slate-600 hover:text-slate-200"
+        ? "border-indigo-400 bg-indigo-50 text-indigo-700"
+        : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800"
     }`;
 
   return (
@@ -117,7 +117,7 @@ export default function AiBackgroundPromptBar({
             </button>
 
             {moodOpen ? (
-              <div className="absolute top-[calc(100%+6px)] left-0 z-30 w-[min(18rem,calc(100vw-2rem))] rounded-xl border border-slate-700/80 bg-[#121824] p-2 shadow-[0_12px_32px_rgba(0,0,0,0.5)]">
+              <div className="absolute top-[calc(100%+6px)] left-0 z-30 w-[min(18rem,calc(100vw-2rem))] rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
                 <p className="mb-1.5 px-1 text-[10px] font-semibold tracking-wide text-slate-500 uppercase">
                   배경 분위기
                 </p>
@@ -138,8 +138,8 @@ export default function AiBackgroundPromptBar({
                         }}
                         className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold [word-break:keep-all] transition ${
                           on
-                            ? "border-indigo-400/50 bg-indigo-500/20 text-indigo-100"
-                            : "border-slate-700 bg-[#0E1420] text-slate-400 hover:border-slate-600 hover:text-slate-200"
+                            ? "border-indigo-400 bg-indigo-50 text-indigo-800"
+                            : "border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300 hover:bg-white"
                         }`}
                       >
                         {cs.fieldGroups[group.id]}
@@ -157,7 +157,7 @@ export default function AiBackgroundPromptBar({
         )}
 
         <div className="ml-auto flex items-center gap-1">
-          <span className="rounded bg-indigo-500/15 px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-indigo-300">
+          <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-indigo-700">
             BETA
           </span>
           <div className="relative">
@@ -174,10 +174,10 @@ export default function AiBackgroundPromptBar({
               <MoreHorizontal className="h-3.5 w-3.5" aria-hidden />
             </button>
             {optionsOpen ? (
-              <div className="absolute top-[calc(100%+6px)] right-0 z-30 w-40 overflow-hidden rounded-lg border border-slate-700 bg-[#121824] py-1 shadow-xl">
+              <div className="absolute top-[calc(100%+6px)] right-0 z-30 w-40 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-sm">
                 <button
                   type="button"
-                  className="block w-full px-2.5 py-1.5 text-left text-[11px] font-medium text-slate-300 hover:bg-slate-800"
+                  className="block w-full px-2.5 py-1.5 text-left text-[11px] font-medium text-slate-700 hover:bg-slate-50"
                   onClick={() => {
                     onChange("");
                     setOptionsOpen(false);
@@ -188,7 +188,7 @@ export default function AiBackgroundPromptBar({
                 </button>
                 <button
                   type="button"
-                  className="block w-full px-2.5 py-1.5 text-left text-[11px] font-medium text-slate-300 hover:bg-slate-800"
+                  className="block w-full px-2.5 py-1.5 text-left text-[11px] font-medium text-slate-700 hover:bg-slate-50"
                   onClick={() => {
                     setOrderOpen(true);
                     setOptionsOpen(false);
@@ -215,9 +215,9 @@ export default function AiBackgroundPromptBar({
       </div>
 
       {/* Full-width core: AI prompt */}
-      <div className="w-full rounded-xl border border-slate-700 bg-[#0E1420] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-        <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 px-3 py-1.5">
-          <p className="text-[12px] font-semibold text-slate-100 [word-break:keep-all]">
+      <div className="w-full rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
+          <p className="text-[12px] font-semibold text-slate-900 [word-break:keep-all]">
             {title}
           </p>
         </div>
@@ -233,24 +233,24 @@ export default function AiBackgroundPromptBar({
             readOnly={false}
             spellCheck={false}
             aria-describedby="print-bg-guide"
-            className="min-h-[4.75rem] w-full resize-none bg-transparent pb-6 text-sm leading-relaxed text-slate-100 outline-none"
+            className="min-h-[4.75rem] w-full resize-none bg-white pb-6 text-sm leading-relaxed text-slate-900 outline-none"
           />
           <p
             id="print-bg-guide"
-            className="pointer-events-none absolute inset-x-2.5 bottom-2 bg-gradient-to-t from-[#0E1420] from-60% to-transparent pt-3 text-[13px] font-medium leading-none text-slate-400 sm:inset-x-3 sm:text-[14px]"
+            className="pointer-events-none absolute inset-x-2.5 bottom-2 bg-gradient-to-t from-white from-60% to-transparent pt-3 text-[13px] font-medium leading-none text-slate-500 sm:inset-x-3 sm:text-[14px]"
           >
             {placeholder}
           </p>
         </div>
         {specTags.length ? (
-          <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-800/80 px-3 py-2">
+          <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-200 px-3 py-2">
             {specTags.map((tag) => (
               <span
                 key={tag.label}
-                className="inline-flex max-w-full items-center gap-1 rounded-full border border-pink-400/40 bg-pink-500/10 px-2.5 py-1 text-[11px] font-semibold text-pink-300 [word-break:keep-all]"
+                className="inline-flex max-w-full items-center gap-1 rounded-full border border-pink-200 bg-pink-50 px-2.5 py-1 text-[11px] font-semibold text-pink-800 [word-break:keep-all]"
               >
-                <span className="text-pink-400/80">{tag.label}</span>
-                <span className="truncate text-pink-200">{tag.value}</span>
+                <span className="text-pink-600">{tag.label}</span>
+                <span className="truncate text-pink-900">{tag.value}</span>
               </span>
             ))}
           </div>
@@ -274,7 +274,7 @@ export default function AiBackgroundPromptBar({
       </button>
 
       {orderOpen && expandedContent ? (
-        <div className="rounded-xl border border-slate-800 bg-[#0E1420]/80 p-2.5">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 shadow-sm">
           {expandedContent}
         </div>
       ) : null}

@@ -17,15 +17,15 @@ export default function Space4AdminReviewBar({
   onCancel,
 }: Space4AdminReviewBarProps) {
   return (
-    <div className="flex shrink-0 flex-col gap-2 rounded-xl border-2 border-emerald-400/50 bg-gradient-to-r from-emerald-600/30 via-slate-900/80 to-slate-800/70 px-3 py-2.5 shadow-[0_0_28px_rgba(16,185,129,0.22)] backdrop-blur-md sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-4 sm:py-3">
+    <div className="flex shrink-0 flex-col gap-2 rounded-xl border-2 border-emerald-300 bg-gradient-to-r from-emerald-50 via-white to-slate-50 px-3 py-2.5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-4 sm:py-3">
       <div className="min-w-0 flex-1">
-        <p className="text-[13px] font-extrabold tracking-tight text-emerald-50 sm:text-sm">
+        <p className="text-[13px] font-extrabold tracking-tight text-emerald-900 sm:text-sm">
           Template 04 검수 모드
         </p>
-        <p className="mt-0.5 text-[11px] font-medium text-emerald-100/85 sm:text-xs">
+        <p className="mt-0.5 text-[11px] font-medium text-emerald-800/90 sm:text-xs">
           수정 완료 후 → 공개 템플릿(03)으로 발행
         </p>
-        <p className="mt-1 truncate text-[10px] text-slate-300 sm:text-[11px]">
+        <p className="mt-1 truncate text-[10px] text-slate-600 sm:text-[11px]">
           {label}
         </p>
       </div>
@@ -34,7 +34,7 @@ export default function Space4AdminReviewBar({
           type="button"
           disabled={publishing}
           onClick={onCancel}
-          className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-600/70 bg-slate-950/40 px-3 py-2.5 text-[12px] font-semibold text-slate-200 transition hover:bg-slate-800/80 disabled:opacity-50 sm:py-3"
+          className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-[12px] font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50 sm:py-3"
         >
           <X className="h-3.5 w-3.5" aria-hidden />
           취소

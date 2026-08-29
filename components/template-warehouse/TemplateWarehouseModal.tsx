@@ -272,33 +272,33 @@ export default function TemplateWarehouseModal() {
       <button
         type="button"
         aria-label="닫기"
-        className="absolute inset-0 bg-slate-950/70 backdrop-blur-md"
+        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
         onClick={() => setOpen(false)}
       />
       <div
         role="dialog"
         aria-modal="true"
         aria-label="템플릿창고"
-        className="relative z-[1] flex max-h-[min(92vh,860px)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-600/70 bg-slate-900/90 shadow-[0_24px_80px_rgba(15,23,42,0.65)] ring-1 ring-white/10 backdrop-blur-md"
+        className="relative z-[1] flex max-h-[min(92vh,860px)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl ring-1 ring-slate-900/5"
       >
-        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-700/60 px-4 py-3 sm:px-5">
+        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 sm:px-5">
           <div>
-            <h2 className="text-base font-semibold text-white">템플릿창고</h2>
-            <p className="mt-0.5 text-[11px] text-slate-300">
+            <h2 className="text-base font-semibold text-slate-900">템플릿창고</h2>
+            <p className="mt-0.5 text-[11px] text-slate-500">
               참고 템플릿을 선택하면 Screen 26 캔버스에 바로 적용됩니다 (A4 단면)
             </p>
           </div>
           <button
             type="button"
             onClick={() => setOpen(false)}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-600/70 text-slate-300 hover:bg-slate-800/80 hover:text-white"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900"
             aria-label="모달 닫기"
           >
             <X className="h-4 w-4" />
           </button>
         </header>
 
-        <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-slate-700/60 px-3 py-2 sm:px-4">
+        <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-slate-200 bg-slate-50/80 px-3 py-2 sm:px-4">
           {TABS.map((item) => (
             <button
               key={item.id}
@@ -306,8 +306,8 @@ export default function TemplateWarehouseModal() {
               onClick={() => setTab(item.id)}
               className={`shrink-0 rounded-lg px-3 py-2 text-left transition ${
                 tab === item.id
-                  ? "bg-emerald-500/20 text-emerald-100 ring-1 ring-emerald-400/45"
-                  : "text-slate-300 hover:bg-slate-800/70 hover:text-white"
+                  ? "bg-emerald-50 text-emerald-900 ring-1 ring-emerald-400/50"
+                  : "text-slate-600 hover:bg-white hover:text-slate-900"
               }`}
             >
               <span className="block text-[12px] font-bold leading-none">
@@ -333,7 +333,7 @@ export default function TemplateWarehouseModal() {
 
           {tab === "double" ? (
             <>
-              <p className="mb-2 text-[11px] text-slate-400">
+              <p className="mb-2 text-[11px] text-slate-500">
                 Template 02 · 기본 A4 템플릿 (Template 01과 동일 베이스)
               </p>
               {renderBaseGrid(baseFallbackCards, "double", false)}
@@ -344,7 +344,7 @@ export default function TemplateWarehouseModal() {
             <div className="space-y-4">
               {publicTemplates.length > 0 ? (
                 <div>
-                  <p className="mb-2 text-[11px] font-semibold text-emerald-200/80">
+                  <p className="mb-2 text-[11px] font-semibold text-emerald-800">
                     관리자 승인 공개 템플릿
                   </p>
                   <ul className={GRID_CLASS}>
@@ -355,10 +355,10 @@ export default function TemplateWarehouseModal() {
                           onClick={() =>
                             pickTemplate(publicRecordToWarehouse(item))
                           }
-                          className="flex w-full flex-col overflow-hidden rounded-xl border border-emerald-400/30 bg-gradient-to-b from-emerald-500/[0.08] to-black/25 text-left shadow-sm transition hover:border-emerald-400/55"
+                          className="flex w-full flex-col overflow-hidden rounded-xl border border-emerald-200 bg-gradient-to-b from-emerald-50 to-white text-left shadow-sm transition hover:border-emerald-400"
                         >
                           <div
-                            className="relative w-full overflow-hidden bg-slate-900"
+                            className="relative w-full overflow-hidden bg-slate-100"
                             style={{ aspectRatio: String(210 / 297) }}
                             aria-hidden
                           >
@@ -375,15 +375,15 @@ export default function TemplateWarehouseModal() {
                               />
                             )}
                           </div>
-                          <div className="space-y-0.5 border-t border-white/8 px-2 py-1.5">
-                            <p className="line-clamp-2 text-[11px] font-semibold leading-snug text-white">
+                          <div className="space-y-0.5 border-t border-slate-100 px-2 py-1.5">
+                            <p className="line-clamp-2 text-[11px] font-semibold leading-snug text-slate-900">
                               {item.title}
                             </p>
-                            <p className="truncate text-[9px] text-white/45">
+                            <p className="truncate text-[9px] text-slate-500">
                               {item.subtitle}
                             </p>
                             {item.maskedNote ? (
-                              <p className="truncate text-[9px] text-amber-200/70">
+                              <p className="truncate text-[9px] text-amber-700">
                                 {item.maskedNote}
                               </p>
                             ) : null}
@@ -395,7 +395,7 @@ export default function TemplateWarehouseModal() {
                 </div>
               ) : null}
               <div>
-                <p className="mb-2 text-[11px] text-slate-400">
+                <p className="mb-2 text-[11px] text-slate-500">
                   기본 A4 템플릿 (공통 베이스)
                 </p>
                 {renderBaseGrid(baseFallbackCards, "public", false)}
@@ -407,12 +407,12 @@ export default function TemplateWarehouseModal() {
             <div className="space-y-4">
               {isAdmin ? (
                 <div>
-                  <p className="mb-2 text-[11px] font-semibold text-amber-200/85">
+                  <p className="mb-2 text-[11px] font-semibold text-amber-800">
                     유저 다운로드 적재함 · 최대 500 · FIFO (관리자)
                     {space4Loading ? " · 불러오는 중…" : ` · ${space4Items.length}건`}
                   </p>
                   {space4Items.length === 0 && !space4Loading ? (
-                    <p className="mb-3 rounded-lg border border-slate-700/60 bg-slate-950/50 px-3 py-4 text-center text-[12px] text-slate-400">
+                    <p className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-4 text-center text-[12px] text-slate-500">
                       아직 적재된 다운로드 작업물이 없습니다. 유저가 Screen 26에서
                       다운로드하면 여기에 자동 저장됩니다.
                     </p>
@@ -430,13 +430,13 @@ export default function TemplateWarehouseModal() {
                   )}
                 </div>
               ) : (
-                <p className="rounded-lg border border-slate-700/60 bg-slate-950/50 px-3 py-3 text-[12px] text-slate-400">
+                <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-[12px] text-slate-500">
                   Template 04 적재함은 관리자 전용입니다. 아래는 공통 기본 A4
                   템플릿입니다.
                 </p>
               )}
               <div>
-                <p className="mb-2 text-[11px] text-slate-400">
+                <p className="mb-2 text-[11px] text-slate-500">
                   기본 A4 템플릿 (공통 베이스)
                 </p>
                 {renderBaseGrid(baseFallbackCards, "single", false)}

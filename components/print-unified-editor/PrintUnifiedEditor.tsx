@@ -944,7 +944,7 @@ export default function PrintUnifiedEditor() {
 
   if (!hydrated) {
     return (
-      <div className="flex h-full min-h-[200px] items-center justify-center text-sm text-white/60">
+      <div className="flex h-full min-h-[200px] items-center justify-center text-sm text-slate-500">
         에디터 준비 중…
       </div>
     );
@@ -1133,6 +1133,7 @@ export default function PrintUnifiedEditor() {
                 mode="agent"
                 embedded
                 panelOnly
+                tone="light"
                 hideExport
                 hideAiCommand
                 alwaysShowStylePanel

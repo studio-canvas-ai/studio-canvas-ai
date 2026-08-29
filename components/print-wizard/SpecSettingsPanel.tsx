@@ -292,8 +292,8 @@ export default function SpecSettingsPanel({
     <section
       className={
         fitContent
-          ? "flex w-full flex-col gap-2.5 overflow-visible rounded-2xl border border-slate-700/60 bg-slate-900/80 p-3 shadow-[0_8px_32px_rgba(15,23,42,0.35)] backdrop-blur-md sm:p-3.5"
-          : "flex h-full min-h-0 flex-col gap-2.5 overflow-y-auto rounded-2xl border border-slate-700/60 bg-slate-900/80 p-3 shadow-[0_8px_32px_rgba(15,23,42,0.35)] backdrop-blur-md sm:p-3.5"
+          ? "flex w-full flex-col gap-2.5 overflow-visible rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-3.5"
+          : "flex h-full min-h-0 flex-col gap-2.5 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-3.5"
       }
     >
       {/* 규격 · 스타일 · 용도 · (인쇄: 장수) · 배경 · (인쇄: 분야) */}
@@ -326,7 +326,7 @@ export default function SpecSettingsPanel({
             ))}
           </div>
 
-          <div className="mt-1.5 border-t border-slate-800 pt-1.5">
+          <div className="mt-1.5 border-t border-slate-200 pt-1.5">
             <button
               type="button"
               onClick={() => {
@@ -335,15 +335,15 @@ export default function SpecSettingsPanel({
               }}
               className={`flex w-full items-center justify-between rounded-lg border px-2.5 py-2 text-left text-[12px] font-semibold transition ${
                 (specPicks.format && formatId === "free") || freeSizeOpen
-                  ? "border-indigo-400/40 bg-indigo-500/15 text-slate-50"
-                  : "border-slate-600/70 bg-slate-800/70 text-slate-100 hover:border-slate-500 hover:bg-slate-700/60"
+                  ? "border-indigo-400 bg-indigo-50 text-indigo-900"
+                  : "border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50"
               }`}
             >
               <span className="[word-break:keep-all]">
                 {cs.customSize}
               </span>
               <ChevronDown
-                className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform ${
+                className={`h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform ${
                   freeSizeOpen ? "rotate-180" : ""
                 }`}
                 aria-hidden
@@ -356,8 +356,8 @@ export default function SpecSettingsPanel({
               }`}
             >
               <div className="min-h-0 overflow-hidden">
-                <div className="mt-2 space-y-2.5 rounded-xl border border-slate-700/60 bg-slate-950/70 p-2.5 backdrop-blur-sm">
-                  <div className="flex overflow-hidden rounded-lg border border-slate-600/70">
+                <div className="mt-2 space-y-2.5 rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+                  <div className="flex overflow-hidden rounded-lg border border-slate-200">
                     {(
                       [
                         { id: "cm", label: "CM" },
@@ -370,8 +370,8 @@ export default function SpecSettingsPanel({
                         onClick={() => setCustomUnit(u.id)}
                         className={`flex-1 py-1.5 text-[11px] font-semibold transition ${
                           customUnit === u.id
-                            ? "bg-slate-100 text-slate-900"
-                            : "bg-transparent text-slate-400 hover:text-slate-200"
+                            ? "bg-slate-800 text-white"
+                            : "bg-white text-slate-500 hover:text-slate-800"
                         }`}
                       >
                         {u.label}
@@ -381,7 +381,7 @@ export default function SpecSettingsPanel({
 
                   <div className="grid grid-cols-2 gap-2">
                     <label className="space-y-1">
-                      <span className="text-[10px] text-slate-500">
+                      <span className="text-[10px] text-slate-600">
                         {cs.width} ({unitLabel})
                       </span>
                       <input
@@ -393,11 +393,11 @@ export default function SpecSettingsPanel({
                           setWidthInput(e.target.value);
                           setSizeError(null);
                         }}
-                        className="w-full rounded-lg border border-slate-600/70 bg-slate-900/80 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-sky-400/50 focus:ring-2 focus:ring-sky-500/20"
+                        className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
                       />
                     </label>
                     <label className="space-y-1">
-                      <span className="text-[10px] text-slate-500">
+                      <span className="text-[10px] text-slate-600">
                         {cs.height} ({unitLabel})
                       </span>
                       <input
@@ -409,7 +409,7 @@ export default function SpecSettingsPanel({
                           setHeightInput(e.target.value);
                           setSizeError(null);
                         }}
-                        className="w-full rounded-lg border border-slate-600/70 bg-slate-900/80 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-sky-400/50 focus:ring-2 focus:ring-sky-500/20"
+                        className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
                       />
                     </label>
                   </div>
@@ -420,7 +420,7 @@ export default function SpecSettingsPanel({
                   </p>
 
                   {sizeError ? (
-                    <p className="text-[11px] font-medium text-rose-300">
+                    <p className="text-[11px] font-medium text-rose-600">
                       {sizeError}
                     </p>
                   ) : null}
@@ -482,7 +482,7 @@ export default function SpecSettingsPanel({
                 });
                 setOpenKey(null);
               }}
-              className="mt-1 w-full rounded-lg border border-slate-600/70 bg-slate-800/60 px-2.5 py-2 text-[11px] font-semibold text-slate-300 hover:border-slate-500 hover:text-slate-100"
+              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[11px] font-semibold text-slate-600 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
             >
               {cs.styleReset}
             </button>
@@ -563,7 +563,7 @@ export default function SpecSettingsPanel({
                 imageStyleId: visualStyle.imageStyleId,
               }).map((group) => (
                 <div key={group.id} className="flex flex-col gap-1.5">
-                  <p className="text-[11px] font-bold tracking-wide text-indigo-200/90 [word-break:keep-all]">
+                  <p className="text-[11px] font-bold tracking-wide text-slate-900 [word-break:keep-all]">
                     {group.label}
                   </p>
                   <div className="flex flex-col gap-1.5">
@@ -579,8 +579,8 @@ export default function SpecSettingsPanel({
                           }}
                           className={`rounded-lg border px-2.5 py-2 text-left text-[11px] font-medium leading-snug [word-break:keep-all] transition pointer-coarse:min-h-10 ${
                             on
-                              ? "border-indigo-400 bg-indigo-500/20 text-indigo-50 ring-2 ring-indigo-400/60"
-                              : "border-slate-600/70 bg-slate-800/70 text-slate-200 hover:border-slate-500 hover:text-white"
+                              ? "border-indigo-500 bg-indigo-50 text-indigo-900 ring-2 ring-indigo-400/60"
+                              : "border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50"
                           }`}
                         >
                           {example}
@@ -595,7 +595,7 @@ export default function SpecSettingsPanel({
             <div className="max-h-[min(60vh,28rem)] overflow-y-auto overscroll-contain p-2 sm:p-2.5">
               {BG_EXAMPLE_CATEGORIES.map((group) => (
                 <div key={group.id} className="mb-3 last:mb-0">
-                  <p className="mb-2 text-[16px] font-bold tracking-wide text-white sm:text-[17px] [word-break:keep-all]">
+                  <p className="mb-2 text-[16px] font-bold tracking-wide text-slate-900 sm:text-[17px] [word-break:keep-all]">
                     {group.labelKo}
                   </p>
                   <div className="flex flex-row flex-wrap gap-1.5">
@@ -653,7 +653,7 @@ export default function SpecSettingsPanel({
             <div className="max-h-[min(60vh,28rem)] overflow-y-auto overscroll-contain p-2 sm:p-2.5">
               {FIELD_CATEGORIES.map((group) => (
                 <div key={group.id} className="mb-3 last:mb-0">
-                  <p className="mb-2 text-[16px] font-bold tracking-wide text-white sm:text-[17px] [word-break:keep-all]">
+                  <p className="mb-2 text-[16px] font-bold tracking-wide text-slate-900 sm:text-[17px] [word-break:keep-all]">
                     {cs.fieldGroups[group.id]}
                   </p>
                   <div className="flex flex-row flex-wrap gap-1.5">
@@ -721,7 +721,7 @@ export default function SpecSettingsPanel({
           onGenerate={onGenerateBackground}
           expandedContent={
             <div className="space-y-1">
-              <p className="text-[11px] font-medium text-slate-500">
+              <p className="text-[11px] font-medium text-slate-600">
                 주문 / 초안 프롬프트
               </p>
               <textarea
@@ -730,7 +730,7 @@ export default function SpecSettingsPanel({
                 aria-label="메인 프롬프트 / 주문 내용"
                 rows={2}
                 placeholder="예시에서 선택하거나 주문 내용을 입력하세요."
-                className="min-h-[3.5rem] w-full resize-none rounded-lg border border-slate-600/70 bg-slate-950/70 px-2.5 py-1.5 text-sm leading-relaxed text-slate-100 outline-none placeholder:text-slate-500 focus:border-sky-400/50 focus:ring-2 focus:ring-sky-500/20"
+                className="min-h-[3.5rem] w-full resize-none rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm leading-relaxed text-slate-900 outline-none placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
               />
             </div>
           }

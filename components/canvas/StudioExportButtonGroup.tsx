@@ -63,7 +63,7 @@ export default function StudioExportButtonGroup({
       : "inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-lg disabled:opacity-50";
 
   const secondaryClass = unified
-    ? "inline-flex w-full flex-row items-center justify-center gap-1.5 rounded-lg border border-slate-600/70 bg-slate-800/60 px-2 py-2.5 text-[12px] font-semibold leading-none text-slate-100 hover:border-slate-500 hover:bg-slate-700/70 disabled:opacity-50 [word-break:keep-all] whitespace-nowrap"
+    ? "inline-flex w-full flex-row items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 py-2.5 text-[12px] font-semibold leading-none text-slate-700 hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50 [word-break:keep-all] whitespace-nowrap"
     : compact
       ? "inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-[#0E1420] px-3 py-2 text-[11px] font-medium text-slate-200 hover:bg-slate-800/60 disabled:opacity-50"
       : "inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-white/85 hover:bg-white/10 disabled:opacity-50";
@@ -74,7 +74,7 @@ export default function StudioExportButtonGroup({
       ? "h-3.5 w-3.5"
       : "h-4 w-4 shrink-0";
   const hintClass = unified
-    ? "px-0.5 text-center text-[9px] leading-snug text-slate-400"
+    ? "px-0.5 text-center text-[9px] leading-snug text-slate-500"
     : compact
       ? "px-0.5 text-center text-[10px] leading-snug text-slate-400"
       : "text-center text-xs leading-snug text-white/45";
@@ -107,7 +107,7 @@ export default function StudioExportButtonGroup({
     <div
       className={
         unified
-          ? "mt-auto grid shrink-0 gap-1.5 border-t border-slate-700/60 pt-3"
+          ? "mt-auto grid shrink-0 gap-1.5 border-t border-slate-200 pt-3"
           : compact
             ? "grid shrink-0 gap-1.5 border-t border-slate-800/80 pt-1.5"
             : "mt-auto grid shrink-0 gap-2 border-t border-white/10 pt-4"

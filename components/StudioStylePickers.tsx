@@ -65,6 +65,8 @@ export function useFixedBelowMenu(
   return style;
 }
 
+export type StudioPickerTone = "dark" | "light";
+
 export function PortalMenu({
   open,
   onClose,
@@ -72,6 +74,7 @@ export function PortalMenu({
   style,
   className,
   children,
+  tone = "dark",
 }: {
   open: boolean;
   onClose: () => void;
@@ -79,9 +82,11 @@ export function PortalMenu({
   style: CSSProperties;
   className?: string;
   children: ReactNode;
+  tone?: StudioPickerTone;
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [isMounted, setIsMounted] = useState(false);
+  const isLight = tone === "light";
 
   useEffect(() => {
     setIsMounted(true);
@@ -113,7 +118,11 @@ export function PortalMenu({
     <div
       ref={menuRef}
       role="listbox"
-      className={`rounded-xl border border-white/15 bg-[#12151e] shadow-2xl shadow-black/60 ring-1 ring-black/40 ${className ?? ""}`}
+      className={`rounded-xl ${
+        isLight
+          ? "border border-slate-200 bg-white shadow-lg"
+          : "border border-white/15 bg-[#12151e] shadow-2xl shadow-black/60 ring-1 ring-black/40"
+      } ${className ?? ""}`}
       style={style}
     >
       {children}
@@ -125,13 +134,16 @@ export function PortalMenu({
 export function EmojiMoreDropdown({
   label,
   onPick,
+  tone = "dark",
 }: {
   label: string;
   onPick: (symbol: string) => void;
+  tone?: StudioPickerTone;
 }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const menuStyle = useFixedBelowMenu(open, triggerRef, 272);
+  const isLight = tone === "light";
 
   return (
     <div className="relative inline-flex shrink-0">
@@ -141,11 +153,17 @@ export function EmojiMoreDropdown({
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex h-9 items-center gap-1 rounded-lg border border-white/10 bg-black/40 px-2.5 text-xs font-semibold text-white/85 transition hover:border-white/25 hover:bg-white/5"
+        className={`inline-flex h-9 items-center gap-1 rounded-lg border px-2.5 text-xs font-semibold transition ${
+          isLight
+            ? "border-slate-200 bg-white text-slate-800 hover:bg-slate-50"
+            : "border-white/10 bg-black/40 text-white/85 hover:border-white/25 hover:bg-white/5"
+        }`}
       >
         {label}
         <ChevronDown
-          className={`h-3.5 w-3.5 text-white/80 transition ${open ? "rotate-180" : ""}`}
+          className={`h-3.5 w-3.5 transition ${
+            open ? "rotate-180" : ""
+          } ${isLight ? "text-slate-500" : "text-white/80"}`}
           aria-hidden
         />
       </button>
@@ -154,6 +172,7 @@ export function EmojiMoreDropdown({
         onClose={() => setOpen(false)}
         triggerRef={triggerRef}
         style={menuStyle}
+        tone={tone}
         className="overflow-y-auto overscroll-contain p-2"
       >
         <div className="grid grid-cols-8 gap-0.5">
@@ -164,7 +183,11 @@ export function EmojiMoreDropdown({
               role="option"
               aria-label={item.char}
               title={item.char}
-              className="font-emoji flex aspect-square items-center justify-center rounded-md text-base text-white/90 transition hover:bg-white/10"
+              className={`font-emoji flex aspect-square items-center justify-center rounded-md text-base transition ${
+                isLight
+                  ? "text-slate-800 hover:bg-slate-100"
+                  : "text-white/90 hover:bg-white/10"
+              }`}
               onClick={() => {
                 onPick(item.char);
                 setOpen(false);
@@ -183,15 +206,18 @@ export function StickerMoreDropdown({
   label,
   selectedId,
   onPick,
+  tone = "dark",
 }: {
   label: string;
   selectedId?: StickerBadgeId | null;
   onPick: (id: StickerBadgeId) => void;
+  tone?: StudioPickerTone;
 }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const menuStyle = useFixedBelowMenu(open, triggerRef, 288);
   const selected = selectedId ? STICKER_BADGES[selectedId] : null;
+  const isLight = tone === "light";
 
   return (
     <div className="relative z-10 w-full min-w-0">
@@ -201,7 +227,11 @@ export function StickerMoreDropdown({
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="flex h-9 w-full items-center gap-1.5 rounded-lg border border-white/10 bg-black/40 px-2.5 text-xs font-semibold text-white/85 transition hover:border-white/25 hover:bg-white/5"
+        className={`flex h-9 w-full items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition ${
+          isLight
+            ? "border-slate-200 bg-white text-slate-800 hover:bg-slate-50"
+            : "border-white/10 bg-black/40 text-white/85 hover:border-white/25 hover:bg-white/5"
+        }`}
       >
         <span className="min-w-0 flex-1 truncate text-left">{label}</span>
         {selected ? (
@@ -217,7 +247,9 @@ export function StickerMoreDropdown({
           </span>
         ) : null}
         <ChevronDown
-          className={`h-3.5 w-3.5 shrink-0 text-white/80 transition ${open ? "rotate-180" : ""}`}
+          className={`h-3.5 w-3.5 shrink-0 transition ${
+            open ? "rotate-180" : ""
+          } ${isLight ? "text-slate-500" : "text-white/80"}`}
           aria-hidden
         />
       </button>
@@ -226,6 +258,7 @@ export function StickerMoreDropdown({
         onClose={() => setOpen(false)}
         triggerRef={triggerRef}
         style={menuStyle}
+        tone={tone}
         className="overflow-y-auto overscroll-contain p-2"
       >
         <div className="flex flex-wrap gap-1.5">
@@ -273,10 +306,12 @@ export function BgColorDropdown({
   label,
   value,
   onChange,
+  tone = "dark",
 }: {
   label: string;
   value: string;
   onChange: (hex: string) => void;
+  tone?: StudioPickerTone;
 }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
@@ -284,6 +319,7 @@ export function BgColorDropdown({
   const current = value || "#000000";
   const needsOutline =
     current.toLowerCase() === "#ffffff" || current.toLowerCase() === "#000000";
+  const isLight = tone === "light";
 
   return (
     <div className="relative w-full min-w-0">
@@ -294,10 +330,16 @@ export function BgColorDropdown({
         aria-expanded={open}
         aria-label={label}
         onClick={() => setOpen((v) => !v)}
-        className="flex h-9 w-full items-center gap-2 rounded-lg border border-white/10 bg-black/40 px-2.5 text-left text-[11px] font-medium text-white/85 outline-none transition hover:border-white/25 focus:border-purple-400/40"
+        className={`flex h-9 w-full items-center gap-2 rounded-lg border px-2.5 text-left text-[11px] font-medium outline-none transition ${
+          isLight
+            ? "border-slate-200 bg-white text-slate-800 hover:bg-slate-50 focus:border-indigo-400/50"
+            : "border-white/10 bg-black/40 text-white/85 hover:border-white/25 focus:border-purple-400/40"
+        }`}
       >
         <span
-          className="h-5 w-5 shrink-0 rounded-md ring-1 ring-white/20"
+          className={`h-5 w-5 shrink-0 rounded-md ring-1 ${
+            isLight ? "ring-slate-200" : "ring-white/20"
+          }`}
           style={{
             backgroundColor: current,
             border: needsOutline ? "1px solid #555555" : undefined,
@@ -305,7 +347,9 @@ export function BgColorDropdown({
         />
         <span className="min-w-0 flex-1 truncate">{label}</span>
         <ChevronDown
-          className={`h-3.5 w-3.5 shrink-0 text-white/80 transition ${open ? "rotate-180" : ""}`}
+          className={`h-3.5 w-3.5 shrink-0 transition ${
+            open ? "rotate-180" : ""
+          } ${isLight ? "text-slate-500" : "text-white/80"}`}
           aria-hidden
         />
       </button>
@@ -314,6 +358,7 @@ export function BgColorDropdown({
         onClose={() => setOpen(false)}
         triggerRef={triggerRef}
         style={menuStyle}
+        tone={tone}
         className="overflow-x-auto overflow-y-hidden overscroll-contain p-2"
       >
         <div className="flex w-max flex-nowrap items-center gap-1.5">
@@ -335,8 +380,12 @@ export function BgColorDropdown({
                 }}
                 className={`h-7 w-7 shrink-0 rounded-md ring-1 transition ${
                   selected
-                    ? "scale-110 ring-2 ring-white"
-                    : "ring-white/20 hover:ring-white/50"
+                    ? isLight
+                      ? "scale-110 ring-2 ring-slate-800"
+                      : "scale-110 ring-2 ring-white"
+                    : isLight
+                      ? "ring-slate-200 hover:ring-slate-400"
+                      : "ring-white/20 hover:ring-white/50"
                 }`}
                 style={{
                   backgroundColor: c.hex,

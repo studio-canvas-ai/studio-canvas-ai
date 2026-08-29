@@ -163,8 +163,8 @@ export default function ControlBarDropdown({
               }`
         } ${
           open
-            ? "border border-sky-400/40 bg-slate-800/90 text-slate-50 shadow-[0_0_0_1px_rgba(56,189,248,0.2)]"
-            : "border border-slate-700/60 bg-slate-800/60 text-slate-100 hover:border-slate-500 hover:bg-slate-700/50"
+            ? "border border-sky-400 bg-sky-50 text-slate-900 shadow-sm ring-1 ring-sky-400/30"
+            : "border border-slate-200 bg-white text-slate-800 shadow-sm hover:border-slate-300 hover:bg-slate-50"
         }`}
       >
         {!compact && icon ? (
@@ -173,20 +173,20 @@ export default function ControlBarDropdown({
           </span>
         ) : null}
         {compact ? (
-          <span className="whitespace-nowrap text-slate-100">{label}</span>
+          <span className="whitespace-nowrap text-slate-800">{label}</span>
         ) : (
           <span className="min-w-0 flex-1 truncate">
-            <span className="text-slate-400">{label}</span>
+            <span className="text-slate-500">{label}</span>
             {value ? (
               <>
-                <span className="mx-1 text-slate-600">·</span>
-                <span className="font-semibold text-slate-100">{value}</span>
+                <span className="mx-1 text-slate-300">·</span>
+                <span className="font-semibold text-slate-900">{value}</span>
               </>
             ) : null}
           </span>
         )}
         <ChevronDown
-          className={`shrink-0 text-slate-500 transition ${
+          className={`shrink-0 text-slate-400 transition ${
             compact ? "h-3 w-3" : "h-3.5 w-3.5"
           } ${open ? "rotate-180" : ""}`}
           aria-hidden
@@ -198,7 +198,7 @@ export default function ControlBarDropdown({
             <div
               ref={menuRef}
               role="listbox"
-              className="overflow-hidden rounded-2xl border border-slate-600/70 bg-slate-900/90 shadow-[0_20px_60px_rgba(15,23,42,0.55)] ring-1 ring-white/10 backdrop-blur-md"
+              className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg ring-1 ring-slate-900/5"
               style={menuStyle}
             >
               <div className="max-h-[inherit] overflow-y-auto overscroll-contain p-1.5">
@@ -236,30 +236,30 @@ export function ControlMenuItem({
       onClick={onClick}
       className={`w-full rounded-lg px-2 py-2 text-left transition ${
         active
-          ? "bg-indigo-500/20 text-slate-50 ring-1 ring-indigo-400/35"
-          : "text-slate-100 hover:bg-slate-700/70"
+          ? "bg-indigo-50 text-slate-900 ring-1 ring-indigo-300"
+          : "text-slate-800 hover:bg-slate-50"
       }`}
     >
       {oneLine ? (
         <span className="inline-flex max-w-full min-w-0 items-baseline gap-1.5 overflow-hidden whitespace-nowrap">
-          <span className="shrink-0 text-[17px] font-bold leading-none tracking-tight">
+          <span className="shrink-0 text-[17px] font-bold leading-none tracking-tight text-slate-900">
             {title}
           </span>
           {hint ? (
-            <span className="min-w-0 truncate text-[14px] font-medium leading-none text-pink-400">
+            <span className="min-w-0 truncate text-[14px] font-medium leading-none text-blue-700">
               ({hint})
             </span>
           ) : null}
         </span>
       ) : (
-        <span className="block text-[12px] font-semibold leading-snug [word-break:keep-all]">
+        <span className="block text-[12px] font-semibold leading-snug text-slate-900 [word-break:keep-all]">
           {title}
         </span>
       )}
       {description ? (
         <span
           className={`mt-0.5 line-clamp-2 block text-[11px] leading-snug ${
-            active ? "text-slate-300" : "text-slate-500"
+            active ? "text-slate-600" : "text-slate-500"
           }`}
         >
           {description}
