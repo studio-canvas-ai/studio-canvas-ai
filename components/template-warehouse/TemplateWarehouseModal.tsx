@@ -1,29 +1,38 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePathname, useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import { useCredits } from "@/components/CreditsProvider";
+import { useFeedback } from "@/components/FeedbackProvider";
 import { PRINT_UNIFIED_EDITOR_PATH } from "@/lib/printUnifiedEditor";
 import {
+  BASE_A4_TEMPLATE_CARDS,
   TEMPLATE_01_CARDS,
   TEMPLATE_WAREHOUSE_OPEN_EVENT,
   applyWarehouseTemplate,
   buildTemplate01WarehouseList,
   cloneTemplate01Card,
+  cloneTemplatePages,
   isBuiltinTemplate01Id,
   loadCustomTemplate01Cards,
   nextTemplate01CardId,
   saveCustomTemplate01Cards,
   saveRemovedTemplate01Ids,
   template01CardToWarehouse,
-  templatesForTab,
   type Template01Card,
   type WarehouseTabId,
   type WarehouseTemplate,
 } from "@/lib/templateWarehouse";
+import type { Template03PublicRecord } from "@/lib/template03Public";
+import {
+  fetchSpace4VaultMeta,
+  promoteSpace4ToTemplate03,
+  type Space4VaultMeta,
+} from "@/lib/space4Client";
 import Template01GridCard from "@/components/template-warehouse/Template01GridCard";
+import Template04QueueCard from "@/components/template-warehouse/Template04QueueCard";
 
 const TABS: Array<{
   id: WarehouseTabId;
@@ -53,22 +62,50 @@ const TABS: Array<{
 ];
 
 const REMOVE_ANIM_MS = 280;
+const GRID_CLASS =
+  "grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-2.5 lg:grid-cols-5";
+
+function publicRecordToWarehouse(
+  item: Template03PublicRecord
+): WarehouseTemplate {
+  return {
+    id: item.id,
+    tab: "public",
+    title: item.title,
+    subtitle: item.subtitle,
+    formatId: item.formatId,
+    pageCount: item.pageCount,
+    thumbClass: item.thumbClass || "bg-slate-800",
+    textLayersByPage: cloneTemplatePages(item.textLayersByPage, false),
+    backgroundUrl: item.backgroundUrl ?? item.thumbSrc ?? null,
+    maskedNote: item.maskedNote,
+  };
+}
 
 /**
  * Template Warehouse modal — opened from Navbar [템플릿창고].
- * Template 01–03 apply to Screen 26 via event; Template 04 routes to /admin.
+ * Template 01–04 share a 5-col A4 grid; Template 04 shows admin FIFO queue.
  */
 export default function TemplateWarehouseModal() {
   const router = useRouter();
   const pathname = usePathname() || "/";
   const { isAdmin } = useCredits();
+  const { showToast } = useFeedback();
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<WarehouseTabId>("single");
   const [mounted, setMounted] = useState(false);
   const [template01Cards, setTemplate01Cards] =
     useState<Template01Card[]>(TEMPLATE_01_CARDS);
   const [removingIds, setRemovingIds] = useState<Set<number>>(new Set());
+  const [publicTemplates, setPublicTemplates] = useState<
+    Template03PublicRecord[]
+  >([]);
+  const [space4Items, setSpace4Items] = useState<Space4VaultMeta[]>([]);
+  const [space4Loading, setSpace4Loading] = useState(false);
+  const [promotingId, setPromotingId] = useState<string | null>(null);
   const removeTimers = useRef<Map<number, number>>(new Map());
+
+  const baseFallbackCards = BASE_A4_TEMPLATE_CARDS;
 
   useEffect(() => {
     setMounted(true);
@@ -98,12 +135,40 @@ export default function TemplateWarehouseModal() {
     return () => document.removeEventListener("keydown", onKey);
   }, [open]);
 
-  if (!mounted || !open) return null;
+  const refreshPublic = useCallback(async () => {
+    try {
+      const res = await fetch("/api/template-warehouse/public?limit=200", {
+        cache: "no-store",
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as { items?: Template03PublicRecord[] };
+      setPublicTemplates(Array.isArray(data.items) ? data.items : []);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
-  const list =
-    tab === "space4" || tab === "single"
-      ? []
-      : templatesForTab(tab as Exclude<WarehouseTabId, "space4">);
+  const refreshSpace4 = useCallback(async () => {
+    if (!isAdmin) {
+      setSpace4Items([]);
+      return;
+    }
+    setSpace4Loading(true);
+    try {
+      const items = await fetchSpace4VaultMeta(500);
+      setSpace4Items(items);
+    } finally {
+      setSpace4Loading(false);
+    }
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (tab === "public") void refreshPublic();
+    if (tab === "space4") void refreshSpace4();
+  }, [open, tab, refreshPublic, refreshSpace4]);
+
+  if (!mounted || !open) return null;
 
   const pickTemplate = (template: WarehouseTemplate) => {
     applyWarehouseTemplate(template);
@@ -155,10 +220,41 @@ export default function TemplateWarehouseModal() {
     });
   };
 
-  const goSpace4 = () => {
-    setOpen(false);
-    router.push("/admin");
+  const onPromote = async (id: string) => {
+    if (!isAdmin || promotingId) return;
+    setPromotingId(id);
+    const result = await promoteSpace4ToTemplate03(id);
+    setPromotingId(null);
+    if (!result.ok) {
+      showToast("공개 템플릿 승인에 실패했습니다.", "error");
+      return;
+    }
+    showToast("Template 03 공개 템플릿으로 승인·전송했습니다.", "success");
+    setSpace4Items((prev) => prev.filter((item) => item.id !== id));
+    void refreshPublic();
   };
+
+  const renderBaseGrid = (
+    cards: Template01Card[],
+    tabId: Exclude<WarehouseTabId, "space4">,
+    canManage: boolean
+  ) => (
+    <ul className={GRID_CLASS}>
+      {cards.map((card) => (
+        <Template01GridCard
+          key={`${tabId}-${card.id}`}
+          card={card}
+          canManage={canManage}
+          removing={tabId === "single" ? removingIds.has(card.id) : false}
+          onPick={() =>
+            pickTemplate(template01CardToWarehouse(card, tabId))
+          }
+          onDuplicate={() => duplicateTemplate01Card(card)}
+          onRemove={() => removeTemplate01Card(card.id)}
+        />
+      ))}
+    </ul>
+  );
 
   return createPortal(
     <div className="fixed inset-0 z-[2000] flex items-center justify-center p-3 sm:p-4">
@@ -172,9 +268,7 @@ export default function TemplateWarehouseModal() {
         role="dialog"
         aria-modal="true"
         aria-label="템플릿창고"
-        className={`relative z-[1] flex max-h-[min(92vh,860px)] w-full flex-col overflow-hidden rounded-2xl border border-slate-600/60 bg-[#121824] shadow-[0_24px_80px_rgba(0,0,0,0.55)] ${
-          tab === "single" ? "max-w-6xl" : "max-w-3xl"
-        }`}
+        className="relative z-[1] flex max-h-[min(92vh,860px)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-600/60 bg-[#121824] shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
       >
         <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-5">
           <div>
@@ -198,13 +292,7 @@ export default function TemplateWarehouseModal() {
             <button
               key={item.id}
               type="button"
-              onClick={() => {
-                if (item.id === "space4") {
-                  goSpace4();
-                  return;
-                }
-                setTab(item.id);
-              }}
+              onClick={() => setTab(item.id)}
               className={`shrink-0 rounded-lg px-3 py-2 text-left transition ${
                 tab === item.id
                   ? "bg-emerald-500/15 text-emerald-100 ring-1 ring-emerald-400/40"
@@ -221,63 +309,129 @@ export default function TemplateWarehouseModal() {
           ))}
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-smooth p-3 sm:p-5">
-          {tab === "space4" ? null : tab === "single" ? (
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-smooth p-3 sm:p-4">
+          {tab === "single" ? (
             template01Cards.length === 0 ? (
               <p className="py-10 text-center text-[13px] text-white/45">
                 표시할 템플릿이 없습니다. 휴지통으로 모두 삭제되었습니다.
               </p>
             ) : (
-              <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
-                {template01Cards.map((card) => (
-                  <Template01GridCard
-                    key={card.id}
-                    card={card}
-                    canManage={isAdmin}
-                    removing={removingIds.has(card.id)}
-                    onPick={() =>
-                      pickTemplate(template01CardToWarehouse(card))
-                    }
-                    onDuplicate={() => duplicateTemplate01Card(card)}
-                    onRemove={() => removeTemplate01Card(card.id)}
-                  />
-                ))}
-              </ul>
+              renderBaseGrid(template01Cards, "single", isAdmin)
             )
-          ) : (
-            <ul className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-              {list.map((tpl) => (
-                <li key={tpl.id}>
-                  <button
-                    type="button"
-                    onClick={() => pickTemplate(tpl)}
-                    className="group flex w-full gap-3 rounded-xl border border-white/10 bg-black/25 p-2.5 text-left transition hover:border-emerald-400/40 hover:bg-emerald-500/10"
-                  >
-                    <div
-                      className={`h-16 w-12 shrink-0 rounded-md border border-white/10 ${tpl.thumbClass}`}
-                      aria-hidden
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[13px] font-semibold text-white">
-                        {tpl.title}
-                      </p>
-                      <p className="mt-0.5 truncate text-[11px] text-white/45">
-                        {tpl.subtitle}
-                      </p>
-                      {tpl.maskedNote ? (
-                        <p className="mt-1 truncate text-[10px] text-amber-200/70">
-                          {tpl.maskedNote}
-                        </p>
-                      ) : null}
-                      <p className="mt-1 text-[10px] tabular-nums text-white/35">
-                        {tpl.pageCount}면 · {tpl.formatId}
-                      </p>
-                    </div>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+          ) : null}
+
+          {tab === "double" ? (
+            <>
+              <p className="mb-2 text-[11px] text-white/45">
+                Template 02 · 기본 A4 템플릿 (Template 01과 동일 베이스)
+              </p>
+              {renderBaseGrid(baseFallbackCards, "double", false)}
+            </>
+          ) : null}
+
+          {tab === "public" ? (
+            <div className="space-y-4">
+              {publicTemplates.length > 0 ? (
+                <div>
+                  <p className="mb-2 text-[11px] font-semibold text-emerald-200/80">
+                    관리자 승인 공개 템플릿
+                  </p>
+                  <ul className={GRID_CLASS}>
+                    {publicTemplates.map((item) => (
+                      <li key={item.id}>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            pickTemplate(publicRecordToWarehouse(item))
+                          }
+                          className="flex w-full flex-col overflow-hidden rounded-xl border border-emerald-400/30 bg-gradient-to-b from-emerald-500/[0.08] to-black/25 text-left shadow-sm transition hover:border-emerald-400/55"
+                        >
+                          <div
+                            className="relative w-full overflow-hidden bg-slate-900"
+                            style={{ aspectRatio: String(210 / 297) }}
+                            aria-hidden
+                          >
+                            {item.thumbSrc || item.backgroundUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={item.thumbSrc || item.backgroundUrl || ""}
+                                alt=""
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <div
+                                className={`h-full w-full ${item.thumbClass}`}
+                              />
+                            )}
+                          </div>
+                          <div className="space-y-0.5 border-t border-white/8 px-2 py-1.5">
+                            <p className="line-clamp-2 text-[11px] font-semibold leading-snug text-white">
+                              {item.title}
+                            </p>
+                            <p className="truncate text-[9px] text-white/45">
+                              {item.subtitle}
+                            </p>
+                            {item.maskedNote ? (
+                              <p className="truncate text-[9px] text-amber-200/70">
+                                {item.maskedNote}
+                              </p>
+                            ) : null}
+                          </div>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              <div>
+                <p className="mb-2 text-[11px] text-white/45">
+                  기본 A4 템플릿 (공통 베이스)
+                </p>
+                {renderBaseGrid(baseFallbackCards, "public", false)}
+              </div>
+            </div>
+          ) : null}
+
+          {tab === "space4" ? (
+            <div className="space-y-4">
+              {isAdmin ? (
+                <div>
+                  <p className="mb-2 text-[11px] font-semibold text-amber-200/85">
+                    유저 다운로드 적재함 · 최대 500 · FIFO (관리자)
+                    {space4Loading ? " · 불러오는 중…" : ` · ${space4Items.length}건`}
+                  </p>
+                  {space4Items.length === 0 && !space4Loading ? (
+                    <p className="mb-3 rounded-lg border border-white/10 bg-black/20 px-3 py-4 text-center text-[12px] text-white/45">
+                      아직 적재된 다운로드 작업물이 없습니다. 유저가 Screen 26에서
+                      다운로드하면 여기에 자동 저장됩니다.
+                    </p>
+                  ) : (
+                    <ul className={GRID_CLASS}>
+                      {space4Items.map((item) => (
+                        <Template04QueueCard
+                          key={item.id}
+                          item={item}
+                          promoting={promotingId === item.id}
+                          onPromote={() => void onPromote(item.id)}
+                        />
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ) : (
+                <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-3 text-[12px] text-white/50">
+                  Template 04 적재함은 관리자 전용입니다. 아래는 공통 기본 A4
+                  템플릿입니다.
+                </p>
+              )}
+              <div>
+                <p className="mb-2 text-[11px] text-white/45">
+                  기본 A4 템플릿 (공통 베이스)
+                </p>
+                {renderBaseGrid(baseFallbackCards, "single", false)}
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>,

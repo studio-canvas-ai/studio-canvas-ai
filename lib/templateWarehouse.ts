@@ -977,7 +977,7 @@ export function buildModularBlockTextLayers(
   return layers;
 }
 
-/** Expert Template 01 catalog — append entries; modal renders large scrollable grid cards. */
+/** Expert Template 01 catalog — shared base A4 cards for Template 01–04 fallback. */
 export const TEMPLATE_01_CARDS: Template01Card[] = [
   {
     id: 1,
@@ -1161,13 +1161,17 @@ export function cloneTemplate01Card(
   return copy;
 }
 
+/** Shared base A4 templates shown across Template 01–04 (fallback / sync). */
+export const BASE_A4_TEMPLATE_CARDS = TEMPLATE_01_CARDS;
+
 export function template01CardToWarehouse(
-  card: Template01Card
+  card: Template01Card,
+  tab: Exclude<WarehouseTabId, "space4"> = "single"
 ): WarehouseTemplate {
   if (isModularTemplate01(card)) {
     return {
-      id: `tpl-single-${card.id}`,
-      tab: "single",
+      id: `tpl-${tab}-${card.id}`,
+      tab,
       title: card.title,
       subtitle: card.desc,
       formatId: TEMPLATE_01_FORMAT_ID,
@@ -1179,8 +1183,8 @@ export function template01CardToWarehouse(
   }
   if (isNestedTemplate01(card)) {
     return {
-      id: `tpl-single-${card.id}`,
-      tab: "single",
+      id: `tpl-${tab}-${card.id}`,
+      tab,
       title: card.title,
       subtitle: card.desc,
       formatId: TEMPLATE_01_FORMAT_ID,
@@ -1192,8 +1196,8 @@ export function template01CardToWarehouse(
   }
   if (isStructuredTemplate01(card)) {
     return {
-      id: `tpl-single-${card.id}`,
-      tab: "single",
+      id: `tpl-${tab}-${card.id}`,
+      tab,
       title: card.title,
       subtitle: card.desc,
       formatId: TEMPLATE_01_FORMAT_ID,
@@ -1204,8 +1208,8 @@ export function template01CardToWarehouse(
     };
   }
   return {
-    id: `tpl-single-${card.id}`,
-    tab: "single",
+    id: `tpl-${tab}-${card.id}`,
+    tab,
     title: card.title,
     subtitle: card.desc,
     formatId: TEMPLATE_01_FORMAT_ID,
@@ -1302,7 +1306,7 @@ export const WAREHOUSE_TEMPLATES: WarehouseTemplate[] = [
   },
 ];
 
-function cloneTemplatePages(
+export function cloneTemplatePages(
   pages: TextLayer[][],
   maskPii: boolean
 ): TextLayer[][] {
@@ -1319,16 +1323,25 @@ export function templatesForTab(
   tab: Exclude<WarehouseTabId, "space4">
 ): WarehouseTemplate[] {
   if (tab === "single") {
-    return TEMPLATE_01_CARDS.map(template01CardToWarehouse).map((t) => ({
+    return TEMPLATE_01_CARDS.map((card) =>
+      template01CardToWarehouse(card, "single")
+    ).map((t) => ({
       ...t,
       textLayersByPage: cloneTemplatePages(t.textLayersByPage, false),
     }));
   }
-  const maskPii = tab === "public";
-  return WAREHOUSE_TEMPLATES.filter((t) => t.tab === tab).map((t) => ({
+  // Template 02 / 03: shared base A4 cards + legacy seed templates for the tab.
+  const base = BASE_A4_TEMPLATE_CARDS.map((card) =>
+    template01CardToWarehouse(card, tab)
+  ).map((t) => ({
     ...t,
-    textLayersByPage: cloneTemplatePages(t.textLayersByPage, maskPii),
+    textLayersByPage: cloneTemplatePages(t.textLayersByPage, tab === "public"),
   }));
+  const extras = WAREHOUSE_TEMPLATES.filter((t) => t.tab === tab).map((t) => ({
+    ...t,
+    textLayersByPage: cloneTemplatePages(t.textLayersByPage, tab === "public"),
+  }));
+  return [...base, ...extras];
 }
 
 export function openTemplateWarehouse() {

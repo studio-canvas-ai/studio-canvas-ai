@@ -12,7 +12,7 @@ import {
   putR2Object,
 } from "@/lib/r2";
 
-export const SPACE4_VAULT_MAX = 200;
+export const SPACE4_VAULT_MAX = 500;
 
 export type Space4VaultRecord = {
   id: string;
@@ -142,6 +142,49 @@ export async function listSpace4Records(
     }
   }
   return sortItems(items)
-    .slice(0, Math.max(1, Math.min(200, limit)))
+    .slice(0, Math.max(1, Math.min(SPACE4_VAULT_MAX, limit)))
     .map(({ sealedContent: _s, ...meta }) => meta);
+}
+
+/** Admin — full vault row including sealed .sca payload. */
+export async function getSpace4Record(
+  id: string
+): Promise<Space4VaultRecord | null> {
+  const key = id.trim();
+  if (!key) return null;
+  let items = mem();
+  if (isR2Configured()) {
+    const fromR2 = await loadR2Manifest();
+    if (fromR2) {
+      items = fromR2;
+      globalThis.__scaSpace4Memory = fromR2;
+    }
+  }
+  return items.find((x) => x.id === key) ?? null;
+}
+
+/** Admin — remove one vault entry (e.g. after promote → Template 03). */
+export async function removeSpace4Record(id: string): Promise<boolean> {
+  const key = id.trim();
+  if (!key) return false;
+  return withDbLock(async () => {
+    let items = mem();
+    if (isR2Configured()) {
+      const fromR2 = await loadR2Manifest();
+      if (fromR2) items = fromR2;
+    }
+    const next = items.filter((x) => x.id !== key);
+    if (next.length === items.length) return false;
+    globalThis.__scaSpace4Memory = next;
+    try {
+      const db = getDb() as { space4Vault?: Space4VaultRecord[] };
+      db.space4Vault = next;
+    } catch {
+      /* ignore */
+    }
+    if (isR2Configured()) {
+      await saveR2Manifest(next);
+    }
+    return true;
+  });
 }

@@ -42,11 +42,11 @@ export default function Template01GridCard({
               e.stopPropagation();
               onDuplicate();
             }}
-            className="absolute left-2.5 top-2.5 z-[3] inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/15 bg-black/55 text-white/70 opacity-0 shadow-lg backdrop-blur-md transition-all duration-200 group-hover:opacity-100 hover:scale-105 hover:border-emerald-400/60 hover:bg-emerald-500/90 hover:text-white focus-visible:opacity-100"
+            className="absolute left-1.5 top-1.5 z-[3] inline-flex h-6 w-6 items-center justify-center rounded-lg border border-white/15 bg-black/55 text-white/70 opacity-0 shadow-lg backdrop-blur-md transition-all duration-200 group-hover:opacity-100 hover:scale-105 hover:border-emerald-400/60 hover:bg-emerald-500/90 hover:text-white focus-visible:opacity-100"
             aria-label={`${card.title} 복사`}
             title="템플릿 복사"
           >
-            <Plus className="h-3.5 w-3.5" />
+            <Plus className="h-3 w-3" />
           </button>
           <button
             type="button"
@@ -54,18 +54,18 @@ export default function Template01GridCard({
               e.stopPropagation();
               onRemove();
             }}
-            className="absolute right-2.5 top-2.5 z-[3] inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/15 bg-black/55 text-white/70 opacity-0 shadow-lg backdrop-blur-md transition-all duration-200 group-hover:opacity-100 hover:scale-105 hover:border-rose-400/60 hover:bg-rose-500/90 hover:text-white focus-visible:opacity-100"
+            className="absolute right-1.5 top-1.5 z-[3] inline-flex h-6 w-6 items-center justify-center rounded-lg border border-white/15 bg-black/55 text-white/70 opacity-0 shadow-lg backdrop-blur-md transition-all duration-200 group-hover:opacity-100 hover:scale-105 hover:border-rose-400/60 hover:bg-rose-500/90 hover:text-white focus-visible:opacity-100"
             aria-label={`${card.title} 삭제`}
             title="템플릿 삭제"
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <Trash2 className="h-3 w-3" />
           </button>
         </>
       ) : null}
       <button
         type="button"
         onClick={onPick}
-        className="flex w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.06] to-black/20 text-left shadow-[0_4px_24px_rgba(0,0,0,0.35)] transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-emerald-400/45 hover:shadow-[0_16px_48px_rgba(16,185,129,0.18)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400"
+        className="flex w-full flex-col overflow-hidden rounded-xl border border-white/10 bg-gradient-to-b from-white/[0.06] to-black/20 text-left shadow-[0_4px_16px_rgba(0,0,0,0.3)] transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-emerald-400/45 hover:shadow-[0_12px_32px_rgba(16,185,129,0.16)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400"
       >
         <div
           className="relative w-full overflow-hidden bg-slate-900"
@@ -76,11 +76,13 @@ export default function Template01GridCard({
             <Template01CardPreview card={card} />
           </div>
         </div>
-        <div className="space-y-0.5 border-t border-white/8 px-3 py-2.5 sm:py-3">
-          <p className="line-clamp-2 text-[13px] font-semibold leading-snug text-white sm:text-[14px]">
+        <div className="space-y-0.5 border-t border-white/8 px-2 py-1.5 sm:px-2.5 sm:py-2">
+          <p className="line-clamp-2 text-[11px] font-semibold leading-snug text-white sm:text-[12px]">
             {card.title}
           </p>
-          <p className="truncate text-[11px] text-white/45">{card.desc}</p>
+          <p className="truncate text-[9px] text-white/45 sm:text-[10px]">
+            {card.desc}
+          </p>
         </div>
       </button>
     </li>

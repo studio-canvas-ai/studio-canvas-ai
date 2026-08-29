@@ -12,10 +12,10 @@ export async function GET(req: Request) {
   }
 
   const limitRaw = new URL(req.url).searchParams.get("limit");
-  const limit = limitRaw ? Number(limitRaw) : 50;
+  const limit = limitRaw ? Number(limitRaw) : 500;
   try {
     const items = await listSpace4Records(limit);
-    return NextResponse.json({ ok: true, items });
+    return NextResponse.json({ ok: true, items, max: 500 });
   } catch (err) {
     console.error("[api/admin/space4] GET", err);
     return NextResponse.json({ error: "list_failed" }, { status: 500 });
