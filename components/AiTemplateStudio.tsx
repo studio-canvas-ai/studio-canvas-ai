@@ -957,6 +957,7 @@ export default function AiTemplateStudio({
   const styleCommitRafRef = useRef<number | null>(null);
   const [commandInput, setCommandInput] = useState("");
   const [quickTextDraft, setQuickTextDraft] = useState("");
+  const quickTextInputRef = useRef<HTMLInputElement>(null);
   const [commandBusy, setCommandBusy] = useState(false);
   const [commandLog, setCommandLog] = useState<
     Array<{ role: "user" | "assistant"; text: string }>
@@ -1046,7 +1047,9 @@ export default function AiTemplateStudio({
       overlayLayers.some((l) => l.id === activeLayerId);
     if (stillValid) return;
     if (panelOnly) {
-      // Always keep a style target so the right panel never goes empty.
+      // Controlled Screen 26: layers can lag one tick behind setActiveLayerId
+      // after quick-add — never steal selection back to layers[0].
+      if (activeLayerId) return;
       selectionClearedRef.current = false;
       setActiveLayerId(overlayLayers[0].id);
       return;
@@ -2396,14 +2399,35 @@ export default function AiTemplateStudio({
 
   /** Screen 26 — quick bar: insert text onto canvas without a side layer list. */
   const addQuickTextLayer = () => {
-    const text = quickTextDraft.trim() || PLACEHOLDER_TEXT;
-    const next = makeDefaultLayer(overlayLayers.length);
-    const source =
+    // Prefer DOM value so Korean IME composition is committed before React state.
+    const raw = (
+      quickTextInputRef.current?.value ?? quickTextDraft
+    ).trim();
+    const text = raw || PLACEHOLDER_TEXT;
+
+    const active =
       (activeLayerId
         ? overlayLayers.find((l) => l.id === activeLayerId)
-        : null) ??
-      overlayLayers[overlayLayers.length - 1] ??
-      null;
+        : null) ?? null;
+    const activeIsEmptyTarget =
+      Boolean(active) &&
+      (!active!.text.replace(/\u200B/g, "").trim() ||
+        active!.text.trim() === PLACEHOLDER_TEXT);
+
+    if (active && activeIsEmptyTarget) {
+      setOverlayLayers((prev) =>
+        prev.map((l) => (l.id === active.id ? { ...l, text } : l))
+      );
+      selectionClearedRef.current = false;
+      setActiveLayerId(active.id);
+      setQuickTextDraft("");
+      if (quickTextInputRef.current) quickTextInputRef.current.value = "";
+      return;
+    }
+
+    const next = makeDefaultLayer(overlayLayers.length);
+    const source = active ?? overlayLayers[overlayLayers.length - 1] ?? null;
+    const stack = overlayLayers.length;
     const placed: TextLayer = {
       ...next,
       text,
@@ -2413,9 +2437,17 @@ export default function AiTemplateStudio({
       fontWeight: source?.fontWeight ?? next.fontWeight,
       letterSpacing: source ? layerLetterSpacing(source) : next.letterSpacing,
       lineHeight: source ? layerLineHeight(source) : next.lineHeight,
-      align: source?.align ?? next.align,
-      showBox: source?.showBox ?? false,
-      showBoxBorder: source?.showBoxBorder ?? false,
+      align: source?.align ?? "center",
+      // Absolute box so PreviewTextOverlay hit-testing / handles work immediately.
+      layoutLocked: true,
+      boxManual: true,
+      boxW: 0.72,
+      boxH: 0.09,
+      manualX: 0.14,
+      manualY: Math.min(0.78, 0.36 + (stack % 6) * 0.07),
+      maxWidth: 0.72,
+      showBox: false,
+      showBoxBorder: false,
       boxOpacity: source?.boxOpacity ?? next.boxOpacity,
       boxColor: source?.boxColor ?? next.boxColor,
     };
@@ -2423,6 +2455,7 @@ export default function AiTemplateStudio({
     selectionClearedRef.current = false;
     setActiveLayerId(placed.id);
     setQuickTextDraft("");
+    if (quickTextInputRef.current) quickTextInputRef.current.value = "";
   };
 
   const removeLayer = (id: string) => {
@@ -4149,11 +4182,16 @@ export default function AiTemplateStudio({
                   <p className={styleSectionTitleChip}>{cs.textLayers}</p>
                   <div className="flex items-center gap-1.5">
                     <input
+                      ref={quickTextInputRef}
                       type="text"
                       value={quickTextDraft}
                       onChange={(e) => setQuickTextDraft(e.target.value)}
                       onKeyDown={(e) => {
                         if (e.key !== "Enter") return;
+                        // Korean IME: wait until composition finishes.
+                        if (e.nativeEvent.isComposing || e.keyCode === 229) {
+                          return;
+                        }
                         e.preventDefault();
                         addQuickTextLayer();
                       }}
@@ -4163,7 +4201,10 @@ export default function AiTemplateStudio({
                     />
                     <button
                       type="button"
-                      onClick={addQuickTextLayer}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        addQuickTextLayer();
+                      }}
                       aria-label={cs.addTextLayer}
                       title={cs.addTextLayer}
                       className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-amber-200/80 bg-yellow-50 text-slate-800 shadow-sm transition hover:border-amber-300 hover:bg-yellow-100/80"

@@ -1158,7 +1158,13 @@ export default function PrintUnifiedEditor() {
                   );
                 }}
                 controlledActiveLayerId={activeTextLayerId}
-                onControlledActiveLayerChange={setActiveTextLayerId}
+                onControlledActiveLayerChange={(id) => {
+                  setActiveTextLayerId(id);
+                  if (id) {
+                    setActivePhotoLayerId(null);
+                    setActiveDecoLayerId(null);
+                  }
+                }}
                 formFields={{ ...state.inputs }}
                 initialVisualStyle={state.visualStyle}
                 onDecoCatalogPick={onDecoCatalogPick}
