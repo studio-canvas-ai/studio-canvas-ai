@@ -19,7 +19,7 @@ const HERO_PRIMARY =
   "box-border flex min-h-[4.75rem] w-full flex-col items-center justify-center gap-0.5 rounded-2xl px-4 py-4 text-center transition-all duration-300 sm:min-h-[5.5rem] sm:px-6 sm:py-5";
 
 const HERO_SECONDARY =
-  "box-border flex min-h-[3rem] w-full flex-col items-center justify-center gap-0 rounded-xl border px-2 py-2 text-center text-sm sm:min-h-[3.25rem] sm:px-3 sm:py-2.5";
+  "box-border flex min-h-[2.75rem] w-full flex-col items-center justify-center gap-0 rounded-xl border px-1.5 py-1.5 text-center text-[11px] sm:min-h-[3.25rem] sm:px-2.5 sm:py-2 sm:text-sm";
 
 export default function HeroSection() {
   const { t } = useI18n();
@@ -71,7 +71,7 @@ export default function HeroSection() {
               ) : null}
             </h1>
 
-            <p className="max-w-xl text-sm leading-relaxed text-white/55 sm:text-base md:text-[1.05rem]">
+            <p className="max-w-2xl text-lg font-medium leading-snug text-white sm:text-2xl sm:leading-snug md:text-[1.85rem] md:leading-[1.35]">
               {t.hero.description}
             </p>
 
@@ -103,13 +103,13 @@ export default function HeroSection() {
               </Link>
             </div>
 
-            {/* Incomplete / lab tools — demoted, disabled for non-admins */}
+            {/* Incomplete / lab tools — 2 rows × 3 cols; disabled for non-admins */}
             <div className="space-y-2 border-t border-white/10 pt-4">
               <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/35">
                 <Lock className="h-3 w-3" aria-hidden />
                 {t.hero.labComingSoon}
               </p>
-              <div className="grid w-full grid-cols-2 gap-2 sm:gap-2.5">
+              <div className="grid w-full grid-cols-3 gap-1.5 sm:gap-2.5">
                 {labEnabled ? (
                   <a
                     href="/generate?fresh=1"
@@ -159,10 +159,10 @@ export default function HeroSection() {
                     className={`btn-secondary group ${HERO_SECONDARY} border-white/15`}
                     aria-label={t.hero.ctaTemplateStudio}
                   >
-                    <span className="text-[12px] font-semibold leading-tight text-white [word-break:keep-all] sm:text-sm">
+                    <span className="text-[11px] font-semibold leading-tight text-white [word-break:keep-all] sm:text-sm">
                       {t.hero.ctaTemplateStudioLine1}
                     </span>
-                    <span className="text-[12px] font-semibold leading-tight text-white/85 [word-break:keep-all] sm:text-sm">
+                    <span className="text-[11px] font-semibold leading-tight text-white/85 [word-break:keep-all] sm:text-sm">
                       {t.hero.ctaTemplateStudioLine2}
                     </span>
                   </Link>
@@ -172,10 +172,10 @@ export default function HeroSection() {
                     title={t.hero.labComingSoon}
                     className={`${HERO_SECONDARY} cursor-not-allowed border-white/10 bg-white/[0.03] text-white/35`}
                   >
-                    <span className="text-[12px] font-semibold leading-tight [word-break:keep-all] sm:text-sm">
+                    <span className="text-[11px] font-semibold leading-tight [word-break:keep-all] sm:text-sm">
                       {t.hero.ctaTemplateStudioLine1}
                     </span>
-                    <span className="text-[12px] font-semibold leading-tight [word-break:keep-all] sm:text-sm">
+                    <span className="text-[11px] font-semibold leading-tight [word-break:keep-all] sm:text-sm">
                       {t.hero.ctaTemplateStudioLine2}
                     </span>
                   </span>
@@ -188,7 +188,7 @@ export default function HeroSection() {
                     className={`btn-secondary group ${HERO_SECONDARY} border-white/15`}
                   >
                     <Images className="mb-0.5 h-3.5 w-3.5 opacity-80" />
-                    <span className="text-[11px] font-semibold leading-tight [word-break:keep-all] sm:text-xs">
+                    <span className="text-[10px] font-semibold leading-tight [word-break:keep-all] sm:text-xs">
                       {t.hero.ctaRegisterPhotos}
                     </span>
                   </button>
@@ -199,24 +199,22 @@ export default function HeroSection() {
                     className={`${HERO_SECONDARY} cursor-not-allowed border-white/10 bg-white/[0.03] text-white/35`}
                   >
                     <Images className="mb-0.5 h-3.5 w-3.5 opacity-50" />
-                    <span className="text-[11px] font-semibold leading-tight [word-break:keep-all] sm:text-xs">
+                    <span className="text-[10px] font-semibold leading-tight [word-break:keep-all] sm:text-xs">
                       {t.hero.ctaRegisterPhotos}
                     </span>
                   </span>
                 )}
-              </div>
 
-              <div className="grid w-full grid-cols-2 gap-2 sm:gap-2.5">
                 {labEnabled ? (
                   <Link
                     href={AI_PHOTO_GENERATOR_PATH}
                     className={`btn-secondary group ${HERO_SECONDARY} border-white/15`}
                     aria-label={t.hero.ctaPhotoGenerator}
                   >
-                    <span className="text-[12px] font-semibold leading-tight [word-break:keep-all] sm:text-sm">
+                    <span className="text-[11px] font-semibold leading-tight [word-break:keep-all] sm:text-sm">
                       {t.hero.ctaPhotoGeneratorLine1}
                     </span>
-                    <span className="text-[12px] font-semibold leading-tight text-white/85 [word-break:keep-all] sm:text-sm">
+                    <span className="text-[11px] font-semibold leading-tight text-white/85 [word-break:keep-all] sm:text-sm">
                       {t.hero.ctaPhotoGeneratorLine2}
                     </span>
                   </Link>
@@ -226,10 +224,10 @@ export default function HeroSection() {
                     title={t.hero.labComingSoon}
                     className={`${HERO_SECONDARY} cursor-not-allowed border-white/10 bg-white/[0.03] text-white/35`}
                   >
-                    <span className="text-[12px] font-semibold leading-tight [word-break:keep-all] sm:text-sm">
+                    <span className="text-[11px] font-semibold leading-tight [word-break:keep-all] sm:text-sm">
                       {t.hero.ctaPhotoGeneratorLine1}
                     </span>
-                    <span className="text-[12px] font-semibold leading-tight [word-break:keep-all] sm:text-sm">
+                    <span className="text-[11px] font-semibold leading-tight [word-break:keep-all] sm:text-sm">
                       {t.hero.ctaPhotoGeneratorLine2}
                     </span>
                   </span>
@@ -241,10 +239,10 @@ export default function HeroSection() {
                     className={`btn-secondary group ${HERO_SECONDARY} border-white/15`}
                     aria-label={t.hero.ctaPrintSmartForm}
                   >
-                    <span className="text-[12px] font-semibold leading-tight [word-break:keep-all] sm:text-sm">
+                    <span className="text-[11px] font-semibold leading-tight [word-break:keep-all] sm:text-sm">
                       {t.hero.ctaPrintSmartFormLine1}
                     </span>
-                    <span className="text-[12px] font-semibold leading-tight text-white/85 [word-break:keep-all] sm:text-sm">
+                    <span className="text-[11px] font-semibold leading-tight text-white/85 [word-break:keep-all] sm:text-sm">
                       {t.hero.ctaPrintSmartFormLine2}
                     </span>
                   </Link>
@@ -254,10 +252,10 @@ export default function HeroSection() {
                     title={t.hero.labComingSoon}
                     className={`${HERO_SECONDARY} cursor-not-allowed border-white/10 bg-white/[0.03] text-white/35`}
                   >
-                    <span className="text-[12px] font-semibold leading-tight [word-break:keep-all] sm:text-sm">
+                    <span className="text-[11px] font-semibold leading-tight [word-break:keep-all] sm:text-sm">
                       {t.hero.ctaPrintSmartFormLine1}
                     </span>
-                    <span className="text-[12px] font-semibold leading-tight [word-break:keep-all] sm:text-sm">
+                    <span className="text-[11px] font-semibold leading-tight [word-break:keep-all] sm:text-sm">
                       {t.hero.ctaPrintSmartFormLine2}
                     </span>
                   </span>
