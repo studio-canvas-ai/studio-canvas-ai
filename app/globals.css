@@ -372,6 +372,15 @@
   margin-inline: auto;
 }
 
+/* Landing dual showcase — Shorts phone + A4 poster float stage */
+.hero-dual {
+  isolation: isolate;
+}
+
+.hero-dual__card {
+  will-change: transform;
+}
+
 .image-compare__frame {
   position: relative;
   aspect-ratio: 4 / 5;

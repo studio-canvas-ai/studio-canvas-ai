@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, Sparkles, Images, Lock } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { useCredits } from "@/components/CreditsProvider";
-import { HERO_BEFORE_IMAGE, HERO_AFTER_IMAGE } from "@/lib/data";
-import ImageComparisonSlider from "@/components/ImageComparisonSlider";
+import HeroDualShowcase from "@/components/HeroDualShowcase";
 import { saveAuthNextPath } from "@/lib/supabase/oauth";
 import { SHORTS_THUMBNAIL_PATH } from "@/lib/shortsThumbnail";
 import { PRINT_SMART_FORM_PATH } from "@/lib/printSmartForm";
@@ -278,37 +277,7 @@ export default function HeroSection() {
           </div>
 
           <div className="animate-fade-in flex justify-center lg:justify-end lg:pt-1">
-            <div
-              className="hero-compare animate-float w-full max-w-[min(100%,420px)] xl:max-w-[min(100%,480px)]"
-              style={{ animationDuration: "6s" }}
-            >
-              <ImageComparisonSlider
-                beforeSrc={HERO_BEFORE_IMAGE}
-                afterSrc={HERO_AFTER_IMAGE}
-                beforeLabel={t.hero.before}
-                afterLabel={t.hero.after}
-                ariaLabel={`${t.hero.before} / ${t.hero.after}`}
-                frameClassName="hero-compare__frame"
-                statusChip={
-                  <div className="glass-card flex items-center gap-1.5 px-2.5 py-1.5">
-                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-glow-emerald" />
-                    <span className="text-[10px] text-white/70">
-                      {t.hero.renderComplete}
-                    </span>
-                  </div>
-                }
-              />
-              <div className="mt-2 flex justify-start sm:mt-3">
-                <div className="glass-card px-3 py-2">
-                  <div className="text-[10px] text-white/50">
-                    {t.hero.styleLabel}
-                  </div>
-                  <div className="text-xs font-medium text-glow-violet">
-                    {t.hero.styleCinematic}
-                  </div>
-                </div>
-              </div>
-            </div>
+            <HeroDualShowcase />
           </div>
         </div>
       </div>
