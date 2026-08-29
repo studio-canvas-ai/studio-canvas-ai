@@ -272,33 +272,33 @@ export default function TemplateWarehouseModal() {
       <button
         type="button"
         aria-label="닫기"
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        className="absolute inset-0 bg-slate-950/70 backdrop-blur-md"
         onClick={() => setOpen(false)}
       />
       <div
         role="dialog"
         aria-modal="true"
         aria-label="템플릿창고"
-        className="relative z-[1] flex max-h-[min(92vh,860px)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-600/60 bg-[#121824] shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
+        className="relative z-[1] flex max-h-[min(92vh,860px)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-600/70 bg-slate-900/90 shadow-[0_24px_80px_rgba(15,23,42,0.65)] ring-1 ring-white/10 backdrop-blur-md"
       >
-        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-5">
+        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-700/60 px-4 py-3 sm:px-5">
           <div>
             <h2 className="text-base font-semibold text-white">템플릿창고</h2>
-            <p className="mt-0.5 text-[11px] text-white/45">
+            <p className="mt-0.5 text-[11px] text-slate-300">
               참고 템플릿을 선택하면 Screen 26 캔버스에 바로 적용됩니다 (A4 단면)
             </p>
           </div>
           <button
             type="button"
             onClick={() => setOpen(false)}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/15 text-white/70 hover:bg-white/10 hover:text-white"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-600/70 text-slate-300 hover:bg-slate-800/80 hover:text-white"
             aria-label="모달 닫기"
           >
             <X className="h-4 w-4" />
           </button>
         </header>
 
-        <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-white/10 px-3 py-2 sm:px-4">
+        <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-slate-700/60 px-3 py-2 sm:px-4">
           {TABS.map((item) => (
             <button
               key={item.id}
@@ -306,8 +306,8 @@ export default function TemplateWarehouseModal() {
               onClick={() => setTab(item.id)}
               className={`shrink-0 rounded-lg px-3 py-2 text-left transition ${
                 tab === item.id
-                  ? "bg-emerald-500/15 text-emerald-100 ring-1 ring-emerald-400/40"
-                  : "text-white/65 hover:bg-white/5 hover:text-white"
+                  ? "bg-emerald-500/20 text-emerald-100 ring-1 ring-emerald-400/45"
+                  : "text-slate-300 hover:bg-slate-800/70 hover:text-white"
               }`}
             >
               <span className="block text-[12px] font-bold leading-none">
@@ -323,7 +323,7 @@ export default function TemplateWarehouseModal() {
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-smooth p-3 sm:p-4">
           {tab === "single" ? (
             template01Cards.length === 0 ? (
-              <p className="py-10 text-center text-[13px] text-white/45">
+              <p className="py-10 text-center text-[13px] text-slate-400">
                 표시할 템플릿이 없습니다. 휴지통으로 모두 삭제되었습니다.
               </p>
             ) : (
@@ -333,7 +333,7 @@ export default function TemplateWarehouseModal() {
 
           {tab === "double" ? (
             <>
-              <p className="mb-2 text-[11px] text-white/45">
+              <p className="mb-2 text-[11px] text-slate-400">
                 Template 02 · 기본 A4 템플릿 (Template 01과 동일 베이스)
               </p>
               {renderBaseGrid(baseFallbackCards, "double", false)}
@@ -395,7 +395,7 @@ export default function TemplateWarehouseModal() {
                 </div>
               ) : null}
               <div>
-                <p className="mb-2 text-[11px] text-white/45">
+                <p className="mb-2 text-[11px] text-slate-400">
                   기본 A4 템플릿 (공통 베이스)
                 </p>
                 {renderBaseGrid(baseFallbackCards, "public", false)}
@@ -412,7 +412,7 @@ export default function TemplateWarehouseModal() {
                     {space4Loading ? " · 불러오는 중…" : ` · ${space4Items.length}건`}
                   </p>
                   {space4Items.length === 0 && !space4Loading ? (
-                    <p className="mb-3 rounded-lg border border-white/10 bg-black/20 px-3 py-4 text-center text-[12px] text-white/45">
+                    <p className="mb-3 rounded-lg border border-slate-700/60 bg-slate-950/50 px-3 py-4 text-center text-[12px] text-slate-400">
                       아직 적재된 다운로드 작업물이 없습니다. 유저가 Screen 26에서
                       다운로드하면 여기에 자동 저장됩니다.
                     </p>
@@ -430,13 +430,13 @@ export default function TemplateWarehouseModal() {
                   )}
                 </div>
               ) : (
-                <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-3 text-[12px] text-white/50">
+                <p className="rounded-lg border border-slate-700/60 bg-slate-950/50 px-3 py-3 text-[12px] text-slate-400">
                   Template 04 적재함은 관리자 전용입니다. 아래는 공통 기본 A4
                   템플릿입니다.
                 </p>
               )}
               <div>
-                <p className="mb-2 text-[11px] text-white/45">
+                <p className="mb-2 text-[11px] text-slate-400">
                   기본 A4 템플릿 (공통 베이스)
                 </p>
                 {renderBaseGrid(baseFallbackCards, "single", false)}

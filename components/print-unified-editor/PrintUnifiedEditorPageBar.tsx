@@ -20,8 +20,8 @@ export default function PrintUnifiedEditorPageBar({
   onSelectPage,
 }: PrintUnifiedEditorPageBarProps) {
   return (
-    <div className="shrink-0 rounded-xl border border-white/10 bg-black/30 p-2">
-      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-white/55">
+    <div className="shrink-0 rounded-xl border border-slate-700/60 bg-slate-800/50 p-2 backdrop-blur-sm">
+      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-300">
         페이지
       </p>
       <div className="grid grid-cols-4 gap-1.5">

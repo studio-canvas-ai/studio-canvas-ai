@@ -1040,7 +1040,7 @@ export default function PrintUnifiedEditor() {
           />
         }
         controls={
-          <div className="flex h-full min-h-0 flex-col gap-2">
+          <div className="flex h-full min-h-0 flex-col gap-2 p-2 sm:p-2.5">
             {/* Specs + AI generate: natural height, no inner scroll / clipped CTA */}
             <div className="shrink-0 overflow-visible">
               <SpecSettingsPanel
@@ -1126,7 +1126,7 @@ export default function PrintUnifiedEditor() {
           </div>
         }
         designPanel={
-          <div className="flex h-full min-h-0 w-full flex-col gap-2">
+          <div className="flex h-full min-h-0 w-full flex-col gap-2 p-2 sm:p-2.5">
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]">
               <AiTemplateStudio
                 key={`unified-studio-${pageIndex}`}

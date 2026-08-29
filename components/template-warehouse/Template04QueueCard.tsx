@@ -48,7 +48,7 @@ export default function Template04QueueCard({
           )}
         </div>
       </div>
-      <div className="space-y-1 border-t border-white/10 bg-black/20 px-2 py-1.5">
+      <div className="space-y-1 border-t border-slate-700/60 bg-slate-950/40 px-2 py-1.5">
         <p className="line-clamp-2 text-[11px] font-semibold leading-snug text-white">
           {item.label}
         </p>

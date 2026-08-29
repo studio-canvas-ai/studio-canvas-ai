@@ -3259,7 +3259,7 @@ export default function AiTemplateStudio({
       ? "lg:grid-cols-2 [&>section:first-child]:lg:row-span-2 [&>section:nth-child(2)]:lg:col-start-2 [&>section:nth-child(2)]:lg:row-start-1 [&>section:nth-child(3)]:lg:col-start-2 [&>section:nth-child(3)]:lg:row-start-2"
       : "lg:grid-cols-3";
   const panelSectionClass = isPanelOnly
-    ? "flex min-h-0 flex-col gap-4 rounded-2xl border border-white/10 bg-black/35 p-4"
+    ? "flex min-h-0 flex-col gap-4 rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4 backdrop-blur-sm"
     : "flex min-h-0 flex-col gap-4 rounded-2xl border border-white/10 bg-black/35 p-4 lg:overflow-y-auto";
 
   return (

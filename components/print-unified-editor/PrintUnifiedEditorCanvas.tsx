@@ -260,7 +260,7 @@ export default function PrintUnifiedEditorCanvas({
   }, [stagePanning, onContentOffsetChange]);
 
   return (
-    <section className="flex h-full min-h-0 flex-col gap-1">
+    <section className="flex h-full min-h-0 flex-col gap-1 p-1.5 sm:p-2">
       <header className="flex shrink-0 items-center gap-2 px-0.5 leading-none">
         <h2 className="shrink-0 text-[12px] font-semibold tracking-tight text-slate-200 [word-break:keep-all] sm:text-[13px]">
           {cs.printTitle}
@@ -307,8 +307,8 @@ export default function PrintUnifiedEditorCanvas({
         ) : null}
       </header>
 
-      <div className="relative flex min-h-0 flex-1 flex-col rounded-2xl border border-slate-800 bg-[#121824] p-1.5 shadow-[0_8px_32px_rgba(0,0,0,0.35)] sm:gap-2 sm:p-2">
-        <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-slate-800 bg-[#0E1420]">
+      <div className="relative flex min-h-0 flex-1 flex-col rounded-xl border border-slate-700/60 bg-slate-900/50 p-1.5 shadow-inner sm:gap-2 sm:p-2">
+        <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-slate-700/50 bg-slate-950/80">
           {pageActivated ? (
             <div
               className={`absolute inset-0 flex items-center justify-center overflow-hidden p-1.5 sm:p-2 [container-type:size] ${
@@ -332,7 +332,7 @@ export default function PrintUnifiedEditorCanvas({
                 <div
                   data-page-stage
                   data-page-card
-                  className="relative overflow-hidden rounded-md border border-slate-700/70 bg-[#0B0F19] shadow-[0_12px_36px_rgba(0,0,0,0.4)]"
+                  className="relative overflow-hidden rounded-md border border-slate-600/70 bg-slate-950 shadow-[0_12px_36px_rgba(15,23,42,0.55)]"
                   style={stageStyle}
                   onPointerDown={handleCanvasBlankPointerDown}
                 >
@@ -350,7 +350,7 @@ export default function PrintUnifiedEditorCanvas({
                         }}
                       />
                     ) : (
-                      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(99,102,241,0.22),transparent_55%),radial-gradient(ellipse_at_80%_80%,rgba(16,185,129,0.12),transparent_50%),linear-gradient(160deg,#121824,#0B0F19)]" />
+                      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(99,102,241,0.2),transparent_55%),radial-gradient(ellipse_at_80%_80%,rgba(16,185,129,0.1),transparent_50%),linear-gradient(160deg,#1e293b,#0f172a)]" />
                     )}
 
                     {blueprint ? (
@@ -462,7 +462,7 @@ export default function PrintUnifiedEditorCanvas({
         </div>
 
         {pageActivated ? (
-          <div className="pointer-events-none absolute bottom-3 right-3 z-20 flex items-center gap-1 rounded-lg border border-white/10 bg-black/70 p-0.5 shadow-lg backdrop-blur-sm">
+          <div className="pointer-events-none absolute bottom-3 right-3 z-20 flex items-center gap-1 rounded-lg border border-slate-600/70 bg-slate-900/90 p-0.5 shadow-lg backdrop-blur-md">
             <button
               type="button"
               aria-label="캔버스 축소"

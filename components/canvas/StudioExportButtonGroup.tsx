@@ -57,13 +57,13 @@ export default function StudioExportButtonGroup({
   const highParts = splitQuotaLabel(highLabel);
 
   const downloadClass = unified
-    ? "inline-flex w-full min-h-[2.85rem] items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-white disabled:opacity-50"
+    ? "inline-flex w-full min-h-[2.85rem] items-center justify-center gap-1.5 rounded-xl border border-white/20 px-3 py-2.5 text-white shadow-[0_8px_24px_rgba(15,23,42,0.35)] disabled:opacity-50"
     : compact
       ? "inline-flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[11px] font-semibold text-white disabled:opacity-50"
       : "inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-lg disabled:opacity-50";
 
   const secondaryClass = unified
-    ? "inline-flex w-full flex-row items-center justify-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2 py-2.5 text-[12px] font-semibold leading-none text-white hover:bg-white/10 disabled:opacity-50 [word-break:keep-all] whitespace-nowrap"
+    ? "inline-flex w-full flex-row items-center justify-center gap-1.5 rounded-lg border border-slate-600/70 bg-slate-800/60 px-2 py-2.5 text-[12px] font-semibold leading-none text-slate-100 hover:border-slate-500 hover:bg-slate-700/70 disabled:opacity-50 [word-break:keep-all] whitespace-nowrap"
     : compact
       ? "inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-[#0E1420] px-3 py-2 text-[11px] font-medium text-slate-200 hover:bg-slate-800/60 disabled:opacity-50"
       : "inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-white/85 hover:bg-white/10 disabled:opacity-50";
@@ -74,7 +74,7 @@ export default function StudioExportButtonGroup({
       ? "h-3.5 w-3.5"
       : "h-4 w-4 shrink-0";
   const hintClass = unified
-    ? "px-0.5 text-center text-[9px] leading-snug text-white/40"
+    ? "px-0.5 text-center text-[9px] leading-snug text-slate-400"
     : compact
       ? "px-0.5 text-center text-[10px] leading-snug text-slate-400"
       : "text-center text-xs leading-snug text-white/45";
@@ -84,10 +84,10 @@ export default function StudioExportButtonGroup({
       ? "min-w-0 text-center text-[10px] font-semibold leading-tight [word-break:keep-all]"
       : "min-w-0 text-center text-[12px] font-semibold leading-tight [word-break:keep-all] sm:text-sm";
   const downloadTitleClass = unified
-    ? "truncate text-[13px] font-bold sm:text-[14px]"
+    ? "truncate text-[13px] font-extrabold tracking-tight sm:text-[14px]"
     : "";
   const downloadQuotaClass = unified
-    ? "shrink-0 text-[11px] font-semibold sm:text-[12px]"
+    ? "shrink-0 text-[11px] font-bold sm:text-[12px]"
     : "";
 
   const renderDownloadLabel = (
@@ -107,7 +107,7 @@ export default function StudioExportButtonGroup({
     <div
       className={
         unified
-          ? "mt-auto grid shrink-0 gap-1.5 border-t border-white/10 pt-3"
+          ? "mt-auto grid shrink-0 gap-1.5 border-t border-slate-700/60 pt-3"
           : compact
             ? "grid shrink-0 gap-1.5 border-t border-slate-800/80 pt-1.5"
             : "mt-auto grid shrink-0 gap-2 border-t border-white/10 pt-4"
@@ -118,7 +118,7 @@ export default function StudioExportButtonGroup({
           type="button"
           onClick={onDownloadStandard}
           disabled={busy || !canDownloadStandard}
-          className={`${downloadClass} bg-gradient-to-r from-teal-600 to-emerald-500`}
+          className={`${downloadClass} bg-gradient-to-r from-teal-500 via-emerald-500 to-emerald-400`}
         >
           <Download className={iconClass} />
           <span className={labelClass}>
@@ -129,7 +129,7 @@ export default function StudioExportButtonGroup({
           type="button"
           onClick={onDownloadHigh}
           disabled={busy || !canDownloadHigh}
-          className={`${downloadClass} bg-gradient-to-r from-purple-600 to-indigo-500`}
+          className={`${downloadClass} bg-gradient-to-r from-violet-600 via-indigo-500 to-sky-500`}
         >
           <Download className={iconClass} />
           <span className={labelClass}>

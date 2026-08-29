@@ -292,8 +292,8 @@ export default function SpecSettingsPanel({
     <section
       className={
         fitContent
-          ? "flex w-full flex-col gap-2.5 overflow-visible rounded-2xl border border-slate-800 bg-[#121824] p-3 shadow-[0_8px_32px_rgba(0,0,0,0.35)] sm:p-3.5"
-          : "flex h-full min-h-0 flex-col gap-2.5 overflow-y-auto rounded-2xl border border-slate-800 bg-[#121824] p-3 shadow-[0_8px_32px_rgba(0,0,0,0.35)] sm:p-3.5"
+          ? "flex w-full flex-col gap-2.5 overflow-visible rounded-2xl border border-slate-700/60 bg-slate-900/80 p-3 shadow-[0_8px_32px_rgba(15,23,42,0.35)] backdrop-blur-md sm:p-3.5"
+          : "flex h-full min-h-0 flex-col gap-2.5 overflow-y-auto rounded-2xl border border-slate-700/60 bg-slate-900/80 p-3 shadow-[0_8px_32px_rgba(15,23,42,0.35)] backdrop-blur-md sm:p-3.5"
       }
     >
       {/* 규격 · 스타일 · 용도 · (인쇄: 장수) · 예시 · (인쇄: 분야) */}
@@ -336,7 +336,7 @@ export default function SpecSettingsPanel({
               className={`flex w-full items-center justify-between rounded-lg border px-2.5 py-2 text-left text-[12px] font-semibold transition ${
                 (specPicks.format && formatId === "free") || freeSizeOpen
                   ? "border-indigo-400/40 bg-indigo-500/15 text-slate-50"
-                  : "border-slate-700/80 bg-[#0E1420] text-slate-200 hover:border-slate-600 hover:bg-slate-800/60"
+                  : "border-slate-600/70 bg-slate-800/70 text-slate-100 hover:border-slate-500 hover:bg-slate-700/60"
               }`}
             >
               <span className="[word-break:keep-all]">
@@ -356,8 +356,8 @@ export default function SpecSettingsPanel({
               }`}
             >
               <div className="min-h-0 overflow-hidden">
-                <div className="mt-2 space-y-2.5 rounded-xl border border-slate-700/70 bg-[#0B0F19] p-2.5">
-                  <div className="flex overflow-hidden rounded-lg border border-slate-700">
+                <div className="mt-2 space-y-2.5 rounded-xl border border-slate-700/60 bg-slate-950/70 p-2.5 backdrop-blur-sm">
+                  <div className="flex overflow-hidden rounded-lg border border-slate-600/70">
                     {(
                       [
                         { id: "cm", label: "CM" },
@@ -393,7 +393,7 @@ export default function SpecSettingsPanel({
                           setWidthInput(e.target.value);
                           setSizeError(null);
                         }}
-                        className="w-full rounded-lg border border-slate-700 bg-[#121824] px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-indigo-400/50 focus:ring-2 focus:ring-indigo-500/20"
+                        className="w-full rounded-lg border border-slate-600/70 bg-slate-900/80 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-sky-400/50 focus:ring-2 focus:ring-sky-500/20"
                       />
                     </label>
                     <label className="space-y-1">
@@ -409,7 +409,7 @@ export default function SpecSettingsPanel({
                           setHeightInput(e.target.value);
                           setSizeError(null);
                         }}
-                        className="w-full rounded-lg border border-slate-700 bg-[#121824] px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-indigo-400/50 focus:ring-2 focus:ring-indigo-500/20"
+                        className="w-full rounded-lg border border-slate-600/70 bg-slate-900/80 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-sky-400/50 focus:ring-2 focus:ring-sky-500/20"
                       />
                     </label>
                   </div>
@@ -482,7 +482,7 @@ export default function SpecSettingsPanel({
                 });
                 setOpenKey(null);
               }}
-              className="mt-1 w-full rounded-lg border border-slate-700/80 bg-[#0E1420] px-2.5 py-2 text-[11px] font-semibold text-slate-400 hover:border-slate-600 hover:text-slate-200"
+              className="mt-1 w-full rounded-lg border border-slate-600/70 bg-slate-800/60 px-2.5 py-2 text-[11px] font-semibold text-slate-300 hover:border-slate-500 hover:text-slate-100"
             >
               {cs.styleReset}
             </button>
@@ -580,7 +580,7 @@ export default function SpecSettingsPanel({
                           className={`rounded-lg border px-2.5 py-2 text-left text-[11px] font-medium leading-snug [word-break:keep-all] transition pointer-coarse:min-h-10 ${
                             on
                               ? "border-indigo-400 bg-indigo-500/20 text-indigo-50 ring-2 ring-indigo-400/60"
-                              : "border-slate-700 bg-[#0E1420] text-slate-300 hover:border-slate-500 hover:text-white"
+                              : "border-slate-600/70 bg-slate-800/70 text-slate-200 hover:border-slate-500 hover:text-white"
                           }`}
                         >
                           {example}
@@ -674,7 +674,7 @@ export default function SpecSettingsPanel({
                           className={`rounded-full border px-2.5 py-1.5 text-[11px] font-semibold [word-break:keep-all] transition pointer-coarse:min-h-9 pointer-coarse:px-3 ${
                             on
                               ? "border-indigo-400/50 bg-indigo-500/20 text-indigo-100"
-                              : "border-slate-700 bg-[#0E1420] text-slate-300 hover:border-slate-500 hover:text-white"
+                              : "border-slate-600/70 bg-slate-800/70 text-slate-200 hover:border-slate-500 hover:text-white"
                           }`}
                         >
                           {title}
@@ -728,7 +728,7 @@ export default function SpecSettingsPanel({
                 aria-label="메인 프롬프트 / 주문 내용"
                 rows={2}
                 placeholder="예시에서 선택하거나 주문 내용을 입력하세요."
-                className="min-h-[3.5rem] w-full resize-none rounded-lg border border-slate-700 bg-[#0B0F19] px-2.5 py-1.5 text-sm leading-relaxed text-slate-100 outline-none placeholder:text-slate-600 focus:border-slate-500 focus:ring-2 focus:ring-indigo-500/20"
+                className="min-h-[3.5rem] w-full resize-none rounded-lg border border-slate-600/70 bg-slate-950/70 px-2.5 py-1.5 text-sm leading-relaxed text-slate-100 outline-none placeholder:text-slate-500 focus:border-sky-400/50 focus:ring-2 focus:ring-sky-500/20"
               />
             </div>
           }

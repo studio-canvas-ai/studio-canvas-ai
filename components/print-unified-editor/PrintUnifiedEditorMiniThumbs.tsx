@@ -54,12 +54,12 @@ export default function PrintUnifiedEditorMiniThumbs({
   );
 
   return (
-    <div className="w-full shrink-0 rounded-lg border border-white/10 bg-black/30 px-1.5 py-1">
+    <div className="w-full shrink-0 rounded-xl border border-slate-700/60 bg-slate-800/50 px-1.5 py-1.5 backdrop-blur-sm">
       <div className="mb-1 flex items-center justify-between gap-1.5">
-        <p className="text-[10px] font-semibold leading-none text-white/70">
+        <p className="text-[10px] font-semibold leading-none text-slate-200">
           {fillCanvas(cs.miniView, { label: "8페이지" })}
         </p>
-        <span className="text-[9px] tabular-nums leading-none text-white/35">
+        <span className="text-[9px] tabular-nums leading-none text-slate-400">
           {pageCount}면
         </span>
       </div>
@@ -90,10 +90,10 @@ export default function PrintUnifiedEditorMiniThumbs({
               }`}
             >
               <div
-                className={`relative mx-auto overflow-hidden rounded border bg-[#0B0F19] ${
+                className={`relative mx-auto overflow-hidden rounded border bg-slate-950 ${
                   active
                     ? "border-emerald-400/55 shadow-[0_0_0_1px_rgba(52,211,153,0.2)]"
-                    : "border-slate-700/80 group-hover:border-slate-500"
+                    : "border-slate-600/80 group-hover:border-slate-500"
                 }`}
                 style={thumbStyle}
               >
@@ -110,13 +110,13 @@ export default function PrintUnifiedEditorMiniThumbs({
                     }}
                   />
                 ) : (
-                  <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(99,102,241,0.18),transparent_55%),linear-gradient(160deg,#1a2234,#0B0F19)]" />
+                  <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(99,102,241,0.18),transparent_55%),linear-gradient(160deg,#334155,#0f172a)]" />
                 )}
                 <span
                   className={`absolute bottom-px left-px z-[1] rounded px-0.5 text-[7px] font-bold leading-tight ${
                     active
                       ? "bg-emerald-600/90 text-white"
-                      : "bg-black/60 text-white/85"
+                      : "bg-slate-900/75 text-slate-100"
                   }`}
                 >
                   {page}

@@ -163,8 +163,8 @@ export default function ControlBarDropdown({
               }`
         } ${
           open
-            ? "border border-slate-600 bg-slate-800/80 text-slate-100 shadow-[0_0_0_1px_rgba(148,163,184,0.12)]"
-            : "border border-slate-800 bg-[#0E1420] text-slate-200 hover:border-slate-700 hover:bg-slate-800/40"
+            ? "border border-sky-400/40 bg-slate-800/90 text-slate-50 shadow-[0_0_0_1px_rgba(56,189,248,0.2)]"
+            : "border border-slate-700/60 bg-slate-800/60 text-slate-100 hover:border-slate-500 hover:bg-slate-700/50"
         }`}
       >
         {!compact && icon ? (
@@ -198,7 +198,7 @@ export default function ControlBarDropdown({
             <div
               ref={menuRef}
               role="listbox"
-              className="overflow-hidden rounded-2xl border border-slate-700/80 bg-[#121824] shadow-[0_16px_48px_rgba(0,0,0,0.55)] ring-1 ring-black/40"
+              className="overflow-hidden rounded-2xl border border-slate-600/70 bg-slate-900/90 shadow-[0_20px_60px_rgba(15,23,42,0.55)] ring-1 ring-white/10 backdrop-blur-md"
               style={menuStyle}
             >
               <div className="max-h-[inherit] overflow-y-auto overscroll-contain p-1.5">
@@ -237,7 +237,7 @@ export function ControlMenuItem({
       className={`w-full rounded-lg px-2 py-2 text-left transition ${
         active
           ? "bg-indigo-500/20 text-slate-50 ring-1 ring-indigo-400/35"
-          : "text-slate-200 hover:bg-slate-800/80"
+          : "text-slate-100 hover:bg-slate-700/70"
       }`}
     >
       {oneLine ? (
