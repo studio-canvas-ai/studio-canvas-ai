@@ -8,6 +8,7 @@ import {
 } from "@/lib/space4Vault";
 import { upsertTemplate03Public } from "@/lib/template03Public";
 import { cloneTemplatePages } from "@/lib/templateWarehouse";
+import { normalizeSpace4ThumbSrc } from "@/lib/space4Thumb";
 import type { PrintFormatId, PrintPageCount } from "@/lib/printWizardTypes";
 import type { TextLayer } from "@/lib/thumbnailStyles";
 
@@ -40,10 +41,9 @@ function resolveThumbSrc(
   vaultThumb: string | null | undefined
 ): string | null {
   const bg = resolveBackgroundUrl(project, vaultThumb);
-  if (typeof vaultThumb === "string" && vaultThumb.startsWith("http")) {
-    return vaultThumb.slice(0, 500);
-  }
-  return bg ? bg.slice(0, 500) : null;
+  const fromVault = normalizeSpace4ThumbSrc(vaultThumb);
+  if (fromVault) return fromVault;
+  return bg ? bg.slice(0, 2048) : null;
 }
 
 /**

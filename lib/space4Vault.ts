@@ -11,6 +11,7 @@ import {
   isR2Configured,
   putR2Object,
 } from "@/lib/r2";
+import { normalizeSpace4ThumbSrc } from "@/lib/space4Thumb";
 
 export const SPACE4_VAULT_MAX = 500;
 
@@ -102,7 +103,7 @@ export async function depositSpace4Record(
     sealedContent: sealed,
     createdAt: input.createdAt ?? Date.now(),
     source: input.source ?? "print-unified-editor",
-    thumbSrc: input.thumbSrc ?? null,
+    thumbSrc: normalizeSpace4ThumbSrc(input.thumbSrc) ?? null,
   };
 
   return withDbLock(async () => {

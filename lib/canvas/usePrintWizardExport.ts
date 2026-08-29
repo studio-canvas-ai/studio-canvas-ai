@@ -185,6 +185,7 @@ export function usePrintWizardExport({
         baseName,
         imageExt: quality === "high" ? "png" : "jpg",
         depositToSpace4: depositSpace4,
+        space4ThumbBlob: imageBlob,
         successMessage:
           quality === "high"
             ? "고화질 파일 + 수정용 상태파일(.sca)을 저장하고 최근 목록에 등록했습니다."

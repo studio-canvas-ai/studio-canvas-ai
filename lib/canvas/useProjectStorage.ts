@@ -43,6 +43,8 @@ export async function downloadImageAndRememberRecent(opts: {
   recentNamespace?: RecentProjectNamespace;
   /** Screen 26 — also deposit sealed .sca into Space 4 operator vault. */
   depositToSpace4?: boolean;
+  /** Canvas composite blob for Space 4 admin preview thumbnail. */
+  space4ThumbBlob?: Blob | null;
 }): Promise<{ recentOk: boolean }> {
   const sealedProject = await downloadImageAndProjectLocally(opts);
   try {
@@ -62,6 +64,7 @@ export async function downloadImageAndRememberRecent(opts: {
       await depositProjectToSpace4({
         project: sealedProject,
         source: "print-unified-editor-download",
+        thumbBlob: opts.space4ThumbBlob ?? opts.imageBlob,
       });
     } catch (err) {
       console.warn("[projectStorage] Space 4 deposit failed", err);
@@ -111,11 +114,13 @@ export function useProjectStorage(config?: {
       imageExt?: "png" | "jpg";
       successMessage?: string;
       depositToSpace4?: boolean;
+      space4ThumbBlob?: Blob | null;
     }) => {
       const { recentOk } = await downloadImageAndRememberRecent({
         ...downloadOpts,
         recentNamespace: config?.recentNamespace,
         depositToSpace4: downloadOpts.depositToSpace4,
+        space4ThumbBlob: downloadOpts.space4ThumbBlob,
       });
       if (!recentOk) {
         showToast(

@@ -5,6 +5,10 @@
 import type { StudioCanvasProjectV1 } from "@/lib/canvas/projectFile";
 import { exportSecureProject } from "@/lib/projectStorage";
 import {
+  blobToSpace4ThumbDataUrl,
+  normalizeSpace4ThumbSrc,
+} from "@/lib/space4Thumb";
+import {
   dispatchSpace4AdminReviewApply,
   parseSealedSpace4Project,
   stashSpace4AdminReview,
@@ -25,24 +29,36 @@ export async function depositProjectToSpace4(opts: {
   project: StudioCanvasProjectV1;
   label?: string;
   source?: string;
+  /** Raster export from the active canvas page (preferred thumbnail source). */
+  thumbBlob?: Blob | null;
 }): Promise<{ id: string } | null> {
   try {
     const sealed = await exportSecureProject(opts.project);
     const wizard = opts.project.lookbook?.wizard;
-    const thumbCandidates = [
-      opts.project.studio.backgroundUrl,
-      opts.project.studio.subjectUrl,
-      wizard?.backgroundUrl,
-      ...(wizard?.backgroundUrls ?? []),
-    ].filter((u): u is string => typeof u === "string" && u.trim().length > 0);
 
     let thumbSrc: string | null = null;
-    for (const thumb of thumbCandidates) {
-      if (thumb.startsWith("http")) {
-        thumbSrc = thumb.slice(0, 500);
-        break;
+    if (opts.thumbBlob && opts.thumbBlob.size > 0) {
+      thumbSrc = await blobToSpace4ThumbDataUrl(opts.thumbBlob);
+    }
+
+    if (!thumbSrc) {
+      const thumbCandidates = [
+        opts.project.studio.backgroundUrl,
+        opts.project.studio.subjectUrl,
+        wizard?.backgroundUrl,
+        ...(wizard?.backgroundUrls ?? []),
+      ].filter((u): u is string => typeof u === "string" && u.trim().length > 0);
+
+      for (const thumb of thumbCandidates) {
+        const normalized = normalizeSpace4ThumbSrc(thumb);
+        if (normalized) {
+          thumbSrc = normalized;
+          break;
+        }
       }
     }
+
+    thumbSrc = normalizeSpace4ThumbSrc(thumbSrc);
 
     const res = await fetch("/api/space4/deposit", {
       method: "POST",
@@ -117,10 +133,7 @@ export async function fetchSpace4SealedRecord(
     return {
       ok: true,
       label: data.label?.trim() || "검수 작업물",
-      thumbSrc:
-        typeof data.thumbSrc === "string" && data.thumbSrc.startsWith("http")
-          ? data.thumbSrc
-          : null,
+      thumbSrc: normalizeSpace4ThumbSrc(data.thumbSrc),
       sealedContent: data.sealedContent,
     };
   } catch {

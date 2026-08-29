@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink, Loader2 } from "lucide-react";
+import { ExternalLink, ImageOff, Loader2 } from "lucide-react";
 import type { Space4VaultMeta } from "@/lib/space4Client";
 
 export type Template04QueueCardProps = {
@@ -21,32 +21,38 @@ export default function Template04QueueCard({
     hour: "2-digit",
     minute: "2-digit",
   });
+  const hasThumb = Boolean(item.thumbSrc?.trim());
 
   return (
-    <li className="flex flex-col overflow-hidden rounded-xl border border-amber-400/25 bg-gradient-to-b from-amber-500/[0.08] to-black/25 shadow-sm">
+    <li className="flex flex-col overflow-hidden rounded-xl border border-amber-300/35 bg-gradient-to-b from-amber-500/[0.12] to-slate-950/90 shadow-[0_8px_24px_rgba(0,0,0,0.35)] ring-1 ring-white/10">
       <div
-        className="relative w-full overflow-hidden bg-slate-900"
+        className="relative w-full overflow-hidden border-b border-white/15 bg-white p-1"
         style={{ aspectRatio: String(210 / 297) }}
         aria-hidden
       >
-        {item.thumbSrc ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={item.thumbSrc}
-            alt=""
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center bg-slate-800 text-[10px] font-semibold text-white/40">
-            .sca
-          </div>
-        )}
+        <div className="relative h-full w-full overflow-hidden rounded-md bg-white shadow-inner ring-1 ring-black/10">
+          {hasThumb ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={item.thumbSrc!}
+              alt=""
+              className="h-full w-full object-contain"
+              loading="lazy"
+              decoding="async"
+            />
+          ) : (
+            <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-gradient-to-br from-slate-100 to-slate-200 text-slate-500">
+              <ImageOff className="h-5 w-5 opacity-60" aria-hidden />
+              <span className="text-[9px] font-semibold">미리보기 없음</span>
+            </div>
+          )}
+        </div>
       </div>
-      <div className="space-y-1 border-t border-white/8 px-2 py-1.5">
+      <div className="space-y-1 border-t border-white/10 bg-black/20 px-2 py-1.5">
         <p className="line-clamp-2 text-[11px] font-semibold leading-snug text-white">
           {item.label}
         </p>
-        <p className="truncate text-[9px] text-white/40 tabular-nums">{when}</p>
+        <p className="truncate text-[9px] text-white/50 tabular-nums">{when}</p>
         <button
           type="button"
           disabled={opening}

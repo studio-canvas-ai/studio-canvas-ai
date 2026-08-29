@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { depositSpace4Record } from "@/lib/space4Vault";
 import { resolveAppUser } from "@/lib/resolveAppUser";
+import { normalizeSpace4ThumbSrc } from "@/lib/space4Thumb";
 
 export const runtime = "nodejs";
 
@@ -41,7 +42,9 @@ export async function POST(req: Request) {
       createdAt: typeof body.createdAt === "number" ? body.createdAt : Date.now(),
       source:
         typeof body.source === "string" ? body.source : "print-unified-editor",
-      thumbSrc: typeof body.thumbSrc === "string" ? body.thumbSrc : null,
+      thumbSrc: normalizeSpace4ThumbSrc(
+        typeof body.thumbSrc === "string" ? body.thumbSrc : null
+      ),
     });
     return NextResponse.json({
       ok: true,
