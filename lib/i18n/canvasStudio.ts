@@ -61,6 +61,8 @@ export type CanvasStudioCopy = {
   bgGenerateTitle: string;
   bgPlaceholder: string;
   bgHint: string;
+  /** Hover tip when generate is blocked until all 6 spec filters are set. */
+  bgGenerateNeedAllOptions: string;
   pageFillHint1: string;
   pageFillHint2: string;
   tagCatBackground: string;
@@ -232,6 +234,7 @@ export const canvasStudioKr: CanvasStudioCopy = {
   bgPlaceholder: "수정하거나, 원하는 단어를 뒤에 적어도 됩니다.",
   bgHint:
     "상단 [배경]에서 키워드를 누르면 입력창에 추가됩니다. 규격·스타일·용도·장수·분야와 함께 하나의 컨텍스트로 생성되며, 입력창에서 직접 수정·삭제할 수 있습니다.",
+  bgGenerateNeedAllOptions: "위 6개 옵션을 빠짐없이 선택해주세요",
   pageFillHint1: "각페이지를 클릭해서 내용을 채우고,",
   pageFillHint2: "완성작업은 다음페이지에서 하세요",
   tagCatBackground: "배경",
@@ -444,6 +447,7 @@ export const canvasStudioEn: CanvasStudioCopy = {
   bgPlaceholder: "You may edit the words as you like",
   bgHint:
     "Click a keyword in Background to append it here. Format, style, use, pages, and field merge into one prompt. You can still edit or delete the text.",
+  bgGenerateNeedAllOptions: "Please select all 6 options above",
   pageFillHint1: "Click each page to fill in the content,",
   pageFillHint2: "then finish the work on the next step",
   tagCatBackground: "Background",
@@ -648,6 +652,7 @@ export const canvasStudioJa: CanvasStudioCopy = {
   bgPlaceholder: "単語はご自由に直しても大丈夫です",
   bgHint:
     "上の「例」からキーワードをクリックすると入力欄に追加されます。規格・スタイル・用途・ページ数・分野と結合して生成され、入力欄で直接編集できます。",
+  bgGenerateNeedAllOptions: "上の6つのオプションをすべて選択してください",
   pageFillHint1: "各ページをクリックして内容を入力し、",
   pageFillHint2: "仕上げは次のページで行ってください",
   tagCatBackground: "背景",
@@ -838,6 +843,7 @@ export const canvasStudioZh: CanvasStudioCopy = {
   bgPlaceholder: "可以按自己的想法修改词语",
   bgHint:
     "在上方「示例」中点击关键词即可追加到输入框。会与规格、风格、用途、页数、领域合并生成，仍可在输入框中直接修改或删除。",
+  bgGenerateNeedAllOptions: "请完整选择上方 6 个选项",
   pageFillHint1: "点击每一页填写内容，",
   pageFillHint2: "完成作业请到下一页进行",
   tagCatBackground: "背景",
@@ -1032,6 +1038,7 @@ export const canvasStudioEs: CanvasStudioCopy = {
   bgPlaceholder: "Puede editar las palabras como desee",
   bgHint:
     "El fondo sigue el formato, uso y número de páginas. Puedes seguir editando aquí después.",
+  bgGenerateNeedAllOptions: "Seleccione las 6 opciones de arriba",
   pageFillHint1: "Haz clic en cada página para rellenar el contenido,",
   pageFillHint2: "y termina el trabajo en el siguiente paso",
   aiCommand: "Comando IA interactivo",
@@ -1222,6 +1229,7 @@ export const canvasStudioFr: CanvasStudioCopy = {
   bgPlaceholder: "Vous pouvez modifier les mots comme vous voulez",
   bgHint:
     "Le fond suit le format, l’usage et le nombre de pages. Vous pouvez continuer à éditer ici.",
+  bgGenerateNeedAllOptions: "Veuillez sélectionner les 6 options ci-dessus",
   pageFillHint1: "Cliquez sur chaque page pour remplir le contenu,",
   pageFillHint2: "puis terminez le travail à l’étape suivante",
   aiCommand: "Commande IA interactive",
@@ -1412,6 +1420,7 @@ export const canvasStudioDe: CanvasStudioCopy = {
   bgPlaceholder: "Sie können die Wörter nach Wunsch ändern",
   bgHint:
     "Der Hintergrund folgt Format, Verwendung und Seitenzahl. Danach hier weiterbearbeiten.",
+  bgGenerateNeedAllOptions: "Bitte alle 6 Optionen oben auswählen",
   pageFillHint1: "Klicken Sie jede Seite an, um den Inhalt auszufüllen,",
   pageFillHint2: "die Fertigstellung erfolgt auf der nächsten Seite",
   aiCommand: "Interaktiver KI-Befehl",
@@ -1602,6 +1611,7 @@ export const canvasStudioIt: CanvasStudioCopy = {
   bgPlaceholder: "Puoi modificare le parole come preferisci",
   bgHint:
     "Lo sfondo segue formato, uso e numero di pagine. Puoi continuare a modificare qui.",
+  bgGenerateNeedAllOptions: "Seleziona tutte e 6 le opzioni sopra",
   pageFillHint1: "Clicca ogni pagina per compilare i contenuti,",
   pageFillHint2: "poi completa il lavoro nel passaggio successivo",
   aiCommand: "Comando IA interattivo",
@@ -1792,6 +1802,7 @@ export const canvasStudioVi: CanvasStudioCopy = {
   bgPlaceholder: "Bạn có thể sửa các từ theo ý muốn",
   bgHint:
     "Nền theo khổ, mục đích và số trang. Sau khi tạo vẫn chỉnh được tại đây.",
+  bgGenerateNeedAllOptions: "Vui lòng chọn đủ 6 tùy chọn phía trên",
   pageFillHint1: "Nhấp từng trang để điền nội dung,",
   pageFillHint2: "rồi hoàn thiện ở bước tiếp theo",
   aiCommand: "Lệnh AI tương tác",
@@ -1982,6 +1993,7 @@ export const canvasStudioHi: CanvasStudioCopy = {
   bgPlaceholder: "शब्दों को अपनी इच्छा से बदल सकते हैं",
   bgHint:
     "बैकग्राउंड फ़ॉर्मैट, उपयोग और पेज संख्या के अनुसार बनता है। बाद में यहीं संपादित करें।",
+  bgGenerateNeedAllOptions: "कृपया ऊपर के सभी 6 विकल्प चुनें",
   pageFillHint1: "सामग्री भरने के लिए प्रत्येक पेज पर क्लिक करें,",
   pageFillHint2: "काम अगले चरण में पूरा करें",
   aiCommand: "इंटरैक्टिव AI कमांड",

@@ -83,6 +83,7 @@ export default function AiBackgroundPromptBar({
   }, [moodOpen, optionsOpen]);
 
   const canSend = !generating && canGenerate;
+  const showNeedOptionsHint = !isPhoto && !canGenerate && !generating;
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key !== "Enter" || e.shiftKey) return;
@@ -257,21 +258,43 @@ export default function AiBackgroundPromptBar({
         ) : null}
       </div>
 
-      <button
-        type="button"
-        disabled={!canSend}
-        onClick={onGenerate}
-        className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-indigo-500 px-3 py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(99,102,241,0.28)] transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-45"
+      <div
+        className={`group/gen relative w-full ${
+          showNeedOptionsHint ? "cursor-not-allowed" : ""
+        }`}
       >
-        {generating ? (
-          <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
-        ) : (
-          <Sparkles className="h-4 w-4 shrink-0" aria-hidden />
-        )}
-        <span className="[word-break:keep-all]">
-          {generating ? generatingLabel : generateLabel}
-        </span>
-      </button>
+        {showNeedOptionsHint ? (
+          <div
+            role="tooltip"
+            id="ai-bg-need-options-hint"
+            className="pointer-events-none absolute bottom-[calc(100%+8px)] left-1/2 z-40 w-[min(100%,20rem)] -translate-x-1/2 rounded-lg border border-amber-400 bg-amber-50 px-3 py-2 text-center text-[12px] font-bold leading-snug text-slate-900 opacity-0 shadow-md [word-break:keep-all] group-hover/gen:opacity-100"
+          >
+            {cs.bgGenerateNeedAllOptions}
+          </div>
+        ) : null}
+        <button
+          type="button"
+          disabled={!canSend}
+          onClick={onGenerate}
+          aria-describedby={
+            showNeedOptionsHint ? "ai-bg-need-options-hint" : undefined
+          }
+          className={`inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-indigo-500 px-3 py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(99,102,241,0.28)] transition hover:bg-indigo-400 disabled:opacity-45 ${
+            showNeedOptionsHint
+              ? "pointer-events-none cursor-not-allowed"
+              : "disabled:cursor-not-allowed"
+          }`}
+        >
+          {generating ? (
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+          ) : (
+            <Sparkles className="h-4 w-4 shrink-0" aria-hidden />
+          )}
+          <span className="[word-break:keep-all]">
+            {generating ? generatingLabel : generateLabel}
+          </span>
+        </button>
+      </div>
 
       {orderOpen && expandedContent ? (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 shadow-sm">

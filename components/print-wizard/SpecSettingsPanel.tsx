@@ -279,6 +279,7 @@ export default function SpecSettingsPanel({
       specPicks.style &&
       specPicks.use &&
       specPicks.pages &&
+      Boolean(bgPresetId) &&
       bgKeyword.trim().length > 0;
   const canGenerateSubject = Boolean(
     isPhotoProduct &&
