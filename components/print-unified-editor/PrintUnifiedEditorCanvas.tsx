@@ -12,6 +12,7 @@ import {
   DEFAULT_CONTENT_OFFSET,
   nextUnifiedZoom,
   normalizeContentOffset,
+  PRINT_UNIFIED_PAPER_FRAME_CLASS,
   PRINT_UNIFIED_ZOOM_LEVELS,
   type PrintContentOffset,
   type PrintUnifiedZoom,
@@ -312,7 +313,7 @@ export default function PrintUnifiedEditorCanvas({
         <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
           {pageActivated ? (
             <div
-              className={`absolute inset-0 flex items-center justify-center overflow-hidden p-1.5 sm:p-2 [container-type:size] ${
+              className={`absolute inset-0 flex items-center justify-center overflow-hidden p-3 sm:p-4 [container-type:size] ${
                 stagePanning ? "cursor-grabbing" : "cursor-grab"
               }`}
               onPointerDown={startStagePan}
@@ -333,7 +334,7 @@ export default function PrintUnifiedEditorCanvas({
                 <div
                   data-page-stage
                   data-page-card
-                  className="relative overflow-hidden rounded-md border border-slate-300 bg-white shadow-[0_10px_28px_rgba(15,23,42,0.12)]"
+                  className={PRINT_UNIFIED_PAPER_FRAME_CLASS}
                   style={stageStyle}
                   onPointerDown={handleCanvasBlankPointerDown}
                 >

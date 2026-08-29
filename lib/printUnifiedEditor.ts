@@ -16,6 +16,10 @@ export const PRINT_UNIFIED_EDITOR_SESSION_KEY = "sca_print_unified_v1";
 
 export const PRINT_UNIFIED_EDITOR_SCREEN_ID = "SCREEN-026";
 
+/** Shared paper chrome for every print format on the Screen 26 left canvas. */
+export const PRINT_UNIFIED_PAPER_FRAME_CLASS =
+  "relative overflow-hidden rounded-md border border-slate-300 bg-white shadow-lg";
+
 /** Canvas zoom presets — applied as transform:scale on the shared stage world. */
 export const PRINT_UNIFIED_ZOOM_LEVELS = [0.5, 0.75, 1, 1.25, 1.5] as const;
 
