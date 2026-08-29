@@ -41,7 +41,7 @@ export default function DecoToolCatalogDropdown({
         onClick={() => setOpen((v) => !v)}
         className={`flex h-9 w-full items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition ${
           isLight
-            ? "border-slate-200 bg-white text-slate-800 hover:bg-slate-50"
+            ? "border-slate-200 bg-white text-slate-900 hover:bg-slate-50"
             : "border-white/10 bg-black/40 text-white/85 hover:border-white/25 hover:bg-white/5"
         }`}
       >
@@ -49,7 +49,7 @@ export default function DecoToolCatalogDropdown({
         <ChevronDown
           className={`h-3.5 w-3.5 shrink-0 transition ${
             open ? "rotate-180" : ""
-          } ${isLight ? "text-slate-500" : "text-white/45"}`}
+          } ${isLight ? "text-slate-900" : "text-white/45"}`}
           aria-hidden
         />
       </button>
@@ -66,7 +66,7 @@ export default function DecoToolCatalogDropdown({
             <section key={category}>
               <h4
                 className={`mb-1 px-0.5 text-[9px] font-bold uppercase tracking-wide ${
-                  isLight ? "text-slate-500" : "text-white/40"
+                  isLight ? "text-slate-900" : "text-white/40"
                 }`}
               >
                 {DECO_CATEGORY_LABELS[category]}
@@ -95,9 +95,9 @@ export default function DecoToolCatalogDropdown({
           ))}
         </div>
         <p
-          className={`mt-2 border-t px-1 pt-2 text-[9px] ${
+          className={`mt-2 border-t px-1 pt-2 text-[9px] font-medium ${
             isLight
-              ? "border-slate-200 text-slate-500"
+              ? "border-slate-200 text-slate-900"
               : "border-white/10 text-white/35"
           }`}
         >

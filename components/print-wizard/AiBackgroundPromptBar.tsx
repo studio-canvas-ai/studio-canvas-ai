@@ -94,7 +94,7 @@ export default function AiBackgroundPromptBar({
     `inline-flex h-7 w-7 items-center justify-center rounded-full border transition ${
       active
         ? "border-indigo-400 bg-indigo-50 text-indigo-700"
-        : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800"
+        : "border-slate-200 bg-white text-slate-900 hover:border-slate-300 hover:bg-slate-50"
     }`;
 
   return (
@@ -118,7 +118,7 @@ export default function AiBackgroundPromptBar({
 
             {moodOpen ? (
               <div className="absolute top-[calc(100%+6px)] left-0 z-30 w-[min(18rem,calc(100vw-2rem))] rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
-                <p className="mb-1.5 px-1 text-[10px] font-semibold tracking-wide text-slate-500 uppercase">
+                <p className="mb-1.5 px-1 text-[10px] font-semibold tracking-wide text-slate-900 uppercase">
                   배경 분위기
                 </p>
                 <div className="flex flex-wrap gap-1">
@@ -139,7 +139,7 @@ export default function AiBackgroundPromptBar({
                         className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold [word-break:keep-all] transition ${
                           on
                             ? "border-indigo-400 bg-indigo-50 text-indigo-800"
-                            : "border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300 hover:bg-white"
+                            : "border-slate-200 bg-slate-50 text-slate-900 hover:border-slate-300 hover:bg-white"
                         }`}
                       >
                         {cs.fieldGroups[group.id]}
@@ -151,7 +151,7 @@ export default function AiBackgroundPromptBar({
             ) : null}
           </div>
         ) : (
-          <p className="max-w-[min(100%,28rem)] text-[10px] leading-snug text-slate-500 [word-break:keep-all]">
+          <p className="max-w-[min(100%,28rem)] text-[10px] font-medium leading-snug text-slate-900 [word-break:keep-all]">
             {photoUi?.hint}
           </p>
         )}
@@ -177,7 +177,7 @@ export default function AiBackgroundPromptBar({
               <div className="absolute top-[calc(100%+6px)] right-0 z-30 w-40 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-sm">
                 <button
                   type="button"
-                  className="block w-full px-2.5 py-1.5 text-left text-[11px] font-medium text-slate-700 hover:bg-slate-50"
+                  className="block w-full px-2.5 py-1.5 text-left text-[11px] font-semibold text-slate-900 hover:bg-slate-50"
                   onClick={() => {
                     onChange("");
                     setOptionsOpen(false);
@@ -188,7 +188,7 @@ export default function AiBackgroundPromptBar({
                 </button>
                 <button
                   type="button"
-                  className="block w-full px-2.5 py-1.5 text-left text-[11px] font-medium text-slate-700 hover:bg-slate-50"
+                  className="block w-full px-2.5 py-1.5 text-left text-[11px] font-semibold text-slate-900 hover:bg-slate-50"
                   onClick={() => {
                     setOrderOpen(true);
                     setOptionsOpen(false);
@@ -237,7 +237,7 @@ export default function AiBackgroundPromptBar({
           />
           <p
             id="print-bg-guide"
-            className="pointer-events-none absolute inset-x-2.5 bottom-2 bg-gradient-to-t from-white from-60% to-transparent pt-3 text-[13px] font-medium leading-none text-slate-500 sm:inset-x-3 sm:text-[14px]"
+            className="pointer-events-none absolute inset-x-2.5 bottom-2 bg-gradient-to-t from-white from-60% to-transparent pt-3 text-[13px] font-semibold leading-none text-slate-900 sm:inset-x-3 sm:text-[14px]"
           >
             {placeholder}
           </p>

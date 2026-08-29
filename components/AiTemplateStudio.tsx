@@ -3069,7 +3069,7 @@ export default function AiTemplateStudio({
         isLight
           ? stylePanelLayer?.align === value
             ? "bg-slate-200 text-slate-900"
-            : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+            : "text-slate-900 hover:bg-slate-50"
           : stylePanelLayer?.align === value
             ? "bg-white/15 text-white"
             : "text-white/45 hover:bg-white/5 hover:text-white/80"
@@ -3275,13 +3275,13 @@ export default function AiTemplateStudio({
         : "flex min-h-0 flex-col gap-4 rounded-2xl border border-white/10 bg-black/35 p-4 lg:overflow-y-auto";
 
   const styleMutedLabel = isLight
-    ? "text-xs font-medium text-slate-500"
+    ? "text-xs font-semibold text-slate-900"
     : "text-xs font-medium text-white/60";
   const styleRowLabel = isLight
-    ? "text-xs text-slate-500"
+    ? "text-xs font-semibold text-slate-900"
     : "text-xs text-white/60";
   const styleValueText = isLight
-    ? "tabular-nums text-slate-700"
+    ? "tabular-nums font-semibold text-slate-900"
     : "tabular-nums text-white/80";
 
   return (
@@ -3289,7 +3289,7 @@ export default function AiTemplateStudio({
       className={`flex ${shellHeightClass} flex-col ${
         isPanelOnly
           ? isLight
-            ? "overflow-visible text-slate-800"
+            ? "overflow-visible text-slate-900"
             : "overflow-visible text-white"
           : "overflow-hidden bg-[#0b0d12] text-white"
       }`}
@@ -4118,7 +4118,7 @@ export default function AiTemplateStudio({
                       onClick={() => insertSymbol(s)}
                       className={`font-emoji rounded-lg border px-2.5 py-1.5 text-sm transition ${
                         isLight
-                          ? "border-slate-200 text-slate-700 hover:bg-slate-50"
+                          ? "border-slate-200 text-slate-900 hover:bg-slate-50"
                           : "border-white/10 text-white/80 hover:border-white/25 hover:bg-white/5"
                       }`}
                     >
@@ -4165,7 +4165,7 @@ export default function AiTemplateStudio({
                             ? "bg-slate-900 text-white"
                             : "bg-white text-black"
                           : isLight
-                            ? "bg-slate-100 text-slate-500 hover:text-slate-800"
+                            ? "bg-slate-100 font-semibold text-slate-900 hover:bg-slate-200"
                             : "bg-black/25 text-white/45 hover:text-white/80"
                       }`}
                       style={{
@@ -4348,7 +4348,7 @@ export default function AiTemplateStudio({
                 <div className="flex flex-col gap-2">
                   <label
                     className={`inline-flex cursor-pointer items-center gap-2 text-[11px] ${
-                      isLight ? "text-slate-600" : "text-white/70"
+                      isLight ? "font-semibold text-slate-900" : "text-white/70"
                     }`}
                   >
                     <input

@@ -155,7 +155,7 @@ export function EmojiMoreDropdown({
         onClick={() => setOpen((v) => !v)}
         className={`inline-flex h-9 items-center gap-1 rounded-lg border px-2.5 text-xs font-semibold transition ${
           isLight
-            ? "border-slate-200 bg-white text-slate-800 hover:bg-slate-50"
+            ? "border-slate-200 bg-white text-slate-900 hover:bg-slate-50"
             : "border-white/10 bg-black/40 text-white/85 hover:border-white/25 hover:bg-white/5"
         }`}
       >
@@ -163,7 +163,7 @@ export function EmojiMoreDropdown({
         <ChevronDown
           className={`h-3.5 w-3.5 transition ${
             open ? "rotate-180" : ""
-          } ${isLight ? "text-slate-500" : "text-white/80"}`}
+          } ${isLight ? "text-slate-900" : "text-white/80"}`}
           aria-hidden
         />
       </button>
@@ -185,7 +185,7 @@ export function EmojiMoreDropdown({
               title={item.char}
               className={`font-emoji flex aspect-square items-center justify-center rounded-md text-base transition ${
                 isLight
-                  ? "text-slate-800 hover:bg-slate-100"
+                  ? "text-slate-900 hover:bg-slate-100"
                   : "text-white/90 hover:bg-white/10"
               }`}
               onClick={() => {
@@ -229,7 +229,7 @@ export function StickerMoreDropdown({
         onClick={() => setOpen((v) => !v)}
         className={`flex h-9 w-full items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition ${
           isLight
-            ? "border-slate-200 bg-white text-slate-800 hover:bg-slate-50"
+            ? "border-slate-200 bg-white text-slate-900 hover:bg-slate-50"
             : "border-white/10 bg-black/40 text-white/85 hover:border-white/25 hover:bg-white/5"
         }`}
       >
@@ -249,7 +249,7 @@ export function StickerMoreDropdown({
         <ChevronDown
           className={`h-3.5 w-3.5 shrink-0 transition ${
             open ? "rotate-180" : ""
-          } ${isLight ? "text-slate-500" : "text-white/80"}`}
+          } ${isLight ? "text-slate-900" : "text-white/80"}`}
           aria-hidden
         />
       </button>
@@ -330,9 +330,9 @@ export function BgColorDropdown({
         aria-expanded={open}
         aria-label={label}
         onClick={() => setOpen((v) => !v)}
-        className={`flex h-9 w-full items-center gap-2 rounded-lg border px-2.5 text-left text-[11px] font-medium outline-none transition ${
+        className={`flex h-9 w-full items-center gap-2 rounded-lg border px-2.5 text-left text-[11px] font-semibold outline-none transition ${
           isLight
-            ? "border-slate-200 bg-white text-slate-800 hover:bg-slate-50 focus:border-indigo-400/50"
+            ? "border-slate-200 bg-white text-slate-900 hover:bg-slate-50 focus:border-indigo-400/50"
             : "border-white/10 bg-black/40 text-white/85 hover:border-white/25 focus:border-purple-400/40"
         }`}
       >
@@ -349,7 +349,7 @@ export function BgColorDropdown({
         <ChevronDown
           className={`h-3.5 w-3.5 shrink-0 transition ${
             open ? "rotate-180" : ""
-          } ${isLight ? "text-slate-500" : "text-white/80"}`}
+          } ${isLight ? "text-slate-900" : "text-white/80"}`}
           aria-hidden
         />
       </button>

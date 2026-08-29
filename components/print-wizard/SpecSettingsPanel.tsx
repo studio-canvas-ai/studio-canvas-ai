@@ -343,7 +343,7 @@ export default function SpecSettingsPanel({
                 {cs.customSize}
               </span>
               <ChevronDown
-                className={`h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform ${
+                className={`h-3.5 w-3.5 shrink-0 text-slate-900 transition-transform ${
                   freeSizeOpen ? "rotate-180" : ""
                 }`}
                 aria-hidden
@@ -371,7 +371,7 @@ export default function SpecSettingsPanel({
                         className={`flex-1 py-1.5 text-[11px] font-semibold transition ${
                           customUnit === u.id
                             ? "bg-slate-800 text-white"
-                            : "bg-white text-slate-500 hover:text-slate-800"
+                            : "bg-white font-semibold text-slate-900 hover:bg-slate-50"
                         }`}
                       >
                         {u.label}
@@ -381,7 +381,7 @@ export default function SpecSettingsPanel({
 
                   <div className="grid grid-cols-2 gap-2">
                     <label className="space-y-1">
-                      <span className="text-[10px] text-slate-600">
+                      <span className="text-[10px] font-semibold text-slate-900">
                         {cs.width} ({unitLabel})
                       </span>
                       <input
@@ -397,7 +397,7 @@ export default function SpecSettingsPanel({
                       />
                     </label>
                     <label className="space-y-1">
-                      <span className="text-[10px] text-slate-600">
+                      <span className="text-[10px] font-semibold text-slate-900">
                         {cs.height} ({unitLabel})
                       </span>
                       <input
@@ -414,7 +414,7 @@ export default function SpecSettingsPanel({
                     </label>
                   </div>
 
-                  <p className="text-[10px] leading-relaxed text-slate-500">
+                  <p className="text-[10px] font-medium leading-relaxed text-slate-900">
                     최대 {PRINT_CUSTOM_SIZE_MAX_CM}cm /{" "}
                     {PRINT_CUSTOM_SIZE_MAX_INCH}인치
                   </p>
@@ -482,7 +482,7 @@ export default function SpecSettingsPanel({
                 });
                 setOpenKey(null);
               }}
-              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[11px] font-semibold text-slate-600 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
+              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[11px] font-semibold text-slate-900 hover:border-slate-300 hover:bg-slate-50"
             >
               {cs.styleReset}
             </button>
@@ -721,7 +721,7 @@ export default function SpecSettingsPanel({
           onGenerate={onGenerateBackground}
           expandedContent={
             <div className="space-y-1">
-              <p className="text-[11px] font-medium text-slate-600">
+              <p className="text-[11px] font-semibold text-slate-900">
                 주문 / 초안 프롬프트
               </p>
               <textarea
@@ -730,7 +730,7 @@ export default function SpecSettingsPanel({
                 aria-label="메인 프롬프트 / 주문 내용"
                 rows={2}
                 placeholder="예시에서 선택하거나 주문 내용을 입력하세요."
-                className="min-h-[3.5rem] w-full resize-none rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm leading-relaxed text-slate-900 outline-none placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
+                className="min-h-[3.5rem] w-full resize-none rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm leading-relaxed text-slate-900 outline-none placeholder:text-slate-700 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
               />
             </div>
           }

@@ -453,10 +453,10 @@ export default function PrintUnifiedEditorCanvas({
             </div>
           ) : (
             <div className="flex h-full min-h-[280px] w-full flex-col items-center justify-center gap-2 px-6 text-center">
-              <p className="text-sm font-medium text-slate-700">
+              <p className="text-sm font-semibold text-slate-900">
                 중앙 패널 하단에서 편집할 페이지를 선택해 주세요
               </p>
-              <p className="max-w-xs text-[11px] leading-relaxed text-slate-500">
+              <p className="max-w-xs text-[11px] font-medium leading-relaxed text-slate-900">
                 1~8페이지 미니 보기를 탭하면 해당 페이지 캔버스가 활성화됩니다
               </p>
             </div>

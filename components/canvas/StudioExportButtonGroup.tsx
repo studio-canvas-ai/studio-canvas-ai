@@ -74,7 +74,7 @@ export default function StudioExportButtonGroup({
       ? "h-3.5 w-3.5"
       : "h-4 w-4 shrink-0";
   const hintClass = unified
-    ? "px-0.5 text-center text-[9px] leading-snug text-slate-500"
+    ? "px-0.5 text-center text-[9px] font-semibold leading-snug text-slate-900"
     : compact
       ? "px-0.5 text-center text-[10px] leading-snug text-slate-400"
       : "text-center text-xs leading-snug text-white/45";

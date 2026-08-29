@@ -173,20 +173,22 @@ export default function ControlBarDropdown({
           </span>
         ) : null}
         {compact ? (
-          <span className="whitespace-nowrap text-slate-800">{label}</span>
+          <span className="whitespace-nowrap font-semibold text-slate-900">
+            {label}
+          </span>
         ) : (
           <span className="min-w-0 flex-1 truncate">
-            <span className="text-slate-500">{label}</span>
+            <span className="font-semibold text-slate-900">{label}</span>
             {value ? (
               <>
-                <span className="mx-1 text-slate-300">·</span>
+                <span className="mx-1 font-semibold text-slate-900">·</span>
                 <span className="font-semibold text-slate-900">{value}</span>
               </>
             ) : null}
           </span>
         )}
         <ChevronDown
-          className={`shrink-0 text-slate-400 transition ${
+          className={`shrink-0 text-slate-900 transition ${
             compact ? "h-3 w-3" : "h-3.5 w-3.5"
           } ${open ? "rotate-180" : ""}`}
           aria-hidden
@@ -257,11 +259,7 @@ export function ControlMenuItem({
         </span>
       )}
       {description ? (
-        <span
-          className={`mt-0.5 line-clamp-2 block text-[11px] leading-snug ${
-            active ? "text-slate-600" : "text-slate-500"
-          }`}
-        >
+        <span className="mt-0.5 line-clamp-2 block text-[11px] font-medium leading-snug text-slate-900">
           {description}
         </span>
       ) : null}

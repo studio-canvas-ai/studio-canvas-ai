@@ -59,7 +59,7 @@ export default function PrintUnifiedEditorMiniThumbs({
         <p className="text-[10px] font-semibold leading-none text-slate-800">
           {fillCanvas(cs.miniView, { label: "8페이지" })}
         </p>
-        <span className="text-[9px] tabular-nums leading-none text-slate-500">
+        <span className="text-[9px] font-semibold tabular-nums leading-none text-slate-900">
           {pageCount}면
         </span>
       </div>

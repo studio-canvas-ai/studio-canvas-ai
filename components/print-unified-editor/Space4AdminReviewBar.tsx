@@ -25,7 +25,7 @@ export default function Space4AdminReviewBar({
         <p className="mt-0.5 text-[11px] font-medium text-emerald-800/90 sm:text-xs">
           수정 완료 후 → 공개 템플릿(03)으로 발행
         </p>
-        <p className="mt-1 truncate text-[10px] text-slate-600 sm:text-[11px]">
+        <p className="mt-1 truncate text-[10px] font-semibold text-slate-900 sm:text-[11px]">
           {label}
         </p>
       </div>

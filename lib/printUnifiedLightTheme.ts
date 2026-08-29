@@ -11,6 +11,6 @@ export const LIGHT_TRIGGER_OPEN =
   "border border-sky-400 bg-sky-50 text-slate-900 shadow-sm ring-1 ring-sky-400/30";
 export const LIGHT_MENU =
   "rounded-2xl border border-slate-200 bg-white shadow-lg ring-1 ring-slate-900/5";
-export const LIGHT_MUTED = "text-slate-500";
-export const LIGHT_LABEL = "text-slate-800";
-export const LIGHT_TITLE = "text-slate-900";
+export const LIGHT_MUTED = "font-semibold text-slate-900";
+export const LIGHT_LABEL = "font-semibold text-slate-900";
+export const LIGHT_TITLE = "font-semibold text-slate-900";

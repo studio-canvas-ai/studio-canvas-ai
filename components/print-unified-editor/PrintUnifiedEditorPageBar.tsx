@@ -21,7 +21,7 @@ export default function PrintUnifiedEditorPageBar({
 }: PrintUnifiedEditorPageBarProps) {
   return (
     <div className="shrink-0 rounded-xl border border-slate-200 bg-slate-50 p-2 shadow-sm">
-      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-900">
         페이지
       </p>
       <div className="grid grid-cols-4 gap-1.5">
