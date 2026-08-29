@@ -296,7 +296,7 @@ export default function SpecSettingsPanel({
           : "flex h-full min-h-0 flex-col gap-2.5 overflow-y-auto rounded-2xl border border-slate-700/60 bg-slate-900/80 p-3 shadow-[0_8px_32px_rgba(15,23,42,0.35)] backdrop-blur-md sm:p-3.5"
       }
     >
-      {/* 규격 · 스타일 · 용도 · (인쇄: 장수) · 예시 · (인쇄: 분야) */}
+      {/* 규격 · 스타일 · 용도 · (인쇄: 장수) · 배경 · (인쇄: 분야) */}
       <div
         data-spec-row
         className={`flex shrink-0 flex-row items-center ${
