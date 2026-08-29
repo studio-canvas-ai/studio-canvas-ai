@@ -215,8 +215,8 @@ export default function AiBackgroundPromptBar({
       </div>
 
       {/* Full-width core: AI prompt */}
-      <div className="w-full rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-3 py-1.5">
+      <div className="w-full rounded-xl border border-sky-200 bg-sky-50 shadow-sm">
+        <div className="flex items-center justify-between gap-2 border-b border-sky-200/80 px-3 py-1.5">
           <p className="text-[12px] font-semibold text-slate-900 [word-break:keep-all]">
             {title}
           </p>
@@ -233,17 +233,17 @@ export default function AiBackgroundPromptBar({
             readOnly={false}
             spellCheck={false}
             aria-describedby="print-bg-guide"
-            className="min-h-[4.75rem] w-full resize-none bg-white pb-6 text-sm leading-relaxed text-slate-900 outline-none"
+            className="min-h-[4.75rem] w-full resize-none bg-sky-50 pb-6 text-sm leading-relaxed text-slate-900 outline-none"
           />
           <p
             id="print-bg-guide"
-            className="pointer-events-none absolute inset-x-2.5 bottom-2 bg-gradient-to-t from-white from-60% to-transparent pt-3 text-[13px] font-semibold leading-none text-slate-900 sm:inset-x-3 sm:text-[14px]"
+            className="pointer-events-none absolute inset-x-2.5 bottom-2 bg-gradient-to-t from-sky-50 from-60% to-transparent pt-3 text-[13px] font-semibold leading-none text-slate-900 sm:inset-x-3 sm:text-[14px]"
           >
             {placeholder}
           </p>
         </div>
         {specTags.length ? (
-          <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-200 px-3 py-2">
+          <div className="flex flex-wrap items-center gap-1.5 border-t border-sky-200/80 px-3 py-2">
             {specTags.map((tag) => (
               <span
                 key={tag.label}

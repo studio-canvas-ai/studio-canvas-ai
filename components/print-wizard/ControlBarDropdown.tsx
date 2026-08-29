@@ -163,8 +163,8 @@ export default function ControlBarDropdown({
               }`
         } ${
           open
-            ? "border border-sky-400 bg-sky-50 text-slate-900 shadow-sm ring-1 ring-sky-400/30"
-            : "border border-slate-200 bg-white text-slate-800 shadow-sm hover:border-slate-300 hover:bg-slate-50"
+            ? "border border-amber-300 bg-yellow-50 text-slate-800 shadow-sm ring-1 ring-amber-200/80"
+            : "border border-amber-200/80 bg-yellow-50 text-slate-800 shadow-sm hover:border-amber-300 hover:bg-yellow-100/80"
         }`}
       >
         {!compact && icon ? (
@@ -173,22 +173,22 @@ export default function ControlBarDropdown({
           </span>
         ) : null}
         {compact ? (
-          <span className="whitespace-nowrap font-semibold text-slate-900">
+          <span className="whitespace-nowrap font-semibold text-slate-800">
             {label}
           </span>
         ) : (
           <span className="min-w-0 flex-1 truncate">
-            <span className="font-semibold text-slate-900">{label}</span>
+            <span className="font-semibold text-slate-800">{label}</span>
             {value ? (
               <>
-                <span className="mx-1 font-semibold text-slate-900">·</span>
-                <span className="font-semibold text-slate-900">{value}</span>
+                <span className="mx-1 font-semibold text-slate-800">·</span>
+                <span className="font-semibold text-slate-800">{value}</span>
               </>
             ) : null}
           </span>
         )}
         <ChevronDown
-          className={`shrink-0 text-slate-900 transition ${
+          className={`shrink-0 text-slate-800 transition ${
             compact ? "h-3 w-3" : "h-3.5 w-3.5"
           } ${open ? "rotate-180" : ""}`}
           aria-hidden
