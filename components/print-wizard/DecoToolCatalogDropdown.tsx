@@ -14,6 +14,10 @@ import {
   DECO_CATEGORY_LABELS,
   decoItemsForCategory,
 } from "@/lib/printWizardDecoCatalog";
+import {
+  LIGHT_SECTION_TITLE_TRIGGER,
+  LIGHT_SECTION_TITLE_TRIGGER_OPEN,
+} from "@/lib/printUnifiedLightTheme";
 
 export type DecoToolCatalogDropdownProps = {
   label?: string;
@@ -41,7 +45,9 @@ export default function DecoToolCatalogDropdown({
         onClick={() => setOpen((v) => !v)}
         className={`flex h-9 w-full items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition ${
           isLight
-            ? "border-slate-200 bg-white text-slate-900 hover:bg-slate-50"
+            ? open
+              ? LIGHT_SECTION_TITLE_TRIGGER_OPEN
+              : LIGHT_SECTION_TITLE_TRIGGER
             : "border-white/10 bg-black/40 text-white/85 hover:border-white/25 hover:bg-white/5"
         }`}
       >
@@ -49,7 +55,7 @@ export default function DecoToolCatalogDropdown({
         <ChevronDown
           className={`h-3.5 w-3.5 shrink-0 transition ${
             open ? "rotate-180" : ""
-          } ${isLight ? "text-slate-900" : "text-white/45"}`}
+          } ${isLight ? "text-slate-800" : "text-white/45"}`}
           aria-hidden
         />
       </button>

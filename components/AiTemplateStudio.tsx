@@ -84,6 +84,9 @@ import {
   StickerMoreDropdown,
 } from "@/components/StudioStylePickers";
 import DecoToolCatalogDropdown from "@/components/print-wizard/DecoToolCatalogDropdown";
+import {
+  LIGHT_SECTION_TITLE_CHIP,
+} from "@/lib/printUnifiedLightTheme";
 import { useCanvasStore } from "@/lib/canvas/canvasStore";
 import {
   loadImageNaturalSize,
@@ -3277,6 +3280,9 @@ export default function AiTemplateStudio({
   const styleMutedLabel = isLight
     ? "text-xs font-semibold text-slate-900"
     : "text-xs font-medium text-white/60";
+  const styleSectionTitleChip = isLight
+    ? `mb-2 ${LIGHT_SECTION_TITLE_CHIP}`
+    : `mb-2 ${styleMutedLabel}`;
   const styleRowLabel = isLight
     ? "text-xs font-semibold text-slate-900"
     : "text-xs text-white/60";
@@ -4107,7 +4113,7 @@ export default function AiTemplateStudio({
           {stylePanelLayer ? (
             <>
               <div>
-                <p className={`mb-2 ${styleMutedLabel}`}>
+                <p className={styleSectionTitleChip}>
                   {t.thumbnail.symbolsLabel}
                 </p>
                 <div className="flex flex-wrap items-center gap-1.5">
@@ -4150,7 +4156,7 @@ export default function AiTemplateStudio({
               ) : null}
 
               <div>
-                <p className={`mb-2 ${styleMutedLabel}`}>
+                <p className={styleSectionTitleChip}>
                   {t.thumbnail.fontLabel}
                 </p>
                 <div className="flex flex-wrap gap-1.5">
