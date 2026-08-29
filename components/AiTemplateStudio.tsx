@@ -1040,6 +1040,17 @@ export default function AiTemplateStudio({
     (panelOnly ? overlayLayers[0] ?? null : null) ??
     (alwaysShowStylePanel ? idleStylePanelLayer : null);
 
+  // Drop live slider draft whenever the canvas / list selection changes.
+  useEffect(() => {
+    styleDraftRef.current = null;
+    setStyleDraft(null);
+    styleDragActiveRef.current = false;
+    if (styleCommitRafRef.current != null) {
+      cancelAnimationFrame(styleCommitRafRef.current);
+      styleCommitRafRef.current = null;
+    }
+  }, [activeLayerId]);
+
   useEffect(() => {
     if (!overlayLayers[0]) return;
     const stillValid =
@@ -2297,8 +2308,13 @@ export default function AiTemplateStudio({
 
   const updateActive = (patch: Partial<TextLayer>) => {
     const id =
-      activeLayerId ?? (panelOnly ? overlayLayers[0]?.id ?? null : null);
-    if (!id) {
+      activeLayerId &&
+      overlayLayers.some((l) => l.id === activeLayerId)
+        ? activeLayerId
+        : panelOnly
+          ? overlayLayers[0]?.id ?? null
+          : null;
+    if (!id || id.startsWith("__panel-idle")) {
       showToast("먼저 텍스트 레이어를 선택해 주세요.", "info");
       return;
     }
@@ -2318,8 +2334,13 @@ export default function AiTemplateStudio({
   /** Patch Konva text node immediately; commit TextLayer once on pointer-up. */
   const patchActiveStyleLive = (patch: Partial<TextLayer>) => {
     const id =
-      activeLayerId ?? (panelOnly ? overlayLayers[0]?.id ?? null : null);
-    if (!id) {
+      activeLayerId &&
+      overlayLayers.some((l) => l.id === activeLayerId)
+        ? activeLayerId
+        : panelOnly
+          ? overlayLayers[0]?.id ?? null
+          : null;
+    if (!id || id.startsWith("__panel-idle")) {
       showToast("먼저 텍스트 레이어를 선택해 주세요.", "info");
       return;
     }
@@ -2349,10 +2370,9 @@ export default function AiTemplateStudio({
     styleCommitRafRef.current = requestAnimationFrame(() => {
       styleCommitRafRef.current = null;
       const draft = styleDraftRef.current;
-      const layerId = activeLayerId;
-      if (!draft || !layerId) return;
+      if (!draft) return;
       setOverlayLayers((prev) =>
-        prev.map((l) => (l.id === layerId ? { ...l, ...draft } : l))
+        prev.map((l) => (l.id === id ? { ...l, ...draft } : l))
       );
     });
   };
@@ -2400,23 +2420,41 @@ export default function AiTemplateStudio({
   /** Screen 26 — quick bar: insert text onto canvas without a side layer list. */
   const addQuickTextLayer = () => {
     // Prefer DOM value so Korean IME composition is committed before React state.
-    const raw = (
-      quickTextInputRef.current?.value ?? quickTextDraft
-    ).trim();
-    const text = raw || PLACEHOLDER_TEXT;
+    let raw = (quickTextInputRef.current?.value ?? quickTextDraft).trim();
+    // Never keep accidental "placeholder + user text" merges in the field.
+    if (raw.startsWith(PLACEHOLDER_TEXT) && raw.length > PLACEHOLDER_TEXT.length) {
+      raw = raw.slice(PLACEHOLDER_TEXT.length).trim();
+    }
+    if (raw === PLACEHOLDER_TEXT) raw = "";
+    // Only the typed string (or default when empty) — never concatenate.
+    const text = raw.length > 0 ? raw : PLACEHOLDER_TEXT;
 
     const active =
       (activeLayerId
         ? overlayLayers.find((l) => l.id === activeLayerId)
         : null) ?? null;
+    const activePlain = active
+      ? active.text.replace(/\u200B/g, "").trim()
+      : "";
     const activeIsEmptyTarget =
       Boolean(active) &&
-      (!active!.text.replace(/\u200B/g, "").trim() ||
-        active!.text.trim() === PLACEHOLDER_TEXT);
+      (!activePlain || activePlain === PLACEHOLDER_TEXT);
 
     if (active && activeIsEmptyTarget) {
       setOverlayLayers((prev) =>
-        prev.map((l) => (l.id === active.id ? { ...l, text } : l))
+        prev.map((l) =>
+          l.id === active.id
+            ? {
+                ...l,
+                text,
+                color: "inkBlack",
+                ranges: [],
+                // Re-fit dashed box to glyph metrics on the next reconcile.
+                layoutLocked: true,
+                boxManual: false,
+              }
+            : l
+        )
       );
       selectionClearedRef.current = false;
       setActiveLayerId(active.id);
@@ -2431,25 +2469,25 @@ export default function AiTemplateStudio({
     const placed: TextLayer = {
       ...next,
       text,
-      color: source?.color ?? next.color,
-      fontPreset: source?.fontPreset ?? next.fontPreset,
-      fontSize: source?.fontSize ?? next.fontSize,
-      fontWeight: source?.fontWeight ?? next.fontWeight,
+      ranges: [],
+      // Dark charcoal — readable on light paper / AI backgrounds.
+      color: "inkBlack",
+      fontPreset: source?.fontPreset ?? "pretendard",
+      fontSize: source?.fontSize ?? 48,
+      fontWeight: source?.fontWeight ?? 700,
       letterSpacing: source ? layerLetterSpacing(source) : next.letterSpacing,
       lineHeight: source ? layerLineHeight(source) : next.lineHeight,
-      align: source?.align ?? "center",
-      // Absolute box so PreviewTextOverlay hit-testing / handles work immediately.
+      align: "center",
+      showBox: false,
+      showBoxBorder: false,
+      // Typography-driven box (parent reconcileLayerTypographyBox sizes padding).
       layoutLocked: true,
-      boxManual: true,
-      boxW: 0.72,
-      boxH: 0.09,
+      boxManual: false,
       manualX: 0.14,
       manualY: Math.min(0.78, 0.36 + (stack % 6) * 0.07),
       maxWidth: 0.72,
-      showBox: false,
-      showBoxBorder: false,
-      boxOpacity: source?.boxOpacity ?? next.boxOpacity,
-      boxColor: source?.boxColor ?? next.boxColor,
+      boxOpacity: next.boxOpacity,
+      boxColor: next.boxColor,
     };
     setOverlayLayers((prev) => [...prev, placed]);
     selectionClearedRef.current = false;
