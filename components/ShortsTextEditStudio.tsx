@@ -920,6 +920,40 @@ export default function ShortsTextEditStudio() {
       setMixError(t.shorts.studioMixNeedVideo);
       return;
     }
+
+    // Charge 20 credits from the durable pool before client-side mix.
+    try {
+      const spendRes = await fetch("/api/quota/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ action: "shortsRender" }),
+      });
+      const spendData = (await spendRes.json().catch(() => ({}))) as {
+        error?: string;
+        remaining?: number;
+      };
+      if (spendRes.status === 401) {
+        setShowCreditModal(true);
+        void refreshAccount();
+        setMixError(t.shorts.studioCaptionsInsufficient);
+        return;
+      }
+      if (!spendRes.ok) {
+        setMixError(
+          spendData.error === "insufficient_quota"
+            ? t.shorts.studioCaptionsInsufficient
+            : t.shorts.studioMixError
+        );
+        void refreshAccount();
+        return;
+      }
+      void refreshAccount();
+    } catch {
+      setMixError(t.shorts.studioMixError);
+      return;
+    }
+
     setMixing(true);
     setMixProgress(0);
     try {
@@ -1066,13 +1100,16 @@ export default function ShortsTextEditStudio() {
     hasVideoSource,
     mixInputKey,
     projectVideoName,
+    refreshAccount,
     resolveVideoBlob,
     session,
     setMixedVideoUrl,
+    setShowCreditModal,
     thumbnailLayers,
     videoLayers,
     videoPosY,
     videoScale,
+    t.shorts.studioCaptionsInsufficient,
     t.shorts.studioMixCapturingOverlay,
     t.shorts.studioMixDone,
     t.shorts.studioMixError,

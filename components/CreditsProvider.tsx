@@ -157,7 +157,8 @@ type CreditsContextValue = {
   applyServerCredits: (balance: number) => void;
   planUsage: PlanUsageSnapshot | null;
   consumeDownloadQuota: (
-    kind: "fhd" | "uhd4k"
+    kind: "fhd" | "uhd4k",
+    opts?: { amount?: number; action?: string }
   ) => Promise<{ ok: boolean; remaining: number; usage: PlanUsageSnapshot | null }>;
   topUpCredits: (amount?: number) => void;
   purchaseCreditPack: (packId: (typeof CREDIT_PACKS)[number]["id"]) => Promise<void>;
@@ -585,13 +586,20 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const consumeDownloadQuota = useCallback(
-    async (kind: "fhd" | "uhd4k") => {
+    async (
+      kind: "fhd" | "uhd4k",
+      opts?: { amount?: number; action?: string }
+    ) => {
       try {
         const res = await fetch("/api/quota/download", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "same-origin",
-          body: JSON.stringify({ kind }),
+          body: JSON.stringify({
+            kind,
+            ...(typeof opts?.amount === "number" ? { amount: opts.amount } : {}),
+            ...(opts?.action ? { action: opts.action } : {}),
+          }),
         });
         const data = (await res.json()) as {
           ok?: boolean;

@@ -52,7 +52,7 @@ export default function StudioExportButtonGroup({
 }: StudioExportButtonGroupProps) {
   const { t } = useI18n();
   const cs = t.canvasStudio;
-  const { standardLabel, highLabel, canDownloadStandard, canDownloadHigh } =
+  const { standardLabel, highLabel, canDownloadStandard, canDownloadHigh, canDownloadUltra } =
     useDownloadQuota();
   const compact = variant === "compact";
   const unified = variant === "unified";
@@ -162,7 +162,7 @@ export default function StudioExportButtonGroup({
           <button
             type="button"
             onClick={onDownloadUltra}
-            disabled={busy || !onDownloadUltra}
+            disabled={busy || !onDownloadUltra || !canDownloadUltra}
             className={`${downloadClass} flex-1 border-amber-300/80 bg-gradient-to-r from-amber-600 via-orange-500 to-rose-500 ring-1 ring-amber-200/70`}
           >
             <Download className={iconClass} aria-hidden />

@@ -56,7 +56,7 @@ export async function loadSupabaseQuota(
   ];
 
   for (const id of lookupIds) {
-    const query = admin
+    const byAppId = await admin
       .from("user_download_quota")
       .select(
         "app_user_id, user_id, fhd_remaining, uhd4k_remaining, quota_period_start, quota_period_end, general_photo_download_count, updated_at"
@@ -64,15 +64,33 @@ export async function loadSupabaseQuota(
       .eq("app_user_id", id)
       .maybeSingle();
 
-    const { data, error } = await query;
-    if (error) {
-      if (!error.message.toLowerCase().includes("does not exist")) {
-        console.warn("[supabaseQuota] load skipped:", error.message);
+    if (byAppId.error) {
+      if (!byAppId.error.message.toLowerCase().includes("does not exist")) {
+        console.warn("[supabaseQuota] load skipped:", byAppId.error.message);
+      }
+    } else if (byAppId.data) {
+      const parsed = parseQuotaRow(byAppId.data as QuotaRow, canonicalUserId);
+      if (parsed) return parsed;
+    }
+
+    if (!/^[0-9a-f-]{36}$/i.test(id)) continue;
+
+    const byAuthId = await admin
+      .from("user_download_quota")
+      .select(
+        "app_user_id, user_id, fhd_remaining, uhd4k_remaining, quota_period_start, quota_period_end, general_photo_download_count, updated_at"
+      )
+      .eq("user_id", id)
+      .maybeSingle();
+
+    if (byAuthId.error) {
+      if (!byAuthId.error.message.toLowerCase().includes("does not exist")) {
+        console.warn("[supabaseQuota] load by user_id skipped:", byAuthId.error.message);
       }
       continue;
     }
-    if (!data) continue;
-    const parsed = parseQuotaRow(data as QuotaRow, canonicalUserId);
+    if (!byAuthId.data) continue;
+    const parsed = parseQuotaRow(byAuthId.data as QuotaRow, canonicalUserId);
     if (parsed) return parsed;
   }
 

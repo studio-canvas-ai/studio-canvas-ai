@@ -15,8 +15,8 @@ import {
 import {
   isPrivilegedAdminEmail,
 } from "@/lib/unlimitedAccount";
-import { applyTestAccountSubscription } from "@/lib/testAccounts";
-import { ensurePlanUsage } from "@/lib/db/planUsage";
+import { applyTestAccountSubscription, getTestAccountSetup } from "@/lib/testAccounts";
+import { ensurePlanUsage, persistUserPlanUsage } from "@/lib/db/planUsage";
 import { writeWalletCookie, readWalletCookie } from "@/lib/walletCookie";
 
 function startingCreditsForEmail(_email: string | null | undefined): number {
@@ -258,6 +258,10 @@ export async function syncTestAccountSubscription(
     return row;
   });
   await writeWalletCookie(updated.id, 0);
+  // Persist credit pool (cookie + R2 + Supabase) after QA plan seed.
+  if (getTestAccountSetup(updated.email)) {
+    await persistUserPlanUsage(updated);
+  }
   return updated;
 }
 

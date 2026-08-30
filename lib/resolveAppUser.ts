@@ -50,12 +50,8 @@ export async function resolveAppUser(
     | undefined;
   let userId = sessionUser?.id;
   let user = userId ? await getUserById(userId) : null;
-  if (user) {
-    user = await reconcileUserWithWalletCookie(user);
-    user = await hydrateUserPlanUsage(user);
-    return { ok: true, user };
-  }
 
+  let jwtSupabaseUserId: string | null = null;
   try {
     const secret = requireAuthSecret();
     const token = await getToken({
@@ -64,6 +60,17 @@ export async function resolveAppUser(
       secureCookie: useSecureAuthCookies(),
       cookieName: authSessionCookieName(),
     });
+    if (typeof token?.supabaseUserId === "string") {
+      jwtSupabaseUserId = token.supabaseUserId;
+    }
+
+    if (user) {
+      user = await reconcileUserWithWalletCookie(user);
+      user = await hydrateUserPlanUsage(user, {
+        supabaseUserId: jwtSupabaseUserId,
+      });
+      return { ok: true, user };
+    }
 
     if (!token && !userId) {
       if (options.allowGuest) {
@@ -151,7 +158,9 @@ export async function resolveAppUser(
       image: sessionUser?.image ?? null,
       credits: wallet?.credits,
     });
-    const hydrated = await hydrateUserPlanUsage(ensured);
+    const hydrated = await hydrateUserPlanUsage(ensured, {
+      supabaseUserId: jwtSupabaseUserId,
+    });
     return { ok: true, user: hydrated };
   }
 

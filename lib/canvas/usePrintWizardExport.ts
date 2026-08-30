@@ -110,15 +110,18 @@ export function usePrintWizardExport({
     return project;
   };
 
-  const downloadWithProject = async (quality: "standard" | "high") => {
+  const downloadWithProject = async (
+    quality: "standard" | "high" | "ultra"
+  ) => {
     if (!requireSubscription()) return;
     setBusy(true);
     try {
+      const exportQuality = quality === "standard" ? "standard" : "high";
       // Build the file first — only spend quota after we have a real blob.
       let imageBlob: Blob | null = null;
       if (resolveExportImage) {
         try {
-          imageBlob = await resolveExportImage(quality);
+          imageBlob = await resolveExportImage(exportQuality);
         } catch (err) {
           if (
             err instanceof Error &&
@@ -183,13 +186,15 @@ export function usePrintWizardExport({
         imageBlob,
         project,
         baseName,
-        imageExt: quality === "high" ? "png" : "jpg",
+        imageExt: quality === "standard" ? "jpg" : "png",
         depositToSpace4: depositSpace4,
         space4ThumbBlob: imageBlob,
         successMessage:
-          quality === "high"
-            ? "고화질 파일 + 수정용 상태파일(.sca)을 저장하고 최근 목록에 등록했습니다."
-            : "일반화질 파일 + 수정용 상태파일(.sca)을 저장하고 최근 목록에 등록했습니다.",
+          quality === "ultra"
+            ? "초고해상도 파일 + 수정용 상태파일(.sca)을 저장하고 최근 목록에 등록했습니다."
+            : quality === "high"
+              ? "고화질 파일 + 수정용 상태파일(.sca)을 저장하고 최근 목록에 등록했습니다."
+              : "일반화질 파일 + 수정용 상태파일(.sca)을 저장하고 최근 목록에 등록했습니다.",
       });
     } catch {
       showToast("다운로드에 실패했습니다.", "error");

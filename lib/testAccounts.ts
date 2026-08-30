@@ -14,7 +14,7 @@ export type TestAccountSetup = {
 export const TEST_ACCOUNT_SETUPS: readonly TestAccountSetup[] = [
   {
     email: "studiocanvas.cs@gmail.com",
-    planId: "standard",
+    planId: "pro",
     interval: "quarterly",
     autoRenew: true,
   },
@@ -86,6 +86,8 @@ export function applyTestAccountSubscription(
 
   if (!periodMatchesSetup(user, setup, now)) {
     const periodExpired = billingPeriodExpired(user, now);
+    const planChanged =
+      user.planId !== setup.planId || user.billingInterval !== setup.interval;
 
     user.planId = setup.planId;
     user.billingInterval = setup.interval;
@@ -97,14 +99,15 @@ export function applyTestAccountSubscription(
     delete user.scheduledCancelAt;
     delete user.cancelledAt;
 
-    if (periodExpired) {
+    if (periodExpired || planChanged) {
+      // New plan or expired window — seed full credit pool via ensurePlanUsage.
       user.currentPeriodStart = now;
       user.currentPeriodEnd = subscriptionPeriodEndMs(now, setup.interval);
       user.quotaPeriodStart = undefined;
       user.fhdRemaining = undefined;
       user.uhd4kRemaining = undefined;
     } else if (typeof user.currentPeriodEnd !== "number") {
-      // Cold start reprovision — set subscription window; quota restored via cookie/R2.
+      // Cold start reprovision — set subscription window; quota restored via cookie/R2/Supabase.
       user.currentPeriodStart = user.currentPeriodStart ?? now;
       user.currentPeriodEnd = subscriptionPeriodEndMs(
         user.currentPeriodStart,

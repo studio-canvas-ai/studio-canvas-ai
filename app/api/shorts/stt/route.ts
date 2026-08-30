@@ -27,7 +27,7 @@ function formKeys(form: FormData): string[] {
  *  - fileName (optional)
  *  - mimeType (optional)
  *  - sourceKind (optional): "audio" | "video"
- * No credit wallet debit — captions run on auth + rate limit only.
+ * Auth + rate limit + 3-credit pool debit on success.
  */
 export async function POST(req: Request) {
   const reqStarted = Date.now();
@@ -214,6 +214,26 @@ export async function POST(req: Request) {
         polished: polished.length > 0,
       });
 
+      const { consumeCreditPool, snapshotPlanUsage } = await import(
+        "@/lib/db/planUsage"
+      );
+      const { FEATURE_CREDIT_COST } = await import("@/lib/featureCreditCosts");
+      const debit = await consumeCreditPool({
+        userId: userId!,
+        amount: FEATURE_CREDIT_COST.shortsCaption,
+      });
+      if (!debit.ok) {
+        return NextResponse.json(
+          {
+            error: "insufficient_quota",
+            code: "insufficient_quota",
+            amount: FEATURE_CREDIT_COST.shortsCaption,
+            remaining: debit.remaining,
+          },
+          { status: 402 }
+        );
+      }
+
       return NextResponse.json({
         ok: true,
         language: result.language ?? null,
@@ -221,6 +241,9 @@ export async function POST(req: Request) {
         segments,
         durationSec: result.durationSec ?? null,
         polished: polished.length > 0,
+        amount: FEATURE_CREDIT_COST.shortsCaption,
+        remaining: debit.remaining,
+        usage: snapshotPlanUsage(debit.user),
       });
     } catch (err) {
       const code =

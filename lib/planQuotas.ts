@@ -1,4 +1,5 @@
 import type { BillingInterval, PricingPlanId } from "@/lib/data";
+import { creditPoolForPlan } from "@/lib/featureCreditCosts";
 
 /** Period caps for pricing UI and download/storage enforcement. */
 export type QuotaMode = "max" | "plus";
@@ -165,8 +166,10 @@ export function getPlanUsageLimits(
     return { fhd: 0, uhd4k: 0, gallery: 0 };
   }
   const q = getPlanQuotaDisplay(key, billing);
+  const creditPool = creditPoolForPlan(key, billing);
   return {
-    fhd: q.fhd.n,
+    // Monthly / 3-month: fhdRemaining is the unified credit pool (pricing catalog).
+    fhd: creditPool ?? q.fhd.n,
     uhd4k: q.uhd4k.n,
     gallery: q.gallery.n,
   };

@@ -14,6 +14,8 @@ import {
 import { applyVisualOnlyPolicy } from "@/lib/ai/layerPolicy";
 import { checkGenerateRateLimit } from "@/lib/rateLimit";
 import { resolveAppUser } from "@/lib/resolveAppUser";
+import { consumeCreditPool, snapshotPlanUsage } from "@/lib/db/planUsage";
+import { FEATURE_CREDIT_COST } from "@/lib/featureCreditCosts";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -59,7 +61,13 @@ export async function POST(req: Request) {
     }
 
     const resolved = await resolveAppUser(req);
-    const userId = resolved.ok ? resolved.user.id : null;
+    if (!resolved.ok) {
+      return NextResponse.json(
+        { ok: false, error: resolved.error, message: "Authentication required." },
+        { status: resolved.status }
+      );
+    }
+    const userId = resolved.user.id;
     const rl = checkGenerateRateLimit(req, userId);
     if (!rl.ok) {
       return NextResponse.json(
@@ -229,6 +237,24 @@ export async function POST(req: Request) {
       );
     }
 
+    const debit = await consumeCreditPool({
+      userId,
+      amount: FEATURE_CREDIT_COST.aiBackground,
+    });
+    if (!debit.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "insufficient_quota",
+          message: "크레딧이 부족합니다. AI 배경 생성에는 25 크레딧이 필요합니다.",
+          amount: FEATURE_CREDIT_COST.aiBackground,
+          remaining: debit.remaining,
+          usage: snapshotPlanUsage(resolved.user),
+        },
+        { status: 402 }
+      );
+    }
+
     return NextResponse.json({
       ok: true,
       imageUrl,
@@ -239,6 +265,9 @@ export async function POST(req: Request) {
       requestId: routed.requestId,
       images: candidates,
       seed: result.seed ?? seed,
+      amount: FEATURE_CREDIT_COST.aiBackground,
+      remaining: debit.remaining,
+      usage: snapshotPlanUsage(debit.user),
     });
   } catch (error) {
     logFalApiError(error, { stage: "api_ai_background" });

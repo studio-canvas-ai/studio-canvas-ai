@@ -1299,12 +1299,7 @@ export default function PrintUnifiedEditor() {
                 busy={exportBusy}
                 onDownloadStandard={() => void downloadWithProject("standard")}
                 onDownloadHigh={() => void downloadWithProject("high")}
-                onDownloadUltra={() => {
-                  showToast(
-                    "초고해상도 다운로드는 곧 연결됩니다.",
-                    "info"
-                  );
-                }}
+                onDownloadUltra={() => void downloadWithProject("ultra")}
                 onLoadProjectClick={() => {
                   if (!requireSubscription()) return;
                   projectFileInputRef.current?.click();

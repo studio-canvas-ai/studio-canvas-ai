@@ -180,12 +180,35 @@ export async function POST(req: Request) {
       frames,
     });
 
+    const { consumeCreditPool, snapshotPlanUsage } = await import(
+      "@/lib/db/planUsage"
+    );
+    const { FEATURE_CREDIT_COST } = await import("@/lib/featureCreditCosts");
+    const debit = await consumeCreditPool({
+      userId,
+      amount: FEATURE_CREDIT_COST.shortsHook,
+    });
+    if (!debit.ok) {
+      return NextResponse.json(
+        {
+          error: "insufficient_quota",
+          amount: FEATURE_CREDIT_COST.shortsHook,
+          remaining: debit.remaining,
+          usage: snapshotPlanUsage(resolved.user),
+        },
+        { status: 402 }
+      );
+    }
+
     return NextResponse.json({
       ok: true,
       videoId,
       method,
       hooks,
       selectedHint: "Pick one frame to continue to the text edit studio.",
+      amount: FEATURE_CREDIT_COST.shortsHook,
+      remaining: debit.remaining,
+      usage: snapshotPlanUsage(debit.user),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "extract_failed";

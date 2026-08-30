@@ -20,6 +20,7 @@ import {
   quotaPeriodCompatible,
   type QuotaSnapshotLike,
 } from "@/lib/quotaPeriod";
+import { FEATURE_CREDIT_COST } from "@/lib/featureCreditCosts";
 
 export type DownloadQuotaKind = "fhd" | "uhd4k";
 
@@ -250,15 +251,25 @@ export type ConsumeQuotaResult =
   | { ok: true; user: UserRecord; remaining: number }
   | { ok: false; reason: "not_found" | "insufficient"; remaining: number };
 
-/** Decrement FHD or 4K remaining. Admins are not exempt. */
-export async function consumeDownloadQuota(params: {
+/**
+ * Decrement the unified credit pool (`fhdRemaining`) by `amount`, then persist
+ * cookie + R2 + Supabase.
+ */
+export async function consumeCreditPool(params: {
   userId: string;
-  kind: DownloadQuotaKind;
+  amount: number;
+  supabaseUserId?: string | null;
 }): Promise<ConsumeQuotaResult> {
+  const amount = Math.max(1, Math.floor(params.amount));
+  const aliases = [
+    params.supabaseUserId,
+    /^[0-9a-f-]{36}$/i.test(params.userId) ? params.userId : null,
+  ].filter((v): v is string => typeof v === "string" && v.length > 0);
+
   const [cookie, durable, supabase] = await Promise.all([
     readQuotaCookie(params.userId),
     loadDurableQuota(params.userId),
-    loadSupabaseQuota(params.userId),
+    loadSupabaseQuota(params.userId, aliases),
   ]);
   const result = await withDbLock((db) => {
     const user = db.users[params.userId];
@@ -266,18 +277,47 @@ export async function consumeDownloadQuota(params: {
       return { ok: false as const, reason: "not_found" as const, remaining: 0 };
     }
     mergePlanUsageFromSnapshots(user, cookie, durable, supabase);
-    const key = params.kind === "uhd4k" ? "uhd4kRemaining" : "fhdRemaining";
-    const remaining = user[key] ?? 0;
-    if (remaining < 1) {
-      return { ok: false as const, reason: "insufficient" as const, remaining };
+    const remaining = user.fhdRemaining ?? 0;
+    if (remaining < amount) {
+      return {
+        ok: false as const,
+        reason: "insufficient" as const,
+        remaining,
+      };
     }
-    user[key] = remaining - 1;
+    user.fhdRemaining = remaining - amount;
     user.updatedAt = Date.now();
-    return { ok: true as const, user, remaining: user[key] ?? 0 };
+    return {
+      ok: true as const,
+      user,
+      remaining: user.fhdRemaining ?? 0,
+    };
   });
 
   if (result.ok) {
-    await persistUserPlanUsage(result.user);
+    await persistUserPlanUsage(result.user, {
+      supabaseUserId: params.supabaseUserId,
+    });
   }
   return result;
+}
+
+/** @deprecated Prefer consumeCreditPool — maps legacy FHD/4K kinds to pool costs. */
+export async function consumeDownloadQuota(params: {
+  userId: string;
+  kind: DownloadQuotaKind;
+  amount?: number;
+  supabaseUserId?: string | null;
+}): Promise<ConsumeQuotaResult> {
+  const amount =
+    typeof params.amount === "number" && Number.isFinite(params.amount)
+      ? Math.max(1, Math.floor(params.amount))
+      : params.kind === "uhd4k"
+        ? FEATURE_CREDIT_COST.hdDownload
+        : FEATURE_CREDIT_COST.webDownload;
+  return consumeCreditPool({
+    userId: params.userId,
+    amount,
+    supabaseUserId: params.supabaseUserId,
+  });
 }
