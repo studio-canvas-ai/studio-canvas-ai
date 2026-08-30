@@ -303,6 +303,7 @@ export default function PrintUnifiedEditorCanvas({
         {onSaveCanvas ? (
           <ScaGallerySaveButton
             onSave={onSaveCanvas}
+            onLoadProject={onOpenRecentProject}
             busy={saveCanvasBusy}
             disabled={exportBusy || generating || !pageActivated}
             requireSubscription={requireSubscription}

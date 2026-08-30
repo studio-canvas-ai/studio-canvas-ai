@@ -1310,6 +1310,7 @@ export default function PrintUnifiedEditor() {
                 fileInputRef={projectFileInputRef}
                 onFileChange={(file) => void loadProjectFile(file)}
                 variant="unified"
+                useSharedGalleryVault
                 showHint
               />
             </div>

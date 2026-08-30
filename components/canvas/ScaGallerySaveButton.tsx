@@ -1,24 +1,34 @@
 "use client";
 
 /**
- * Screen 26 — "내 갤러리 저장" toggle popover (same interaction as 최근 파일 불러오기).
- * Light high-contrast panel: list stored .sca + primary save action.
+ * Screen 26 — shared "내 갤러리" vault popover (save + list / load).
+ * Top-left save trigger and bottom "내갤러리불러오기" open the same menu.
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ImageDown, Images } from "lucide-react";
 import { useCredits } from "@/components/CreditsProvider";
+import { useFeedback } from "@/components/FeedbackProvider";
 import { useI18n } from "@/components/I18nProvider";
 import { fillCanvas } from "@/lib/i18n";
+import { parseStudioProject, type StudioCanvasProjectV1 } from "@/lib/canvas/projectFile";
 import { getPlanStorageLimits } from "@/lib/planStorageLimits";
+import { importSecureProject } from "@/lib/projectStorage";
 import {
+  SCA_GALLERY_VAULT_EVENT,
+  type ScaGalleryVaultDetail,
+} from "@/lib/scaGalleryVaultUi";
+import {
+  fetchScaGalleryProjectContent,
   fetchScaGalleryProjects,
   type ScaGalleryProjectMeta,
 } from "@/lib/scaGalleryProjects";
 
 type Props = {
   onSave: () => void | Promise<void>;
+  /** When set, list rows load the sealed .sca into the editor. */
+  onLoadProject?: (project: StudioCanvasProjectV1) => void | Promise<void>;
   disabled?: boolean;
   busy?: boolean;
   className?: string;
@@ -31,11 +41,13 @@ const VIEWPORT_PAD = 8;
 
 export default function ScaGallerySaveButton({
   onSave,
+  onLoadProject,
   disabled = false,
   busy = false,
   className = "",
   requireSubscription,
 }: Props) {
+  const { showToast } = useFeedback();
   const { t } = useI18n();
   const cs = t.canvasStudio;
   const { planId, billingInterval } = useCredits();
@@ -43,10 +55,12 @@ export default function ScaGallerySaveButton({
 
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadBusy, setLoadBusy] = useState(false);
   const [projects, setProjects] = useState<ScaGalleryProjectMeta[]>([]);
   const [serverMax, setServerMax] = useState(planMax);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuPanelRef = useRef<HTMLDivElement>(null);
+  const externalAnchorRef = useRef<HTMLElement | null>(null);
   const [coords, setCoords] = useState<{
     top: number;
     bottom: number;
@@ -77,7 +91,8 @@ export default function ScaGallerySaveButton({
   }, [refresh]);
 
   const updateCoords = useCallback(() => {
-    const rect = triggerRef.current?.getBoundingClientRect();
+    const el = externalAnchorRef.current ?? triggerRef.current;
+    const rect = el?.getBoundingClientRect();
     if (!rect) return;
     const width = Math.min(
       Math.max(MENU_MIN_W, rect.width),
@@ -122,15 +137,50 @@ export default function ScaGallerySaveButton({
   }, [open, refresh]);
 
   useEffect(() => {
+    const onVault = (e: Event) => {
+      const detail = (e as CustomEvent<ScaGalleryVaultDetail>).detail;
+      if (!detail) return;
+      if (detail.action === "close") {
+        externalAnchorRef.current = null;
+        setOpen(false);
+        return;
+      }
+      if (detail.action === "open") {
+        if (requireSubscription && !requireSubscription()) return;
+        externalAnchorRef.current = detail.anchor ?? null;
+        setOpen(true);
+        return;
+      }
+      // toggle
+      setOpen((prev) => {
+        if (prev) {
+          externalAnchorRef.current = null;
+          return false;
+        }
+        if (requireSubscription && !requireSubscription()) return false;
+        externalAnchorRef.current = detail.anchor ?? null;
+        return true;
+      });
+    };
+    window.addEventListener(SCA_GALLERY_VAULT_EVENT, onVault);
+    return () => window.removeEventListener(SCA_GALLERY_VAULT_EVENT, onVault);
+  }, [requireSubscription]);
+
+  useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
       const target = e.target as Node;
       if (triggerRef.current?.contains(target)) return;
       if (menuPanelRef.current?.contains(target)) return;
+      if (externalAnchorRef.current?.contains(target)) return;
+      externalAnchorRef.current = null;
       setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") {
+        externalAnchorRef.current = null;
+        setOpen(false);
+      }
     };
     const timer = window.setTimeout(() => {
       document.addEventListener("mousedown", onDoc);
@@ -147,6 +197,26 @@ export default function ScaGallerySaveButton({
     if (requireSubscription && !requireSubscription()) return;
     await onSave();
     await refresh();
+  };
+
+  const handlePick = async (meta: ScaGalleryProjectMeta) => {
+    if (!onLoadProject) return;
+    if (requireSubscription && !requireSubscription()) return;
+    setLoadBusy(true);
+    try {
+      const sealed = await fetchScaGalleryProjectContent(meta.id);
+      const raw = await importSecureProject(sealed);
+      const project = parseStudioProject(raw);
+      await onLoadProject(project);
+      externalAnchorRef.current = null;
+      setOpen(false);
+      showToast(cs.loadFromGalleryDone, "success");
+    } catch (err) {
+      console.warn("[ScaGallerySaveButton] load failed", err);
+      showToast(cs.loadFromGalleryFailed, "error");
+    } finally {
+      setLoadBusy(false);
+    }
   };
 
   const menu =
@@ -183,7 +253,7 @@ export default function ScaGallerySaveButton({
               <button
                 type="button"
                 role="menuitem"
-                disabled={disabled || busy}
+                disabled={disabled || busy || loadBusy}
                 onClick={() => void handleSave()}
                 className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-[11px] font-semibold text-indigo-900 transition hover:bg-indigo-100 disabled:opacity-40"
               >
@@ -200,36 +270,57 @@ export default function ScaGallerySaveButton({
                 {fillCanvas(cs.saveGalleryEmpty, { max })}
               </p>
             ) : (
-              projects.map((p) => (
-                <div
-                  key={p.id}
-                  className="flex w-full items-center gap-2 px-3 py-2"
-                >
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-slate-100">
-                    {p.thumbSrc ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={p.thumbSrc}
-                        alt=""
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <Images className="h-3.5 w-3.5 text-slate-500" aria-hidden />
-                    )}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[11px] font-semibold text-slate-900">
-                      {p.label}
+              projects.map((p) => {
+                const row = (
+                  <>
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-slate-100">
+                      {p.thumbSrc ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={p.thumbSrc}
+                          alt=""
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <Images
+                          className="h-3.5 w-3.5 text-slate-500"
+                          aria-hidden
+                        />
+                      )}
                     </span>
-                    <span className="block text-[10px] text-slate-600">
-                      {p.mode === "agent"
-                        ? cs.recentModePrint
-                        : cs.recentModeTemplate}{" "}
-                      · .sca
+                    <span className="min-w-0 flex-1 text-left">
+                      <span className="block truncate text-[11px] font-semibold text-slate-900">
+                        {p.label}
+                      </span>
+                      <span className="block text-[10px] text-slate-600">
+                        {p.mode === "agent"
+                          ? cs.recentModePrint
+                          : cs.recentModeTemplate}{" "}
+                        · .sca
+                      </span>
                     </span>
-                  </span>
-                </div>
-              ))
+                  </>
+                );
+                if (onLoadProject) {
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      role="menuitem"
+                      disabled={loadBusy || busy}
+                      onClick={() => void handlePick(p)}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-slate-100 disabled:opacity-50"
+                    >
+                      {row}
+                    </button>
+                  );
+                }
+                return (
+                  <div key={p.id} className="flex w-full items-center gap-2 px-3 py-2">
+                    {row}
+                  </div>
+                );
+              })
             )}
           </div>,
           document.body
@@ -246,6 +337,7 @@ export default function ScaGallerySaveButton({
         aria-expanded={open}
         onClick={() => {
           if (requireSubscription && !requireSubscription()) return;
+          externalAnchorRef.current = null;
           setOpen((v) => !v);
         }}
         title={fillCanvas(cs.saveGalleryDrawerHint, { max })}

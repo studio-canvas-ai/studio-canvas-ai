@@ -1,28 +1,34 @@
 "use client";
 
 import type { RefObject } from "react";
-import { Download, FolderOpen, Share2 } from "lucide-react";
+import { Download, FolderOpen, Images, Share2 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import ScaGalleryLoadButton from "@/components/canvas/ScaGalleryLoadButton";
 import type { StudioCanvasProjectV1 } from "@/lib/canvas/projectFile";
+import { dispatchScaGalleryVault } from "@/lib/scaGalleryVaultUi";
 import { useDownloadQuota } from "@/lib/useDownloadQuota";
 
 export type StudioExportButtonGroupProps = {
   busy?: boolean;
   onDownloadStandard: () => void;
   onDownloadHigh: () => void;
-  /** Screen 26 — print-ready ultra/vector download trigger (UI only until credits backend). */
+  /** Screen 26 — print-ready ultra/vector download trigger. */
   onDownloadUltra?: () => void;
   onLoadProjectClick: () => void;
   onShare: () => void;
   fileInputRef?: RefObject<HTMLInputElement | null>;
   onFileChange?: (file: File | null) => void;
-  /** Restore project from server FIFO `.sca` gallery (max 10). */
+  /** Restore project from server FIFO `.sca` gallery. */
   onLoadFromGallery?: (project: StudioCanvasProjectV1) => void | Promise<void>;
   requireSubscription?: () => boolean;
   /** Template Studio right-rail sizing vs compact print preview. */
   variant?: "studio" | "compact" | "unified";
   showHint?: boolean;
+  /**
+   * Screen 26 — bottom gallery button opens the shared vault popover
+   * (same UI as top-left 내 갤러리 저장).
+   */
+  useSharedGalleryVault?: boolean;
 };
 
 /** Split "일반화질 다운로드 (2000회 ↓)" → title + quota for single-line buttons. */
@@ -34,7 +40,6 @@ function splitQuotaLabel(label: string): { title: string; quota: string | null }
 
 /**
  * Download / load / share stack used by Template Studio and print-smart-form.
- * Download labels always show live FHD / 4K remaining (same as My Gallery).
  */
 export default function StudioExportButtonGroup({
   busy = false,
@@ -49,6 +54,7 @@ export default function StudioExportButtonGroup({
   requireSubscription,
   variant = "studio",
   showHint = true,
+  useSharedGalleryVault = false,
 }: StudioExportButtonGroupProps) {
   const { t } = useI18n();
   const cs = t.canvasStudio;
@@ -60,7 +66,7 @@ export default function StudioExportButtonGroup({
   const highParts = splitQuotaLabel(highLabel);
 
   const downloadClass = unified
-    ? "inline-flex min-h-[2.85rem] w-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl border px-1.5 py-2 text-white shadow-[0_8px_24px_rgba(15,23,42,0.35)] disabled:opacity-50"
+    ? "inline-flex min-h-[2.85rem] w-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl border px-1.5 py-2 shadow-[0_8px_24px_rgba(15,23,42,0.35)] disabled:opacity-50"
     : compact
       ? "inline-flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[11px] font-semibold text-white disabled:opacity-50"
       : "inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-lg disabled:opacity-50";
@@ -70,6 +76,9 @@ export default function StudioExportButtonGroup({
     : compact
       ? "inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-[#0E1420] px-3 py-2 text-[11px] font-medium text-slate-200 hover:bg-slate-800/60 disabled:opacity-50"
       : "inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-white/85 hover:bg-white/10 disabled:opacity-50";
+
+  const galleryVaultBtnClass =
+    "inline-flex w-full flex-row items-center justify-center gap-1.5 rounded-lg border border-amber-300 bg-amber-100 px-2 py-2.5 text-[12px] font-semibold leading-none text-amber-950 hover:border-amber-400 hover:bg-amber-200 disabled:opacity-50 [word-break:keep-all] whitespace-nowrap";
 
   const iconClass = unified
     ? "h-3.5 w-3.5 shrink-0"
@@ -87,10 +96,10 @@ export default function StudioExportButtonGroup({
       ? "min-w-0 text-center text-[10px] font-semibold leading-tight [word-break:keep-all]"
       : "min-w-0 text-center text-[12px] font-semibold leading-tight [word-break:keep-all] sm:text-sm";
   const downloadTitleClass = unified
-    ? "max-w-full text-[10px] font-extrabold tracking-tight [word-break:keep-all] sm:text-[11px]"
+    ? "max-w-full text-[12px] font-extrabold leading-tight tracking-tight text-black [word-break:keep-all] sm:text-[13px]"
     : "";
   const downloadCreditClass = unified
-    ? "shrink-0 text-[9px] font-bold tabular-nums sm:text-[10px]"
+    ? "shrink-0 text-[11px] font-bold tabular-nums text-white sm:text-[12px]"
     : "";
   const downloadQuotaClass = unified
     ? "shrink-0 text-[11px] font-bold sm:text-[12px]"
@@ -109,17 +118,11 @@ export default function StudioExportButtonGroup({
       full
     );
 
-  const renderCreditLabel = (title: string, line2: string, line3?: string) => (
+  /** Screen 26: exactly two lines — black title + white credit. */
+  const renderCreditLabel = (title: string, credit: string) => (
     <span className={labelClass}>
       <span className={downloadTitleClass}>{title}</span>
-      {line2 ? (
-        <span className={downloadCreditClass}>{line2}</span>
-      ) : null}
-      {line3 ? (
-        <span className="max-w-full text-[8px] font-semibold leading-none opacity-90 [word-break:keep-all] sm:text-[9px]">
-          {line3}
-        </span>
-      ) : null}
+      <span className={downloadCreditClass}>{credit}</span>
     </span>
   );
 
@@ -141,11 +144,8 @@ export default function StudioExportButtonGroup({
             disabled={busy || !canDownloadStandard}
             className={`${downloadClass} flex-1 border-white/20 bg-gradient-to-r from-teal-500 via-emerald-500 to-emerald-400`}
           >
-            <Download className={iconClass} aria-hidden />
-            {renderCreditLabel(
-              "일반화질 다운로드 (1 크레딧)",
-              "(웹, SNS, 인쇄물)"
-            )}
+            <Download className={`${iconClass} text-white`} aria-hidden />
+            {renderCreditLabel("일반화질 다운로드", "(1 크레딧)")}
           </button>
           <button
             type="button"
@@ -153,11 +153,8 @@ export default function StudioExportButtonGroup({
             disabled={busy || !canDownloadHigh}
             className={`${downloadClass} flex-1 border-white/20 bg-gradient-to-r from-violet-600 via-indigo-500 to-sky-500`}
           >
-            <Download className={iconClass} aria-hidden />
-            {renderCreditLabel(
-              "고화질 다운로드 (2 크레딧)",
-              "(고해상도, 포스터, 인쇄물)"
-            )}
+            <Download className={`${iconClass} text-white`} aria-hidden />
+            {renderCreditLabel("고화질 다운로드", "(2 크레딧)")}
           </button>
           <button
             type="button"
@@ -165,7 +162,7 @@ export default function StudioExportButtonGroup({
             disabled={busy || !onDownloadUltra || !canDownloadUltra}
             className={`${downloadClass} flex-1 border-amber-300/80 bg-gradient-to-r from-amber-600 via-orange-500 to-rose-500 ring-1 ring-amber-200/70`}
           >
-            <Download className={iconClass} aria-hidden />
+            <Download className={`${iconClass} text-white`} aria-hidden />
             {renderCreditLabel("초고해상도 다운로드", "(5 크레딧)")}
           </button>
         </div>
@@ -212,14 +209,32 @@ export default function StudioExportButtonGroup({
             <FolderOpen className={iconClass} aria-hidden />
             <span className="min-w-0 truncate">{cs.loadEditFile}</span>
           </button>
-          <ScaGalleryLoadButton
-            compact={false}
-            disabled={busy}
-            tone="light"
-            requireSubscription={requireSubscription}
-            onLoadProject={onLoadFromGallery}
-            className={secondaryClass}
-          />
+          {useSharedGalleryVault ? (
+            <button
+              type="button"
+              disabled={busy}
+              className={galleryVaultBtnClass}
+              onClick={(e) => {
+                if (requireSubscription && !requireSubscription()) return;
+                dispatchScaGalleryVault({
+                  action: "toggle",
+                  anchor: e.currentTarget,
+                });
+              }}
+            >
+              <Images className={iconClass} aria-hidden />
+              <span className="min-w-0 truncate">내갤러리불러오기</span>
+            </button>
+          ) : (
+            <ScaGalleryLoadButton
+              compact={false}
+              disabled={busy}
+              tone="light"
+              requireSubscription={requireSubscription}
+              onLoadProject={onLoadFromGallery}
+              className={secondaryClass}
+            />
+          )}
           <button
             type="button"
             onClick={onShare}
