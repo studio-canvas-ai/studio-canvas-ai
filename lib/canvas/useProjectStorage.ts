@@ -2,11 +2,12 @@
 
 /**
  * Shared recent-project storage for Template Studio + Print Smart Form.
- * Download → PC files + localStorage FIFO drawer (max 10) + server gallery FIFO.
+ * Download → device export + recent FIFO + gallery FIFO + optional Space4.
  */
 
 import { useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { useCredits } from "@/components/CreditsProvider";
 import { useFeedback } from "@/components/FeedbackProvider";
 import {
   downloadImageAndProjectLocally,
@@ -18,6 +19,7 @@ import {
   type RecentProjectNamespace,
 } from "@/lib/canvas/recentProjects";
 import { uploadScaProjectToGallery } from "@/lib/scaGalleryProjects";
+import { getPlanStorageLimits } from "@/lib/planStorageLimits";
 import { PRINT_WIZARD_STUDIO_PATH } from "@/lib/wizard/wizardProduct";
 
 export const TEMPLATE_STUDIO_PATH = "/template-studio";
@@ -32,7 +34,8 @@ export function studioPathForProject(
 }
 
 /**
- * Download PNG + sealed `.sca` then push into the shared recent FIFO (max 10).
+ * Download rendered export to device, then sync sealed `.sca` to:
+ * recent-files cloud, works gallery, and (optional) Space 4 vault.
  * Caller must enforce subscription before invoking.
  */
 export async function downloadImageAndRememberRecent(opts: {
@@ -45,10 +48,23 @@ export async function downloadImageAndRememberRecent(opts: {
   depositToSpace4?: boolean;
   /** Canvas composite blob for Space 4 admin preview thumbnail. */
   space4ThumbBlob?: Blob | null;
+  /** Plan scaCloud cap for recent-files FIFO. */
+  recentMax?: number;
 }): Promise<{ recentOk: boolean }> {
-  const sealedProject = await downloadImageAndProjectLocally(opts);
+  const sealedProject = await downloadImageAndProjectLocally({
+    imageBlob: opts.imageBlob,
+    project: opts.project,
+    baseName: opts.baseName,
+    imageExt: opts.imageExt,
+    // Screen 26 multi-cloud sync: device keeps export only; .sca → clouds.
+    skipLocalProject: Boolean(opts.depositToSpace4),
+  });
   try {
-    await pushRecentProject(sealedProject, opts.recentNamespace);
+    await pushRecentProject(
+      sealedProject,
+      opts.recentNamespace,
+      opts.recentMax
+    );
   } catch (err) {
     console.warn("[projectStorage] recent FIFO save failed", err);
     return { recentOk: false };
@@ -77,11 +93,16 @@ export async function downloadImageAndRememberRecent(opts: {
 export async function rememberProjectInGallery(opts: {
   project: StudioCanvasProjectV1;
   recentNamespace?: RecentProjectNamespace;
+  recentMax?: number;
 }): Promise<{ recentOk: boolean; galleryOk: boolean }> {
   let recentOk = false;
   let galleryOk = false;
   try {
-    await pushRecentProject(opts.project, opts.recentNamespace);
+    await pushRecentProject(
+      opts.project,
+      opts.recentNamespace,
+      opts.recentMax
+    );
     recentOk = true;
   } catch (err) {
     console.warn("[projectStorage] recent FIFO save failed", err);
@@ -127,6 +148,8 @@ export function useProjectStorage(config?: {
 }) {
   const router = useRouter();
   const { showToast } = useFeedback();
+  const { planId, billingInterval } = useCredits();
+  const storageLimits = getPlanStorageLimits(planId, billingInterval);
 
   const downloadAndRemember = useCallback(
     async (downloadOpts: {
@@ -143,6 +166,7 @@ export function useProjectStorage(config?: {
         recentNamespace: config?.recentNamespace,
         depositToSpace4: downloadOpts.depositToSpace4,
         space4ThumbBlob: downloadOpts.space4ThumbBlob,
+        recentMax: storageLimits.scaCloud,
       });
       if (!recentOk) {
         showToast(
@@ -156,7 +180,7 @@ export function useProjectStorage(config?: {
       }
       return { recentOk: true as const };
     },
-    [config?.recentNamespace, showToast]
+    [config?.recentNamespace, showToast, storageLimits.scaCloud]
   );
 
   const openRecent = useCallback(
@@ -189,6 +213,7 @@ export function useProjectStorage(config?: {
       const { recentOk, galleryOk } = await rememberProjectInGallery({
         project,
         recentNamespace: config?.recentNamespace,
+        recentMax: storageLimits.scaCloud,
       });
       if (!recentOk && !galleryOk) {
         showToast("갤러리 저장에 실패했습니다. 잠시 후 다시 시도해 주세요.", "error");
@@ -203,7 +228,7 @@ export function useProjectStorage(config?: {
       }
       return { ok: true as const, partial: false as const };
     },
-    [config?.recentNamespace, showToast]
+    [config?.recentNamespace, showToast, storageLimits.scaCloud]
   );
 
   return {
@@ -211,5 +236,6 @@ export function useProjectStorage(config?: {
     saveToGallery,
     openRecent,
     studioPathForProject,
+    storageLimits,
   };
 }

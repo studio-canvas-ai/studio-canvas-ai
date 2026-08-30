@@ -19,8 +19,10 @@ import {
   Upload,
 } from "lucide-react";
 import { useFeedback } from "@/components/FeedbackProvider";
+import { useCredits } from "@/components/CreditsProvider";
 import { useI18n } from "@/components/I18nProvider";
 import { fillCanvas } from "@/lib/i18n";
+import { getPlanStorageLimits } from "@/lib/planStorageLimits";
 import { useCanvasStore } from "@/lib/canvas/canvasStore";
 import {
   addPhotoLayerFromFile,
@@ -101,6 +103,8 @@ export default function CanvasUploadToolbar({
   const { showToast } = useFeedback();
   const { t } = useI18n();
   const cs = t.canvasStudio;
+  const { planId, billingInterval } = useCredits();
+  const recentMax = getPlanStorageLimits(planId, billingInterval).scaCloud;
   const originalInputRef = useRef<HTMLInputElement>(null);
   const cutoutInputRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -259,30 +263,30 @@ export default function CanvasUploadToolbar({
     if (extraDeletable) {
       onDeleteObject?.(extraDeletable.id, extraDeletable.type);
       onLayersChanged?.();
-      showToast("?�택??객체�???��?�습?�다.", "success");
+      showToast("선택한 객체를 삭제했습니다.", "success");
       return;
     }
     const store = useCanvasStore.getState();
     const id = store.selectedId;
     if (!id) {
-      showToast("??��??객체�??�택??주세??", "info");
+      showToast("삭제할 객체를 선택해 주세요.", "info");
       return;
     }
     const obj = store.objects.find((o) => o.id === id);
     if (!obj || obj.locked || obj.type === "background") {
-      showToast("??객체????��?????�습?�다.", "info");
+      showToast("이 객체는 삭제할 수 없습니다.", "info");
       return;
     }
     onDeleteObject?.(obj.id, obj.type);
     store.removeObject(id);
     onLayersChanged?.();
-    showToast("?�택??객체�???��?�습?�다.", "success");
+    showToast("선택한 객체를 삭제했습니다.", "success");
   };
 
   const pick = (mode: "original" | "cutout", file: File | null) => {
     if (!file) return;
     if (!isAllowedPrintPhotoFile(file)) {
-      showToast("JPG, PNG, WebP ?��?지�??�로?�할 ???�습?�다.", "info");
+      showToast("JPG, PNG, WebP 이미지만 업로드할 수 있습니다.", "info");
       if (originalInputRef.current) originalInputRef.current.value = "";
       if (cutoutInputRef.current) cutoutInputRef.current.value = "";
       return;
@@ -302,13 +306,13 @@ export default function CanvasUploadToolbar({
         onLayersChanged?.();
         showToast(
           mode === "cutout"
-            ? "배경 ?�거 ?��?지�?중앙???�착?�습?�다."
-            : "?�본 ?��?지�?중앙???�착?�습?�다.",
+            ? "배경 제거 이미지를 중앙에 부착했습니다."
+            : "원본 이미지를 중앙에 부착했습니다.",
           "success"
         );
       } catch (err) {
         showToast(
-          err instanceof Error ? err.message : "?�진 ?�로?�에 ?�패?�습?�다.",
+          err instanceof Error ? err.message : "사진 업로드에 실패했습니다.",
           "error"
         );
       } finally {
@@ -322,7 +326,7 @@ export default function CanvasUploadToolbar({
   const loadRecent = (id: string) => {
     if (requireSubscription && !requireSubscription()) return;
     if (!onLoadRecentProject) {
-      showToast("???�면?�서??최근 ?�일 복원??지?�하지 ?�습?�다.", "info");
+      showToast("이 화면에서는 최근 파일 복원을 지원하지 않습니다.", "info");
       return;
     }
     void (async () => {
@@ -330,7 +334,7 @@ export default function CanvasUploadToolbar({
       try {
         const project = await getRecentProject(id, recentNamespace);
         if (!project) {
-          showToast("최근 ?�일??찾을 ???�습?�다.", "error");
+          showToast("최근 파일을 찾을 수 없습니다.", "error");
           return;
         }
         await onLoadRecentProject(project);
@@ -339,7 +343,7 @@ export default function CanvasUploadToolbar({
         showToast(
           err instanceof Error
             ? err.message
-            : "최근 ?�일 불러?�기???�패?�습?�다.",
+            : "최근 파일 불러오기에 실패했습니다.",
           "error"
         );
       } finally {
@@ -355,7 +359,11 @@ export default function CanvasUploadToolbar({
             ref={menuPanelRef}
             role="menu"
             aria-label={cs.recentDrawerTitle}
-            className="overflow-hidden rounded-xl border border-white/15 bg-[#12161f]/98 py-1 shadow-2xl backdrop-blur-xl"
+            className={`overflow-hidden rounded-xl border py-1 shadow-2xl backdrop-blur-xl ${
+              isLight
+                ? "border-slate-200 bg-white text-slate-900"
+                : "border-white/15 bg-[#12161f]/98 text-white"
+            }`}
             style={{
               position: "fixed",
               zIndex: MENU_Z,
@@ -370,17 +378,33 @@ export default function CanvasUploadToolbar({
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="border-b border-white/10 px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-200/80">
+            <div
+              className={`border-b px-3 py-2 ${
+                isLight ? "border-slate-200" : "border-white/10"
+              }`}
+            >
+              <p
+                className={`text-[10px] font-semibold uppercase tracking-wide ${
+                  isLight ? "text-amber-800" : "text-amber-200/80"
+                }`}
+              >
                 {cs.recentDrawerTitle}
               </p>
-              <p className="text-[10px] text-white/40">
-                {fillCanvas(cs.recentDrawerHint, { max: RECENT_PROJECTS_MAX })}
+              <p
+                className={`text-[10px] ${
+                  isLight ? "text-slate-600" : "text-white/55"
+                }`}
+              >
+                {fillCanvas(cs.recentDrawerHint, { max: recentMax })}
               </p>
             </div>
             {recent.length === 0 ? (
-              <p className="px-3 py-3 text-[11px] leading-relaxed text-white/45">
-                {fillCanvas(cs.recentEmpty, { max: RECENT_PROJECTS_MAX })}
+              <p
+                className={`px-3 py-3 text-[11px] leading-relaxed ${
+                  isLight ? "text-slate-600" : "text-white/55"
+                }`}
+              >
+                {fillCanvas(cs.recentEmpty, { max: recentMax })}
               </p>
             ) : (
               recent.map((item) => (
@@ -389,9 +413,19 @@ export default function CanvasUploadToolbar({
                   type="button"
                   role="menuitem"
                   onClick={() => loadRecent(item.id)}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-white/10"
+                  className={`flex w-full items-center gap-2 px-3 py-2 text-left ${
+                    isLight
+                      ? "hover:bg-slate-100"
+                      : "hover:bg-white/10"
+                  }`}
                 >
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md border border-white/10 bg-black/40">
+                  <span
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md border ${
+                      isLight
+                        ? "border-slate-200 bg-slate-100"
+                        : "border-white/10 bg-black/40"
+                    }`}
+                  >
                     {item.thumbSrc ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -400,14 +434,26 @@ export default function CanvasUploadToolbar({
                         className="h-full w-full object-cover"
                       />
                     ) : (
-                      <Clock3 className="h-3.5 w-3.5 text-white/40" />
+                      <Clock3
+                        className={`h-3.5 w-3.5 ${
+                          isLight ? "text-slate-500" : "text-white/40"
+                        }`}
+                      />
                     )}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[11px] font-semibold text-white/85">
+                    <span
+                      className={`block truncate text-[11px] font-semibold ${
+                        isLight ? "text-slate-900" : "text-white"
+                      }`}
+                    >
                       {item.label}
                     </span>
-                    <span className="block text-[10px] text-white/40">
+                    <span
+                      className={`block text-[10px] ${
+                        isLight ? "text-slate-600" : "text-white/50"
+                      }`}
+                    >
                       {item.mode === "agent" ? cs.recentModePrint : cs.recentModeTemplate} · .sca
                     </span>
                   </span>
@@ -440,7 +486,7 @@ export default function CanvasUploadToolbar({
             setMenuOpen((v) => !v);
           }}
           className={recentBtn}
-          title={fillCanvas(cs.recentDrawerHint, { max: RECENT_PROJECTS_MAX })}
+          title={fillCanvas(cs.recentDrawerHint, { max: recentMax })}
         >
           <Clock3 className={iconCls} />
           <span className="whitespace-nowrap">
@@ -448,7 +494,7 @@ export default function CanvasUploadToolbar({
               ? cs.recentLoadBusy
               : fillCanvas(cs.recentLoad, {
                   count: recent.length,
-                  max: RECENT_PROJECTS_MAX,
+                  max: recentMax,
                 })}
           </span>
         </button>

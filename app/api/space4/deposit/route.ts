@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { depositSpace4Record } from "@/lib/space4Vault";
 import { resolveAppUser } from "@/lib/resolveAppUser";
 import { normalizeSpace4ThumbSrc } from "@/lib/space4Thumb";
+import { getPlanStorageLimits } from "@/lib/planStorageLimits";
 
 export const runtime = "nodejs";
 
@@ -33,6 +34,11 @@ export async function POST(req: Request) {
     );
   }
 
+  const storage = getPlanStorageLimits(
+    resolved.user.planId,
+    resolved.user.billingInterval ?? "monthly"
+  );
+
   try {
     const record = await depositSpace4Record({
       userId: resolved.user.id,
@@ -45,6 +51,7 @@ export async function POST(req: Request) {
       thumbSrc: normalizeSpace4ThumbSrc(
         typeof body.thumbSrc === "string" ? body.thumbSrc : null
       ),
+      perUserMax: storage.scaCloud,
     });
     return NextResponse.json({
       ok: true,

@@ -14,6 +14,7 @@ import {
   USER_SAVED_FORM_SCREENS,
   type SavedFormScreenId,
 } from "@/lib/canvas/userSavedFormsStore";
+import { getPlanStorageLimits } from "@/lib/planStorageLimits";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -74,13 +75,19 @@ export async function GET(req: Request) {
   }
 
   const aliases = await collectUserStorageAliases(req, resolved.user);
-  const entries = await loadUserSavedForms(
-    [...new Set([resolved.user.id, ...aliases])],
-    screenId
+  const storage = getPlanStorageLimits(
+    resolved.user.planId,
+    resolved.user.billingInterval ?? "monthly"
   );
+  const entries = (
+    await loadUserSavedForms(
+      [...new Set([resolved.user.id, ...aliases])],
+      screenId
+    )
+  ).slice(0, storage.scaCloud);
 
   return NextResponse.json(
-    { ok: true, namespace: screenId, entries },
+    { ok: true, namespace: screenId, entries, max: storage.scaCloud },
     { headers: { "Cache-Control": "private, no-store" } }
   );
 }
@@ -112,14 +119,24 @@ export async function PUT(req: Request) {
 
   const incoming = parseSavedFormPayload(body.entries ?? body.payload);
   const supabaseUserId = await supabaseUserIdFrom(req);
+  const storage = getPlanStorageLimits(
+    resolved.user.planId,
+    resolved.user.billingInterval ?? "monthly"
+  );
   const entries = await saveUserSavedForms({
     canonicalUserId: resolved.user.id,
     supabaseUserId,
     screenId,
     entries: incoming,
+    max: storage.scaCloud,
   });
 
-  return NextResponse.json({ ok: true, namespace: screenId, entries });
+  return NextResponse.json({
+    ok: true,
+    namespace: screenId,
+    entries,
+    max: storage.scaCloud,
+  });
 }
 
 /** POST — same as PUT (clients that prefer POST). */

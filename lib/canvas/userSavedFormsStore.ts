@@ -138,10 +138,21 @@ export async function saveUserSavedForms(opts: {
   supabaseUserId?: string | null;
   screenId: SavedFormScreenId;
   entries: RecentDrawerEntry[];
+  /** Plan scaCloud FIFO cap (default 10). */
+  max?: number;
 }): Promise<RecentDrawerEntry[]> {
+  const cap = Math.max(
+    1,
+    Math.min(
+      200,
+      typeof opts.max === "number" && Number.isFinite(opts.max)
+        ? Math.floor(opts.max)
+        : 10
+    )
+  );
   const admin = createSupabaseServiceClient();
   if (!admin || !isScreenId(opts.screenId)) {
-    return opts.entries.slice(0, 10);
+    return opts.entries.slice(0, cap);
   }
 
   const userId = opts.canonicalUserId;
@@ -156,7 +167,7 @@ export async function saveUserSavedForms(opts: {
     [...new Set([userId, opts.supabaseUserId].filter(Boolean) as string[])],
     opts.screenId
   );
-  const merged = mergeRecentEntries(opts.entries, existing);
+  const merged = mergeRecentEntries(opts.entries, existing).slice(0, cap);
 
   const row = {
     user_id: uuid,

@@ -87,6 +87,8 @@ export async function depositSpace4Record(
   input: Omit<Space4VaultRecord, "id" | "createdAt"> & {
     id?: string;
     createdAt?: number;
+    /** Per-user FIFO cap (plan scaCloud). Global vault still capped at SPACE4_VAULT_MAX. */
+    perUserMax?: number;
   }
 ): Promise<Space4VaultRecord> {
   const sealed = String(input.sealedContent ?? "").trim();
@@ -106,16 +108,27 @@ export async function depositSpace4Record(
     thumbSrc: normalizeSpace4ThumbSrc(input.thumbSrc) ?? null,
   };
 
+  const perUserMax =
+    typeof input.perUserMax === "number" && Number.isFinite(input.perUserMax)
+      ? Math.max(1, Math.floor(input.perUserMax))
+      : null;
+
   return withDbLock(async () => {
     let items = mem();
     if (isR2Configured()) {
       const fromR2 = await loadR2Manifest();
       if (fromR2) items = fromR2;
     }
-    const next = sortItems([record, ...items.filter((x) => x.id !== record.id)]).slice(
-      0,
-      SPACE4_VAULT_MAX
-    );
+    let next = sortItems([record, ...items.filter((x) => x.id !== record.id)]);
+    if (perUserMax != null) {
+      let keptForUser = 0;
+      next = next.filter((row) => {
+        if (row.userId !== record.userId) return true;
+        keptForUser += 1;
+        return keptForUser <= perUserMax;
+      });
+    }
+    next = next.slice(0, SPACE4_VAULT_MAX);
     globalThis.__scaSpace4Memory = next;
     // Keep a mirror key on db memory for diagnostics (optional).
     try {

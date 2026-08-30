@@ -499,15 +499,19 @@ export async function downloadImageAndProjectLocally(opts: {
   project: StudioCanvasProjectV1;
   baseName: string;
   imageExt?: "png" | "jpg";
+  /** When true, only the rendered export is saved on-device (.sca stays cloud-only). */
+  skipLocalProject?: boolean;
 }): Promise<StudioCanvasProjectV1> {
   const ext = opts.imageExt || "png";
   const stamp = Date.now();
   const base = opts.baseName.replace(/[^\w.-]+/g, "_") || "studio-canvas";
   downloadBlobLocally(opts.imageBlob, `${base}-${stamp}.${ext}`);
-  await new Promise((r) => setTimeout(r, 180));
   const hardened = await hardenStudioProjectImages(opts.project);
-  const projectBlob = await exportSecureProjectBlob(hardened);
-  downloadBlobLocally(projectBlob, `${base}-${stamp}${PROJECT_FILE_EXT}`);
+  if (!opts.skipLocalProject) {
+    await new Promise((r) => setTimeout(r, 180));
+    const projectBlob = await exportSecureProjectBlob(hardened);
+    downloadBlobLocally(projectBlob, `${base}-${stamp}${PROJECT_FILE_EXT}`);
+  }
   return hardened;
 }
 

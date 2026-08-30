@@ -10,6 +10,14 @@ import {
 
 export const SCA_PROJECTS_MAX = 10;
 
+/** Prefer plan worksGallery; fall back to starter floor. */
+export function resolveScaProjectsMax(max?: number | null): number {
+  if (typeof max === "number" && Number.isFinite(max) && max >= 1) {
+    return Math.min(200, Math.floor(max));
+  }
+  return SCA_PROJECTS_MAX;
+}
+
 type UserManifest = {
   userId: string;
   updatedAt: number;
@@ -71,30 +79,33 @@ export type ListUserStoreOptions = {
 
 export async function listUserScaProjects(
   userId: string,
-  options: ListUserStoreOptions = {}
+  options: ListUserStoreOptions & { max?: number } = {}
 ): Promise<ScaProjectRecord[]> {
+  const cap = resolveScaProjectsMax(options.max);
   const mem = getDb().scaProjects[userId] ?? [];
   if (isR2Configured()) {
     const fromR2 = await loadR2Manifest(userId);
     if (fromR2 !== null) {
       if (fromR2.length === 0 && options.allowEmptyR2Fallback && mem.length > 0) {
-        return sortProjects(mem).slice(0, SCA_PROJECTS_MAX);
+        return sortProjects(mem).slice(0, cap);
       }
       const rekeyed = fromR2.map((p) => ({ ...p, userId }));
       await withDbLock((db) => {
         db.scaProjects[userId] = rekeyed;
       });
-      return sortProjects(rekeyed).slice(0, SCA_PROJECTS_MAX);
+      return sortProjects(rekeyed).slice(0, cap);
     }
   }
-  return sortProjects(mem).slice(0, SCA_PROJECTS_MAX);
+  return sortProjects(mem).slice(0, cap);
 }
 
 export async function upsertUserScaProject(
   userId: string,
-  item: Omit<ScaProjectRecord, "userId"> & { userId?: string }
+  item: Omit<ScaProjectRecord, "userId"> & { userId?: string },
+  opts?: { max?: number }
 ): Promise<ScaProjectRecord> {
-  const existing = await listUserScaProjects(userId);
+  const cap = resolveScaProjectsMax(opts?.max);
+  const existing = await listUserScaProjects(userId, { max: cap });
   const sealed = item.sealedContent.trim();
   if (!sealed.includes("SCAENC1")) {
     throw new Error("invalid_sca_content");
@@ -112,7 +123,7 @@ export async function upsertUserScaProject(
 
   const projects = [record, ...existing.filter((p) => p.id !== record.id)].slice(
     0,
-    SCA_PROJECTS_MAX
+    cap
   );
 
   await withDbLock((db) => {

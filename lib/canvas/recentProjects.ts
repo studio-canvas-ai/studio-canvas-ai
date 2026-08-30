@@ -178,12 +178,21 @@ function readDrawer(
 function writeDrawer(
   entries: RecentDrawerEntry[],
   namespace: RecentProjectNamespace = "screen_007",
-  opts?: { persistCloud?: boolean }
+  opts?: { persistCloud?: boolean; max?: number }
 ): void {
   if (typeof localStorage === "undefined") {
     throw new Error("localstorage_unavailable");
   }
-  const trimmed = entries.slice(0, RECENT_PROJECTS_MAX);
+  const cap = Math.max(
+    1,
+    Math.min(
+      200,
+      typeof opts?.max === "number" && Number.isFinite(opts.max)
+        ? Math.floor(opts.max)
+        : RECENT_PROJECTS_MAX
+    )
+  );
+  const trimmed = entries.slice(0, cap);
   const payload = JSON.stringify(
     trimmed.map((e) => ({
       id: e.id,
@@ -436,7 +445,8 @@ export async function getRecentProject(
 /** Push newest project into the drawer; drop oldest beyond max (FIFO). */
 export async function pushRecentProject(
   project: StudioCanvasProjectV1,
-  namespace: RecentProjectNamespace = "screen_007"
+  namespace: RecentProjectNamespace = "screen_007",
+  maxItems: number = RECENT_PROJECTS_MAX
 ): Promise<RecentProjectMeta> {
   await ensureMigrated(namespace);
   await ensureCloudHydrated(namespace);
@@ -453,12 +463,13 @@ export async function pushRecentProject(
     mode: frozen.studio.mode,
     thumbSrc: projectThumb(frozen),
   };
+  const cap = Math.max(1, Math.min(200, Math.floor(maxItems) || RECENT_PROJECTS_MAX));
   const prev = readDrawer(namespace).filter((e) => e.id !== id);
   const next: RecentDrawerEntry[] = [
     { id, meta, project: frozen },
     ...prev,
-  ].slice(0, RECENT_PROJECTS_MAX);
-  writeDrawer(next, namespace);
+  ].slice(0, cap);
+  writeDrawer(next, namespace, { max: cap });
   return meta;
 }
 

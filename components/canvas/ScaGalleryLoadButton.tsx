@@ -19,6 +19,8 @@ type Props = {
   disabled?: boolean;
   compact?: boolean;
   className?: string;
+  /** Light panel for Screen 26 / white chrome (high-contrast text). */
+  tone?: "dark" | "light";
 };
 
 export default function ScaGalleryLoadButton({
@@ -27,10 +29,12 @@ export default function ScaGalleryLoadButton({
   disabled = false,
   compact = false,
   className = "",
+  tone = "dark",
 }: Props) {
   const { showToast } = useFeedback();
   const { t } = useI18n();
   const cs = t.canvasStudio;
+  const isLight = tone === "light";
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -103,24 +107,46 @@ export default function ScaGalleryLoadButton({
             <button
               type="button"
               aria-label="close"
-              className="fixed inset-0 z-[9998] cursor-default bg-black/40"
+              className={`fixed inset-0 z-[9998] cursor-default ${
+                isLight ? "bg-slate-900/20" : "bg-black/40"
+              }`}
               onClick={() => setOpen(false)}
             />
             <div
-              className="fixed z-[9999] max-h-[min(320px,50vh)] overflow-y-auto rounded-xl border border-white/10 bg-navy/95 p-2 shadow-2xl backdrop-blur-xl"
+              className={`fixed z-[9999] max-h-[min(320px,50vh)] overflow-y-auto rounded-xl border p-2 shadow-2xl backdrop-blur-xl ${
+                isLight
+                  ? "border-slate-200 bg-white text-slate-900"
+                  : "border-white/10 bg-navy/95 text-white"
+              }`}
               style={{
                 top: coords.top,
                 left: coords.left,
                 width: coords.width,
               }}
             >
-              <p className="px-2 py-1.5 text-[11px] font-semibold text-white/50">
+              <p
+                className={`px-2 py-1.5 text-[11px] font-semibold ${
+                  isLight ? "text-slate-600" : "text-white/50"
+                }`}
+              >
                 {cs.loadFromGalleryTitle.replace("{max}", String(max))}
               </p>
               {loading ? (
-                <p className="px-2 py-4 text-center text-xs text-white/40">{cs.loadFromGalleryBusy}</p>
+                <p
+                  className={`px-2 py-4 text-center text-xs ${
+                    isLight ? "text-slate-500" : "text-white/40"
+                  }`}
+                >
+                  {cs.loadFromGalleryBusy}
+                </p>
               ) : projects.length === 0 ? (
-                <p className="px-2 py-4 text-center text-xs text-white/40">{cs.loadFromGalleryEmpty}</p>
+                <p
+                  className={`px-2 py-4 text-center text-xs ${
+                    isLight ? "text-slate-500" : "text-white/40"
+                  }`}
+                >
+                  {cs.loadFromGalleryEmpty}
+                </p>
               ) : (
                 projects.map((p) => (
                   <button
@@ -128,7 +154,11 @@ export default function ScaGalleryLoadButton({
                     type="button"
                     disabled={busy}
                     onClick={() => void handlePick(p)}
-                    className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-white/80 hover:bg-white/5 disabled:opacity-50"
+                    className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs disabled:opacity-50 ${
+                      isLight
+                        ? "text-slate-800 hover:bg-slate-100"
+                        : "text-white/80 hover:bg-white/5"
+                    }`}
                   >
                     {p.thumbSrc ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -138,7 +168,13 @@ export default function ScaGalleryLoadButton({
                         className="h-9 w-9 shrink-0 rounded object-cover"
                       />
                     ) : (
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-white/10 text-[10px] text-white/40">
+                      <div
+                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded text-[10px] ${
+                          isLight
+                            ? "bg-slate-100 text-slate-500"
+                            : "bg-white/10 text-white/40"
+                        }`}
+                      >
                         .sca
                       </div>
                     )}

@@ -25,6 +25,12 @@ export type CanvasStudioCopy = {
   loadFromGalleryBusy: string;
   loadFromGalleryDone: string;
   loadFromGalleryFailed: string;
+  saveGalleryLoad: string;
+  saveGalleryBusy: string;
+  saveGalleryAction: string;
+  saveGalleryDrawerTitle: string;
+  saveGalleryDrawerHint: string;
+  saveGalleryEmpty: string;
   share: string;
   downloadPairHint: string;
   saveEditFileHint: string;
@@ -190,11 +196,18 @@ export const canvasStudioKr: CanvasStudioCopy = {
   downloadHigh: "고화질 다운로드",
   loadEditFile: "수정용 파일 불러오기",
   loadFromGallery: "내 갤러리에서 불러오기",
-  loadFromGalleryTitle: "서버 임시 보관 수정파일 ({max}/10)",
+  loadFromGalleryTitle: "서버 임시 보관 수정파일 ({max}장)",
   loadFromGalleryEmpty: "저장된 수정파일이 없습니다. 다운로드 시 .sca가 자동 등록됩니다.",
   loadFromGalleryBusy: "목록 불러오는 중…",
   loadFromGalleryDone: "갤러리 수정파일을 불러왔습니다.",
   loadFromGalleryFailed: "수정파일 불러오기에 실패했습니다.",
+  saveGalleryLoad: "내 갤러리 저장 ({count}/{max})",
+  saveGalleryBusy: "저장 중…",
+  saveGalleryAction: "현재 작업 저장",
+  saveGalleryDrawerTitle: "내 갤러리 · 작업물 보관함",
+  saveGalleryDrawerHint: "최대 {max}장 · 초과 시 오래된 .sca부터 자동 삭제",
+  saveGalleryEmpty:
+    "아직 저장된 작업물이 없습니다. 아래에서 저장하거나 다운로드 시 자동 등록됩니다.",
   share: "공유하기",
   downloadPairHint:
     "다운로드 시 결과 이미지와 보안 수정파일(.sca)이 함께 저장됩니다",
@@ -402,11 +415,18 @@ export const canvasStudioEn: CanvasStudioCopy = {
   downloadHigh: "High-quality download",
   loadEditFile: "Load editable file",
   loadFromGallery: "Load from My Gallery",
-  loadFromGalleryTitle: "Server draft projects ({max}/10)",
+  loadFromGalleryTitle: "Server draft projects (max {max})",
   loadFromGalleryEmpty: "No saved projects yet. Download to register a .sca file.",
   loadFromGalleryBusy: "Loading list…",
   loadFromGalleryDone: "Project loaded from gallery.",
   loadFromGalleryFailed: "Could not load project.",
+  saveGalleryLoad: "Save to My Gallery ({count}/{max})",
+  saveGalleryBusy: "Saving…",
+  saveGalleryAction: "Save current work",
+  saveGalleryDrawerTitle: "My Gallery · works vault",
+  saveGalleryDrawerHint: "Up to {max} items · oldest .sca pruned when full",
+  saveGalleryEmpty:
+    "No saved works yet. Save below, or download to register automatically.",
   share: "Share",
   downloadPairHint:
     "Download saves the result image and a secure editable file (.sca) together",

@@ -197,8 +197,8 @@ export default function StudioExportButtonGroup({
       )}
       {showHint ? (
         <p className={hintClass}>
-          (다운로드시 완성본과 보안 수정파일(.sca)이 함께 저장되며, 수정용파일은
-          나중에 수정시 필요하니, 꼭 따로 저장바랍니다)
+          (다운로드 시 완성본은 기기에, 수정용 .sca는 최근 파일·내 갤러리·템플릿
+          창고에 함께 보관됩니다)
         </p>
       ) : null}
       {unified && onLoadFromGallery ? (
@@ -215,6 +215,7 @@ export default function StudioExportButtonGroup({
           <ScaGalleryLoadButton
             compact={false}
             disabled={busy}
+            tone="light"
             requireSubscription={requireSubscription}
             onLoadProject={onLoadFromGallery}
             className={secondaryClass}

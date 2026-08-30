@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
+import { getPlanStorageLimits } from "@/lib/planStorageLimits";
+import { resolveAppUser } from "@/lib/resolveAppUser";
+import { collectUserStorageAliases } from "@/lib/studioStore/userAliases";
 import {
   deleteUserScaProject,
   getUserScaProject,
   listUserScaProjects,
-  SCA_PROJECTS_MAX,
   upsertUserScaProject,
 } from "@/lib/db/scaProjects";
-import { resolveAppUser } from "@/lib/resolveAppUser";
-import { collectUserStorageAliases } from "@/lib/studioStore/userAliases";
 
 export const runtime = "nodejs";
 
@@ -39,6 +39,11 @@ export async function GET(req: Request) {
   }
 
   const aliases = await collectUserStorageAliases(req, resolved.user);
+  const storage = getPlanStorageLimits(
+    resolved.user.planId,
+    resolved.user.billingInterval ?? "monthly"
+  );
+  const max = storage.worksGallery;
   const byId = new Map<
     string,
     Awaited<ReturnType<typeof listUserScaProjects>>[number]
@@ -47,6 +52,7 @@ export async function GET(req: Request) {
     const list = await listUserScaProjects(alias, {
       allowEmptyR2Fallback: true,
       relaxOwnerFilter: true,
+      max,
     });
     for (const p of list) {
       const prev = byId.get(p.id);
@@ -57,11 +63,11 @@ export async function GET(req: Request) {
   }
   const projects = [...byId.values()]
     .sort((a, b) => b.createdAt - a.createdAt)
-    .slice(0, SCA_PROJECTS_MAX);
+    .slice(0, max);
 
   return NextResponse.json({
     ok: true,
-    max: SCA_PROJECTS_MAX,
+    max,
     projects: projects.map((p) => ({
       id: p.id,
       label: p.label,
@@ -95,14 +101,22 @@ export async function POST(req: Request) {
     String(body.id ?? "").trim() ||
     `sca_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
-  const project = await upsertUserScaProject(resolved.user.id, {
-    id,
-    label: typeof body.label === "string" ? body.label : "수정 프로젝트",
-    mode: body.mode === "agent" ? "agent" : "utility",
-    sealedContent,
-    createdAt: typeof body.createdAt === "number" ? body.createdAt : Date.now(),
-    thumbSrc: typeof body.thumbSrc === "string" ? body.thumbSrc : null,
-  });
+  const storage = getPlanStorageLimits(
+    resolved.user.planId,
+    resolved.user.billingInterval ?? "monthly"
+  );
+  const project = await upsertUserScaProject(
+    resolved.user.id,
+    {
+      id,
+      label: typeof body.label === "string" ? body.label : "수정 프로젝트",
+      mode: body.mode === "agent" ? "agent" : "utility",
+      sealedContent,
+      createdAt: typeof body.createdAt === "number" ? body.createdAt : Date.now(),
+      thumbSrc: typeof body.thumbSrc === "string" ? body.thumbSrc : null,
+    },
+    { max: storage.worksGallery }
+  );
 
   return NextResponse.json({ ok: true, project: { id: project.id, label: project.label } });
 }

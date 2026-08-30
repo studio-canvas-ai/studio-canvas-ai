@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ImageDown, Minus, Plus, Save, Trash2 } from "lucide-react";
+import { Minus, Plus, Save, Trash2 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { openTemplateWarehouse } from "@/lib/templateWarehouse";
 import CanvasUploadToolbar from "@/components/canvas/CanvasUploadToolbar";
+import ScaGallerySaveButton from "@/components/canvas/ScaGallerySaveButton";
 import PrintBlueprintOverlay from "@/components/print-wizard/PrintBlueprintOverlay";
 import PreviewDecoOverlay from "@/components/print-wizard/PreviewDecoOverlay";
 import PreviewPhotoOverlay from "@/components/print-wizard/PreviewPhotoOverlay";
@@ -132,7 +133,6 @@ export default function PrintUnifiedEditorCanvas({
 }: PrintUnifiedEditorCanvasProps) {
   const { t } = useI18n();
   const cs = t.canvasStudio;
-  const creator = t.creator;
   const stagePanRef = useRef<StagePanDrag | null>(null);
   const [stagePanning, setStagePanning] = useState(false);
   const [zoomAnimating, setZoomAnimating] = useState(false);
@@ -301,19 +301,12 @@ export default function PrintUnifiedEditorCanvas({
           />
         </div>
         {onSaveCanvas ? (
-          <button
-            type="button"
-            onClick={onSaveCanvas}
-            disabled={
-              exportBusy || generating || saveCanvasBusy || !pageActivated
-            }
-            title={creator.actionSaveGallery}
-            aria-label={creator.actionSaveGallery}
-            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-indigo-300 bg-indigo-50 px-2 text-[10px] font-semibold leading-none text-indigo-800 transition hover:bg-indigo-100 disabled:opacity-40"
-          >
-            <ImageDown className="h-3 w-3 shrink-0" aria-hidden />
-            <span className="whitespace-nowrap">내 갤러리 저장</span>
-          </button>
+          <ScaGallerySaveButton
+            onSave={onSaveCanvas}
+            busy={saveCanvasBusy}
+            disabled={exportBusy || generating || !pageActivated}
+            requireSubscription={requireSubscription}
+          />
         ) : null}
       </header>
 
