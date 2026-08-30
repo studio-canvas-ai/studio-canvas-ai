@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Minus, Plus, Save, Trash2 } from "lucide-react";
+import { ImageDown, Minus, Plus, Save, Trash2 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { openTemplateWarehouse } from "@/lib/templateWarehouse";
 import CanvasUploadToolbar from "@/components/canvas/CanvasUploadToolbar";
@@ -132,6 +132,7 @@ export default function PrintUnifiedEditorCanvas({
 }: PrintUnifiedEditorCanvasProps) {
   const { t } = useI18n();
   const cs = t.canvasStudio;
+  const creator = t.creator;
   const stagePanRef = useRef<StagePanDrag | null>(null);
   const [stagePanning, setStagePanning] = useState(false);
   const [zoomAnimating, setZoomAnimating] = useState(false);
@@ -299,6 +300,21 @@ export default function PrintUnifiedEditorCanvas({
             recentNamespace={recentNamespace}
           />
         </div>
+        {onSaveCanvas ? (
+          <button
+            type="button"
+            onClick={onSaveCanvas}
+            disabled={
+              exportBusy || generating || saveCanvasBusy || !pageActivated
+            }
+            title={creator.actionSaveGallery}
+            aria-label={creator.actionSaveGallery}
+            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-indigo-300 bg-indigo-50 px-2 text-[10px] font-semibold leading-none text-indigo-800 transition hover:bg-indigo-100 disabled:opacity-40"
+          >
+            <ImageDown className="h-3 w-3 shrink-0" aria-hidden />
+            <span className="whitespace-nowrap">내 갤러리 저장</span>
+          </button>
+        ) : null}
       </header>
 
       <div className="relative flex min-h-0 flex-1 flex-col rounded-xl border border-slate-200/90 bg-slate-100 p-1.5 shadow-inner sm:gap-2 sm:p-2">
