@@ -49,7 +49,6 @@ export default function Navbar({ printWizardBack }: NavbarProps = {}) {
     openAuthModal,
     setShowTopUpModal,
     setShowPromoModal,
-    credits,
     creditsLabel,
     unlimitedCredits,
     isAuthenticated,
@@ -149,7 +148,7 @@ export default function Navbar({ printWizardBack }: NavbarProps = {}) {
       {promoWallet && !unlimitedCredits ? t.nav.promoBalance : "⚡"}{" "}
       {unlimitedCredits
         ? creditsLabel
-        : t.nav.creditsBadge.replace("{n}", String(credits))}
+        : t.nav.creditsBadge.replace("{n}", creditsLabel)}
     </span>
   );
 

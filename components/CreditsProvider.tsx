@@ -248,7 +248,14 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
 
   const isFreePlan = planId === "free";
   const unlimitedCredits = hasUnlimitedCredits(authUser?.email);
-  const creditsLabel = unlimitedCredits ? "∞" : String(credits);
+  // Navbar badge: durable credit pool (fhdRemaining), not legacy wallet (always 0).
+  const poolRemaining =
+    typeof planUsage?.fhdRemaining === "number" ? planUsage.fhdRemaining : null;
+  const creditsLabel = unlimitedCredits
+    ? "∞"
+    : poolRemaining != null
+      ? poolRemaining.toLocaleString("ko-KR")
+      : "—";
   const applyBrandWatermark = shouldApplyBrandWatermark(
     planId,
     authUser?.email,
