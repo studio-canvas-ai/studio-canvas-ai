@@ -1184,10 +1184,10 @@ const en: Translations = {
     monthlyRecurringKcpNotice:
       "Monthly plans use NHN KCP recurring billing (billing key) with automatic monthly charge and approval. You must agree to recurring auto-pay before checkout.",
     vatNotice: "All prices include VAT.",
-    creditPoolMonthly:
-      "{n} credits / month (resets on each billing date; unused credits do not roll over and expire immediately).",
-    creditPoolQuarterly:
-      "{n} credits / 3 months (use freely within the period; unused credits expire when the period ends).",
+    creditPoolMonthly: "{n} credits / month",
+    creditPoolQuarterly: "{n} credits / 3 months",
+    creditPoolSharedNotice:
+      "※ Credits reset on each billing date (or within the pass period). Unused credits do not roll over and expire immediately.",
     quotaWebShare: "Web/SNS draft download (1 credit): up to {n} times",
     quotaHiResPrint: "High-res poster/print download (2 credits): up to {n} times",
     quotaShortsHook: "Shorts hook auto-extract (2 credits): up to {n} times",
@@ -1238,7 +1238,7 @@ const en: Translations = {
         name: "Starter",
         description: "Perfect for getting started",
         features: [
-          "1,400 credits / month (resets on billing date; unused credits expire)",
+          "1,400 credits / month",
           "Web/SNS draft download (1 credit): up to 1,400 times",
           "High-res poster/print download (2 credits): up to 700 times",
           "Shorts hook auto-extract (2 credits): up to 700 times",
@@ -1256,7 +1256,7 @@ const en: Translations = {
         name: "Standard",
         description: "For creators who need more production volume",
         features: [
-          "3,200 credits / month (resets on billing date; unused credits expire)",
+          "3,200 credits / month",
           "Web/SNS draft download (1 credit): up to 3,200 times",
           "High-res poster/print download (2 credits): up to 1,600 times",
           "Shorts hook auto-extract (2 credits): up to 1,600 times",
@@ -1274,7 +1274,7 @@ const en: Translations = {
         name: "Pro",
         description: "For commercial use and high-volume production",
         features: [
-          "6,750 credits / month (resets on billing date; unused credits expire)",
+          "6,750 credits / month",
           "Web/SNS draft download (1 credit): up to 6,750 times",
           "High-res poster/print download (2 credits): up to 3,375 times",
           "Shorts hook auto-extract (2 credits): up to 3,375 times",

@@ -108,8 +108,8 @@ function PlanCard({
       <div
         className={`flex min-h-0 flex-1 flex-col rounded-2xl text-center ${
           compact
-            ? "px-3.5 pb-3.5 pt-6 sm:px-5 sm:pb-4 sm:pt-6"
-            : "px-5 pb-5 pt-7 sm:px-8 sm:pb-8 sm:pt-9"
+            ? "px-4 pb-4 pt-7 sm:px-6 sm:pb-5 sm:pt-7"
+            : "px-6 pb-6 pt-8 sm:px-9 sm:pb-9 sm:pt-10"
         } ${
           isPro
             ? "bg-gradient-to-b from-violet-500/[0.18] via-[#1c2438]/95 to-emerald-500/[0.12] backdrop-blur-xl"
@@ -178,7 +178,7 @@ function PlanCard({
 
         <ul
           className={`min-h-0 flex-1 text-left ${
-            compact ? "mb-3 space-y-1" : "mb-6 space-y-1.5"
+            compact ? "mb-3.5 space-y-1.5" : "mb-7 space-y-2"
           }`}
         >
           {product.features.map((feature) => {
@@ -187,12 +187,12 @@ function PlanCard({
               <li
                 key={feature}
                 className={`flex items-start text-left ${
-                  compact ? "gap-1.5" : "gap-2"
+                  compact ? "gap-2" : "gap-2.5"
                 }`}
               >
                 <div
                   className={`mt-0.5 flex shrink-0 items-center justify-center rounded-full ${
-                    compact ? "h-3.5 w-3.5" : "h-4 w-4"
+                    compact ? "h-4 w-4" : "h-5 w-5"
                   } ${
                     isPro
                       ? "bg-gradient-to-br from-violet-400/35 to-emerald-400/30"
@@ -202,7 +202,7 @@ function PlanCard({
                   }`}
                 >
                   <Check
-                    className={`${compact ? "h-2 w-2" : "h-2.5 w-2.5"} ${
+                    className={`${compact ? "h-2.5 w-2.5" : "h-2.5 w-2.5"} ${
                       isPro
                         ? "text-emerald-300"
                         : highlighted
@@ -214,13 +214,13 @@ function PlanCard({
                 <p
                   className={`min-w-0 flex-1 text-left leading-snug tracking-tight ${
                     compact
-                      ? "text-[10px] sm:text-[11px]"
-                      : "text-[11px] sm:text-xs"
+                      ? "text-[11px] sm:text-xs"
+                      : "text-xs sm:text-[13px]"
                   }`}
                 >
-                  <span className="font-medium text-white/88">{primary}</span>
+                  <span className="font-medium text-white">{primary}</span>
                   {secondary ? (
-                    <span className="font-normal text-white/42">
+                    <span className="font-normal text-cyan-300">
                       {secondary.startsWith("(") ? " " : ": "}
                       {secondary}
                     </span>
@@ -297,8 +297,8 @@ export default function PricingSectionClient({
 
   const isPage = layout === "page";
   const gridClass = isPage
-    ? "grid min-h-0 flex-1 items-stretch gap-4 pt-3 sm:gap-5 lg:grid-cols-3"
-    : "grid gap-6 pt-7 lg:grid-cols-3";
+    ? "grid min-h-0 flex-1 items-stretch gap-5 pt-2 sm:gap-6 lg:grid-cols-3"
+    : "grid gap-7 pt-7 lg:grid-cols-3";
 
   if (!isReady) {
     return (
@@ -328,7 +328,7 @@ export default function PricingSectionClient({
       <div className="ambient-glow bottom-0 left-1/2 h-96 w-96 -translate-x-1/2 bg-glow-purple/10" />
 
       <div
-        className={`relative mx-auto flex w-full max-w-6xl flex-1 flex-col ${
+        className={`relative mx-auto flex w-full max-w-7xl flex-1 flex-col ${
           isPage ? "pt-0" : "pt-3 sm:pt-4"
         }`}
       >
@@ -394,6 +394,16 @@ export default function PricingSectionClient({
               {t.pricing.monthlyBilling}
             </button>
           </div>
+
+          <p
+            className={`mx-auto max-w-3xl text-center font-medium text-cyan-200/85 [word-break:keep-all] ${
+              isPage
+                ? "mt-2.5 text-[11px] leading-snug sm:mt-3 sm:text-xs"
+                : "mt-4 text-sm leading-snug"
+            }`}
+          >
+            {t.pricing.creditPoolSharedNotice}
+          </p>
         </div>
 
         <div

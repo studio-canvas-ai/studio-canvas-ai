@@ -1106,6 +1106,7 @@ export interface Translations {
     vatNotice: string;
     creditPoolMonthly: string;
     creditPoolQuarterly: string;
+    creditPoolSharedNotice: string;
     quotaWebShare: string;
     quotaHiResPrint: string;
     quotaShortsHook: string;
