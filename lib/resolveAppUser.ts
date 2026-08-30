@@ -15,6 +15,7 @@ import type { AuthProviderId, UserRecord } from "@/lib/db/types";
 import { FREE_CREDITS } from "@/lib/data";
 import { readWalletCookie } from "@/lib/walletCookie";
 import { ensureGuestCheckoutUser } from "@/lib/guestCheckout";
+import { hydrateUserPlanUsage } from "@/lib/db/planUsage";
 
 export type ResolveAppUserResult =
   | { ok: true; user: UserRecord }
@@ -51,6 +52,7 @@ export async function resolveAppUser(
   let user = userId ? await getUserById(userId) : null;
   if (user) {
     user = await reconcileUserWithWalletCookie(user);
+    user = await hydrateUserPlanUsage(user);
     return { ok: true, user };
   }
 
@@ -104,7 +106,11 @@ export async function resolveAppUser(
         image: typeof token.picture === "string" ? token.picture : null,
         creditsHint,
       });
-      return { ok: true, user: created.user };
+      const hydrated = await hydrateUserPlanUsage(created.user, {
+        supabaseUserId:
+          typeof token.supabaseUserId === "string" ? token.supabaseUserId : null,
+      });
+      return { ok: true, user: hydrated };
     }
 
     // Session/JWT has an id but identity claims are incomplete — provision in place.
@@ -125,7 +131,11 @@ export async function resolveAppUser(
         providerAccountId,
         credits: creditsHint ?? FREE_CREDITS,
       });
-      return { ok: true, user: ensured };
+      const hydrated = await hydrateUserPlanUsage(ensured, {
+        supabaseUserId:
+          typeof token?.supabaseUserId === "string" ? token.supabaseUserId : null,
+      });
+      return { ok: true, user: hydrated };
     }
   } catch {
     /* fall through */
@@ -141,7 +151,8 @@ export async function resolveAppUser(
       image: sessionUser?.image ?? null,
       credits: wallet?.credits,
     });
-    return { ok: true, user: ensured };
+    const hydrated = await hydrateUserPlanUsage(ensured);
+    return { ok: true, user: hydrated };
   }
 
   if (options.allowGuest) {

@@ -7,6 +7,7 @@ import {
   saveDurableQuota,
   type DurableQuotaSnapshot,
 } from "@/lib/db/durableQuota";
+import { loadSupabaseQuota, saveSupabaseQuota } from "@/lib/db/supabaseQuota";
 import {
   readQuotaCookie,
   writeQuotaCookie,
@@ -116,25 +117,41 @@ function toSnapshotLike(
   };
 }
 
-/** Restore cookie/R2 first, then fill gaps — shared by hydrate and consume. */
+/** Restore cookie/R2/Supabase first, then fill gaps — shared by hydrate and consume. */
 export function mergePlanUsageFromSnapshots(
   user: UserRecord,
   cookie: QuotaCookiePayload | null,
-  durable: DurableQuotaSnapshot | null
+  durable: DurableQuotaSnapshot | null,
+  supabase: DurableQuotaSnapshot | null = null
 ): void {
   const cookieSnap = toSnapshotLike(cookie);
   const durableSnap = toSnapshotLike(durable);
-  const preferred = pickPreferredQuotaSnapshot(cookieSnap, durableSnap);
+  const supabaseSnap = toSnapshotLike(supabase);
+  const preferred = pickPreferredQuotaSnapshot(
+    pickPreferredQuotaSnapshot(cookieSnap, durableSnap),
+    supabaseSnap
+  );
+
+  // Vercel cold start reprovisions memory rows with full plan caps before hydrate.
+  // Clear volatile defaults so signed durable snapshots can realign the period.
+  if (preferred) {
+    user.fhdRemaining = undefined;
+    user.uhd4kRemaining = undefined;
+    user.quotaPeriodStart = undefined;
+  }
+
   alignUserPeriodFromSnapshot(user, preferred);
   applyQuotaCookieToUser(user, cookie);
   applyDurableQuotaToUser(user, durable);
+  applyDurableQuotaToUser(user, supabase);
   ensurePlanUsage(user);
 }
 
 function guardedPersistValues(
   user: UserRecord,
   existingCookie: QuotaCookiePayload | null,
-  existingDurable: DurableQuotaSnapshot | null
+  existingDurable: DurableQuotaSnapshot | null,
+  existingSupabase: DurableQuotaSnapshot | null = null
 ): { fhdRemaining: number; uhd4kRemaining: number; quotaPeriodStart: number } {
   const limits = limitsFor(user);
   const periodStart = user.quotaPeriodStart ?? user.currentPeriodStart ?? 0;
@@ -158,6 +175,7 @@ function guardedPersistValues(
 
   guard(existingCookie);
   guard(existingDurable);
+  guard(existingSupabase);
 
   return {
     fhdRemaining: Math.min(limits.fhd, fhd),
@@ -167,28 +185,49 @@ function guardedPersistValues(
 }
 
 export async function hydrateUserPlanUsage(
-  user: UserRecord
+  user: UserRecord,
+  opts?: { supabaseUserId?: string | null }
 ): Promise<UserRecord> {
-  const [cookie, durable] = await Promise.all([
+  const aliases = [
+    opts?.supabaseUserId,
+    /^[0-9a-f-]{36}$/i.test(user.id) ? user.id : null,
+  ].filter((v): v is string => typeof v === "string" && v.length > 0);
+
+  const [cookie, durable, supabase] = await Promise.all([
     readQuotaCookie(user.id),
     loadDurableQuota(user.id),
+    loadSupabaseQuota(user.id, aliases),
   ]);
   const updated = await withDbLock((db) => {
     const row = db.users[user.id];
     if (!row) return user;
-    mergePlanUsageFromSnapshots(row, cookie, durable);
+    mergePlanUsageFromSnapshots(row, cookie, durable, supabase);
     return row;
   });
-  await persistUserPlanUsage(updated);
+  await persistUserPlanUsage(updated, opts);
   return updated;
 }
 
-export async function persistUserPlanUsage(user: UserRecord): Promise<void> {
-  const [existingCookie, existingDurable] = await Promise.all([
+export async function persistUserPlanUsage(
+  user: UserRecord,
+  opts?: { supabaseUserId?: string | null }
+): Promise<void> {
+  const aliases = [
+    opts?.supabaseUserId,
+    /^[0-9a-f-]{36}$/i.test(user.id) ? user.id : null,
+  ].filter((v): v is string => typeof v === "string" && v.length > 0);
+
+  const [existingCookie, existingDurable, existingSupabase] = await Promise.all([
     readQuotaCookie(user.id),
     loadDurableQuota(user.id),
+    loadSupabaseQuota(user.id, aliases),
   ]);
-  const guarded = guardedPersistValues(user, existingCookie, existingDurable);
+  const guarded = guardedPersistValues(
+    user,
+    existingCookie,
+    existingDurable,
+    existingSupabase
+  );
   user.fhdRemaining = guarded.fhdRemaining;
   user.uhd4kRemaining = guarded.uhd4kRemaining;
   user.quotaPeriodStart = guarded.quotaPeriodStart;
@@ -203,6 +242,7 @@ export async function persistUserPlanUsage(user: UserRecord): Promise<void> {
       updatedAt: Date.now(),
     }),
     saveDurableQuota(user),
+    saveSupabaseQuota(user, opts),
   ]);
 }
 
@@ -215,16 +255,17 @@ export async function consumeDownloadQuota(params: {
   userId: string;
   kind: DownloadQuotaKind;
 }): Promise<ConsumeQuotaResult> {
-  const [cookie, durable] = await Promise.all([
+  const [cookie, durable, supabase] = await Promise.all([
     readQuotaCookie(params.userId),
     loadDurableQuota(params.userId),
+    loadSupabaseQuota(params.userId),
   ]);
   const result = await withDbLock((db) => {
     const user = db.users[params.userId];
     if (!user) {
       return { ok: false as const, reason: "not_found" as const, remaining: 0 };
     }
-    mergePlanUsageFromSnapshots(user, cookie, durable);
+    mergePlanUsageFromSnapshots(user, cookie, durable, supabase);
     const key = params.kind === "uhd4k" ? "uhd4kRemaining" : "fhdRemaining";
     const remaining = user[key] ?? 0;
     if (remaining < 1) {

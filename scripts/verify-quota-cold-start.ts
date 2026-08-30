@@ -156,6 +156,21 @@ async function main() {
   });
   await simulatePersist(getDb().users[USER_ID]!);
 
+  // --- Step 4b: hydrate after ensurePlanUsage filled memory to plan caps (regression) ---
+  await withDbLock((db) => {
+    const row = db.users[USER_ID]!;
+    row.fhdRemaining = 2000;
+    row.uhd4kRemaining = 500;
+    row.quotaPeriodStart = T2;
+    mergePlanUsageFromSnapshots(row, memoryCookie, memoryDurable);
+    assert(
+      snapshotPlanUsage(row).fhdRemaining === 1999,
+      `step4b ensurePlanUsage clobber guard expected 1999, got ${snapshotPlanUsage(row).fhdRemaining}`
+    );
+    return row;
+  });
+  console.log("✓ step4b memory defaults cannot clobber durable quota");
+
   usage = snapshotPlanUsage(getDb().users[USER_ID]!);
   assert(
     usage.fhdRemaining === 1999,

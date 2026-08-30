@@ -30,7 +30,6 @@ export async function GET(request: NextRequest) {
   let user = userId ? await getUserById(userId) : null;
   if (user) {
     user = await reconcileUserWithWalletCookie(user);
-    user = await syncTestAccountSubscription(user);
   }
 
   // Vercel memory DB can be empty after a cold start even with a valid JWT.
@@ -120,8 +119,23 @@ export async function GET(request: NextRequest) {
   }
 
   if (user) {
+    let supabaseUserId: string | null = null;
+    try {
+      const secret = requireAuthSecret();
+      const token = await getToken({
+        req: request,
+        secret,
+        secureCookie: useSecureAuthCookies(),
+        cookieName: authSessionCookieName(),
+      });
+      if (typeof token?.supabaseUserId === "string") {
+        supabaseUserId = token.supabaseUserId;
+      }
+    } catch {
+      /* optional JWT read for Supabase quota alias */
+    }
+    user = await hydrateUserPlanUsage(user, { supabaseUserId });
     user = await syncTestAccountSubscription(user);
-    user = await hydrateUserPlanUsage(user);
   }
 
   const expiryDate = user
