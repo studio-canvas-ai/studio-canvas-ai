@@ -1,5 +1,6 @@
 import type { UserRecord } from "@/lib/db/types";
 import { getPlanUsageLimits } from "@/lib/planQuotas";
+import { creditPoolForPlan } from "@/lib/featureCreditCosts";
 import { quotaPeriodCompatible } from "@/lib/quotaPeriod";
 import {
   createR2Client,
@@ -18,6 +19,8 @@ export type DurableQuotaSnapshot = {
   fhdRemaining: number;
   uhd4kRemaining: number;
   generalPhotoDownloadCount: number;
+  /** 1 = legacy FHD/4K; 2 = credit pool in fhdRemaining. */
+  schemaVersion?: number;
 };
 
 function manifestKey(userId: string) {
@@ -42,6 +45,7 @@ export async function loadDurableQuota(
     const quotaPeriodEnd =
       parsed.quotaPeriodEnd != null ? Number(parsed.quotaPeriodEnd) : undefined;
     const generalPhotoDownloadCount = Number(parsed.generalPhotoDownloadCount);
+    const schemaVersion = Number(parsed.schemaVersion ?? 1);
     if (
       !Number.isFinite(fhdRemaining) ||
       !Number.isFinite(uhd4kRemaining) ||
@@ -60,6 +64,9 @@ export async function loadDurableQuota(
       generalPhotoDownloadCount: Number.isFinite(generalPhotoDownloadCount)
         ? Math.max(0, Math.floor(generalPhotoDownloadCount))
         : 0,
+      schemaVersion: Number.isFinite(schemaVersion)
+        ? Math.max(1, Math.floor(schemaVersion))
+        : 1,
     };
   } catch {
     return null;
@@ -81,6 +88,7 @@ export async function saveDurableQuota(user: UserRecord): Promise<void> {
     fhdRemaining: Math.max(0, user.fhdRemaining ?? 0),
     uhd4kRemaining: Math.max(0, user.uhd4kRemaining ?? 0),
     generalPhotoDownloadCount: Math.max(0, user.generalPhotoDownloadCount ?? 0),
+    schemaVersion: Math.max(1, user.quotaSchemaVersion ?? 1),
   };
   await putR2Object(
     client,
@@ -111,16 +119,26 @@ export function applyDurableQuotaToUser(
       snapshot.quotaPeriodEnd
     )
   ) {
-    user.fhdRemaining = Math.min(
-      limits.fhd,
-      user.fhdRemaining ?? limits.fhd,
-      Math.max(0, snapshot.fhdRemaining)
-    );
+    const pool = creditPoolForPlan(user.planId, user.billingInterval ?? "monthly");
+    const snapVer = snapshot.schemaVersion ?? 1;
+    // Legacy FHD counters must not overwrite the unified credit pool.
+    const applyFhd = !(pool != null && snapVer < 2);
+
+    if (applyFhd) {
+      user.fhdRemaining = Math.min(
+        limits.fhd,
+        user.fhdRemaining ?? limits.fhd,
+        Math.max(0, snapshot.fhdRemaining)
+      );
+    }
     user.uhd4kRemaining = Math.min(
       limits.uhd4k,
       user.uhd4kRemaining ?? limits.uhd4k,
       Math.max(0, snapshot.uhd4kRemaining)
     );
+    if (snapVer >= 2) {
+      user.quotaSchemaVersion = Math.max(user.quotaSchemaVersion ?? 1, snapVer);
+    }
   }
 
   user.generalPhotoDownloadCount = Math.max(

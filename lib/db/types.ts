@@ -58,6 +58,11 @@ export type UserRecord = {
   uhd4kRemaining?: number;
   /** Billing window the remaining quotas belong to. */
   quotaPeriodStart?: number;
+  /**
+   * 1 = legacy FHD/4K counters; 2 = unified credit pool in fhdRemaining
+   * (pricing catalog). Missing/undefined treated as 1.
+   */
+  quotaSchemaVersion?: number;
   /** One-time wipe of leftover credit-wallet balances. */
   legacyCreditsWiped?: boolean;
 };

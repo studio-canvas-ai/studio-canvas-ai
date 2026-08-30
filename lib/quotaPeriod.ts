@@ -8,6 +8,7 @@ export type QuotaSnapshotLike = {
   quotaPeriodStart: number;
   quotaPeriodEnd?: number | null;
   updatedAt?: number;
+  schemaVersion?: number;
 };
 
 export function pickPreferredQuotaSnapshot(

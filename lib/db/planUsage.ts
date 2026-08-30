@@ -20,7 +20,7 @@ import {
   quotaPeriodCompatible,
   type QuotaSnapshotLike,
 } from "@/lib/quotaPeriod";
-import { FEATURE_CREDIT_COST } from "@/lib/featureCreditCosts";
+import { FEATURE_CREDIT_COST, creditPoolForPlan } from "@/lib/featureCreditCosts";
 
 export type DownloadQuotaKind = "fhd" | "uhd4k";
 
@@ -90,17 +90,42 @@ export function applyQuotaCookieToUser(
     return;
   }
   const limits = limitsFor(user);
+  const pool = creditPoolForPlan(user.planId, user.billingInterval ?? "monthly");
+  const snapVer = cookie.schemaVersion ?? 1;
+  const applyFhd = !(pool != null && snapVer < 2);
+
   user.quotaPeriodStart = user.currentPeriodStart ?? cookie.quotaPeriodStart;
-  user.fhdRemaining = Math.min(
-    limits.fhd,
-    Math.max(0, cookie.fhdRemaining),
-    user.fhdRemaining ?? cookie.fhdRemaining
-  );
+  if (applyFhd) {
+    user.fhdRemaining = Math.min(
+      limits.fhd,
+      Math.max(0, cookie.fhdRemaining),
+      user.fhdRemaining ?? cookie.fhdRemaining
+    );
+  }
   user.uhd4kRemaining = Math.min(
     limits.uhd4k,
     Math.max(0, cookie.uhd4kRemaining),
     user.uhd4kRemaining ?? cookie.uhd4kRemaining
   );
+  if (snapVer >= 2) {
+    user.quotaSchemaVersion = Math.max(user.quotaSchemaVersion ?? 1, snapVer);
+  }
+}
+
+/** One-time cutover: legacy FHD counters → full plan credit pool. */
+export function migrateToCreditPoolSchema(user: UserRecord): boolean {
+  const interval = user.billingInterval ?? "monthly";
+  const pool = creditPoolForPlan(user.planId, interval);
+  if (pool == null) return false;
+  if ((user.quotaSchemaVersion ?? 1) >= 2) return false;
+
+  const limits = limitsFor(user);
+  user.fhdRemaining = pool;
+  user.uhd4kRemaining = limits.uhd4k;
+  user.quotaPeriodStart = user.currentPeriodStart ?? user.quotaPeriodStart ?? Date.now();
+  user.quotaSchemaVersion = 2;
+  user.updatedAt = Date.now();
+  return true;
 }
 
 function toSnapshotLike(
@@ -115,6 +140,10 @@ function toSnapshotLike(
     quotaPeriodEnd:
       "quotaPeriodEnd" in source ? source.quotaPeriodEnd : undefined,
     updatedAt: "updatedAt" in source ? source.updatedAt : undefined,
+    schemaVersion:
+      "schemaVersion" in source && typeof source.schemaVersion === "number"
+        ? source.schemaVersion
+        : 1,
   };
 }
 
@@ -152,12 +181,14 @@ function guardedPersistValues(
   user: UserRecord,
   existingCookie: QuotaCookiePayload | null,
   existingDurable: DurableQuotaSnapshot | null,
-  existingSupabase: DurableQuotaSnapshot | null = null
+  existingSupabase: DurableQuotaSnapshot | null = null,
+  opts?: { allowPoolIncrease?: boolean }
 ): { fhdRemaining: number; uhd4kRemaining: number; quotaPeriodStart: number } {
   const limits = limitsFor(user);
   const periodStart = user.quotaPeriodStart ?? user.currentPeriodStart ?? 0;
   let fhd = Math.max(0, user.fhdRemaining ?? 0);
   let uhd = Math.max(0, user.uhd4kRemaining ?? 0);
+  const allowIncrease = opts?.allowPoolIncrease === true;
 
   const guard = (stored: QuotaSnapshotLike | QuotaCookiePayload | null) => {
     if (!stored || stored.userId !== user.id) return;
@@ -170,6 +201,12 @@ function guardedPersistValues(
     ) {
       return;
     }
+    const storedVer =
+      "schemaVersion" in stored && typeof stored.schemaVersion === "number"
+        ? stored.schemaVersion
+        : 1;
+    // Do not let legacy FHD snapshots pull a credit-pool balance down.
+    if (allowIncrease || storedVer < 2) return;
     fhd = Math.min(fhd, Math.max(0, stored.fhdRemaining));
     uhd = Math.min(uhd, Math.max(0, stored.uhd4kRemaining));
   };
@@ -201,17 +238,22 @@ export async function hydrateUserPlanUsage(
   ]);
   const updated = await withDbLock((db) => {
     const row = db.users[user.id];
-    if (!row) return user;
+    if (!row) return { user, migrated: false };
     mergePlanUsageFromSnapshots(row, cookie, durable, supabase);
-    return row;
+    const migrated = migrateToCreditPoolSchema(row);
+    ensurePlanUsage(row);
+    return { user: row, migrated };
   });
-  await persistUserPlanUsage(updated, opts);
-  return updated;
+  await persistUserPlanUsage(updated.user, {
+    ...opts,
+    allowPoolIncrease: updated.migrated,
+  });
+  return updated.user;
 }
 
 export async function persistUserPlanUsage(
   user: UserRecord,
-  opts?: { supabaseUserId?: string | null }
+  opts?: { supabaseUserId?: string | null; allowPoolIncrease?: boolean }
 ): Promise<void> {
   const aliases = [
     opts?.supabaseUserId,
@@ -227,11 +269,15 @@ export async function persistUserPlanUsage(
     user,
     existingCookie,
     existingDurable,
-    existingSupabase
+    existingSupabase,
+    { allowPoolIncrease: opts?.allowPoolIncrease }
   );
   user.fhdRemaining = guarded.fhdRemaining;
   user.uhd4kRemaining = guarded.uhd4kRemaining;
   user.quotaPeriodStart = guarded.quotaPeriodStart;
+  if ((user.quotaSchemaVersion ?? 1) < 2 && creditPoolForPlan(user.planId, user.billingInterval)) {
+    user.quotaSchemaVersion = 2;
+  }
 
   await Promise.all([
     writeQuotaCookie({
@@ -241,6 +287,7 @@ export async function persistUserPlanUsage(
       quotaPeriodStart: guarded.quotaPeriodStart,
       quotaPeriodEnd: user.currentPeriodEnd ?? null,
       updatedAt: Date.now(),
+      schemaVersion: user.quotaSchemaVersion ?? 1,
     }),
     saveDurableQuota(user),
     saveSupabaseQuota(user, opts),
@@ -277,6 +324,8 @@ export async function consumeCreditPool(params: {
       return { ok: false as const, reason: "not_found" as const, remaining: 0 };
     }
     mergePlanUsageFromSnapshots(user, cookie, durable, supabase);
+    migrateToCreditPoolSchema(user);
+    ensurePlanUsage(user);
     const remaining = user.fhdRemaining ?? 0;
     if (remaining < amount) {
       return {
@@ -286,6 +335,7 @@ export async function consumeCreditPool(params: {
       };
     }
     user.fhdRemaining = remaining - amount;
+    user.quotaSchemaVersion = Math.max(user.quotaSchemaVersion ?? 1, 2);
     user.updatedAt = Date.now();
     return {
       ok: true as const,
@@ -297,6 +347,7 @@ export async function consumeCreditPool(params: {
   if (result.ok) {
     await persistUserPlanUsage(result.user, {
       supabaseUserId: params.supabaseUserId,
+      allowPoolIncrease: false,
     });
   }
   return result;

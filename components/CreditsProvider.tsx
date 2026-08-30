@@ -43,7 +43,7 @@ import { clearAuthStorageOnly } from "@/lib/auth/clearAuthStorage";
 import { SESSION_LOCK_STORAGE_KEY } from "@/lib/auth/sessionLockShared";
 import type { PlanUsageSnapshot } from "@/lib/planQuotas";
 
-const PLAN_USAGE_CACHE_KEY = "sca_plan_usage_v1";
+const PLAN_USAGE_CACHE_KEY = "sca_plan_usage_v2";
 
 type CachedPlanUsagePayload = PlanUsageSnapshot & {
   quotaPeriodStart?: number;

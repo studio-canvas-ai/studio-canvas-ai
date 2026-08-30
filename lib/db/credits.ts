@@ -16,7 +16,7 @@ import {
   isPrivilegedAdminEmail,
 } from "@/lib/unlimitedAccount";
 import { applyTestAccountSubscription, getTestAccountSetup } from "@/lib/testAccounts";
-import { ensurePlanUsage, persistUserPlanUsage } from "@/lib/db/planUsage";
+import { ensurePlanUsage, migrateToCreditPoolSchema, persistUserPlanUsage } from "@/lib/db/planUsage";
 import { writeWalletCookie, readWalletCookie } from "@/lib/walletCookie";
 
 function startingCreditsForEmail(_email: string | null | undefined): number {
@@ -249,18 +249,21 @@ export async function ensureUserRecord(input: {
 export async function syncTestAccountSubscription(
   user: UserRecord
 ): Promise<UserRecord> {
+  let migrated = false;
   const updated = await withDbLock((db) => {
     const row = db.users[user.id];
     if (!row) return user;
     wipeLegacyCredits(row);
     applyTestAccountSubscription(row);
     ensurePlanUsage(row);
+    migrated = migrateToCreditPoolSchema(row);
+    ensurePlanUsage(row);
     return row;
   });
   await writeWalletCookie(updated.id, 0);
-  // Persist credit pool (cookie + R2 + Supabase) after QA plan seed.
+  // Persist credit pool (cookie + R2 + Supabase) after QA plan seed / pool migrate.
   if (getTestAccountSetup(updated.email)) {
-    await persistUserPlanUsage(updated);
+    await persistUserPlanUsage(updated, { allowPoolIncrease: migrated });
   }
   return updated;
 }

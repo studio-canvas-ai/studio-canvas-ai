@@ -11,6 +11,7 @@ type QuotaRow = {
   quota_period_end: number | string | null;
   general_photo_download_count: number | null;
   updated_at: string | null;
+  quota_schema_version?: number | null;
 };
 
 function parseQuotaRow(row: QuotaRow, canonicalUserId: string): DurableQuotaSnapshot | null {
@@ -21,6 +22,7 @@ function parseQuotaRow(row: QuotaRow, canonicalUserId: string): DurableQuotaSnap
     row.quota_period_end != null ? Number(row.quota_period_end) : undefined;
   const generalPhotoDownloadCount = Number(row.general_photo_download_count ?? 0);
   const updatedAt = row.updated_at ? Date.parse(row.updated_at) : Date.now();
+  const schemaVersion = Number(row.quota_schema_version ?? 1);
 
   if (
     !Number.isFinite(fhdRemaining) ||
@@ -40,6 +42,9 @@ function parseQuotaRow(row: QuotaRow, canonicalUserId: string): DurableQuotaSnap
     generalPhotoDownloadCount: Number.isFinite(generalPhotoDownloadCount)
       ? Math.max(0, Math.floor(generalPhotoDownloadCount))
       : 0,
+    schemaVersion: Number.isFinite(schemaVersion)
+      ? Math.max(1, Math.floor(schemaVersion))
+      : 1,
   };
 }
 
@@ -59,7 +64,7 @@ export async function loadSupabaseQuota(
     const byAppId = await admin
       .from("user_download_quota")
       .select(
-        "app_user_id, user_id, fhd_remaining, uhd4k_remaining, quota_period_start, quota_period_end, general_photo_download_count, updated_at"
+        "app_user_id, user_id, fhd_remaining, uhd4k_remaining, quota_period_start, quota_period_end, general_photo_download_count, updated_at, quota_schema_version"
       )
       .eq("app_user_id", id)
       .maybeSingle();
@@ -78,7 +83,7 @@ export async function loadSupabaseQuota(
     const byAuthId = await admin
       .from("user_download_quota")
       .select(
-        "app_user_id, user_id, fhd_remaining, uhd4k_remaining, quota_period_start, quota_period_end, general_photo_download_count, updated_at"
+        "app_user_id, user_id, fhd_remaining, uhd4k_remaining, quota_period_start, quota_period_end, general_photo_download_count, updated_at, quota_schema_version"
       )
       .eq("user_id", id)
       .maybeSingle();
@@ -120,6 +125,7 @@ export async function saveSupabaseQuota(
     quota_period_start: user.quotaPeriodStart ?? user.currentPeriodStart ?? 0,
     quota_period_end: user.currentPeriodEnd ?? null,
     general_photo_download_count: Math.max(0, user.generalPhotoDownloadCount ?? 0),
+    quota_schema_version: Math.max(1, user.quotaSchemaVersion ?? 1),
     updated_at: new Date().toISOString(),
   };
 
@@ -129,6 +135,14 @@ export async function saveSupabaseQuota(
 
   if (error) {
     const msg = error.message.toLowerCase();
+    // Column may not exist until migration is applied — retry without it.
+    if (msg.includes("quota_schema_version")) {
+      const { quota_schema_version: _v, ...legacyRow } = row;
+      const retry = await admin
+        .from("user_download_quota")
+        .upsert(legacyRow, { onConflict: "app_user_id" });
+      if (!retry.error) return;
+    }
     if (!msg.includes("does not exist") && !msg.includes("schema cache")) {
       console.warn("[supabaseQuota] save skipped:", error.message);
     }

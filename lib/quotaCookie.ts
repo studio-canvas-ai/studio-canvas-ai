@@ -32,6 +32,8 @@ export type QuotaCookiePayload = {
   quotaPeriodStart: number;
   quotaPeriodEnd?: number | null;
   updatedAt: number;
+  /** 1 = legacy FHD/4K; 2 = credit pool. Omitted on old cookies → 1. */
+  schemaVersion?: number;
 };
 
 export function encodeQuotaCookie(payload: QuotaCookiePayload): string {
@@ -39,6 +41,7 @@ export function encodeQuotaCookie(payload: QuotaCookiePayload): string {
     payload.quotaPeriodEnd != null && Number.isFinite(payload.quotaPeriodEnd)
       ? Math.floor(payload.quotaPeriodEnd)
       : "";
+  const schemaVersion = Math.max(1, Math.floor(payload.schemaVersion ?? 1));
   const body = [
     payload.userId,
     Math.max(0, Math.floor(payload.fhdRemaining)),
@@ -46,6 +49,7 @@ export function encodeQuotaCookie(payload: QuotaCookiePayload): string {
     payload.quotaPeriodStart,
     payload.updatedAt,
     periodEnd,
+    schemaVersion,
   ].join("|");
   return `${body}.${sign(body)}`;
 }
@@ -60,7 +64,8 @@ export function decodeQuotaCookie(
   const sig = raw.slice(dot + 1);
   if (!sig || !safeEqual(sign(body), sig)) return null;
   const parts = body.split("|");
-  const [userId, fhdRaw, uhdRaw, periodRaw, updatedAtRaw, periodEndRaw] = parts;
+  const [userId, fhdRaw, uhdRaw, periodRaw, updatedAtRaw, periodEndRaw, schemaRaw] =
+    parts;
   if (!userId) return null;
   const fhdRemaining = Number(fhdRaw);
   const uhd4kRemaining = Number(uhdRaw);
@@ -68,6 +73,8 @@ export function decodeQuotaCookie(
   const updatedAt = Number(updatedAtRaw);
   const quotaPeriodEnd =
     periodEndRaw != null && periodEndRaw !== "" ? Number(periodEndRaw) : undefined;
+  const schemaVersion =
+    schemaRaw != null && schemaRaw !== "" ? Number(schemaRaw) : 1;
   if (
     !Number.isFinite(fhdRemaining) ||
     !Number.isFinite(uhd4kRemaining) ||
@@ -83,6 +90,9 @@ export function decodeQuotaCookie(
     quotaPeriodStart,
     ...(Number.isFinite(quotaPeriodEnd) ? { quotaPeriodEnd } : {}),
     updatedAt,
+    schemaVersion: Number.isFinite(schemaVersion)
+      ? Math.max(1, Math.floor(schemaVersion))
+      : 1,
   };
 }
 
