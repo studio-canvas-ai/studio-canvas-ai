@@ -1299,6 +1299,12 @@ export default function PrintUnifiedEditor() {
                 busy={exportBusy}
                 onDownloadStandard={() => void downloadWithProject("standard")}
                 onDownloadHigh={() => void downloadWithProject("high")}
+                onDownloadUltra={() => {
+                  showToast(
+                    "초고화질(인쇄용 벡터) 다운로드는 곧 연결됩니다.",
+                    "info"
+                  );
+                }}
                 onLoadProjectClick={() => {
                   if (!requireSubscription()) return;
                   projectFileInputRef.current?.click();

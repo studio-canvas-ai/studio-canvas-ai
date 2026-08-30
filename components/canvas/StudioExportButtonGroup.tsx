@@ -11,6 +11,8 @@ export type StudioExportButtonGroupProps = {
   busy?: boolean;
   onDownloadStandard: () => void;
   onDownloadHigh: () => void;
+  /** Screen 26 — print-ready ultra/vector download trigger (UI only until credits backend). */
+  onDownloadUltra?: () => void;
   onLoadProjectClick: () => void;
   onShare: () => void;
   fileInputRef?: RefObject<HTMLInputElement | null>;
@@ -38,6 +40,7 @@ export default function StudioExportButtonGroup({
   busy = false,
   onDownloadStandard,
   onDownloadHigh,
+  onDownloadUltra,
   onLoadProjectClick,
   onShare,
   fileInputRef,
@@ -57,7 +60,7 @@ export default function StudioExportButtonGroup({
   const highParts = splitQuotaLabel(highLabel);
 
   const downloadClass = unified
-    ? "inline-flex w-full min-h-[2.85rem] items-center justify-center gap-1.5 rounded-xl border border-white/20 px-3 py-2.5 text-white shadow-[0_8px_24px_rgba(15,23,42,0.35)] disabled:opacity-50"
+    ? "inline-flex min-h-[2.85rem] w-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl border px-1.5 py-2 text-white shadow-[0_8px_24px_rgba(15,23,42,0.35)] disabled:opacity-50"
     : compact
       ? "inline-flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[11px] font-semibold text-white disabled:opacity-50"
       : "inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-lg disabled:opacity-50";
@@ -69,7 +72,7 @@ export default function StudioExportButtonGroup({
       : "inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-white/85 hover:bg-white/10 disabled:opacity-50";
 
   const iconClass = unified
-    ? "h-4 w-4 shrink-0"
+    ? "h-3.5 w-3.5 shrink-0"
     : compact
       ? "h-3.5 w-3.5"
       : "h-4 w-4 shrink-0";
@@ -79,12 +82,15 @@ export default function StudioExportButtonGroup({
       ? "px-0.5 text-center text-[10px] leading-snug text-slate-400"
       : "text-center text-xs leading-snug text-white/45";
   const labelClass = unified
-    ? "inline-flex min-w-0 max-w-full items-baseline gap-1 whitespace-nowrap leading-none"
+    ? "inline-flex min-w-0 max-w-full flex-col items-center gap-0.5 text-center leading-tight"
     : compact
       ? "min-w-0 text-center text-[10px] font-semibold leading-tight [word-break:keep-all]"
       : "min-w-0 text-center text-[12px] font-semibold leading-tight [word-break:keep-all] sm:text-sm";
   const downloadTitleClass = unified
-    ? "truncate text-[13px] font-extrabold tracking-tight sm:text-[14px]"
+    ? "max-w-full text-[10px] font-extrabold tracking-tight [word-break:keep-all] sm:text-[11px]"
+    : "";
+  const downloadCreditClass = unified
+    ? "shrink-0 text-[9px] font-bold tabular-nums sm:text-[10px]"
     : "";
   const downloadQuotaClass = unified
     ? "shrink-0 text-[11px] font-bold sm:text-[12px]"
@@ -103,6 +109,18 @@ export default function StudioExportButtonGroup({
       full
     );
 
+  const renderCreditLabel = (title: string, credit: string, subtitle?: string) => (
+    <span className={labelClass}>
+      <span className={downloadTitleClass}>{title}</span>
+      {subtitle ? (
+        <span className="max-w-full text-[8px] font-semibold leading-none opacity-90 [word-break:keep-all] sm:text-[9px]">
+          {subtitle}
+        </span>
+      ) : null}
+      <span className={downloadCreditClass}>{credit}</span>
+    </span>
+  );
+
   return (
     <div
       className={
@@ -113,30 +131,66 @@ export default function StudioExportButtonGroup({
             : "mt-auto grid shrink-0 gap-2 border-t border-white/10 pt-4"
       }
     >
-      <div className={`grid grid-cols-2 ${unified ? "gap-2" : "gap-1.5"}`}>
-        <button
-          type="button"
-          onClick={onDownloadStandard}
-          disabled={busy || !canDownloadStandard}
-          className={`${downloadClass} bg-gradient-to-r from-teal-500 via-emerald-500 to-emerald-400`}
-        >
-          <Download className={iconClass} />
-          <span className={labelClass}>
-            {renderDownloadLabel(standardLabel, standardParts)}
-          </span>
-        </button>
-        <button
-          type="button"
-          onClick={onDownloadHigh}
-          disabled={busy || !canDownloadHigh}
-          className={`${downloadClass} bg-gradient-to-r from-violet-600 via-indigo-500 to-sky-500`}
-        >
-          <Download className={iconClass} />
-          <span className={labelClass}>
-            {renderDownloadLabel(highLabel, highParts)}
-          </span>
-        </button>
-      </div>
+      {unified ? (
+        <div className="flex w-full min-w-0 flex-row items-stretch gap-1.5">
+          <button
+            type="button"
+            onClick={onDownloadStandard}
+            disabled={busy || !canDownloadStandard}
+            className={`${downloadClass} flex-1 border-white/20 bg-gradient-to-r from-teal-500 via-emerald-500 to-emerald-400`}
+          >
+            <Download className={iconClass} aria-hidden />
+            {renderCreditLabel("일반화질 다운로드", "(1 크레딧)")}
+          </button>
+          <button
+            type="button"
+            onClick={onDownloadHigh}
+            disabled={busy || !canDownloadHigh}
+            className={`${downloadClass} flex-1 border-white/20 bg-gradient-to-r from-violet-600 via-indigo-500 to-sky-500`}
+          >
+            <Download className={iconClass} aria-hidden />
+            {renderCreditLabel("고화질 다운로드", "(2 크레딧)")}
+          </button>
+          <button
+            type="button"
+            onClick={onDownloadUltra}
+            disabled={busy || !onDownloadUltra}
+            className={`${downloadClass} flex-1 border-amber-300/80 bg-gradient-to-r from-amber-600 via-orange-500 to-rose-500 ring-1 ring-amber-200/70`}
+          >
+            <Download className={iconClass} aria-hidden />
+            {renderCreditLabel(
+              "초고화질 다운로드",
+              "(10 크레딧)",
+              "(인쇄용 벡터)"
+            )}
+          </button>
+        </div>
+      ) : (
+        <div className={`grid grid-cols-2 ${compact ? "gap-1.5" : "gap-1.5"}`}>
+          <button
+            type="button"
+            onClick={onDownloadStandard}
+            disabled={busy || !canDownloadStandard}
+            className={`${downloadClass} bg-gradient-to-r from-teal-500 via-emerald-500 to-emerald-400`}
+          >
+            <Download className={iconClass} />
+            <span className={labelClass}>
+              {renderDownloadLabel(standardLabel, standardParts)}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={onDownloadHigh}
+            disabled={busy || !canDownloadHigh}
+            className={`${downloadClass} bg-gradient-to-r from-violet-600 via-indigo-500 to-sky-500`}
+          >
+            <Download className={iconClass} />
+            <span className={labelClass}>
+              {renderDownloadLabel(highLabel, highParts)}
+            </span>
+          </button>
+        </div>
+      )}
       {showHint ? (
         <p className={hintClass}>
           (다운로드시 완성본과 보안 수정파일(.sca)이 함께 저장되며, 수정용파일은
