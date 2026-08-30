@@ -249,26 +249,33 @@ export default function AiBackgroundPromptBar({
           </p>
         </div>
         {specTags.length ? (
-          <div className="flex flex-wrap items-center gap-1.5 border-t border-sky-200/80 px-3 py-2">
-            {specTags.map((tag) => (
-              <span
-                key={tag.id}
-                className="inline-flex max-w-full items-center gap-1 rounded-full border border-pink-200 bg-pink-50 py-1 pl-2.5 pr-1 text-[11px] font-semibold text-pink-800 [word-break:keep-all]"
-              >
-                <span className="text-pink-600">{tag.label}</span>
-                <span className="truncate text-pink-900">{tag.value}</span>
-                {onClearSpecTag && tag.id !== "pages" ? (
-                  <button
-                    type="button"
-                    aria-label={`${tag.label} 선택 해제`}
-                    onClick={() => onClearSpecTag(tag.id as SpecSettingsTagId)}
-                    className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-pink-700 transition hover:bg-pink-100 hover:text-pink-900"
-                  >
-                    <X className="h-3 w-3" aria-hidden />
-                  </button>
-                ) : null}
-              </span>
-            ))}
+          <div className="flex max-h-[3.75rem] flex-wrap content-start items-center gap-x-1 gap-y-0.5 overflow-hidden border-t border-sky-200/80 px-2 py-1">
+            {specTags.map((tag) => {
+              const chipMaxW =
+                tag.id === "bg" || tag.id === "prompt"
+                  ? "max-w-[min(100%,10.5rem)]"
+                  : "max-w-[min(100%,8.75rem)]";
+              return (
+                <span
+                  key={tag.id}
+                  title={`${tag.label}: ${tag.value}`}
+                  className={`inline-flex min-w-0 items-center gap-0.5 rounded-full border border-pink-200 bg-pink-50 py-0.5 pl-1.5 pr-0.5 text-[10px] font-semibold leading-tight text-pink-800 ${chipMaxW}`}
+                >
+                  <span className="shrink-0 text-pink-600">{tag.label}</span>
+                  <span className="min-w-0 truncate text-pink-900">{tag.value}</span>
+                  {onClearSpecTag && tag.id !== "pages" ? (
+                    <button
+                      type="button"
+                      aria-label={`${tag.label} 선택 해제`}
+                      onClick={() => onClearSpecTag(tag.id as SpecSettingsTagId)}
+                      className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full text-pink-700 transition hover:bg-pink-100 hover:text-pink-900"
+                    >
+                      <X className="h-2.5 w-2.5" aria-hidden />
+                    </button>
+                  ) : null}
+                </span>
+              );
+            })}
           </div>
         ) : null}
       </div>
