@@ -88,6 +88,7 @@ type PlanCreditDisplay = {
   hiResPrint: number;
   shortsHook: number;
   autoCaption: number;
+  shortsRender: number;
   bannerOriginal: number;
   aiImageBg: number;
   scaCloud: number;
@@ -105,6 +106,7 @@ const MONTHLY_CREDIT_DISPLAY: Record<
     hiResPrint: 700,
     shortsHook: 700,
     autoCaption: 466,
+    shortsRender: 70,
     bannerOriginal: 280,
     aiImageBg: 56,
     scaCloud: 10,
@@ -117,6 +119,7 @@ const MONTHLY_CREDIT_DISPLAY: Record<
     hiResPrint: 1_600,
     shortsHook: 1_600,
     autoCaption: 1_066,
+    shortsRender: 160,
     bannerOriginal: 640,
     aiImageBg: 128,
     scaCloud: 20,
@@ -129,6 +132,7 @@ const MONTHLY_CREDIT_DISPLAY: Record<
     hiResPrint: 3_375,
     shortsHook: 3_375,
     autoCaption: 2_250,
+    shortsRender: 337,
     bannerOriginal: 1_350,
     aiImageBg: 270,
     scaCloud: 40,
@@ -147,6 +151,7 @@ const QUARTERLY_CREDIT_DISPLAY: Record<
     hiResPrint: 2_100,
     shortsHook: 2_100,
     autoCaption: 1_400,
+    shortsRender: 210,
     bannerOriginal: 840,
     aiImageBg: 168,
     scaCloud: 10,
@@ -159,6 +164,7 @@ const QUARTERLY_CREDIT_DISPLAY: Record<
     hiResPrint: 4_800,
     shortsHook: 4_800,
     autoCaption: 3_200,
+    shortsRender: 480,
     bannerOriginal: 1_920,
     aiImageBg: 384,
     scaCloud: 20,
@@ -171,6 +177,7 @@ const QUARTERLY_CREDIT_DISPLAY: Record<
     hiResPrint: 10_125,
     shortsHook: 10_125,
     autoCaption: 6_750,
+    shortsRender: 1_012,
     bannerOriginal: 4_050,
     aiImageBg: 810,
     scaCloud: 40,
@@ -213,6 +220,7 @@ function creditPlanFeatureLines(
     fill(copy.quotaHiResPrint, { n: n(d.hiResPrint) }),
     fill(copy.quotaShortsHook, { n: n(d.shortsHook) }),
     fill(copy.quotaAutoCaption, { n: n(d.autoCaption) }),
+    fill(copy.quotaShortsRender, { n: n(d.shortsRender) }),
     fill(copy.quotaBannerOriginal, { n: n(d.bannerOriginal) }),
     fill(copy.quotaAiImageBg, { n: n(d.aiImageBg) }),
     fill(copy.quotaScaCloud, { n: n(d.scaCloud) }),

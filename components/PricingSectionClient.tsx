@@ -12,6 +12,30 @@ import {
 import { isDomesticLocale } from "@/lib/market";
 import { shouldShowKrw } from "@/lib/paymentRouting";
 
+/** Split feature copy into title vs muted detail for visual hierarchy. */
+function splitFeatureLine(feature: string): {
+  primary: string;
+  secondary: string | null;
+} {
+  const creditUse = feature.match(
+    /^(.+?\((?:\d+\s*(?:크레딧|credits?))\))\s*[:：]\s*(.+)$/i
+  );
+  if (creditUse) {
+    return { primary: creditUse[1]!.trim(), secondary: creditUse[2]!.trim() };
+  }
+  const pool = feature.match(
+    /^(.+?(?:크레딧|credits)\s*\/\s*[^\(]+)\s*(\(.+\))$/i
+  );
+  if (pool) {
+    return { primary: pool[1]!.trim(), secondary: pool[2]!.trim() };
+  }
+  const colon = feature.match(/^([^:：]{2,40})\s*[:：]\s*(.+)$/);
+  if (colon) {
+    return { primary: colon[1]!.trim(), secondary: colon[2]!.trim() };
+  }
+  return { primary: feature, secondary: null };
+}
+
 function PlanCard({
   product,
   onSubscribe,
@@ -154,46 +178,57 @@ function PlanCard({
 
         <ul
           className={`min-h-0 flex-1 text-left ${
-            compact ? "mb-3 space-y-1.5" : "mb-8 space-y-3.5"
+            compact ? "mb-3 space-y-1" : "mb-6 space-y-1.5"
           }`}
         >
-          {product.features.map((feature) => (
-            <li
-              key={feature}
-              className={`flex items-start text-left ${
-                compact ? "gap-2" : "gap-2.5"
-              }`}
-            >
-              <div
-                className={`mt-0.5 flex shrink-0 items-center justify-center rounded-full ${
-                  compact ? "h-4 w-4" : "h-5 w-5"
-                } ${
-                  isPro
-                    ? "bg-gradient-to-br from-violet-400/35 to-emerald-400/30"
-                    : highlighted
-                      ? "bg-glow-purple/20"
-                      : "bg-white/10"
+          {product.features.map((feature) => {
+            const { primary, secondary } = splitFeatureLine(feature);
+            return (
+              <li
+                key={feature}
+                className={`flex items-start text-left ${
+                  compact ? "gap-1.5" : "gap-2"
                 }`}
               >
-                <Check
-                  className={`${compact ? "h-2.5 w-2.5" : "h-3 w-3"} ${
+                <div
+                  className={`mt-0.5 flex shrink-0 items-center justify-center rounded-full ${
+                    compact ? "h-3.5 w-3.5" : "h-4 w-4"
+                  } ${
                     isPro
-                      ? "text-emerald-300"
+                      ? "bg-gradient-to-br from-violet-400/35 to-emerald-400/30"
                       : highlighted
-                        ? "text-glow-purple"
-                        : "text-white/55"
+                        ? "bg-glow-purple/20"
+                        : "bg-white/10"
                   }`}
-                />
-              </div>
-              <span
-                className={`text-left leading-tight text-slate-100 ${
-                  compact ? "text-xs leading-snug sm:text-[13px]" : "text-[15px] leading-snug"
-                }`}
-              >
-                {feature}
-              </span>
-            </li>
-          ))}
+                >
+                  <Check
+                    className={`${compact ? "h-2 w-2" : "h-2.5 w-2.5"} ${
+                      isPro
+                        ? "text-emerald-300"
+                        : highlighted
+                          ? "text-glow-purple"
+                          : "text-white/50"
+                    }`}
+                  />
+                </div>
+                <p
+                  className={`min-w-0 flex-1 text-left leading-snug tracking-tight ${
+                    compact
+                      ? "text-[10px] sm:text-[11px]"
+                      : "text-[11px] sm:text-xs"
+                  }`}
+                >
+                  <span className="font-medium text-white/88">{primary}</span>
+                  {secondary ? (
+                    <span className="font-normal text-white/42">
+                      {secondary.startsWith("(") ? " " : ": "}
+                      {secondary}
+                    </span>
+                  ) : null}
+                </p>
+              </li>
+            );
+          })}
         </ul>
 
         <button

@@ -1110,6 +1110,7 @@ export interface Translations {
     quotaHiResPrint: string;
     quotaShortsHook: string;
     quotaAutoCaption: string;
+    quotaShortsRender: string;
     quotaBannerOriginal: string;
     quotaAiImageBg: string;
     quotaScaCloud: string;
