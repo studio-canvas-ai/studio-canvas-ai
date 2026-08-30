@@ -1423,7 +1423,9 @@ export default function ShortsFullStudio({
         ) : (
           <Sparkles className="h-3.5 w-3.5" />
         )}
-        {t.shorts.studioCaptionsGenerate}
+        <span className="whitespace-pre-line text-center leading-tight">
+          {t.shorts.studioCaptionsGenerate}
+        </span>
       </button>
       <button
         type="button"
@@ -1450,9 +1452,9 @@ export default function ShortsFullStudio({
         ) : (
           <Clapperboard className="h-3.5 w-3.5" />
         )}
-        {mixing
-          ? `${mixProgress}%`
-          : t.shorts.studioMixRender}
+        <span className="whitespace-pre-line text-center leading-tight">
+          {mixing ? `${mixProgress}%` : t.shorts.studioMixRender}
+        </span>
       </button>
       <button
         type="button"

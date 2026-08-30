@@ -109,15 +109,17 @@ export default function StudioExportButtonGroup({
       full
     );
 
-  const renderCreditLabel = (title: string, credit: string, subtitle?: string) => (
+  const renderCreditLabel = (title: string, line2: string, line3?: string) => (
     <span className={labelClass}>
       <span className={downloadTitleClass}>{title}</span>
-      {subtitle ? (
+      {line2 ? (
+        <span className={downloadCreditClass}>{line2}</span>
+      ) : null}
+      {line3 ? (
         <span className="max-w-full text-[8px] font-semibold leading-none opacity-90 [word-break:keep-all] sm:text-[9px]">
-          {subtitle}
+          {line3}
         </span>
       ) : null}
-      <span className={downloadCreditClass}>{credit}</span>
     </span>
   );
 
@@ -140,7 +142,10 @@ export default function StudioExportButtonGroup({
             className={`${downloadClass} flex-1 border-white/20 bg-gradient-to-r from-teal-500 via-emerald-500 to-emerald-400`}
           >
             <Download className={iconClass} aria-hidden />
-            {renderCreditLabel("일반화질 다운로드", "(1 크레딧)")}
+            {renderCreditLabel(
+              "일반화질 다운로드 (1 크레딧)",
+              "(웹, SNS, 인쇄물)"
+            )}
           </button>
           <button
             type="button"
@@ -149,7 +154,10 @@ export default function StudioExportButtonGroup({
             className={`${downloadClass} flex-1 border-white/20 bg-gradient-to-r from-violet-600 via-indigo-500 to-sky-500`}
           >
             <Download className={iconClass} aria-hidden />
-            {renderCreditLabel("고화질 다운로드", "(2 크레딧)")}
+            {renderCreditLabel(
+              "고화질 다운로드 (2 크레딧)",
+              "(고해상도, 포스터, 인쇄물)"
+            )}
           </button>
           <button
             type="button"
@@ -158,11 +166,7 @@ export default function StudioExportButtonGroup({
             className={`${downloadClass} flex-1 border-amber-300/80 bg-gradient-to-r from-amber-600 via-orange-500 to-rose-500 ring-1 ring-amber-200/70`}
           >
             <Download className={iconClass} aria-hidden />
-            {renderCreditLabel(
-              "초고화질 다운로드",
-              "(10 크레딧)",
-              "(인쇄용 벡터)"
-            )}
+            {renderCreditLabel("초고해상도 다운로드", "(5 크레딧)")}
           </button>
         </div>
       ) : (

@@ -388,7 +388,7 @@ export default function ShortsVideoUpload({
               ) : (
                 <Sparkles className="h-5 w-5" aria-hidden />
               )}
-              <span>
+              <span className="whitespace-pre-line text-center leading-tight">
                 {phase === "extracting"
                   ? t.shorts.extracting
                   : phase === "hooks_ready"

@@ -97,7 +97,7 @@ const kr: Translations = {
     storageR2: "Cloudflare R2",
     storageLocal: "로컬 미리보기 (R2 미설정)",
     clearVideo: "영상 제거",
-    startHookExtract: "✨ AI 훅 프레임 자동 추출 시작",
+    startHookExtract: "AI훅프레임자동추출시작\n(2 크레딧)",
     extracting: "훅 프레임 추출 중…",
     extractPending:
       "핵심 장면을 샘플링하고 썸네일 후보를 보안 스토리지에 저장합니다.",
@@ -182,7 +182,7 @@ const kr: Translations = {
     studioUnmute: "음소거 해제",
     studioVolume: "볼륨",
     studioTimeline: "타임라인",
-    studioMixRender: "✨ 영상 렌더링 및 다운받기",
+    studioMixRender: "영상렌더링 및 다운받기\n(20 크레딧)",
     studioMixing: "영상 + BGM 믹싱 중…",
     studioMixProgress: "렌더링 진행률",
     studioMixLoadingEngine: "FFmpeg 엔진 로딩 중…",
@@ -205,7 +205,7 @@ const kr: Translations = {
     studioCaptionsTitle: "AI 타임라인 자막",
     studioCaptionsHint:
       "음성에서 자막을 생성합니다. 문구를 수정한 뒤 최종 MP4에 타임라인으로 굽습니다.",
-    studioCaptionsGenerate: "✨ AI 자동 자막 생성",
+    studioCaptionsGenerate: "AI자동자막생성\n(3 크레딧)",
     studioCaptionsGenerating: "음성 인식 중…",
     studioCaptionsEmpty: "자막이 없습니다. 영상 음성으로 생성해 보세요.",
     studioCaptionsEmptyResult: "이 클립에서 인식된 음성이 없습니다.",

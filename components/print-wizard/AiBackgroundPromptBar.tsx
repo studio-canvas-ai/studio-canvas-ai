@@ -312,8 +312,15 @@ export default function AiBackgroundPromptBar({
           ) : (
             <Sparkles className="h-4 w-4 shrink-0" aria-hidden />
           )}
-          <span className="[word-break:keep-all]">
-            {generating ? generatingLabel : generateLabel}
+          <span className="inline-flex flex-col items-center gap-0.5 leading-tight [word-break:keep-all]">
+            <span>
+              {generating ? generatingLabel : generateLabel}
+            </span>
+            {!generating && !isPhoto ? (
+              <span className="text-[11px] font-bold tracking-tight opacity-95">
+                (25 크레딧)
+              </span>
+            ) : null}
           </span>
         </button>
       </div>

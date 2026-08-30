@@ -2015,7 +2015,7 @@ export default function ShortsTextEditStudio() {
               ) : (
                 <Clapperboard className="h-5 w-5 text-glow-emerald" aria-hidden />
               )}
-              <span>
+              <span className="whitespace-pre-line text-center leading-tight">
                 {mixing
                   ? `${t.shorts.studioMixing} ${mixProgress}%`
                   : t.shorts.studioMixRender}

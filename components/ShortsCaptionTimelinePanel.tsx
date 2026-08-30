@@ -83,7 +83,11 @@ export default function ShortsCaptionTimelinePanel({
           )}
           {generating
             ? t.shorts.studioCaptionsGenerating
-            : t.shorts.studioCaptionsGenerate}
+            : (
+              <span className="whitespace-pre-line text-center leading-tight">
+                {t.shorts.studioCaptionsGenerate}
+              </span>
+            )}
         </button>
       </div>
 

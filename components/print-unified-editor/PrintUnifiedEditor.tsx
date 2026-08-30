@@ -1301,7 +1301,7 @@ export default function PrintUnifiedEditor() {
                 onDownloadHigh={() => void downloadWithProject("high")}
                 onDownloadUltra={() => {
                   showToast(
-                    "초고화질(인쇄용 벡터) 다운로드는 곧 연결됩니다.",
+                    "초고해상도 다운로드는 곧 연결됩니다.",
                     "info"
                   );
                 }}
