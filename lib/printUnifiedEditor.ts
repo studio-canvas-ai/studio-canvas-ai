@@ -77,6 +77,17 @@ export function resizeContentOffsets(
   return out;
 }
 
+export function resizePageThumbUrls(
+  prev: string[] | undefined,
+  pageCount: number
+): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < pageCount; i++) {
+    out.push(typeof prev?.[i] === "string" ? prev[i]! : "");
+  }
+  return out;
+}
+
 const UNIFIED_GUIDE_BOX_W = 0.92 * 0.8; // ~80% of prior width
 const UNIFIED_GUIDE_BOX_H: Record<SemanticZone, number> = {
   top: 0.1 * 0.5,

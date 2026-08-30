@@ -757,6 +757,8 @@ export type PrintWizardState = {
   backgroundUrl: string | null;
   /** Per-page backgrounds aligned with pageCount (index 0 = 1면). */
   backgroundUrls: string[];
+  /** Screen 26 — flattened slot previews for mini thumbs (index 0 = 1면). */
+  pageThumbUrls?: string[];
   /** Per-page cover-crop pan so format changes can be reframed. */
   backgroundPansByPage?: PrintBackgroundPan[];
   /**

@@ -284,15 +284,17 @@ export default function Navbar({ printWizardBack }: NavbarProps = {}) {
             >
               {t.nav.designGenerator}
             </Link>
-            <button
-              type="button"
-              data-nav="template-warehouse"
-              title="템플릿창고"
-              onClick={() => openTemplateWarehouse()}
-              className="shrink-0 rounded-full border border-sky-400/35 bg-sky-500/10 px-2.5 py-1.5 text-sm font-semibold text-sky-100 transition-colors hover:bg-sky-500/20 hover:text-sky-50 lg:px-3"
-            >
-              템플릿창고
-            </button>
+            {pathname !== PRINT_UNIFIED_EDITOR_PATH ? (
+              <button
+                type="button"
+                data-nav="template-warehouse"
+                title="템플릿창고"
+                onClick={() => openTemplateWarehouse()}
+                className="shrink-0 rounded-full border border-sky-400/35 bg-sky-500/10 px-2.5 py-1.5 text-sm font-semibold text-sky-100 transition-colors hover:bg-sky-500/20 hover:text-sky-50 lg:px-3"
+              >
+                템플릿창고
+              </button>
+            ) : null}
           </div>
 
           <div className="flex min-w-0 shrink-0 items-center gap-2 lg:gap-3">

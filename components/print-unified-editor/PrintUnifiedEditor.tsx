@@ -18,6 +18,7 @@ import {
   isBlankUnifiedTextPage,
   resizeBlankIsolatedPages,
   resizeContentOffsets,
+  resizePageThumbUrls,
   type PrintContentOffset,
   type PrintUnifiedZoom,
 } from "@/lib/printUnifiedEditor";
@@ -194,6 +195,7 @@ function hydrateInitialState(): PrintWizardState {
         wizard.contentOffsetByPage,
         pageCount
       ),
+      pageThumbUrls: resizePageThumbUrls(wizard.pageThumbUrls, pageCount),
     };
   }
   const pageCount = 8 as PrintPageCount;
@@ -205,6 +207,7 @@ function hydrateInitialState(): PrintWizardState {
     photoLayersByPage: Array.from({ length: pageCount }, () => []),
     decoLayersByPage: Array.from({ length: pageCount }, () => []),
     backgroundUrls: Array.from({ length: pageCount }, () => ""),
+    pageThumbUrls: Array.from({ length: pageCount }, () => ""),
   };
 }
 
@@ -235,6 +238,7 @@ export default function PrintUnifiedEditor() {
   const [space4Review, setSpace4Review] =
     useState<Space4AdminReviewSession | null>(null);
   const [publishingSpace4, setPublishingSpace4] = useState(false);
+  const [saveCanvasBusy, setSaveCanvasBusy] = useState(false);
   const stateRef = useRef(state);
   stateRef.current = state;
   const formatSeedKeyRef = useRef("");
@@ -627,6 +631,7 @@ export default function PrintUnifiedEditor() {
             wizard.contentOffsetByPage,
             pageCount
           ),
+          pageThumbUrls: resizePageThumbUrls(wizard.pageThumbUrls, pageCount),
           textLayersByPage: cloneTextPagesFromWizard(
             wizard.textLayersByPage,
             pageCount
@@ -942,6 +947,79 @@ export default function PrintUnifiedEditor() {
     },
   });
 
+  const saveCanvasToSlotAndGallery = useCallback(async () => {
+    if (!pageActivated || pageIndex < 0) {
+      showToast("페이지를 먼저 선택해 주세요.", "info");
+      return;
+    }
+    if (saveCanvasBusy || exportBusy) return;
+    setSaveCanvasBusy(true);
+    try {
+      const exportState: PrintWizardState = {
+        ...stateRef.current,
+        textLayersByPage,
+        decoLayersByPage,
+        photoLayersByPage,
+      };
+      const blob = await compositePrintWizardPageBlob({
+        state: exportState,
+        pageIndex,
+        quality: "standard",
+      });
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result ?? ""));
+        reader.onerror = () => reject(new Error("thumb_read_failed"));
+        reader.readAsDataURL(blob);
+      });
+      const pageThumbUrls = resizePageThumbUrls(
+        stateRef.current.pageThumbUrls,
+        stateRef.current.pageCount
+      );
+      pageThumbUrls[pageIndex] = dataUrl;
+      const nextState: PrintWizardState = {
+        ...stateRef.current,
+        textLayersByPage,
+        decoLayersByPage,
+        photoLayersByPage,
+        pageThumbUrls,
+      };
+      stateRef.current = nextState;
+      saveSession(nextState);
+      setState(nextState);
+
+      const galleryResult = await saveToGallery({ silent: true });
+      if (galleryResult?.ok) {
+        showToast(
+          "현재 페이지가 미니 보기 슬롯과 내 갤러리에 저장되었습니다.",
+          "success"
+        );
+      } else if (galleryResult?.ok === false) {
+        showToast(
+          "미니 보기 슬롯에는 저장됐지만 갤러리 백업에 실패했습니다.",
+          "info"
+        );
+      } else {
+        showToast("현재 페이지가 미니 보기 슬롯에 저장되었습니다.", "success");
+      }
+    } catch (err) {
+      console.error("[unified-editor] canvas save failed", err);
+      showToast("저장에 실패했습니다. 잠시 후 다시 시도해 주세요.", "error");
+    } finally {
+      setSaveCanvasBusy(false);
+    }
+  }, [
+    decoLayersByPage,
+    exportBusy,
+    pageActivated,
+    pageIndex,
+    photoLayersByPage,
+    saveCanvasBusy,
+    saveToGallery,
+    showToast,
+    textLayersByPage,
+  ]);
+
   const onPublishSpace4Review = useCallback(async () => {
     if (!space4Review || publishingSpace4) return;
     setPublishingSpace4(true);
@@ -1071,8 +1149,8 @@ export default function PrintUnifiedEditor() {
             requireSubscription={requireSubscription}
             onInstallPhoto={onInstallPhoto}
             onOpenRecentProject={onOpenRecentProject}
-            onSaveToGallery={() => void saveToGallery()}
-            saveGalleryBusy={exportBusy}
+            onSaveCanvas={() => void saveCanvasToSlotAndGallery()}
+            saveCanvasBusy={saveCanvasBusy || exportBusy}
             onClearCanvasImage={clearCurrentPageBackground}
             recentNamespace="screen_008"
           />
@@ -1121,6 +1199,10 @@ export default function PrintUnifiedEditor() {
                       stateRef.current.contentOffsetByPage,
                       count
                     ),
+                    pageThumbUrls: resizePageThumbUrls(
+                      stateRef.current.pageThumbUrls,
+                      count
+                    ),
                   });
                   setCurrentPage((p) => (p > count ? 0 : p));
                 }}
@@ -1159,6 +1241,7 @@ export default function PrintUnifiedEditor() {
                 currentPage={currentPage}
                 backgroundUrl={state.backgroundUrl}
                 backgroundUrls={state.backgroundUrls}
+                pageThumbUrls={state.pageThumbUrls}
                 backgroundPansByPage={state.backgroundPansByPage}
                 onSelectPage={selectPage}
               />

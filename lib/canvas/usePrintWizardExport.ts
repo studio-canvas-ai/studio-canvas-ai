@@ -274,22 +274,28 @@ export function usePrintWizardExport({
     }
   };
 
-  const saveToGallery = async () => {
-    if (!requireSubscription()) return;
+  const saveToGallery = async (options?: { silent?: boolean }) => {
+    if (!requireSubscription()) return { ok: false as const };
     setBusy(true);
     try {
       const project = buildStep2Project();
       const result = await persistToGallery(project);
       if (result.ok) {
-        showToast(
-          isPhoto
-            ? "내 갤러리에 저장되었습니다."
-            : "내 갤러리에 저장되었습니다. 미니 보기·캔버스 작업 상태가 포함됩니다.",
-          "success"
-        );
+        if (!options?.silent) {
+          showToast(
+            isPhoto
+              ? "내 갤러리에 저장되었습니다."
+              : "내 갤러리에 저장되었습니다. 미니 보기·캔버스 작업 상태가 포함됩니다.",
+            "success"
+          );
+        }
       }
+      return result;
     } catch {
-      showToast("갤러리 저장에 실패했습니다.", "error");
+      if (!options?.silent) {
+        showToast("갤러리 저장에 실패했습니다.", "error");
+      }
+      return { ok: false as const };
     } finally {
       setBusy(false);
     }

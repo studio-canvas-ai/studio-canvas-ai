@@ -20,6 +20,8 @@ export type PrintUnifiedEditorMiniThumbsProps = {
   currentPage: number;
   backgroundUrl: string | null;
   backgroundUrls: (string | null)[];
+  /** Saved slot previews (composite); falls back to background when empty. */
+  pageThumbUrls?: (string | null)[];
   backgroundPansByPage?: PrintBackgroundPan[];
   onSelectPage: (page: number) => void;
 };
@@ -36,6 +38,7 @@ export default function PrintUnifiedEditorMiniThumbs({
   currentPage,
   backgroundUrl,
   backgroundUrls,
+  pageThumbUrls,
   backgroundPansByPage,
   onSelectPage,
 }: PrintUnifiedEditorMiniThumbsProps) {
@@ -68,9 +71,11 @@ export default function PrintUnifiedEditorMiniThumbs({
           const index = page - 1;
           const disabled = false;
           const active = currentPage > 0 && page === currentPage;
+          const thumbFromSlot = pageThumbUrls?.[index]?.trim();
           const thumbBg = disabled
             ? null
-            : pageBackgroundUrl(backgroundUrls, backgroundUrl, index);
+            : thumbFromSlot ||
+              pageBackgroundUrl(backgroundUrls, backgroundUrl, index);
           const pan = backgroundPansByPage?.[index];
 
           return (
