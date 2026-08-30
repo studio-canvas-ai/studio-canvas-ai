@@ -32,6 +32,7 @@ import {
 import { drawPrintLayerInBox, layerEditTextPadding } from "@/lib/printWizardTextDraw";
 import { colorPresetFill, fontForText, type TextLayer } from "@/lib/thumbnailStyles";
 import { revealTextLayerField } from "@/lib/canvas/textLayerInteraction";
+import { isLayerQuickInputPlaceholder } from "@/lib/layerTextPlaceholder";
 
 export type PreviewTextOverlayProps = {
   layers: TextLayer[];
@@ -765,7 +766,7 @@ export default function PreviewTextOverlay({
                   />
                   {showEmptyGuideBoxes &&
                   !hideGuideLabels &&
-                  !layer.text.trim() &&
+                  isLayerQuickInputPlaceholder(layer.text) &&
                   !isEditing ? (
                     <span className="pointer-events-none absolute inset-0 flex items-center justify-center px-2 text-center text-[11px] font-medium text-white/35">
                       {PAGE_ZONE_LABELS[layerZone(layer)]}

@@ -6,6 +6,7 @@ import StudioExportButtonGroup from "@/components/canvas/StudioExportButtonGroup
 import { useCredits } from "@/components/CreditsProvider";
 import { useFeedback } from "@/components/FeedbackProvider";
 import SpecSettingsPanel from "@/components/print-wizard/SpecSettingsPanel";
+import type { SpecSettingsTagId } from "@/components/print-wizard/AiBackgroundPromptBar";
 import PrintUnifiedEditorCanvas from "@/components/print-unified-editor/PrintUnifiedEditorCanvas";
 import PrintUnifiedEditorMiniThumbs from "@/components/print-unified-editor/PrintUnifiedEditorMiniThumbs";
 import PrintUnifiedEditorLayout from "@/components/print-unified-editor/PrintUnifiedEditorLayout";
@@ -39,7 +40,6 @@ import {
   referencePrintStageSize,
 } from "@/lib/printWizardTextLayers";
 import { usePrintWizardExport } from "@/lib/canvas/usePrintWizardExport";
-import { useCanvasStore } from "@/lib/canvas/canvasStore";
 import type { PhotoKind } from "@/lib/canvas/addPhotoLayer";
 import type { StudioCanvasProjectV1 } from "@/lib/canvas/projectFile";
 import {
@@ -88,6 +88,7 @@ import {
 import { PRINT_WIZARD_SESSION_KEY } from "@/lib/printWizardTypes";
 import { toDisplayImageSrc } from "@/lib/resultSession";
 import type { TextLayer } from "@/lib/thumbnailStyles";
+import { emptyVisualStyleSelection } from "@/lib/ai/visualStylePresets";
 
 const AiTemplateStudio = dynamic(
   () => import("@/components/AiTemplateStudio"),
@@ -515,32 +516,66 @@ export default function PrintUnifiedEditor() {
     ]
   );
 
-  const resetWorkspace = useCallback(() => {
-    const pageCount = 8 as PrintPageCount;
-    const next: PrintWizardState = {
-      ...defaultPrintWizardState(),
-      pageCount,
-      wizardStep: 2,
-      textLayersByPage: resizeBlankIsolatedPages(undefined, pageCount),
-      photoLayersByPage: Array.from({ length: pageCount }, () => []),
-      decoLayersByPage: Array.from({ length: pageCount }, () => []),
-      backgroundUrls: Array.from({ length: pageCount }, () => ""),
-      backgroundUrl: null,
-      backgroundPansByPage: resizeBackgroundPans(undefined, pageCount),
-      contentOffsetByPage: resizeContentOffsets(undefined, pageCount),
-      foldGuidesHidden: false,
-    };
-    saveSession(next);
-    setState(next);
-    setCurrentPage(0);
-    setZoom(1);
-    setGenerating(false);
-    setActiveTextLayerId(null);
-    setActivePhotoLayerId(null);
-    setActiveDecoLayerId(null);
-    useCanvasStore.getState().resetDocument();
-    showToast("편집 상태를 초기화했습니다.", "success");
-  }, [showToast]);
+  const clearSpecTag = useCallback((key: SpecSettingsTagId) => {
+    setState((prev) => {
+      let next: PrintWizardState = { ...prev };
+      switch (key) {
+        case "format":
+          next = markSpecPick(
+            { ...next, formatId: "a4", customSize: null },
+            "format",
+            false
+          );
+          break;
+        case "style":
+          next = markSpecPick(
+            { ...next, visualStyle: emptyVisualStyleSelection() },
+            "style",
+            false
+          );
+          break;
+        case "use":
+          next = markSpecPick({ ...next, useId: "flyer" }, "use", false);
+          break;
+        case "prompt":
+          next = { ...next, bgKeyword: "" };
+          break;
+        case "bg":
+          next = { ...next, bgPresetId: null };
+          break;
+        default:
+          break;
+      }
+      saveSession(next);
+      return next;
+    });
+  }, []);
+
+  const clearCurrentPageBackground = useCallback(() => {
+    if (!pageActivated || pageIndex < 0) {
+      showToast("페이지를 먼저 선택해 주세요.", "info");
+      return;
+    }
+    setState((prev) => {
+      const urls = Array.from({ length: prev.pageCount }, (_, i) =>
+        prev.backgroundUrls?.[i] ?? (i === 0 ? prev.backgroundUrl ?? "" : "")
+      );
+      urls[pageIndex] = "";
+      const next: PrintWizardState = {
+        ...prev,
+        backgroundUrls: urls,
+        backgroundUrl:
+          pageIndex === 0
+            ? null
+            : prev.backgroundUrl && urls.some((u) => u.trim())
+              ? prev.backgroundUrl
+              : urls.find((u) => u.trim()) ?? null,
+      };
+      saveSession(next);
+      return next;
+    });
+    showToast("현재 캔버스 배경 이미지를 삭제했습니다.", "success");
+  }, [pageActivated, pageIndex, showToast]);
 
   const onOpenRecentProject = useCallback(
     (project: StudioCanvasProjectV1) => {
@@ -861,6 +896,7 @@ export default function PrintUnifiedEditor() {
     busy: exportBusy,
     projectFileInputRef,
     downloadWithProject,
+    saveToGallery,
     buildCurrentProject,
     loadProjectFile,
     loadProjectFromGallery,
@@ -1035,7 +1071,9 @@ export default function PrintUnifiedEditor() {
             requireSubscription={requireSubscription}
             onInstallPhoto={onInstallPhoto}
             onOpenRecentProject={onOpenRecentProject}
-            onResetWorkspace={resetWorkspace}
+            onSaveToGallery={() => void saveToGallery()}
+            saveGalleryBusy={exportBusy}
+            onClearCanvasImage={clearCurrentPageBackground}
             recentNamespace="screen_008"
           />
         }
@@ -1045,6 +1083,7 @@ export default function PrintUnifiedEditor() {
             <div className="shrink-0 overflow-visible">
               <SpecSettingsPanel
                 fitContent
+                hidePageCountOption
                 formatId={state.formatId}
                 useId={state.useId}
                 pageCount={state.pageCount}
@@ -1107,6 +1146,7 @@ export default function PrintUnifiedEditor() {
                     )
                   );
                 }}
+                onClearSpecTag={clearSpecTag}
               />
             </div>
             {/* Empty flex space — do not stretch mini thumbs into the middle */}

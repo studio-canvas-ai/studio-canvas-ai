@@ -88,6 +88,8 @@ type ControlBarDropdownProps = {
   fullWidth?: boolean;
   /** Two-char chip: label only, equal flex share in a row. */
   compact?: boolean;
+  /** Option chosen — distinct from menu open state. */
+  selected?: boolean;
 };
 
 /**
@@ -106,6 +108,7 @@ export default function ControlBarDropdown({
   className = "",
   fullWidth = false,
   compact = false,
+  selected = false,
 }: ControlBarDropdownProps) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -164,7 +167,9 @@ export default function ControlBarDropdown({
         } ${
           open
             ? "border border-amber-300 bg-yellow-50 text-slate-800 shadow-sm ring-1 ring-amber-200/80"
-            : "border border-amber-200/80 bg-yellow-50 text-slate-800 shadow-sm hover:border-amber-300 hover:bg-yellow-100/80"
+            : selected
+              ? "border border-indigo-400 bg-indigo-50 text-indigo-900 shadow-sm ring-1 ring-indigo-300/70"
+              : "border border-amber-200/80 bg-yellow-50 text-slate-800 shadow-sm hover:border-amber-300 hover:bg-yellow-100/80"
         }`}
       >
         {!compact && icon ? (

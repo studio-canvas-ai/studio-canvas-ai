@@ -9,6 +9,7 @@ import {
   programNumFontCss,
   programNumberColumnWidth,
 } from "@/lib/printWizardTextFormat";
+import { stripLayerQuickInputPlaceholder } from "@/lib/layerTextPlaceholder";
 import {
   colorPresetFill,
   fontForText,
@@ -24,8 +25,10 @@ function stripLayerPlaceholderPrefix(text: string): string {
 
 export function displayTextForLayer(layer: TextLayer): string {
   const field = formFieldFromLayerId(layer.id);
-  if (!field) return stripLayerPlaceholderPrefix(layer.text);
-  return stripLayerPlaceholderPrefix(formatFormFieldText(field, layer.text));
+  const raw = field
+    ? formatFormFieldText(field, layer.text)
+    : layer.text;
+  return stripLayerPlaceholderPrefix(stripLayerQuickInputPlaceholder(raw));
 }
 
 function layerGlyphPad(fontSize: number): { padX: number; padY: number } {

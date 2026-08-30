@@ -117,6 +117,10 @@ import {
 } from "@/lib/printWizardTextFormat";
 import { wrapParagraph } from "@/lib/printWizardTextDraw";
 import {
+  isLayerQuickInputPlaceholder,
+  LAYER_QUICK_INPUT_PLACEHOLDER,
+} from "@/lib/layerTextPlaceholder";
+import {
   buildStudioProject,
   cloneOverlayLayers,
   readProjectFile,
@@ -396,7 +400,7 @@ type LayerHitBox = {
   width: number;
   height: number;
 };
-const PLACEHOLDER_TEXT = "텍스트를 입력하세요";
+const PLACEHOLDER_TEXT = LAYER_QUICK_INPUT_PLACEHOLDER;
 /** Compact single-line default; grows with content via scrollHeight. */
 const LAYER_TEXTAREA_MIN_PX = 44;
 const FONT_SIZE_MIN = 10;
@@ -1411,7 +1415,7 @@ export default function AiTemplateStudio({
       const lineHeightMul = layerLineHeight(layer);
       const asPlaceholder = Boolean(opts?.placeholder);
       const pureText = asPlaceholder
-        ? PLACEHOLDER_TEXT
+        ? ""
         : stripStickerTokens(layer.text);
       ctx.textBaseline = "middle";
       ctx.textAlign = "left";
@@ -1435,7 +1439,11 @@ export default function AiTemplateStudio({
             ? width * 0.92 - contentW + layer.offsetX * width
             : xAnchor - contentW / 2 + layer.offsetX * width;
 
-      if (!asPlaceholder && layer.showBox && (pureText.trim() || stickerId)) {
+      if (!pureText.trim() && !stickerId) {
+        return;
+      }
+
+      if (layer.showBox && (pureText.trim() || stickerId)) {
         const padX = fontSize * 0.35;
         const padY = fontSize * 0.45;
         const topPad = stickerId ? fontSize * 1.55 : padY;
@@ -1458,27 +1466,7 @@ export default function AiTemplateStudio({
         ctx.restore();
       }
 
-      if (asPlaceholder) {
-        for (let li = 0; li < lines.length; li++) {
-          const line = lines[li] ?? "";
-          const lineW = lineWidths[li] ?? fontSize * 2.2;
-          const lineY = blockTop + (li + 0.5) * lineHeightPx;
-          const lineX = lineAnchorX(
-            align,
-            lineW,
-            xAnchor,
-            width,
-            layer.offsetX
-          );
-          ctx.save();
-          ctx.font = `${fontWeight} ${fontSize}px ${fontForText(fontPreset, line)}`;
-          ctx.fillStyle = "rgba(255,255,255,0.38)";
-          ctx.shadowColor = "transparent";
-          ctx.shadowBlur = 0;
-          ctx.fillText(line, lineX, lineY);
-          ctx.restore();
-        }
-      } else {
+      {
         const isPlainPrintLayer =
           layer.id.startsWith("form-") && !stickerId;
         const fillColor = colorPresetFill(layer.color);
@@ -1630,7 +1618,11 @@ export default function AiTemplateStudio({
       const lineHeightMul = layerLineHeight(layer);
       const pureText = stripStickerTokens(layer.text);
       const measureText =
-        pureText.trim() || layer.stickerId ? pureText : PLACEHOLDER_TEXT;
+        isLayerQuickInputPlaceholder(pureText) && !layer.stickerId
+          ? ""
+          : pureText.trim() || layer.stickerId
+            ? pureText
+            : "";
 
       const { lines, lineWidths, contentW, blockH } = measureTextBlock(
         ctx,
@@ -1834,10 +1826,7 @@ export default function AiTemplateStudio({
           y: baseY + layer.offsetY * height,
           box,
         });
-        const isEmpty = !layer.text.trim() && !layer.stickerId;
-        drawStyledText(ctx, scaled, baseX, baseY, width, height, {
-          placeholder: isEmpty,
-        });
+        drawStyledText(ctx, scaled, baseX, baseY, width, height);
       });
       if (opts?.updateAnchors !== false && width === canvasSize.width) {
         layerAnchorsRef.current = anchors;
@@ -2421,24 +2410,21 @@ export default function AiTemplateStudio({
   const addQuickTextLayer = () => {
     // Prefer DOM value so Korean IME composition is committed before React state.
     let raw = (quickTextInputRef.current?.value ?? quickTextDraft).trim();
-    // Never keep accidental "placeholder + user text" merges in the field.
-    if (raw.startsWith(PLACEHOLDER_TEXT) && raw.length > PLACEHOLDER_TEXT.length) {
-      raw = raw.slice(PLACEHOLDER_TEXT.length).trim();
-    }
-    if (raw === PLACEHOLDER_TEXT) raw = "";
-    // Only the typed string (or default when empty) — never concatenate.
-    const text = raw.length > 0 ? raw : PLACEHOLDER_TEXT;
+    if (isLayerQuickInputPlaceholder(raw)) raw = "";
+    if (!raw) return;
+
+    const text = raw;
 
     const active =
       (activeLayerId
         ? overlayLayers.find((l) => l.id === activeLayerId)
         : null) ?? null;
     const activePlain = active
-      ? active.text.replace(/\u200B/g, "").trim()
+      ? stripStickerTokens(active.text).replace(/\u200B/g, "").trim()
       : "";
     const activeIsEmptyTarget =
       Boolean(active) &&
-      (!activePlain || activePlain === PLACEHOLDER_TEXT);
+      (isLayerQuickInputPlaceholder(activePlain) || !activePlain);
 
     if (active && activeIsEmptyTarget) {
       setOverlayLayers((prev) =>

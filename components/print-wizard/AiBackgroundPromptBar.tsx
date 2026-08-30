@@ -7,6 +7,7 @@ import {
   MoreHorizontal,
   Sparkles,
   Wand2,
+  X,
 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import {
@@ -16,15 +17,18 @@ import {
 import type { WizardProductId } from "@/lib/wizard/wizardProduct";
 import { photoInpaintUi } from "@/lib/photoInpaintCopy";
 
+export type SpecSettingsTagId = "format" | "style" | "use" | "prompt" | "bg";
+
 export type AiBackgroundPromptBarProps = {
   value: string;
   generating?: boolean;
   bgPresetId?: BgPresetId | null;
-  specTags?: { label: string; value: string }[];
+  specTags?: { id: SpecSettingsTagId | "pages"; label: string; value: string }[];
   canGenerate?: boolean;
   onChange: (value: string) => void;
   onPresetPick: (id: BgPresetId) => void;
   onGenerate: () => void;
+  onClearSpecTag?: (id: SpecSettingsTagId) => void;
   /** Optional order prompt shown when expanded. */
   expandedContent?: ReactNode;
   /** Photo lookbook uses subject-transform (inpaint) copy + hides field mood. */
@@ -45,6 +49,7 @@ export default function AiBackgroundPromptBar({
   onGenerate,
   expandedContent,
   productId = "print",
+  onClearSpecTag,
 }: AiBackgroundPromptBarProps) {
   const { t, locale } = useI18n();
   const cs = t.canvasStudio;
@@ -247,11 +252,21 @@ export default function AiBackgroundPromptBar({
           <div className="flex flex-wrap items-center gap-1.5 border-t border-sky-200/80 px-3 py-2">
             {specTags.map((tag) => (
               <span
-                key={tag.label}
-                className="inline-flex max-w-full items-center gap-1 rounded-full border border-pink-200 bg-pink-50 px-2.5 py-1 text-[11px] font-semibold text-pink-800 [word-break:keep-all]"
+                key={tag.id}
+                className="inline-flex max-w-full items-center gap-1 rounded-full border border-pink-200 bg-pink-50 py-1 pl-2.5 pr-1 text-[11px] font-semibold text-pink-800 [word-break:keep-all]"
               >
                 <span className="text-pink-600">{tag.label}</span>
                 <span className="truncate text-pink-900">{tag.value}</span>
+                {onClearSpecTag && tag.id !== "pages" ? (
+                  <button
+                    type="button"
+                    aria-label={`${tag.label} 선택 해제`}
+                    onClick={() => onClearSpecTag(tag.id as SpecSettingsTagId)}
+                    className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-pink-700 transition hover:bg-pink-100 hover:text-pink-900"
+                  >
+                    <X className="h-3 w-3" aria-hidden />
+                  </button>
+                ) : null}
               </span>
             ))}
           </div>

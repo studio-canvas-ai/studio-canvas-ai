@@ -234,7 +234,7 @@ export const canvasStudioKr: CanvasStudioCopy = {
   bgPlaceholder: "수정하거나, 원하는 단어를 뒤에 적어도 됩니다.",
   bgHint:
     "상단 [배경]에서 키워드를 누르면 입력창에 추가됩니다. 규격·스타일·용도·장수·분야와 함께 하나의 컨텍스트로 생성되며, 입력창에서 직접 수정·삭제할 수 있습니다.",
-  bgGenerateNeedAllOptions: "위 6개 옵션을 빠짐없이 선택해주세요",
+  bgGenerateNeedAllOptions: "위 5개 옵션을 빠짐없이 선택해주세요",
   pageFillHint1: "각페이지를 클릭해서 내용을 채우고,",
   pageFillHint2: "완성작업은 다음페이지에서 하세요",
   tagCatBackground: "배경",

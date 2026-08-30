@@ -39,6 +39,7 @@ import ControlBarDropdown, {
 } from "@/components/print-wizard/ControlBarDropdown";
 import AiBackgroundPromptBar from "@/components/print-wizard/AiBackgroundPromptBar";
 import PhotoLookbookPromptPanel from "@/components/print-wizard/PhotoLookbookPromptPanel";
+import type { SpecSettingsTagId } from "@/components/print-wizard/AiBackgroundPromptBar";
 import {
   IMAGE_STYLE_PRESETS,
   type VisualStyleSelection,
@@ -62,6 +63,8 @@ export type SpecSettingsPanelProps = {
   productId?: WizardProductId;
   /** Screen 26: expand to content height (no inner scrollbar / clipped CTA). */
   fitContent?: boolean;
+  /** Screen 26 — hide 장수 chip; mini thumbs stay fixed at 8 slots. */
+  hidePageCountOption?: boolean;
   onFormatChange: (id: PrintFormatId) => void;
   onCustomSizeApply: (size: PrintCustomSize) => void;
   onUseChange: (id: PrintUseId) => void;
@@ -74,6 +77,8 @@ export type SpecSettingsPanelProps = {
   onPromptPresetPick: (id: string, prompt: string) => void;
   onMainPromptChange: (value: string) => void;
   onVisualStyleChange: (next: VisualStyleSelection) => void;
+  /** Clear one spec tag (Screen 26 bidirectional sync). */
+  onClearSpecTag?: (key: SpecSettingsTagId) => void;
 };
 
 type OpenKey = "format" | "style" | "use" | "pages" | "prompt" | "bg" | null;
@@ -99,6 +104,7 @@ export default function SpecSettingsPanel({
   generatingKind = null,
   productId = "print",
   fitContent = false,
+  hidePageCountOption = false,
   onFormatChange,
   onCustomSizeApply,
   onUseChange,
@@ -110,6 +116,7 @@ export default function SpecSettingsPanel({
   onPromptPresetPick: _onPromptPresetPick,
   onMainPromptChange,
   onVisualStyleChange,
+  onClearSpecTag,
 }: SpecSettingsPanelProps) {
   const { t, locale } = useI18n();
   const cs = t.canvasStudio;
@@ -252,24 +259,32 @@ export default function SpecSettingsPanel({
         : "";
   const specTags = [
     specPicks.format && formatValueLabel
-      ? { label: cs.specFormat, value: formatValueLabel }
+      ? { id: "format" as const, label: cs.specFormat, value: formatValueLabel }
       : null,
     specPicks.style && styleValueLabel
-      ? { label: cs.specStyle, value: styleValueLabel }
+      ? { id: "style" as const, label: cs.specStyle, value: styleValueLabel }
       : null,
     specPicks.use && useValueLabel
-      ? { label: cs.specUse, value: useValueLabel }
+      ? { id: "use" as const, label: cs.specUse, value: useValueLabel }
       : null,
-    !isPhotoProduct && specPicks.pages && pageValueLabel
-      ? { label: cs.specPages, value: pageValueLabel }
+    !isPhotoProduct &&
+    !hidePageCountOption &&
+    specPicks.pages &&
+    pageValueLabel
+      ? { id: "pages" as const, label: cs.specPages, value: pageValueLabel }
       : null,
     exampleValueLabel
-      ? { label: cs.specExample, value: exampleValueLabel }
+      ? { id: "prompt" as const, label: cs.specExample, value: exampleValueLabel }
       : null,
     !isPhotoProduct && fieldValueLabel
-      ? { label: cs.specBg, value: fieldValueLabel }
+      ? { id: "bg" as const, label: cs.specBg, value: fieldValueLabel }
       : null,
-  ].filter((tag): tag is { label: string; value: string } => Boolean(tag));
+  ].filter(
+    (tag): tag is { id: SpecSettingsTagId | "pages"; label: string; value: string } =>
+      Boolean(tag)
+  );
+  const bgPromptSelected = bgKeyword.trim().length > 0;
+  const fieldSelected = Boolean(bgPresetId);
   const canGenerateBackground = isPhotoProduct
     ? specPicks.format &&
       specPicks.style &&
@@ -278,9 +293,8 @@ export default function SpecSettingsPanel({
     : specPicks.format &&
       specPicks.style &&
       specPicks.use &&
-      specPicks.pages &&
-      Boolean(bgPresetId) &&
-      bgKeyword.trim().length > 0;
+      fieldSelected &&
+      bgPromptSelected;
   const canGenerateSubject = Boolean(
     isPhotoProduct &&
       specPicks.format &&
@@ -306,6 +320,7 @@ export default function SpecSettingsPanel({
       >
         <ControlBarDropdown
           compact
+          selected={specPicks.format}
           label={cs.specFormat}
           value={specPicks.format ? formatValueLabel : undefined}
           open={openKey === "format"}
@@ -441,6 +456,7 @@ export default function SpecSettingsPanel({
 
         <ControlBarDropdown
           compact
+          selected={specPicks.style && Boolean(visualStyle.imageStyleId)}
           label={cs.specStyle}
           value={specPicks.style ? styleValueLabel || undefined : undefined}
           open={openKey === "style"}
@@ -492,6 +508,7 @@ export default function SpecSettingsPanel({
 
         <ControlBarDropdown
           compact
+          selected={specPicks.use}
           label={cs.specUse}
           value={specPicks.use ? useValueLabel : undefined}
           open={openKey === "use"}
@@ -520,7 +537,7 @@ export default function SpecSettingsPanel({
           </div>
         </ControlBarDropdown>
 
-        {!isPhotoProduct ? (
+        {!isPhotoProduct && !hidePageCountOption ? (
           <ControlBarDropdown
             compact
             label={cs.specPages}
@@ -546,6 +563,7 @@ export default function SpecSettingsPanel({
 
         <ControlBarDropdown
           compact
+          selected={bgPromptSelected}
           label={cs.specExample}
           value={exampleValueLabel || undefined}
           open={openKey === "prompt"}
@@ -639,6 +657,7 @@ export default function SpecSettingsPanel({
         {!isPhotoProduct ? (
           <ControlBarDropdown
             compact
+            selected={fieldSelected}
             label={cs.specBg}
             value={
               bgPresetId
@@ -717,6 +736,7 @@ export default function SpecSettingsPanel({
           bgPresetId={bgPresetId}
           specTags={specTags}
           canGenerate={canGenerateBackground}
+          onClearSpecTag={onClearSpecTag}
           onChange={onBgKeywordChange}
           onPresetPick={onBgPresetPick}
           onGenerate={onGenerateBackground}

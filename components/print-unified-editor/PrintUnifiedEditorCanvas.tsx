@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Minus, Plus, Trash2 } from "lucide-react";
+import { Minus, Plus, Trash2, ImageDown } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import CanvasUploadToolbar from "@/components/canvas/CanvasUploadToolbar";
 import PrintBlueprintOverlay from "@/components/print-wizard/PrintBlueprintOverlay";
@@ -75,7 +75,9 @@ export type PrintUnifiedEditorCanvasProps = {
   requireSubscription?: () => boolean;
   onInstallPhoto?: (file: File, mode: PhotoKind) => Promise<void>;
   onOpenRecentProject?: (project: StudioCanvasProjectV1) => void;
-  onResetWorkspace?: () => void;
+  onSaveToGallery?: () => void;
+  saveGalleryBusy?: boolean;
+  onClearCanvasImage?: () => void;
   recentNamespace?: RecentProjectNamespace;
 };
 
@@ -122,11 +124,14 @@ export default function PrintUnifiedEditorCanvas({
   requireSubscription,
   onInstallPhoto,
   onOpenRecentProject,
-  onResetWorkspace,
+  onSaveToGallery,
+  saveGalleryBusy = false,
+  onClearCanvasImage,
   recentNamespace = "screen_008",
 }: PrintUnifiedEditorCanvasProps) {
   const { t } = useI18n();
   const cs = t.canvasStudio;
+  const creator = t.creator;
   const stagePanRef = useRef<StagePanDrag | null>(null);
   const [stagePanning, setStagePanning] = useState(false);
   const [zoomAnimating, setZoomAnimating] = useState(false);
@@ -294,22 +299,34 @@ export default function PrintUnifiedEditorCanvas({
             recentNamespace={recentNamespace}
           />
         </div>
-        {onResetWorkspace ? (
+        {onSaveToGallery ? (
           <button
             type="button"
-            onClick={onResetWorkspace}
-            disabled={exportBusy || generating}
-            title={cs.reset}
-            aria-label={cs.reset}
-            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-red-300 bg-red-50 px-2 text-[10px] font-semibold leading-none text-red-700 transition hover:bg-red-100 disabled:opacity-40"
+            onClick={onSaveToGallery}
+            disabled={exportBusy || generating || saveGalleryBusy}
+            title={creator.actionSaveGallery}
+            aria-label={creator.actionSaveGallery}
+            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-indigo-300 bg-indigo-50 px-2 text-[10px] font-semibold leading-none text-indigo-800 transition hover:bg-indigo-100 disabled:opacity-40"
           >
-            <Trash2 className="h-3 w-3 shrink-0" aria-hidden />
-            <span className="whitespace-nowrap">{cs.reset}</span>
+            <ImageDown className="h-3 w-3 shrink-0" aria-hidden />
+            <span className="whitespace-nowrap">내 갤러리 저장</span>
           </button>
         ) : null}
       </header>
 
       <div className="relative flex min-h-0 flex-1 flex-col rounded-xl border border-slate-200/90 bg-slate-100 p-1.5 shadow-inner sm:gap-2 sm:p-2">
+        {onClearCanvasImage && pageActivated ? (
+          <button
+            type="button"
+            onClick={onClearCanvasImage}
+            disabled={exportBusy || generating || !pageBg}
+            title="현재 캔버스 배경 이미지 삭제"
+            aria-label="현재 캔버스 배경 이미지 삭제"
+            className="absolute right-3 top-3 z-30 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 bg-white/95 text-slate-700 shadow-md backdrop-blur-sm transition hover:border-red-300 hover:bg-red-50 hover:text-red-700 disabled:pointer-events-none disabled:opacity-35"
+          >
+            <Trash2 className="h-4 w-4" aria-hidden />
+          </button>
+        ) : null}
         <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
           {pageActivated ? (
             <div

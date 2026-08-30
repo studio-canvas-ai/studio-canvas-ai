@@ -73,6 +73,28 @@ export async function downloadImageAndRememberRecent(opts: {
   return { recentOk: true };
 }
 
+/** Save sealed .sca to local recent FIFO + server gallery (no PNG download). */
+export async function rememberProjectInGallery(opts: {
+  project: StudioCanvasProjectV1;
+  recentNamespace?: RecentProjectNamespace;
+}): Promise<{ recentOk: boolean; galleryOk: boolean }> {
+  let recentOk = false;
+  let galleryOk = false;
+  try {
+    await pushRecentProject(opts.project, opts.recentNamespace);
+    recentOk = true;
+  } catch (err) {
+    console.warn("[projectStorage] recent FIFO save failed", err);
+  }
+  try {
+    await uploadScaProjectToGallery({ project: opts.project });
+    galleryOk = true;
+  } catch (err) {
+    console.warn("[projectStorage] gallery sca upload failed", err);
+  }
+  return { recentOk, galleryOk };
+}
+
 export type OpenRecentProjectResult = "applied" | "navigated";
 
 /**
@@ -162,8 +184,31 @@ export function useProjectStorage(config?: {
     [config?.pendingProjectKey, config?.studioPath, router, showToast]
   );
 
+  const saveToGallery = useCallback(
+    async (project: StudioCanvasProjectV1) => {
+      const { recentOk, galleryOk } = await rememberProjectInGallery({
+        project,
+        recentNamespace: config?.recentNamespace,
+      });
+      if (!recentOk && !galleryOk) {
+        showToast("갤러리 저장에 실패했습니다. 잠시 후 다시 시도해 주세요.", "error");
+        return { ok: false as const };
+      }
+      if (!recentOk || !galleryOk) {
+        showToast(
+          "일부 저장 경로에만 반영됐습니다. 브라우저 저장 공간을 확인해 주세요.",
+          "info"
+        );
+        return { ok: true as const, partial: true as const };
+      }
+      return { ok: true as const, partial: false as const };
+    },
+    [config?.recentNamespace, showToast]
+  );
+
   return {
     downloadAndRemember,
+    saveToGallery,
     openRecent,
     studioPathForProject,
   };

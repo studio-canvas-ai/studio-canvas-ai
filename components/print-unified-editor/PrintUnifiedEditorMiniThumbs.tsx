@@ -60,13 +60,13 @@ export default function PrintUnifiedEditorMiniThumbs({
           {fillCanvas(cs.miniView, { label: "8페이지" })}
         </p>
         <span className="text-[9px] font-semibold tabular-nums leading-none text-slate-900">
-          {pageCount}면
+          8면
         </span>
       </div>
       <div className="grid grid-cols-4 gap-1">
         {THUMB_PAGES.map((page) => {
           const index = page - 1;
-          const disabled = page > pageCount;
+          const disabled = false;
           const active = currentPage > 0 && page === currentPage;
           const thumbBg = disabled
             ? null

@@ -55,7 +55,7 @@ export function usePrintWizardExport({
   const { showToast } = useFeedback();
   const { requireSubscription, premiumModal } = useExportGate();
   const { spendForQuality, quotaEmptyMessage } = useDownloadQuota();
-  const { downloadAndRemember, openRecent } = useProjectStorage({
+  const { downloadAndRemember, saveToGallery: persistToGallery, openRecent } = useProjectStorage({
     studioPath,
     pendingProjectKey,
     recentNamespace,
@@ -274,10 +274,32 @@ export function usePrintWizardExport({
     }
   };
 
+  const saveToGallery = async () => {
+    if (!requireSubscription()) return;
+    setBusy(true);
+    try {
+      const project = buildStep2Project();
+      const result = await persistToGallery(project);
+      if (result.ok) {
+        showToast(
+          isPhoto
+            ? "내 갤러리에 저장되었습니다."
+            : "내 갤러리에 저장되었습니다. 미니 보기·캔버스 작업 상태가 포함됩니다.",
+          "success"
+        );
+      }
+    } catch {
+      showToast("갤러리 저장에 실패했습니다.", "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return {
     busy,
     projectFileInputRef,
     downloadWithProject,
+    saveToGallery,
     buildCurrentProject: buildStep2Project,
     loadProjectFile,
     loadProjectFromGallery,
