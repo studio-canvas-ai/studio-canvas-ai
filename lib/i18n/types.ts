@@ -1104,6 +1104,17 @@ export interface Translations {
     quarterlyNoAutoRenewNotice: string;
     monthlyRecurringKcpNotice: string;
     vatNotice: string;
+    creditPoolMonthly: string;
+    creditPoolQuarterly: string;
+    quotaWebShare: string;
+    quotaHiResPrint: string;
+    quotaShortsHook: string;
+    quotaAutoCaption: string;
+    quotaBannerOriginal: string;
+    quotaAiImageBg: string;
+    quotaScaCloud: string;
+    quotaWorksGallery: string;
+    quotaScaAutoSave: string;
     quotaFhd: string;
     quotaFhdPlus: string;
     quota4k: string;

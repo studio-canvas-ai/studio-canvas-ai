@@ -6,7 +6,7 @@ type PricingCopy = Translations["pricing"];
 export const pricingPeriodJa: Partial<PricingCopy> = {
   title: "期間内回数プラン",
   subtitle:
-    "クレジットではなく、契約期間中のN回上限です。海外は月間または年間前払いを選べます。",
+    "AI宣伝ポスター・チラシ・横断幕・ショート動画制作＆プリントスタジオ",
   perQuarter: "/ 3か月一括",
   quarterlyBilling: "3か月利用券",
   quarterlySubscription: "3か月前払い利用券",
@@ -56,8 +56,7 @@ export const pricingPeriodJa: Partial<PricingCopy> = {
 
 export const pricingPeriodZh: Partial<PricingCopy> = {
   title: "期限内次数套餐",
-  subtitle:
-    "不是积分，而是合约期内的 N 次上限。海外可选月付或年付预付。",
+  subtitle: "AI宣传海报·传单·横幅·短视频制作与印刷工作室",
   perQuarter: "/ 3 个月一次性",
   quarterlyBilling: "3 个月通行证",
   quarterlySubscription: "3 个月预付通行证",
@@ -108,7 +107,7 @@ export const pricingPeriodZh: Partial<PricingCopy> = {
 export const pricingPeriodEs: Partial<PricingCopy> = {
   title: "Planes por límite de usos",
   subtitle:
-    "No son créditos: cada plan tiene un máximo de N usos en el periodo. Corea: mensual o 3 meses prepago. Global: mensual o anual prepago.",
+    "AI promo posters, leaflets, banners, shorts, and print studio",
   perQuarter: "/ 3 meses de una vez",
   quarterlyBilling: "Pase de 3 meses",
   quarterlySubscription: "Pase prepago de 3 meses",
@@ -159,7 +158,7 @@ export const pricingPeriodEs: Partial<PricingCopy> = {
 export const pricingPeriodFr: Partial<PricingCopy> = {
   title: "Formules à quota de période",
   subtitle:
-    "Ce n’est pas un solde de crédits : chaque formule a un plafond de N utilisations sur la période. Corée : mensuel ou 3 mois prépayés. International : mensuel ou annuel prépayé.",
+    "AI promo posters, leaflets, banners, shorts, and print studio",
   perQuarter: "/ 3 mois en une fois",
   quarterlyBilling: "Pass 3 mois",
   quarterlySubscription: "Pass prépayé 3 mois",
@@ -210,7 +209,7 @@ export const pricingPeriodFr: Partial<PricingCopy> = {
 export const pricingPeriodDe: Partial<PricingCopy> = {
   title: "Pläne mit Periodenkontingent",
   subtitle:
-    "Keine Credits, sondern ein N-mal-Maximum in der Laufzeit. Korea: monatlich oder 3 Monate vorausgezahlt. International: monatlich oder jährlich vorausgezahlt.",
+    "AI promo posters, leaflets, banners, shorts, and print studio",
   perQuarter: "/ 3 Monate einmalig",
   quarterlyBilling: "3-Monats-Pass",
   quarterlySubscription: "3-Monats-Prepaid-Pass",
@@ -261,7 +260,7 @@ export const pricingPeriodDe: Partial<PricingCopy> = {
 export const pricingPeriodIt: Partial<PricingCopy> = {
   title: "Piani a quota di periodo",
   subtitle:
-    "Non sono crediti: ogni piano ha un massimo di N utilizzi nel periodo. Corea: mensile o 3 mesi prepagati. Internazionale: mensile o annuale prepagato.",
+    "AI promo posters, leaflets, banners, shorts, and print studio",
   perQuarter: "/ 3 mesi in un’unica soluzione",
   quarterlyBilling: "Pass 3 mesi",
   quarterlySubscription: "Pass prepagato 3 mesi",
@@ -312,7 +311,7 @@ export const pricingPeriodIt: Partial<PricingCopy> = {
 export const pricingPeriodVi: Partial<PricingCopy> = {
   title: "Gói giới hạn số lần theo kỳ",
   subtitle:
-    "Không phải credit: mỗi gói có hạn mức N lần trong kỳ. Hàn Quốc: tháng hoặc 3 tháng trả trước. Quốc tế: tháng hoặc năm trả trước.",
+    "AI promo posters, leaflets, banners, shorts, and print studio",
   perQuarter: "/ 3 tháng trả một lần",
   quarterlyBilling: "Vé 3 tháng",
   quarterlySubscription: "Vé trả trước 3 tháng",
@@ -363,7 +362,7 @@ export const pricingPeriodVi: Partial<PricingCopy> = {
 export const pricingPeriodHi: Partial<PricingCopy> = {
   title: "अवधि के अनुसार बार-सीमा प्लान",
   subtitle:
-    "यह क्रेडिट नहीं, अवधि में N बार की अधिकतम सीमा है। कोरिया: मासिक या 3-माह प्रीपेड। वैश्विक: मासिक या वार्षिक प्रीपेड।",
+    "AI promo posters, leaflets, banners, shorts, and print studio",
   perQuarter: "/ 3 महीने एकमुश्त",
   quarterlyBilling: "3-माह पास",
   quarterlySubscription: "3-माह प्रीपेड पास",

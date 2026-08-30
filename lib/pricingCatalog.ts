@@ -4,6 +4,7 @@ import {
   isPrepaidPass,
   type PlanOffer,
   type BillingInterval,
+  type PricingPlanId,
 } from "@/lib/data";
 import { formatKrw, formatUsd } from "@/lib/currency";
 import { getTranslations, type Locale, type Translations } from "@/lib/i18n";
@@ -56,6 +57,10 @@ function formatCap(cap: QuotaCap, locale: Locale): string {
   return cap.n.toLocaleString(creditNumberLocale(locale));
 }
 
+function formatN(n: number, locale: Locale): string {
+  return n.toLocaleString(creditNumberLocale(locale));
+}
+
 function fillCap(
   maxTpl: string,
   plusTpl: string,
@@ -76,12 +81,158 @@ function licenseLine(
   return copy.quotaLicenseCommercial;
 }
 
-/** Feature lines follow the active UI locale (period N-times caps, not credits). */
+/** Pricing-card display catalog (UI copy only — not enforcement limits). */
+type PlanCreditDisplay = {
+  credits: number;
+  webShare: number;
+  hiResPrint: number;
+  shortsHook: number;
+  autoCaption: number;
+  bannerOriginal: number;
+  aiImageBg: number;
+  scaCloud: number;
+  worksGallery: number;
+  license: PlanLicense;
+};
+
+const MONTHLY_CREDIT_DISPLAY: Record<
+  "starter" | "standard" | "pro",
+  PlanCreditDisplay
+> = {
+  starter: {
+    credits: 1_400,
+    webShare: 1_400,
+    hiResPrint: 700,
+    shortsHook: 700,
+    autoCaption: 466,
+    bannerOriginal: 280,
+    aiImageBg: 56,
+    scaCloud: 10,
+    worksGallery: 20,
+    license: "personal",
+  },
+  standard: {
+    credits: 3_200,
+    webShare: 3_200,
+    hiResPrint: 1_600,
+    shortsHook: 1_600,
+    autoCaption: 1_066,
+    bannerOriginal: 640,
+    aiImageBg: 128,
+    scaCloud: 20,
+    worksGallery: 40,
+    license: "commercial",
+  },
+  pro: {
+    credits: 6_750,
+    webShare: 6_750,
+    hiResPrint: 3_375,
+    shortsHook: 3_375,
+    autoCaption: 2_250,
+    bannerOriginal: 1_350,
+    aiImageBg: 270,
+    scaCloud: 40,
+    worksGallery: 70,
+    license: "commercialFull",
+  },
+};
+
+const QUARTERLY_CREDIT_DISPLAY: Record<
+  "starter" | "standard" | "pro",
+  PlanCreditDisplay
+> = {
+  starter: {
+    credits: 4_200,
+    webShare: 4_200,
+    hiResPrint: 2_100,
+    shortsHook: 2_100,
+    autoCaption: 1_400,
+    bannerOriginal: 840,
+    aiImageBg: 168,
+    scaCloud: 10,
+    worksGallery: 20,
+    license: "personal",
+  },
+  standard: {
+    credits: 9_600,
+    webShare: 9_600,
+    hiResPrint: 4_800,
+    shortsHook: 4_800,
+    autoCaption: 3_200,
+    bannerOriginal: 1_920,
+    aiImageBg: 384,
+    scaCloud: 20,
+    worksGallery: 40,
+    license: "commercial",
+  },
+  pro: {
+    credits: 20_250,
+    webShare: 20_250,
+    hiResPrint: 10_125,
+    shortsHook: 10_125,
+    autoCaption: 6_750,
+    bannerOriginal: 4_050,
+    aiImageBg: 810,
+    scaCloud: 40,
+    worksGallery: 70,
+    license: "commercialFull",
+  },
+};
+
+function planKey(planId: PricingPlanId): "starter" | "standard" | "pro" {
+  if (planId === "standard") return "standard";
+  if (planId === "pro" || planId === "enterprise") return "pro";
+  return "starter";
+}
+
+function getPlanCreditDisplay(
+  planId: PricingPlanId,
+  interval: BillingInterval
+): PlanCreditDisplay | null {
+  if (interval !== "monthly" && interval !== "quarterly") return null;
+  const key = planKey(planId);
+  return interval === "quarterly"
+    ? QUARTERLY_CREDIT_DISPLAY[key]
+    : MONTHLY_CREDIT_DISPLAY[key];
+}
+
+function creditPlanFeatureLines(
+  offer: PlanOffer,
+  copy: Translations["pricing"],
+  locale: Locale,
+  d: PlanCreditDisplay
+): string[] {
+  const n = (value: number) => formatN(value, locale);
+  const poolTpl =
+    offer.interval === "quarterly"
+      ? copy.creditPoolQuarterly
+      : copy.creditPoolMonthly;
+  return [
+    fill(poolTpl, { n: n(d.credits) }),
+    fill(copy.quotaWebShare, { n: n(d.webShare) }),
+    fill(copy.quotaHiResPrint, { n: n(d.hiResPrint) }),
+    fill(copy.quotaShortsHook, { n: n(d.shortsHook) }),
+    fill(copy.quotaAutoCaption, { n: n(d.autoCaption) }),
+    fill(copy.quotaBannerOriginal, { n: n(d.bannerOriginal) }),
+    fill(copy.quotaAiImageBg, { n: n(d.aiImageBg) }),
+    fill(copy.quotaScaCloud, { n: n(d.scaCloud) }),
+    fill(copy.quotaWorksGallery, { n: n(d.worksGallery) }),
+    copy.quotaScaAutoSave,
+    licenseLine(d.license, copy),
+  ];
+}
+
+/** Feature lines for pricing cards (monthly/3-month = credit catalog; annual keeps legacy caps). */
 export function planFeatureLines(
   offer: PlanOffer,
   copy: Translations["pricing"],
   locale: Locale = "en"
 ): string[] {
+  const creditDisplay = getPlanCreditDisplay(offer.planId, offer.interval);
+  if (creditDisplay) {
+    return creditPlanFeatureLines(offer, copy, locale, creditDisplay);
+  }
+
   const q = getPlanQuotaDisplay(offer.planId, offer.interval);
   return [
     fillCap(copy.quotaFhd, copy.quotaFhdPlus, q.fhd, locale),
