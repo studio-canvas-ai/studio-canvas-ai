@@ -252,6 +252,18 @@ export default function ShortsFullStudio({
   const [panelTab, setPanelTab] = useState<"caption" | "thumb" | "youtube">(
     "thumb"
   );
+  const [isDesktop, setIsDesktop] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(min-width: 1024px)").matches;
+  });
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const sync = () => setIsDesktop(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
   /**
    * Active dual screen (blinking border): left = video edit, right = thumbnail.
    * Scale / posY sliders + pan only affect this screen's content.
@@ -1482,6 +1494,68 @@ export default function ShortsFullStudio({
     </>
   );
 
+  const headerRightMobile = (
+    <>
+      <button
+        type="button"
+        disabled={sttGenerating || !videoUrl}
+        onClick={onGenerateStt}
+        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-glow-emerald/40 bg-glow-emerald/15 disabled:opacity-50"
+        aria-label={t.shorts.studioCaptionsGenerate}
+        title={t.shorts.studioCaptionsGenerate}
+      >
+        {sttGenerating ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <Sparkles className="h-3.5 w-3.5" />
+        )}
+      </button>
+      <button
+        type="button"
+        disabled={polishing || !captions.length}
+        onClick={onPolish}
+        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/10 disabled:opacity-50"
+        aria-label={t.shorts.studioCaptionsPolish}
+        title={t.shorts.studioCaptionsPolish}
+      >
+        {polishing ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <Wand2 className="h-3.5 w-3.5" />
+        )}
+      </button>
+      <button
+        type="button"
+        disabled={mixing}
+        onClick={onMixRender}
+        className="inline-flex h-8 min-w-8 shrink-0 items-center justify-center rounded-lg bg-glow-emerald/20 px-1.5 text-[10px] font-bold tabular-nums ring-1 ring-glow-emerald/40 disabled:opacity-50"
+        aria-busy={mixing}
+        aria-label={t.shorts.studioMixRender}
+        title={t.shorts.studioMixRender}
+      >
+        {mixing ? (
+          `${mixProgress}%`
+        ) : (
+          <Clapperboard className="h-3.5 w-3.5" />
+        )}
+      </button>
+      <button
+        type="button"
+        disabled={youtubeBusy}
+        onClick={() => setPanelTab("youtube")}
+        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-500/20 text-red-100 ring-1 ring-red-400/40 disabled:opacity-50"
+        aria-label={t.shorts.youtubeUpload}
+        title={t.shorts.youtubeUpload}
+      >
+        {youtubeBusy ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <Youtube className="h-3.5 w-3.5" />
+        )}
+      </button>
+    </>
+  );
+
   /** Fit two 9:16 stages into the preview row (capped so timeline stays visible). */
   const stageShellBaseClass =
     "relative min-h-0 max-h-full touch-none overflow-hidden rounded-xl bg-black shadow-lg shadow-black/40 transition-[box-shadow,opacity] duration-150";
@@ -1510,15 +1584,24 @@ export default function ShortsFullStudio({
     overflow: "hidden",
   };
 
-  const controlPanelWrapperStyle: CSSProperties = {
-    display: "flex",
-    flexDirection: "column",
-    flexShrink: 0,
-    gap: "0.25rem",
-    minHeight: "10.5rem",
-    height: "auto",
-    overflow: "visible",
-  };
+  const controlPanelWrapperStyle: CSSProperties = isDesktop
+    ? {
+        display: "flex",
+        flexDirection: "column",
+        flexShrink: 0,
+        gap: "0.25rem",
+        minHeight: "10.5rem",
+        height: "auto",
+        overflow: "visible",
+      }
+    : {
+        display: "flex",
+        flexDirection: "column",
+        flexShrink: 0,
+        gap: "0.25rem",
+        height: "auto",
+        overflow: "visible",
+      };
 
   const controlPanelRowStyle: CSSProperties = {
     flex: "0 0 auto",
@@ -1673,13 +1756,21 @@ export default function ShortsFullStudio({
       <div
         ref={captionPanelRef}
         className="box-border flex min-h-0 min-w-0 max-w-full flex-col overflow-hidden rounded-xl bg-[#07090f] shadow-lg shadow-black/40 ring-1 ring-white/15"
-        style={{
-          width: workspaceW > 0 ? workspaceW : "100%",
-          height: workspaceH > 0 ? workspaceH : "100%",
-          maxWidth: "100%",
-          maxHeight: "100%",
-          flex: "0 0 auto",
-        }}
+        style={
+          isDesktop
+            ? {
+                width: workspaceW > 0 ? workspaceW : "100%",
+                height: workspaceH > 0 ? workspaceH : "100%",
+                maxWidth: "100%",
+                maxHeight: "100%",
+                flex: "0 0 auto",
+              }
+            : {
+                width: "100%",
+                maxWidth: "100%",
+                flex: "0 0 auto",
+              }
+        }
         onPointerEnter={() => setCaptionPanelHover(true)}
         onPointerLeave={() => setCaptionPanelHover(false)}
         onFocusCapture={onCaptionPanelFocusIn}
@@ -1797,6 +1888,84 @@ export default function ShortsFullStudio({
       </div>
   ) : null;
 
+  const studioControlPanel = (
+    <div
+      className="control-panel-wrapper z-10 border-t border-white/10 bg-black/55 px-1.5 py-1"
+      data-studio-control-panel
+      style={controlPanelWrapperStyle}
+    >
+      <div className="control-panel-sliders" style={controlPanelRowStyle}>
+        {videoUrl ? (
+          <ShortsPreviewControlBar
+            layout="stacked"
+            videoRef={videoRef}
+            videoKey={videoUrl}
+            duration={duration || peaks?.durationSec || 0}
+            onSeek={seek}
+            onPlayheadSample={onPlayheadSample}
+            scaleLabel={t.shorts.studioSliderScale}
+            posYLabel={t.shorts.studioSliderPosY}
+            scaleValueFormat="percent"
+            videoScale={
+              activeScreenId === "left"
+                ? clampVideoScale(videoScale)
+                : clampVideoScale(thumbScale)
+            }
+            videoPosY={
+              activeScreenId === "left"
+                ? clampVideoPosY(videoPosY)
+                : clampVideoPosY(thumbPosY)
+            }
+            onVideoScaleChange={(v) => {
+              const next = clampVideoScale(v);
+              if (activeScreenId === "left") {
+                onVideoScaleChange(next);
+              } else {
+                setThumbScale(next);
+              }
+            }}
+            onVideoPosYChange={(v) => {
+              const next = clampVideoPosY(v);
+              if (activeScreenId === "left") {
+                onVideoPosYChange(next);
+              } else {
+                setThumbPosY(next);
+              }
+            }}
+            videoScaleMin={SHORTS_VIDEO_SCALE_MIN}
+            videoScaleMax={SHORTS_VIDEO_SCALE_MAX}
+            videoScaleStep={0.01}
+            entranceEffect={captionEntrance}
+            onEntranceEffectChange={applyCaptionEntrance}
+          />
+        ) : (
+          <div className="h-9 rounded-lg border border-dashed border-white/10 bg-black/30" />
+        )}
+      </div>
+      <div
+        className="control-panel-timeline"
+        style={{
+          ...controlPanelRowStyle,
+          minHeight: "4rem",
+        }}
+      >
+        <ShortsCaptionWaveTimeline
+          compact
+          captions={captions}
+          activeCaptionId={activeCapId}
+          currentTime={previewTime}
+          durationSec={duration || peaks?.durationSec || 0}
+          peaks={peaks}
+          videoRef={videoRef}
+          videoKey={videoUrl}
+          onChange={onCaptionsChange}
+          onSelect={onSelectCap}
+          onSeek={seek}
+        />
+      </div>
+    </div>
+  );
+
   if (!open) return null;
 
   return (
@@ -1806,29 +1975,28 @@ export default function ShortsFullStudio({
       data-studio-shell="full-page"
       className="fixed inset-0 z-[100] flex h-[100dvh] w-screen flex-col overflow-hidden bg-[#0b0d14] text-white"
     >
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-white/[0.04] px-3 py-2.5 sm:px-4">
-        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/90 transition hover:bg-white/10 hover:text-white"
-            aria-label={t.shorts.studioBack}
-            title={t.shorts.studioBack}
-          >
-            <ArrowLeft className="h-4 w-4" aria-hidden />
-          </button>
-          <p className="shrink-0 text-sm font-bold tracking-tight text-white sm:text-[15px]">
-            {t.shorts.fullStudioTitle}
-          </p>
-          {onLoadShortsProject ? (
-            <ShortsProjectToolbar
-              busy={mixing || youtubeBusy}
-              onLoadProject={onLoadShortsProject}
-            />
-          ) : null}
-        </div>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-          {headerRight}
+      <header className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-b border-white/10 bg-white/[0.04] px-2 py-1.5 [-webkit-overflow-scrolling:touch] lg:justify-between lg:gap-3 lg:overflow-visible lg:px-4 lg:py-2.5">
+        <button
+          type="button"
+          onClick={onClose}
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/90 transition hover:bg-white/10 hover:text-white"
+          aria-label={t.shorts.studioBack}
+          title={t.shorts.studioBack}
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden />
+        </button>
+        <p className="hidden shrink-0 text-sm font-bold tracking-tight text-white lg:block lg:text-[15px]">
+          {t.shorts.fullStudioTitle}
+        </p>
+        {onLoadShortsProject ? (
+          <ShortsProjectToolbar
+            compact={!isDesktop}
+            busy={mixing || youtubeBusy}
+            onLoadProject={onLoadShortsProject}
+          />
+        ) : null}
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          {isDesktop ? headerRight : headerRightMobile}
         </div>
       </header>
 
@@ -1872,16 +2040,31 @@ export default function ShortsFullStudio({
           </div>
         )}
 
-        <div style={studioBodyGridStyle} data-studio-body-split="preview-timeline">
-          {/* ROW A — dual stages | caption workspace | sidebar */}
+        <div
+          className={
+            isDesktop ? undefined : "flex min-h-0 flex-1 flex-col overflow-hidden"
+          }
+          style={isDesktop ? studioBodyGridStyle : undefined}
+          data-studio-body-split="preview-timeline"
+        >
           <div
-            className="box-border min-h-0 min-w-0 max-h-full overflow-hidden"
-            style={mainGridStyle}
+            className={
+              isDesktop
+                ? "box-border min-h-0 min-w-0 max-h-full overflow-hidden"
+                : "flex min-h-0 flex-1 flex-col overflow-hidden"
+            }
+            style={isDesktop ? mainGridStyle : undefined}
           >
-            {/* LEFT — dual 9:16 preview stages only (no timeline here) */}
-            <section className="box-border flex min-h-0 min-w-0 flex-col overflow-hidden border-r border-white/10 bg-black/25">
+            {/* Dual 9:16 preview stages — top ~42vh on mobile, left column on desktop */}
+            <section
+              className={
+                isDesktop
+                  ? "box-border flex min-h-0 min-w-0 flex-col overflow-hidden border-r border-white/10 bg-black/25"
+                  : "pointer-events-auto box-border flex h-[42vh] max-h-[45vh] min-h-[200px] shrink-0 flex-col overflow-hidden border-b border-white/10 bg-black/25"
+              }
+            >
               <div
-                className="flex min-h-0 min-w-0 flex-1 items-center justify-center gap-3 overflow-hidden px-1.5 py-1"
+                className="flex h-full min-h-0 min-w-0 flex-1 items-center justify-center gap-2 overflow-hidden px-1 py-0.5 lg:gap-3 lg:px-1.5 lg:py-1"
                 style={{ containerType: "size" }}
               >
               <div
@@ -2175,10 +2358,22 @@ export default function ShortsFullStudio({
             </div>
             </section>
 
+            <div
+              className={
+                isDesktop
+                  ? "contents"
+                  : "pointer-events-auto flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]"
+              }
+            >
+
             {/* CENTER — caption workspace: min-width protected, never shrinks away */}
             {captionWorkspaceOpen ? (
               <section
-                className="box-border flex h-full min-h-0 min-w-[280px] shrink-0 flex-col items-center justify-center overflow-hidden border-r border-white/10 bg-[#05070c] px-2 py-1"
+                className={
+                  isDesktop
+                    ? "box-border flex h-full min-h-0 min-w-[280px] shrink-0 flex-col items-center justify-center overflow-hidden border-r border-white/10 bg-[#05070c] px-2 py-1"
+                    : "box-border flex w-full shrink-0 flex-col overflow-hidden border-b border-white/10 bg-[#05070c] px-2 py-2"
+                }
                 aria-label={t.shorts.captionWorkspaceTitle}
                 data-caption-workspace-col
               >
@@ -2187,7 +2382,13 @@ export default function ShortsFullStudio({
             ) : null}
 
             {/* RIGHT — tools sidebar */}
-            <aside className="box-border flex h-full min-h-0 w-full min-w-[300px] shrink-0 flex-col overflow-hidden bg-[#0e111a]">
+            <aside
+              className={
+                isDesktop
+                  ? "box-border flex h-full min-h-0 w-full min-w-[300px] shrink-0 flex-col overflow-hidden bg-[#0e111a]"
+                  : "box-border flex w-full shrink-0 flex-col overflow-visible bg-[#0e111a]"
+              }
+            >
             <div className="shrink-0 border-b border-white/10 px-2.5 py-1.5">
               <div className="flex gap-1 rounded-lg bg-black/40 p-0.5">
                 {(
@@ -2217,7 +2418,13 @@ export default function ShortsFullStudio({
               </div>
             </div>
 
-            <div className="shorts-side-panel-scroll flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain px-3 py-2.5">
+            <div
+              className={
+                isDesktop
+                  ? "shorts-side-panel-scroll flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain px-3 py-2.5"
+                  : "shorts-side-panel-scroll flex flex-col gap-3 px-3 py-2.5 pb-4"
+              }
+            >
               {panelTab === "thumb" ? (
                 <>
                   <div className="flex items-center justify-between gap-2">
@@ -3060,87 +3267,12 @@ export default function ShortsFullStudio({
               ) : null}
             </div>
           </aside>
+
+          {!isDesktop ? studioControlPanel : null}
+            </div>
           </div>
 
-          {/* ROW B — sticky control panel: sliders + timeline (content-sized, never clipped) */}
-          <div
-            className="control-panel-wrapper z-10 border-t border-white/10 bg-black/55 px-1.5 py-1"
-            data-studio-control-panel
-            style={controlPanelWrapperStyle}
-          >
-            <div
-              className="control-panel-sliders"
-              style={controlPanelRowStyle}
-            >
-              {videoUrl ? (
-                <ShortsPreviewControlBar
-                  layout="stacked"
-                  videoRef={videoRef}
-                  videoKey={videoUrl}
-                  duration={duration || peaks?.durationSec || 0}
-                  onSeek={seek}
-                  onPlayheadSample={onPlayheadSample}
-                  scaleLabel={t.shorts.studioSliderScale}
-                  posYLabel={t.shorts.studioSliderPosY}
-                  scaleValueFormat="percent"
-                  videoScale={
-                    activeScreenId === "left"
-                      ? clampVideoScale(videoScale)
-                      : clampVideoScale(thumbScale)
-                  }
-                  videoPosY={
-                    activeScreenId === "left"
-                      ? clampVideoPosY(videoPosY)
-                      : clampVideoPosY(thumbPosY)
-                  }
-                  onVideoScaleChange={(v) => {
-                    const next = clampVideoScale(v);
-                    if (activeScreenId === "left") {
-                      onVideoScaleChange(next);
-                    } else {
-                      setThumbScale(next);
-                    }
-                  }}
-                  onVideoPosYChange={(v) => {
-                    const next = clampVideoPosY(v);
-                    if (activeScreenId === "left") {
-                      onVideoPosYChange(next);
-                    } else {
-                      setThumbPosY(next);
-                    }
-                  }}
-                  videoScaleMin={SHORTS_VIDEO_SCALE_MIN}
-                  videoScaleMax={SHORTS_VIDEO_SCALE_MAX}
-                  videoScaleStep={0.01}
-                  entranceEffect={captionEntrance}
-                  onEntranceEffectChange={applyCaptionEntrance}
-                />
-              ) : (
-                <div className="h-9 rounded-lg border border-dashed border-white/10 bg-black/30" />
-              )}
-            </div>
-            <div
-              className="control-panel-timeline"
-              style={{
-                ...controlPanelRowStyle,
-                minHeight: "4rem",
-              }}
-            >
-              <ShortsCaptionWaveTimeline
-                compact
-                captions={captions}
-                activeCaptionId={activeCapId}
-                currentTime={previewTime}
-                durationSec={duration || peaks?.durationSec || 0}
-                peaks={peaks}
-                videoRef={videoRef}
-                videoKey={videoUrl}
-                onChange={onCaptionsChange}
-                onSelect={onSelectCap}
-                onSeek={seek}
-              />
-            </div>
-          </div>
+          {isDesktop ? studioControlPanel : null}
         </div>
 
         {showYtSuccess && youtubeWatchUrl ? (

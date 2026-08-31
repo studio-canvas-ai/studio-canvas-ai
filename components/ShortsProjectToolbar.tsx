@@ -28,10 +28,16 @@ const MENU_Z = 200;
 
 type Props = {
   busy?: boolean;
+  /** Icon-first compact bar for mobile studio header. */
+  compact?: boolean;
   onLoadProject: (project: ShortsStudioProjectV1) => void | Promise<void>;
 };
 
-export default function ShortsProjectToolbar({ busy = false, onLoadProject }: Props) {
+export default function ShortsProjectToolbar({
+  busy = false,
+  compact = false,
+  onLoadProject,
+}: Props) {
   const { t } = useI18n();
   const s = t.shorts;
   const [recent, setRecent] = useState<ShortsRecentProjectMeta[]>([]);
@@ -233,8 +239,18 @@ export default function ShortsProjectToolbar({ busy = false, onLoadProject }: Pr
         )
       : null;
 
+  const recentLabel = s.projectRecentButtonShort
+    .replace("{count}", String(count))
+    .replace("{max}", String(SHORTS_RECENT_PROJECTS_MAX));
+
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
+    <div
+      className={
+        compact
+          ? "flex shrink-0 items-center gap-1"
+          : "flex flex-wrap items-center gap-1.5"
+      }
+    >
       <button
         ref={btnRef}
         type="button"
@@ -245,35 +261,51 @@ export default function ShortsProjectToolbar({ busy = false, onLoadProject }: Pr
           refreshRecent();
           setMenuOpen((v) => !v);
         }}
-        className="inline-flex items-center gap-1 rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5 text-[11px] font-semibold text-white/90 hover:bg-white/10 disabled:opacity-50"
+        className={
+          compact
+            ? "inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg border border-white/15 bg-white/5 px-2 text-[10px] font-semibold text-white/90 hover:bg-white/10 disabled:opacity-50"
+            : "inline-flex items-center gap-1 rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5 text-[11px] font-semibold text-white/90 hover:bg-white/10 disabled:opacity-50"
+        }
         title={s.projectRecentTitle}
+        aria-label={recentLabel}
       >
         <History className="h-3.5 w-3.5 shrink-0" />
-        <span className="hidden sm:inline">
-          {s.projectRecentButton
-            .replace("{count}", String(count))
-            .replace("{max}", String(SHORTS_RECENT_PROJECTS_MAX))}
-        </span>
-        <span className="sm:hidden">
-          {s.projectRecentButtonShort
-            .replace("{count}", String(count))
-            .replace("{max}", String(SHORTS_RECENT_PROJECTS_MAX))}
-        </span>
+        {compact ? (
+          <span className="tabular-nums">{count}</span>
+        ) : (
+          <>
+            <span className="hidden sm:inline">
+              {s.projectRecentButton
+                .replace("{count}", String(count))
+                .replace("{max}", String(SHORTS_RECENT_PROJECTS_MAX))}
+            </span>
+            <span className="sm:hidden">{recentLabel}</span>
+          </>
+        )}
       </button>
       <button
         type="button"
         disabled={disabled}
         onClick={() => fileInputRef.current?.click()}
-        className="inline-flex items-center gap-1 rounded-lg border border-sky-400/35 bg-sky-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-sky-100 hover:bg-sky-500/20 disabled:opacity-50"
+        className={
+          compact
+            ? "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-sky-400/35 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20 disabled:opacity-50"
+            : "inline-flex items-center gap-1 rounded-lg border border-sky-400/35 bg-sky-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-sky-100 hover:bg-sky-500/20 disabled:opacity-50"
+        }
         title={s.projectLoadFile}
+        aria-label={s.projectLoadFileShort}
       >
         {fileBusy ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
         ) : (
           <FolderOpen className="h-3.5 w-3.5 shrink-0" />
         )}
-        <span className="hidden md:inline">{s.projectLoadFile}</span>
-        <span className="md:hidden">{s.projectLoadFileShort}</span>
+        {!compact ? (
+          <>
+            <span className="hidden md:inline">{s.projectLoadFile}</span>
+            <span className="md:hidden">{s.projectLoadFileShort}</span>
+          </>
+        ) : null}
       </button>
       <input
         ref={fileInputRef}
