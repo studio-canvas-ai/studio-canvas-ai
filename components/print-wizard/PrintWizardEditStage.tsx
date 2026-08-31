@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import StudioExportButtonGroup from "@/components/canvas/StudioExportButtonGroup";
+import StudioShareModal from "@/components/canvas/StudioShareModal";
 import PreviewCanvas from "@/components/print-wizard/PreviewCanvas";
 import PrintWizardStep2Layout from "@/components/print-wizard/PrintWizardStep2Layout";
 import { usePrintWizardExport } from "@/lib/canvas/usePrintWizardExport";
@@ -145,6 +146,7 @@ export default function PrintWizardEditStage({
     loadProjectFile,
     loadProjectFromGallery,
     sharePreview,
+    shareModalProps,
     requireSubscription,
     premiumModal: exportPremiumModal,
   } = usePrintWizardExport({
@@ -289,7 +291,7 @@ export default function PrintWizardEditStage({
                 }}
                 onLoadFromGallery={(project) => loadProjectFromGallery(project)}
                 requireSubscription={requireSubscription}
-                onShare={() => void sharePreview()}
+                onShare={sharePreview}
                 fileInputRef={projectFileInputRef}
                 onFileChange={(file) => void loadProjectFile(file)}
                 variant="studio"
@@ -300,6 +302,7 @@ export default function PrintWizardEditStage({
         }
       />
       {exportPremiumModal}
+      <StudioShareModal {...shareModalProps} />
     </>
   );
 }

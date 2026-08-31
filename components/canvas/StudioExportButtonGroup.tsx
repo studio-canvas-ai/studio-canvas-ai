@@ -256,7 +256,10 @@ export default function StudioExportButtonGroup({
           )}
           <button
             type="button"
-            onClick={onShare}
+            onClick={(e) => {
+              e.stopPropagation();
+              onShare();
+            }}
             disabled={busy}
             className={secondaryClass}
           >
@@ -286,7 +289,10 @@ export default function StudioExportButtonGroup({
             ) : (
               <button
                 type="button"
-                onClick={onShare}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onShare();
+                }}
                 disabled={busy}
                 className={secondaryClass}
               >
@@ -298,7 +304,10 @@ export default function StudioExportButtonGroup({
           {onLoadFromGallery ? (
             <button
               type="button"
-              onClick={onShare}
+              onClick={(e) => {
+                e.stopPropagation();
+                onShare();
+              }}
               disabled={busy}
               className={secondaryClass}
             >

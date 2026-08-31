@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useFeedback } from "@/components/FeedbackProvider";
 import { useCanvasStore } from "@/lib/canvas/canvasStore";
 import {
@@ -9,7 +9,8 @@ import {
   type StudioCanvasProjectV1,
 } from "@/lib/canvas/projectFile";
 import { createLayer, type TextLayer } from "@/lib/thumbnailStyles";
-import { shareWithFallback } from "@/lib/webShare";
+import { dispatchScaGalleryVault } from "@/lib/scaGalleryVaultUi";
+import { isShareAbortError, shareWithFallback } from "@/lib/webShare";
 import type { PrintCustomSize } from "@/lib/printWizardTypes";
 import { useExportGate } from "@/lib/useExportGate";
 import { useDownloadQuota } from "@/lib/useDownloadQuota";
@@ -17,6 +18,30 @@ import { projectStorageErrorMessage } from "@/lib/projectStorage";
 import { useProjectStorage } from "@/lib/canvas/useProjectStorage";
 import type { RecentProjectNamespace } from "@/lib/canvas/recentProjects";
 import type { PhotoLookbookSnapshot } from "@/lib/photoLookbookProject";
+
+type ShareModalState = {
+  open: boolean;
+  loading: boolean;
+  previewUrl: string | null;
+  file: File | null;
+  error: string | null;
+};
+
+export type PrintWizardShareModalProps = {
+  open: boolean;
+  onClose: () => void;
+  loading: boolean;
+  error: string | null;
+  previewUrl: string | null;
+  title: string;
+  description: string;
+  pageUrl: string;
+  projectLabel?: string;
+  sharing: boolean;
+  onNativeShare: () => void;
+  onCopyLink: () => void;
+  onDownloadImage: () => void;
+};
 
 export type UsePrintWizardExportArgs = {
   activeBg: string | null;
@@ -62,8 +87,30 @@ export function usePrintWizardExport({
   });
   const projectFileInputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const [shareBusy, setShareBusy] = useState(false);
+  const sharePrepGenRef = useRef(0);
+  const [shareState, setShareState] = useState<ShareModalState>({
+    open: false,
+    loading: false,
+    previewUrl: null,
+    file: null,
+    error: null,
+  });
   const isPhoto = recentNamespace === "screen_010";
   const depositSpace4 = depositToSpace4;
+
+  const closeSharePreview = useCallback(() => {
+    setShareState((prev) => {
+      if (prev.previewUrl) URL.revokeObjectURL(prev.previewUrl);
+      return {
+        open: false,
+        loading: false,
+        previewUrl: null,
+        file: null,
+        error: null,
+      };
+    });
+  }, []);
 
   const buildStep2Project = () => {
     const snapshot = useCanvasStore.getState().getExportSnapshot();
@@ -240,44 +287,153 @@ export function usePrintWizardExport({
     }
   };
 
-  const sharePreview = async () => {
+  const openSharePreview = useCallback(() => {
     if (!requireSubscription()) return;
-    setBusy(true);
+    dispatchScaGalleryVault({ action: "close" });
+    setShareState((prev) => {
+      if (prev.previewUrl) URL.revokeObjectURL(prev.previewUrl);
+      return {
+        open: true,
+        loading: true,
+        previewUrl: null,
+        file: null,
+        error: null,
+      };
+    });
+  }, [requireSubscription]);
+
+  useEffect(() => {
+    if (!shareState.open || !shareState.loading) return;
+    const gen = ++sharePrepGenRef.current;
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        let blob: Blob | null = null;
+        if (resolveExportImage) {
+          try {
+            blob = await resolveExportImage("high");
+          } catch (err) {
+            if (
+              err instanceof Error &&
+              (err.message === "nothing_to_export" || err.message === "no_page_selected")
+            ) {
+              blob = null;
+            } else {
+              throw err;
+            }
+          }
+        }
+        if (!blob) {
+          if (!activeBg) {
+            if (cancelled || gen !== sharePrepGenRef.current) return;
+            setShareState((prev) => ({
+              ...prev,
+              loading: false,
+              error: isPhoto
+                ? "공유할 사진이 없습니다. 캔버스에 이미지를 올려 주세요."
+                : "공유할 이미지가 없습니다. AI 배경을 생성하거나 업로드해 주세요.",
+            }));
+            return;
+          }
+          const res = await fetch(activeBg, { cache: "no-store" });
+          if (!res.ok) throw new Error("fetch_failed");
+          blob = await res.blob();
+        }
+        if (cancelled || gen !== sharePrepGenRef.current) return;
+        const previewUrl = URL.createObjectURL(blob);
+        const file = new File([blob], "print-smart-form.png", {
+          type: blob.type || "image/png",
+        });
+        setShareState((prev) => ({
+          ...prev,
+          loading: false,
+          previewUrl,
+          file,
+          error: null,
+        }));
+      } catch {
+        if (cancelled || gen !== sharePrepGenRef.current) return;
+        setShareState((prev) => ({
+          ...prev,
+          loading: false,
+          error: "공유 미리보기를 준비하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+        }));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeBg, isPhoto, resolveExportImage, shareState.loading, shareState.open]);
+
+  const runNativeShare = useCallback(async () => {
+    if (!shareState.file) return;
+    setShareBusy(true);
     try {
-      let blob: Blob | null = null;
-      if (resolveExportImage) {
-        try {
-          blob = await resolveExportImage("high");
-        } catch {
-          blob = null;
-        }
-      }
-      if (!blob) {
-        if (!activeBg) {
-          showToast("공유할 이미지가 없습니다.", "info");
-          return;
-        }
-        const res = await fetch(activeBg, { cache: "no-store" });
-        blob = await res.blob();
-      }
-      const file = new File([blob], "print-smart-form.png", {
-        type: blob.type || "image/png",
-      });
+      const pageUrl =
+        typeof window !== "undefined" ? window.location.href : "";
       const result = await shareWithFallback({
         title: "AI 1분 인쇄물 뚝딱 생성기",
         text: "Studio Canvas AI에서 만든 인쇄물 미리보기입니다.",
-        file,
+        url: pageUrl,
+        file: shareState.file,
       });
       if (result === "shared") {
         showToast("기기 공유 시트로 이미지를 공유했습니다.", "success");
+        closeSharePreview();
       } else if (result === "copied") {
-        showToast("공유가 지원되지 않아 링크/텍스트를 복사했습니다.", "info");
+        showToast("공유가 지원되지 않아 링크를 복사했습니다.", "info");
       }
-    } catch {
-      showToast("공유가 취소되었거나 실패했습니다.", "info");
+    } catch (err) {
+      if (isShareAbortError(err)) return;
+      showToast("공유에 실패했습니다.", "error");
     } finally {
-      setBusy(false);
+      setShareBusy(false);
     }
+  }, [closeSharePreview, shareState.file, showToast]);
+
+  const runCopyShareLink = useCallback(async () => {
+    const pageUrl = typeof window !== "undefined" ? window.location.href : "";
+    if (!pageUrl) return;
+    try {
+      await navigator.clipboard.writeText(pageUrl);
+      showToast("링크를 복사했습니다.", "success");
+    } catch {
+      showToast("링크 복사에 실패했습니다.", "error");
+    }
+  }, [showToast]);
+
+  const runDownloadShareImage = useCallback(() => {
+    if (!shareState.file) return;
+    const objectUrl = URL.createObjectURL(shareState.file);
+    const a = document.createElement("a");
+    a.href = objectUrl;
+    a.download = shareState.file.name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(objectUrl);
+    showToast("이미지를 저장했습니다.", "success");
+  }, [shareState.file, showToast]);
+
+  const sharePageUrl =
+    typeof window !== "undefined" ? window.location.href : "";
+
+  const shareModalProps: PrintWizardShareModalProps = {
+    open: shareState.open,
+    onClose: closeSharePreview,
+    loading: shareState.loading,
+    error: shareState.error,
+    previewUrl: shareState.previewUrl,
+    title: "AI 1분 인쇄물 뚝딱 생성기",
+    description: "Studio Canvas AI에서 만든 인쇄물 미리보기입니다.",
+    pageUrl: sharePageUrl,
+    projectLabel: titlePreview?.trim() || undefined,
+    sharing: shareBusy,
+    onNativeShare: () => void runNativeShare(),
+    onCopyLink: () => void runCopyShareLink(),
+    onDownloadImage: runDownloadShareImage,
   };
 
   const saveToGallery = async (options?: { silent?: boolean }) => {
@@ -315,7 +471,9 @@ export function usePrintWizardExport({
     buildCurrentProject: buildStep2Project,
     loadProjectFile,
     loadProjectFromGallery,
-    sharePreview,
+    sharePreview: openSharePreview,
+    openSharePreview,
+    shareModalProps,
     requireSubscription,
     premiumModal,
     openRecent,

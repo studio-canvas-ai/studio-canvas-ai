@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import StudioExportButtonGroup from "@/components/canvas/StudioExportButtonGroup";
+import StudioShareModal from "@/components/canvas/StudioShareModal";
 import { useCredits } from "@/components/CreditsProvider";
 import { useFeedback } from "@/components/FeedbackProvider";
 import SpecSettingsPanel from "@/components/print-wizard/SpecSettingsPanel";
@@ -906,6 +907,7 @@ export default function PrintUnifiedEditor() {
     loadProjectFile,
     loadProjectFromGallery,
     sharePreview,
+    shareModalProps,
     requireSubscription,
     premiumModal: exportPremiumModal,
   } = usePrintWizardExport({
@@ -1306,7 +1308,7 @@ export default function PrintUnifiedEditor() {
                 }}
                 onLoadFromGallery={(project) => loadProjectFromGallery(project)}
                 requireSubscription={requireSubscription}
-                onShare={() => void sharePreview()}
+                onShare={sharePreview}
                 fileInputRef={projectFileInputRef}
                 onFileChange={(file) => void loadProjectFile(file)}
                 variant="unified"
@@ -1320,6 +1322,7 @@ export default function PrintUnifiedEditor() {
         </div>
       </div>
       {exportPremiumModal}
+      <StudioShareModal {...shareModalProps} />
     </>
   );
 }
