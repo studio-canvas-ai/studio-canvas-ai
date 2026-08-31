@@ -36,6 +36,9 @@ export function studioPathForProject(
 /**
  * Download rendered export to device, then sync sealed `.sca` to:
  * recent-files cloud, works gallery, and (optional) Space 4 vault.
+ *
+ * Local recent-drawer failures (e.g. QuotaExceededError) must NOT block
+ * gallery or Template 4 / Space 4 deposition.
  * Caller must enforce subscription before invoking.
  */
 export async function downloadImageAndRememberRecent(opts: {
@@ -50,7 +53,11 @@ export async function downloadImageAndRememberRecent(opts: {
   space4ThumbBlob?: Blob | null;
   /** Plan scaCloud cap for recent-files FIFO. */
   recentMax?: number;
-}): Promise<{ recentOk: boolean }> {
+}): Promise<{
+  recentOk: boolean;
+  galleryOk: boolean;
+  space4Ok: boolean | null;
+}> {
   const sealedProject = await downloadImageAndProjectLocally({
     imageBlob: opts.imageBlob,
     project: opts.project,
@@ -59,34 +66,45 @@ export async function downloadImageAndRememberRecent(opts: {
     // Device: final export + editable .sca. Clouds still get .sca below.
     skipLocalProject: false,
   });
+
+  let recentOk = false;
+  let galleryOk = false;
+  let space4Ok: boolean | null = opts.depositToSpace4 ? false : null;
+
   try {
     await pushRecentProject(
       sealedProject,
       opts.recentNamespace,
       opts.recentMax
     );
+    recentOk = true;
   } catch (err) {
     console.warn("[projectStorage] recent FIFO save failed", err);
-    return { recentOk: false };
   }
+
   try {
-    await uploadScaProjectToGallery({ project: sealedProject });
+    const uploaded = await uploadScaProjectToGallery({ project: sealedProject });
+    galleryOk = Boolean(uploaded?.id);
   } catch (err) {
     console.warn("[projectStorage] gallery sca upload failed", err);
   }
+
   if (opts.depositToSpace4) {
     try {
       const { depositProjectToSpace4 } = await import("@/lib/space4Client");
-      await depositProjectToSpace4({
+      const deposited = await depositProjectToSpace4({
         project: sealedProject,
         source: "print-unified-editor-download",
         thumbBlob: opts.space4ThumbBlob ?? opts.imageBlob,
       });
+      space4Ok = Boolean(deposited?.id);
     } catch (err) {
       console.warn("[projectStorage] Space 4 deposit failed", err);
+      space4Ok = false;
     }
   }
-  return { recentOk: true };
+
+  return { recentOk, galleryOk, space4Ok };
 }
 
 /** Save sealed .sca to local recent FIFO + server gallery (no PNG download). */
@@ -108,8 +126,8 @@ export async function rememberProjectInGallery(opts: {
     console.warn("[projectStorage] recent FIFO save failed", err);
   }
   try {
-    await uploadScaProjectToGallery({ project: opts.project });
-    galleryOk = true;
+    const uploaded = await uploadScaProjectToGallery({ project: opts.project });
+    galleryOk = Boolean(uploaded?.id);
   } catch (err) {
     console.warn("[projectStorage] gallery sca upload failed", err);
   }
@@ -161,24 +179,56 @@ export function useProjectStorage(config?: {
       depositToSpace4?: boolean;
       space4ThumbBlob?: Blob | null;
     }) => {
-      const { recentOk } = await downloadImageAndRememberRecent({
-        ...downloadOpts,
-        recentNamespace: config?.recentNamespace,
-        depositToSpace4: downloadOpts.depositToSpace4,
-        space4ThumbBlob: downloadOpts.space4ThumbBlob,
-        recentMax: storageLimits.scaCloud,
-      });
-      if (!recentOk) {
+      const { recentOk, galleryOk, space4Ok } =
+        await downloadImageAndRememberRecent({
+          ...downloadOpts,
+          recentNamespace: config?.recentNamespace,
+          depositToSpace4: downloadOpts.depositToSpace4,
+          space4ThumbBlob: downloadOpts.space4ThumbBlob,
+          recentMax: storageLimits.scaCloud,
+        });
+
+      const cloudOk =
+        galleryOk && (space4Ok === null || space4Ok === true);
+      const anyCloudOk = galleryOk || space4Ok === true;
+
+      if (cloudOk && recentOk) {
+        if (downloadOpts.successMessage) {
+          showToast(downloadOpts.successMessage, "success");
+        }
+        return { recentOk: true as const, galleryOk, space4Ok };
+      }
+
+      if (cloudOk && !recentOk) {
         showToast(
-          "파일은 저장됐지만 최근 목록 등록에 실패했습니다. 브라우저 저장 공간을 확인해 주세요.",
+          downloadOpts.successMessage
+            ? `${downloadOpts.successMessage} (브라우저 최근 목록만 용량 부족으로 생략됨)`
+            : "클라우드·템플릿 창고 저장은 완료됐습니다. 브라우저 최근 목록만 용량 부족으로 생략됐습니다.",
+          "success"
+        );
+        return { recentOk: false as const, galleryOk, space4Ok };
+      }
+
+      if (anyCloudOk) {
+        showToast(
+          "일부 클라우드 저장만 반영됐습니다. 최근 목록·갤러리·템플릿 창고 상태를 확인해 주세요.",
           "info"
         );
-        return { recentOk: false as const };
+        return { recentOk, galleryOk, space4Ok };
       }
-      if (downloadOpts.successMessage) {
-        showToast(downloadOpts.successMessage, "success");
+
+      if (!recentOk) {
+        showToast(
+          "기기 파일은 저장됐지만 클라우드 동기화에 실패했습니다. 네트워크와 브라우저 저장 공간을 확인해 주세요.",
+          "error"
+        );
+      } else {
+        showToast(
+          "기기·최근 목록은 저장됐지만 갤러리·템플릿 창고 동기화에 실패했습니다.",
+          "error"
+        );
       }
-      return { recentOk: true as const };
+      return { recentOk, galleryOk, space4Ok };
     },
     [config?.recentNamespace, showToast, storageLimits.scaCloud]
   );
@@ -219,9 +269,16 @@ export function useProjectStorage(config?: {
         showToast("갤러리 저장에 실패했습니다. 잠시 후 다시 시도해 주세요.", "error");
         return { ok: false as const };
       }
-      if (!recentOk || !galleryOk) {
+      if (galleryOk && !recentOk) {
         showToast(
-          "일부 저장 경로에만 반영됐습니다. 브라우저 저장 공간을 확인해 주세요.",
+          "내 갤러리에 저장됐습니다. 브라우저 최근 목록만 용량 부족으로 생략됐습니다.",
+          "success"
+        );
+        return { ok: true as const, partial: true as const };
+      }
+      if (!galleryOk && recentOk) {
+        showToast(
+          "최근 목록에는 반영됐지만 내 갤러리 클라우드 저장에 실패했습니다.",
           "info"
         );
         return { ok: true as const, partial: true as const };

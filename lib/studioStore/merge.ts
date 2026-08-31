@@ -51,7 +51,7 @@ export function mergeRecentEntries(
   }
   return [...map.values()]
     .sort((a, b) => (b.meta.savedAt || 0) - (a.meta.savedAt || 0))
-    .slice(0, 10);
+    .slice(0, 200);
 }
 
 export function mergeVaultItems(

@@ -212,7 +212,13 @@ function writeDrawer(
         thumbSrc: e.meta.thumbSrc?.startsWith("data:") ? null : e.meta.thumbSrc,
       },
     }));
-    localStorage.setItem(drawerKey(namespace), JSON.stringify(shrunk));
+    try {
+      localStorage.setItem(drawerKey(namespace), JSON.stringify(shrunk));
+    } catch (err) {
+      // Soft-fail: cloud gallery / Space4 must still run after this throws.
+      console.warn("[recentProjects] localStorage quota exceeded", err);
+      throw new Error("localstorage_quota_exceeded");
+    }
   }
   // Only sync IDB for 007/010 so print (008) never mixes into shared cloud bucket.
   // Account cloud (`user_saved_forms`) syncs all three screens.
@@ -413,7 +419,10 @@ export async function listRecentProjects(
 ): Promise<RecentProjectMeta[]> {
   await ensureMigrated(namespace);
   await ensureCloudHydrated(namespace);
-  return readDrawer(namespace).map((e) => e.meta);
+  return readDrawer(namespace)
+    .slice()
+    .sort((a, b) => (b.meta.savedAt || 0) - (a.meta.savedAt || 0))
+    .map((e) => e.meta);
 }
 
 export async function getRecentProject(
@@ -453,22 +462,27 @@ export async function pushRecentProject(
   const id = `rp_${Date.now().toString(36)}_${Math.random()
     .toString(36)
     .slice(2, 8)}`;
+  const now = Date.now();
   const frozen = parseStudioProject(
     JSON.parse(JSON.stringify(project)) as StudioCanvasProjectV1
   );
+  frozen.savedAt = now;
   const meta: RecentProjectMeta = {
     id,
-    savedAt: frozen.savedAt || Date.now(),
+    savedAt: now,
     label: projectLabel(frozen),
     mode: frozen.studio.mode,
     thumbSrc: projectThumb(frozen),
   };
   const cap = Math.max(1, Math.min(200, Math.floor(maxItems) || RECENT_PROJECTS_MAX));
   const prev = readDrawer(namespace).filter((e) => e.id !== id);
+  // Newest first: prepend, then keep stable by savedAt desc.
   const next: RecentDrawerEntry[] = [
     { id, meta, project: frozen },
     ...prev,
-  ].slice(0, cap);
+  ]
+    .sort((a, b) => (b.meta.savedAt || 0) - (a.meta.savedAt || 0))
+    .slice(0, cap);
   writeDrawer(next, namespace, { max: cap });
   return meta;
 }

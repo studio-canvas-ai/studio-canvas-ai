@@ -73,7 +73,7 @@ export async function uploadScaProjectToGallery(opts: {
         label,
         mode: opts.project.studio.mode,
         sealedContent: sealed,
-        createdAt: opts.project.savedAt || Date.now(),
+        createdAt: Date.now(),
         thumbSrc,
       }),
     });
