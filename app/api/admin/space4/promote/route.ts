@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAdminSession } from "@/lib/adminAuth";
+import { resolveAdminAccess } from "@/lib/adminAuth";
 import { parseStudioProject } from "@/lib/canvas/projectFile";
 import { importSecureProject } from "@/lib/projectStorage";
 import {
@@ -52,7 +52,7 @@ function resolveThumbSrc(
  * with no automatic PII masking. Removes the source vault entry (move semantics).
  */
 export async function POST(req: Request) {
-  const admin = await getAdminSession();
+  const admin = await resolveAdminAccess(req);
   if (!admin) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }

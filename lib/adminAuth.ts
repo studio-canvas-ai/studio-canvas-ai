@@ -146,6 +146,32 @@ export async function getAdminSession(): Promise<AdminSession | null> {
   }
 }
 
+/**
+ * Admin access for Template 04 / Space 4 APIs used from Screen 26.
+ * Accepts either the dedicated /admin cookie OR a logged-in user whose
+ * email is on the admin allow-list (matches CreditsProvider `isAdmin`).
+ */
+export async function resolveAdminAccess(
+  req: Request
+): Promise<AdminSession | null> {
+  const cookieSession = await getAdminSession();
+  if (cookieSession) return cookieSession;
+
+  try {
+    const { resolveAppUser } = await import("@/lib/resolveAppUser");
+    const resolved = await resolveAppUser(req);
+    if (!resolved.ok) return null;
+    const email = (resolved.user.email || "").trim().toLowerCase();
+    if (!email || !isAdminEmail(email)) return null;
+    return {
+      user: { email, name: resolved.user.name ?? "Admin" },
+      authProvider: "admin",
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function requireAdmin() {
   const session = await getAdminSession();
   if (!session) throw new Error("ADMIN_FORBIDDEN");

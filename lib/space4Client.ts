@@ -77,9 +77,21 @@ export async function depositProjectToSpace4(opts: {
         thumbSrc,
       }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => "");
+      console.warn(
+        "[space4Client] deposit HTTP failed",
+        res.status,
+        errBody.slice(0, 300)
+      );
+      return null;
+    }
     const data = (await res.json()) as { id?: string };
-    return data.id ? { id: data.id } : null;
+    if (!data.id) {
+      console.warn("[space4Client] deposit ok but missing id");
+      return null;
+    }
+    return { id: data.id };
   } catch (err) {
     console.warn("[space4Client] deposit failed", err);
     return null;
@@ -94,10 +106,18 @@ export async function fetchSpace4VaultMeta(
       credentials: "same-origin",
       cache: "no-store",
     });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      console.warn(
+        "[space4Client] list vault failed",
+        res.status,
+        await res.text().catch(() => "")
+      );
+      return [];
+    }
     const data = (await res.json()) as { items?: Space4VaultMeta[] };
     return Array.isArray(data.items) ? data.items : [];
-  } catch {
+  } catch (err) {
+    console.warn("[space4Client] list vault error", err);
     return [];
   }
 }

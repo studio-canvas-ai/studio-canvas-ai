@@ -62,6 +62,7 @@ export {
   downloadImageAndRememberRecent,
   openRecentProjectInEditor,
   studioPathForProject,
+  syncProjectCloudBackup,
   useProjectStorage,
   TEMPLATE_STUDIO_PATH,
 } from "@/lib/canvas/useProjectStorage";

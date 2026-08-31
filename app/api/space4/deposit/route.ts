@@ -59,7 +59,20 @@ export async function POST(req: Request) {
       createdAt: record.createdAt,
     });
   } catch (err) {
-    console.error("[api/space4/deposit] POST", err);
-    return NextResponse.json({ error: "deposit_failed" }, { status: 500 });
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[api/space4/deposit] POST", message);
+    if (message === "r2_required") {
+      return NextResponse.json(
+        { error: "r2_required", message: "Space 4 durable storage is not configured" },
+        { status: 503 }
+      );
+    }
+    if (message === "sealedContent_required") {
+      return NextResponse.json({ error: "sealedContent_required" }, { status: 400 });
+    }
+    return NextResponse.json(
+      { error: "deposit_failed", detail: message.slice(0, 200) },
+      { status: 500 }
+    );
   }
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAdminSession } from "@/lib/adminAuth";
+import { resolveAdminAccess } from "@/lib/adminAuth";
 import { getSpace4Record } from "@/lib/space4Vault";
 
 export const runtime = "nodejs";
@@ -7,8 +7,8 @@ export const runtime = "nodejs";
 type RouteContext = { params: Promise<{ id: string }> };
 
 /** GET — admin-only sealed .sca payload for manual review in Screen 26. */
-export async function GET(_req: Request, context: RouteContext) {
-  const admin = await getAdminSession();
+export async function GET(req: Request, context: RouteContext) {
+  const admin = await resolveAdminAccess(req);
   if (!admin) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }

@@ -1,11 +1,12 @@
 "use client";
 
 import type { RefObject } from "react";
-import { Download, FolderOpen, Images, Share2 } from "lucide-react";
+import { Cloud, Download, FolderOpen, Images, Loader2, Share2 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import ScaGalleryLoadButton from "@/components/canvas/ScaGalleryLoadButton";
 import type { StudioCanvasProjectV1 } from "@/lib/canvas/projectFile";
 import { dispatchScaGalleryVault } from "@/lib/scaGalleryVaultUi";
+import { useCloudBackupStatus } from "@/lib/useCloudBackupStatus";
 import { useDownloadQuota } from "@/lib/useDownloadQuota";
 
 export type StudioExportButtonGroupProps = {
@@ -60,6 +61,7 @@ export default function StudioExportButtonGroup({
   const cs = t.canvasStudio;
   const { standardLabel, highLabel, canDownloadStandard, canDownloadHigh, canDownloadUltra } =
     useDownloadQuota();
+  const cloudBackup = useCloudBackupStatus();
   const compact = variant === "compact";
   const unified = variant === "unified";
   const standardParts = splitQuotaLabel(standardLabel);
@@ -136,6 +138,23 @@ export default function StudioExportButtonGroup({
             : "mt-auto grid shrink-0 gap-2 border-t border-white/10 pt-4"
       }
     >
+      {cloudBackup.busy ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className={
+            unified
+              ? "flex items-center justify-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-[12px] font-semibold text-sky-900"
+              : compact
+                ? "flex items-center justify-center gap-2 rounded-lg border border-sky-500/40 bg-sky-950/50 px-2 py-1.5 text-[11px] font-medium text-sky-100"
+                : "flex items-center justify-center gap-2 rounded-xl border border-sky-400/30 bg-sky-500/10 px-3 py-2 text-sm font-medium text-sky-100"
+          }
+        >
+          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
+          <Cloud className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+          <span>{cloudBackup.label || "클라우드 백업 중..."}</span>
+        </div>
+      ) : null}
       {unified ? (
         <div className="flex w-full min-w-0 flex-row items-stretch gap-1.5">
           <button
@@ -194,8 +213,8 @@ export default function StudioExportButtonGroup({
       )}
       {showHint ? (
         <p className={hintClass}>
-          (다운로드 시 완성본과 수정용 .sca는 기기에, 수정용 .sca는 최근 파일·내
-          갤러리·템플릿 창고에도 함께 보관됩니다)
+          (다운로드 시 완성본과 수정용 .sca는 기기에 바로 저장되고, 수정용 .sca는
+          최근 파일·내 갤러리·템플릿 창고에 백그라운드로 동기화됩니다)
         </p>
       ) : null}
       {unified && onLoadFromGallery ? (

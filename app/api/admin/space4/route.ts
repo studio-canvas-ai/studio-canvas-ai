@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { getAdminSession } from "@/lib/adminAuth";
+import { resolveAdminAccess } from "@/lib/adminAuth";
 import { listSpace4Records } from "@/lib/space4Vault";
 
 export const runtime = "nodejs";
 
 /** GET — admin-only Space 4 vault metadata (no sealed payload). */
 export async function GET(req: Request) {
-  const admin = await getAdminSession();
+  const admin = await resolveAdminAccess(req);
   if (!admin) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }

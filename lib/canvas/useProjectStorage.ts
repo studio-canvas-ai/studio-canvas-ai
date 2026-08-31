@@ -1,8 +1,6 @@
-"use client";
-
 /**
  * Shared recent-project storage for Template Studio + Print Smart Form.
- * Download → device export + recent FIFO + gallery FIFO + optional Space4.
+ * Download → device export immediately; cloud gallery / Space 4 run in background.
  *
  * Browser localStorage quota failures are silent and never block cloud sync.
  */
@@ -21,6 +19,7 @@ import {
   shrinkProjectForStorage,
   type RecentProjectNamespace,
 } from "@/lib/canvas/recentProjects";
+import { beginCloudBackup, endCloudBackup } from "@/lib/cloudBackupUi";
 import { uploadScaProjectToGallery } from "@/lib/scaGalleryProjects";
 import { getPlanStorageLimits } from "@/lib/planStorageLimits";
 import { PRINT_WIZARD_STUDIO_PATH } from "@/lib/wizard/wizardProduct";
@@ -36,37 +35,21 @@ export function studioPathForProject(
     : TEMPLATE_STUDIO_PATH;
 }
 
-/**
- * Download rendered export to device, then sync sealed `.sca` to:
- * recent-files cloud, works gallery, and (optional) Space 4 vault.
- *
- * Local recent-drawer failures (e.g. QuotaExceededError) are swallowed —
- * gallery / Template 4 deposition always still runs.
- */
-export async function downloadImageAndRememberRecent(opts: {
-  imageBlob: Blob;
-  project: StudioCanvasProjectV1;
-  baseName: string;
-  imageExt?: "png" | "jpg";
-  recentNamespace?: RecentProjectNamespace;
-  depositToSpace4?: boolean;
-  space4ThumbBlob?: Blob | null;
-  recentMax?: number;
-}): Promise<{
+export type CloudBackupResult = {
   recentOk: boolean;
   galleryOk: boolean;
   space4Ok: boolean | null;
-}> {
-  const sealedProject = await downloadImageAndProjectLocally({
-    imageBlob: opts.imageBlob,
-    project: opts.project,
-    baseName: opts.baseName,
-    imageExt: opts.imageExt,
-    skipLocalProject: false,
-  });
+};
 
-  // Slim copy for cloud APIs — strip huge data-URLs that blow request bodies / R2.
-  const cloudProject = shrinkProjectForStorage(sealedProject);
+/** Sync sealed `.sca` to recent FIFO + gallery + optional Space 4 (blocking). */
+export async function syncProjectCloudBackup(opts: {
+  project: StudioCanvasProjectV1;
+  recentNamespace?: RecentProjectNamespace;
+  recentMax?: number;
+  depositToSpace4?: boolean;
+  space4ThumbBlob?: Blob | null;
+}): Promise<CloudBackupResult> {
+  const cloudProject = shrinkProjectForStorage(opts.project);
 
   let recentOk = false;
   let galleryOk = false;
@@ -80,7 +63,6 @@ export async function downloadImageAndRememberRecent(opts: {
     );
     recentOk = true;
   } catch (err) {
-    // Silent: never surface localStorage quota to the user.
     console.warn("[projectStorage] recent FIFO save failed (ignored)", err);
     recentOk = false;
   }
@@ -101,7 +83,7 @@ export async function downloadImageAndRememberRecent(opts: {
       const deposited = await depositProjectToSpace4({
         project: cloudProject,
         source: "print-unified-editor-download",
-        thumbBlob: opts.space4ThumbBlob ?? opts.imageBlob,
+        thumbBlob: opts.space4ThumbBlob ?? null,
       });
       space4Ok = Boolean(deposited?.id);
       if (!space4Ok) {
@@ -116,32 +98,111 @@ export async function downloadImageAndRememberRecent(opts: {
   return { recentOk, galleryOk, space4Ok };
 }
 
+function toastCloudBackupResult(
+  showToast: (message: string, tone?: "success" | "error" | "info") => void,
+  result: CloudBackupResult,
+  space4Required: boolean
+) {
+  const space4Passed = !space4Required || result.space4Ok === true;
+  const cloudOk = result.galleryOk && space4Passed;
+  const anyCloudOk = result.galleryOk || result.space4Ok === true;
+
+  if (cloudOk || anyCloudOk) {
+    showToast("클라우드 백업이 완료됐습니다.", "success");
+    return;
+  }
+  showToast(
+    "기기 파일은 저장됐습니다. 클라우드 백업은 네트워크 상태를 확인한 뒤 다시 시도해 주세요.",
+    "info"
+  );
+}
+
+/**
+ * Download rendered export to device, then sync sealed `.sca` to cloud.
+ * Cloud work (recent / gallery / Template 4) runs in the background so the UI
+ * is not blocked after the device files start downloading.
+ */
+export async function downloadImageAndRememberRecent(opts: {
+  imageBlob: Blob;
+  project: StudioCanvasProjectV1;
+  baseName: string;
+  imageExt?: "png" | "jpg";
+  recentNamespace?: RecentProjectNamespace;
+  depositToSpace4?: boolean;
+  space4ThumbBlob?: Blob | null;
+  recentMax?: number;
+  /**
+   * When false, waits for cloud sync (legacy). Default true — non-blocking.
+   */
+  deferCloudSync?: boolean;
+  onCloudBackupComplete?: (result: CloudBackupResult) => void;
+}): Promise<CloudBackupResult & { deferred: boolean }> {
+  const sealedProject = await downloadImageAndProjectLocally({
+    imageBlob: opts.imageBlob,
+    project: opts.project,
+    baseName: opts.baseName,
+    imageExt: opts.imageExt,
+    skipLocalProject: false,
+  });
+
+  const defer = opts.deferCloudSync !== false;
+  const space4Required = opts.depositToSpace4 === true;
+
+  if (!defer) {
+    const result = await syncProjectCloudBackup({
+      project: sealedProject,
+      recentNamespace: opts.recentNamespace,
+      recentMax: opts.recentMax,
+      depositToSpace4: opts.depositToSpace4,
+      space4ThumbBlob: opts.space4ThumbBlob ?? opts.imageBlob,
+    });
+    return { ...result, deferred: false };
+  }
+
+  beginCloudBackup("클라우드 백업 중...");
+  void (async () => {
+    try {
+      const result = await syncProjectCloudBackup({
+        project: sealedProject,
+        recentNamespace: opts.recentNamespace,
+        recentMax: opts.recentMax,
+        depositToSpace4: opts.depositToSpace4,
+        space4ThumbBlob: opts.space4ThumbBlob ?? opts.imageBlob,
+      });
+      opts.onCloudBackupComplete?.(result);
+    } catch (err) {
+      console.warn("[projectStorage] background cloud backup failed", err);
+      opts.onCloudBackupComplete?.({
+        recentOk: false,
+        galleryOk: false,
+        space4Ok: space4Required ? false : null,
+      });
+    } finally {
+      endCloudBackup();
+    }
+  })();
+
+  return {
+    recentOk: true,
+    galleryOk: false,
+    space4Ok: space4Required ? false : null,
+    deferred: true,
+  };
+}
+
 /** Save sealed .sca to local recent FIFO + server gallery (no PNG download). */
 export async function rememberProjectInGallery(opts: {
   project: StudioCanvasProjectV1;
   recentNamespace?: RecentProjectNamespace;
   recentMax?: number;
 }): Promise<{ recentOk: boolean; galleryOk: boolean }> {
-  const cloudProject = shrinkProjectForStorage(opts.project);
-  let recentOk = false;
-  let galleryOk = false;
-  try {
-    await pushRecentProject(
-      cloudProject,
-      opts.recentNamespace,
-      opts.recentMax
-    );
-    recentOk = true;
-  } catch (err) {
-    console.warn("[projectStorage] recent FIFO save failed (ignored)", err);
-  }
-  try {
-    const uploaded = await uploadScaProjectToGallery({ project: cloudProject });
-    galleryOk = Boolean(uploaded?.id);
-  } catch (err) {
-    console.warn("[projectStorage] gallery sca upload failed", err);
-  }
-  return { recentOk, galleryOk };
+  const result = await syncProjectCloudBackup({
+    project: opts.project,
+    recentNamespace: opts.recentNamespace,
+    recentMax: opts.recentMax,
+    depositToSpace4: false,
+  });
+  return { recentOk: result.recentOk, galleryOk: result.galleryOk };
 }
 
 export type OpenRecentProjectResult = "applied" | "navigated";
@@ -182,49 +243,47 @@ export function useProjectStorage(config?: {
       baseName: string;
       imageExt?: "png" | "jpg";
       successMessage?: string;
+      /** Immediate toast after device save (defaults when successMessage set). */
+      deviceSavedMessage?: string;
       depositToSpace4?: boolean;
       space4ThumbBlob?: Blob | null;
+      /** Default true — gallery / Template 4 do not block the UI. */
+      deferCloudSync?: boolean;
     }) => {
-      const { recentOk, galleryOk, space4Ok } =
-        await downloadImageAndRememberRecent({
-          ...downloadOpts,
-          recentNamespace: config?.recentNamespace,
-          depositToSpace4: downloadOpts.depositToSpace4,
-          space4ThumbBlob: downloadOpts.space4ThumbBlob,
-          recentMax: storageLimits.scaCloud,
-        });
-
-      // recentOk is informational only — never drives error toasts.
-      void recentOk;
-
       const space4Required = downloadOpts.depositToSpace4 === true;
-      const space4Passed = !space4Required || space4Ok === true;
-      const cloudOk = galleryOk && space4Passed;
-      const anyCloudOk = galleryOk || space4Ok === true;
+      const defer = downloadOpts.deferCloudSync !== false;
 
-      if (cloudOk) {
-        if (downloadOpts.successMessage) {
-          showToast(downloadOpts.successMessage, "success");
-        }
-        return { recentOk, galleryOk, space4Ok };
+      const result = await downloadImageAndRememberRecent({
+        ...downloadOpts,
+        recentNamespace: config?.recentNamespace,
+        depositToSpace4: downloadOpts.depositToSpace4,
+        space4ThumbBlob: downloadOpts.space4ThumbBlob,
+        recentMax: storageLimits.scaCloud,
+        deferCloudSync: defer,
+        onCloudBackupComplete: (cloudResult) => {
+          toastCloudBackupResult(showToast, cloudResult, space4Required);
+        },
+      });
+
+      if (result.deferred) {
+        showToast(
+          downloadOpts.deviceSavedMessage ||
+            "완성본과 수정용 .sca를 기기에 저장했습니다. 클라우드 백업을 진행 중입니다.",
+          "success"
+        );
+        return result;
       }
 
-      if (anyCloudOk) {
-        // One cloud path worked — treat as success for UX; log the other.
-        if (downloadOpts.successMessage) {
-          showToast(downloadOpts.successMessage, "success");
-        } else {
-          showToast("클라우드 백업이 완료됐습니다.", "success");
-        }
-        return { recentOk, galleryOk, space4Ok };
+      // Blocking path (deferCloudSync: false).
+      void result.recentOk;
+      const space4Passed = !space4Required || result.space4Ok === true;
+      const anyCloudOk = result.galleryOk || result.space4Ok === true;
+      if (anyCloudOk && space4Passed && downloadOpts.successMessage) {
+        showToast(downloadOpts.successMessage, "success");
+      } else {
+        toastCloudBackupResult(showToast, result, space4Required);
       }
-
-      // True cloud failure only — never mention browser localStorage.
-      showToast(
-        "기기 파일은 저장됐습니다. 클라우드 백업은 네트워크 상태를 확인한 뒤 다시 시도해 주세요.",
-        "info"
-      );
-      return { recentOk, galleryOk, space4Ok };
+      return result;
     },
     [config?.recentNamespace, showToast, storageLimits.scaCloud]
   );
@@ -261,7 +320,7 @@ export function useProjectStorage(config?: {
         recentNamespace: config?.recentNamespace,
         recentMax: storageLimits.scaCloud,
       });
-      void recentOk; // local recent failure is silent
+      void recentOk;
       if (galleryOk) {
         return { ok: true as const, partial: false as const };
       }

@@ -2950,10 +2950,11 @@ export default function AiTemplateStudio({
         imageBlob,
         project,
         baseName: `${label}-${quality}`,
-        successMessage:
+        deferCloudSync: true,
+        deviceSavedMessage:
           quality === "high"
-            ? `고화질 PNG + 수정파일 저장 · 최근 파일에 등록 (${targetW}px)`
-            : `일반화질 PNG + 수정파일 저장 · 최근 파일에 등록 (${targetW}px)`,
+            ? `고화질 PNG + 수정파일을 기기에 저장했습니다. 클라우드 백업을 진행 중입니다. (${targetW}px)`
+            : `일반화질 PNG + 수정파일을 기기에 저장했습니다. 클라우드 백업을 진행 중입니다. (${targetW}px)`,
       });
     } catch {
       showToast("다운로드에 실패했습니다.", "error");
