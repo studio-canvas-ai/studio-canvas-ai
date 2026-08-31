@@ -14,7 +14,11 @@ import { useI18n } from "@/components/I18nProvider";
 import { useCredits } from "@/components/CreditsProvider";
 import { captureCurrentVideoFrame } from "@/lib/shortsCaptureFrames";
 import type { ShortsHookFrame } from "@/lib/shortsHookShared";
-import { uploadShortsVideoFile, logR2UploadDetailError, ShortsUploadError } from "@/lib/shortsUploadClient";
+import {
+  uploadShortsVideoFile,
+  logR2UploadDetailError,
+  formatShortsUploadErrorForDisplay,
+} from "@/lib/shortsUploadClient";
 import { useShortsProjectStore } from "@/lib/shortsProjectStore";
 import { persistShortsVideoBlob } from "@/lib/shortsVideoIdb";
 import {
@@ -40,35 +44,6 @@ type Props = {
   /** Manual still from the preview player → Screen 13 thumbnail. */
   onManualFrameCaptured?: (frame: ShortsHookFrame) => void | Promise<void>;
 };
-
-function mapUploadError(code: string, t: ReturnType<typeof useI18n>["t"]): string {
-  switch (code) {
-    case "authentication required":
-    case "terms_required":
-      return t.shorts.errorAuth;
-    case "file_too_large":
-      return t.shorts.errorTooLarge.replace(
-        "{max}",
-        formatBytes(DEFAULT_SHORTS_MAX_VIDEO_BYTES)
-      );
-    case "unsupported_type":
-    case "empty_file":
-      return t.shorts.errorType;
-    case "rate_limited":
-      return t.shorts.errorRateLimit;
-    case "presign_network":
-      return t.shorts.errorGeneric;
-    default:
-      if (
-        code.includes("r2_put") ||
-        code.includes("CORS") ||
-        code.includes("missing_content_type")
-      ) {
-        return t.shorts.errorR2;
-      }
-      return t.shorts.errorGeneric;
-  }
-}
 
 /**
  * Phase-2 Shorts video dropzone + R2 upload + preview.
@@ -147,14 +122,8 @@ export default function ShortsVideoUpload({
         onProgressChange(100);
       } catch (err) {
         logR2UploadDetailError(err, { phase: "shorts_video_upload" });
-        const code =
-          err instanceof ShortsUploadError
-            ? err.message
-            : err instanceof Error
-              ? err.message
-              : "upload_failed";
         onPhaseChange("error");
-        onError(mapUploadError(code, t));
+        onError(formatShortsUploadErrorForDisplay(err));
       }
     },
     [
@@ -420,7 +389,7 @@ export default function ShortsVideoUpload({
 
       {errorMessage && (
         <p
-          className="rounded-xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-center text-xs text-red-200 sm:text-sm"
+          className="whitespace-pre-wrap break-words rounded-xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-left text-xs text-red-200 sm:text-sm"
           role="alert"
         >
           {errorMessage}

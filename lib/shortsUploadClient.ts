@@ -158,6 +158,95 @@ export function logR2UploadDetailError(
   console.error("R2 Upload Detail Error:", { ...base, ...context });
 }
 
+function detailToText(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed || null;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (value instanceof Error) return value.message || value.name;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function compactResponseSnippet(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return "";
+  const code = trimmed.match(/<Code>([^<]+)<\/Code>/i)?.[1];
+  const message = trimmed.match(/<Message>([^<]+)<\/Message>/i)?.[1];
+  if (code || message) {
+    return [code, message].filter(Boolean).join(": ");
+  }
+  try {
+    const parsed = JSON.parse(trimmed) as { error?: string; message?: string };
+    if (parsed.error || parsed.message) {
+      return [parsed.error, parsed.message].filter(Boolean).join(": ");
+    }
+  } catch {
+    /* plain text / XML */
+  }
+  return trimmed.length > 480 ? `${trimmed.slice(0, 480)}…` : trimmed;
+}
+
+/** User-visible upload failure copy — actual server/network cause, not a fixed R2 banner. */
+export function formatShortsUploadErrorForDisplay(err: unknown): string {
+  if (err instanceof ShortsUploadError) {
+    const lines: string[] = [`[${err.stage}] ${err.message}`];
+    const d = err.details;
+
+    if (typeof d.httpStatus === "number") {
+      lines.push(`HTTP ${d.httpStatus}`);
+    }
+    if (typeof d.hint === "string" && d.hint.trim()) {
+      lines.push(d.hint.trim());
+    }
+
+    const responseSnippet =
+      typeof d.responseBody === "string"
+        ? compactResponseSnippet(d.responseBody)
+        : typeof d.responseText === "string"
+          ? compactResponseSnippet(d.responseText)
+          : "";
+    if (responseSnippet) lines.push(responseSnippet);
+
+    if (d.cause != null) {
+      const cause = detailToText(d.cause);
+      if (cause) lines.push(cause);
+    }
+
+    if (err.stage === "validate") {
+      const meta = [
+        d.rawFileName != null ? `file=${detailToText(d.rawFileName)}` : null,
+        d.rawMime != null ? `mime=${detailToText(d.rawMime)}` : null,
+        d.sizeBytes != null ? `size=${detailToText(d.sizeBytes)}` : null,
+        d.maxBytes != null ? `max=${detailToText(d.maxBytes)}` : null,
+      ].filter(Boolean);
+      if (meta.length) lines.push(meta.join(" · "));
+    }
+
+    if (typeof d.uploadHost === "string" && d.uploadHost) {
+      lines.push(`host=${d.uploadHost}`);
+    }
+    if (typeof d.note === "string" && d.note.trim()) {
+      lines.push(d.note.trim());
+    }
+
+    return lines.join("\n");
+  }
+
+  if (err instanceof Error) {
+    return err.message?.trim() || err.name || "upload_failed";
+  }
+
+  return String(err);
+}
+
 export async function uploadShortsVideoFile(
   file: File,
   opts?: {
