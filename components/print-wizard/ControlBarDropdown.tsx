@@ -147,8 +147,8 @@ export default function ControlBarDropdown({
 
   return (
     <div
-      className={`relative min-w-0 ${
-        compact ? "flex-1" : fullWidth ? "w-full" : ""
+      className={`relative min-w-0 max-w-full ${
+        compact ? "w-full flex-1" : fullWidth ? "w-full" : ""
       } ${className}`}
     >
       <button
@@ -158,9 +158,9 @@ export default function ControlBarDropdown({
         aria-expanded={open}
         aria-label={value ? `${label} ${value}` : label}
         onClick={() => onOpenChange(!open)}
-        className={`inline-flex items-center text-left font-semibold transition ${
+        className={`inline-flex max-w-full items-center text-left font-semibold transition ${
           compact
-            ? "h-9 w-full justify-center gap-0.5 rounded-lg px-1.5 text-[13px]"
+            ? "h-9 w-full min-w-0 justify-center gap-0.5 rounded-lg px-1 text-[12px] sm:px-1.5 sm:text-[13px]"
             : `h-11 gap-2 rounded-xl px-3 text-[13px] font-medium ${
                 fullWidth ? "w-full" : "max-w-full"
               }`
@@ -178,7 +178,7 @@ export default function ControlBarDropdown({
           </span>
         ) : null}
         {compact ? (
-          <span className="whitespace-nowrap font-semibold text-slate-800">
+          <span className="min-w-0 truncate font-semibold text-slate-800">
             {label}
           </span>
         ) : (

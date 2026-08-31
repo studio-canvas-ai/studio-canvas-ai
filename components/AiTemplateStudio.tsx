@@ -921,20 +921,15 @@ export default function AiTemplateStudio({
   const setOverlayLayers = useCallback(
     (updater: TextLayer[] | ((prev: TextLayer[]) => TextLayer[])) => {
       if (isOverlayControlled && onControlledOverlayLayersChange) {
+        const prev = overlayLayersRef.current;
         const next =
-          typeof updater === "function"
-            ? updater(controlledOverlayLayers)
-            : updater;
+          typeof updater === "function" ? updater(prev) : updater;
         onControlledOverlayLayersChange(next);
         return;
       }
       setInternalOverlayLayers(updater);
     },
-    [
-      isOverlayControlled,
-      controlledOverlayLayers,
-      onControlledOverlayLayersChange,
-    ]
+    [isOverlayControlled, onControlledOverlayLayersChange]
   );
   const [internalActiveLayerId, setInternalActiveLayerId] = useState<
     string | null
@@ -1033,16 +1028,40 @@ export default function AiTemplateStudio({
   const activeLayerBase = activeLayerId
     ? (overlayLayers.find((l) => l.id === activeLayerId) ?? null)
     : null;
-  const activeLayer = activeLayerBase
-    ? styleDraft
+  const activeLayer =
+    activeLayerBase && styleDraft
       ? { ...activeLayerBase, ...styleDraft }
-      : activeLayerBase
-    : null;
+      : activeLayerBase;
   /** SCREEN-024/026: keep style tools live even when canvas selection is cleared. */
-  const stylePanelLayer =
-    activeLayer ??
+  const stylePanelLayerBase =
+    activeLayerBase ??
     (panelOnly ? overlayLayers[0] ?? null : null) ??
     (alwaysShowStylePanel ? idleStylePanelLayer : null);
+  const stylePanelLayer =
+    stylePanelLayerBase && styleDraft
+      ? { ...stylePanelLayerBase, ...styleDraft }
+      : stylePanelLayerBase;
+
+  const resolveStylePanelTargetId = useCallback((): string | null => {
+    if (
+      activeLayerId &&
+      overlayLayersRef.current.some((l) => l.id === activeLayerId)
+    ) {
+      return activeLayerId;
+    }
+    const baseId = stylePanelLayerBase?.id;
+    if (
+      baseId &&
+      !baseId.startsWith("__panel-idle") &&
+      overlayLayersRef.current.some((l) => l.id === baseId)
+    ) {
+      return baseId;
+    }
+    if (panelOnly) {
+      return overlayLayersRef.current[0]?.id ?? null;
+    }
+    return null;
+  }, [activeLayerId, panelOnly, stylePanelLayerBase?.id]);
 
   // Drop live slider draft whenever the canvas / list selection changes.
   useEffect(() => {
@@ -2296,14 +2315,8 @@ export default function AiTemplateStudio({
   };
 
   const updateActive = (patch: Partial<TextLayer>) => {
-    const id =
-      activeLayerId &&
-      overlayLayers.some((l) => l.id === activeLayerId)
-        ? activeLayerId
-        : panelOnly
-          ? overlayLayers[0]?.id ?? null
-          : null;
-    if (!id || id.startsWith("__panel-idle")) {
+    const id = resolveStylePanelTargetId();
+    if (!id) {
       showToast("먼저 텍스트 레이어를 선택해 주세요.", "info");
       return;
     }
@@ -2318,14 +2331,8 @@ export default function AiTemplateStudio({
 
   /** Patch active text style live; commit TextLayer once on pointer-up. */
   const patchActiveStyleLive = (patch: Partial<TextLayer>) => {
-    const id =
-      activeLayerId &&
-      overlayLayers.some((l) => l.id === activeLayerId)
-        ? activeLayerId
-        : panelOnly
-          ? overlayLayers[0]?.id ?? null
-          : null;
-    if (!id || id.startsWith("__panel-idle")) {
+    const id = resolveStylePanelTargetId();
+    if (!id) {
       showToast("먼저 텍스트 레이어를 선택해 주세요.", "info");
       return;
     }
@@ -4349,6 +4356,13 @@ export default function AiTemplateStudio({
                   onChange={(e) =>
                     patchActiveStyleLive({
                       fontWeight: clampFontWeight(Number(e.target.value)),
+                    })
+                  }
+                  onInput={(e) =>
+                    patchActiveStyleLive({
+                      fontWeight: clampFontWeight(
+                        Number(e.currentTarget.value)
+                      ),
                     })
                   }
                   onPointerUp={commitActiveStyleDrag}

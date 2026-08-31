@@ -308,20 +308,27 @@ export default function SpecSettingsPanel({
       mainPrompt.trim().length > 0
   );
 
+  const compactSpecToolbar =
+    fitContent && hidePageCountOption && !isPhotoProduct;
+
   return (
     <section
       className={
         fitContent
-          ? "flex w-full flex-col gap-2.5 overflow-visible rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-3.5"
+          ? "flex w-full min-w-0 flex-col gap-2.5 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-3.5"
           : "flex h-full min-h-0 flex-col gap-2.5 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-3.5"
       }
     >
       {/* 규격 · 스타일 · 용도 · (인쇄: 장수) · 배경 · (인쇄: 분야) */}
       <div
         data-spec-row
-        className={`flex shrink-0 flex-row items-center ${
-          isPhotoProduct ? "gap-2" : "gap-1.5"
-        }`}
+        className={
+          compactSpecToolbar
+            ? "grid min-w-0 shrink-0 grid-cols-2 gap-1.5"
+            : `flex min-w-0 shrink-0 flex-row flex-wrap items-stretch ${
+                isPhotoProduct ? "gap-2" : "gap-1.5"
+              } [&>*]:min-w-0 [&>*]:flex-[1_1_7.5rem]`
+        }
       >
         <ControlBarDropdown
           compact
