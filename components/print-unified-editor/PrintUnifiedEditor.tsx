@@ -1256,8 +1256,9 @@ export default function PrintUnifiedEditor() {
           </div>
         }
         designPanel={
-          <div className="flex h-full min-h-0 w-full flex-col gap-2 p-2 sm:p-2.5">
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]">
+          <div className="flex h-full min-h-0 w-full flex-col gap-2 p-2 max-lg:h-auto max-lg:min-h-0 sm:p-2.5">
+            {/* Mobile: downloads first, then style tools below. Desktop: tools then downloads. */}
+            <div className="order-1 min-h-0 max-lg:order-2 max-lg:min-h-[min(60vh,640px)] max-lg:flex-none max-lg:overflow-visible max-lg:pb-4 lg:order-1 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain lg:[scrollbar-gutter:stable]">
               <AiTemplateStudio
                 key={`unified-studio-${pageIndex}`}
                 mode="agent"
@@ -1301,7 +1302,7 @@ export default function PrintUnifiedEditor() {
                 onCanvasSymbolPick={onCanvasSymbolPick}
               />
             </div>
-            <div className="shrink-0">
+            <div className="order-2 shrink-0 max-lg:order-1 lg:order-2">
               <StudioExportButtonGroup
                 busy={exportBusy}
                 onDownloadStandard={() => void downloadWithProject("standard")}
