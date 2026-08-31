@@ -1236,6 +1236,11 @@ export default function PrintUnifiedEditor() {
             {/* Empty flex space — do not stretch mini thumbs into the middle */}
             <div className="min-h-0 flex-1" aria-hidden />
             <div className="mt-auto shrink-0">
+              <p className="mb-1.5 px-0.5 text-xs leading-snug text-pink-500 [word-break:keep-all]">
+                내가 만든 디자인은 운영자 검수 및 민감 개인정보 삭제를 거쳐
+                템플릿창고(Template 03)에 공개 템플릿으로 등록되며, 다른
+                사용자들의 무료 디자인 참고 자료로 활용될 수 있음을 고지합니다.
+              </p>
               <PrintUnifiedEditorMiniThumbs
                 formatId={state.formatId}
                 customSize={state.customSize}
