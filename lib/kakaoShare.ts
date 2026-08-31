@@ -269,6 +269,8 @@ export type KakaoFeedShareOptions = {
   description: string;
   imageUrl?: string;
   buttonTitle?: string;
+  /** Landing URL when the Kakao card / button is tapped (viewer page). */
+  linkUrl?: string;
 };
 
 export async function sendKakaoFeedShare(opts: KakaoFeedShareOptions): Promise<void> {
@@ -276,7 +278,7 @@ export async function sendKakaoFeedShare(opts: KakaoFeedShareOptions): Promise<v
 
   const title = clampText(opts.title || "Studio Canvas AI", 40);
   const description = clampText(opts.description || "Studio Canvas AI", 80);
-  const buttonTitle = clampText(opts.buttonTitle || "결과 보기", 14);
+  const buttonTitle = clampText(opts.buttonTitle || "이미지 보기", 14);
   const imageUrl =
     opts.imageUrl && isKakaoCdnImageUrl(opts.imageUrl)
       ? opts.imageUrl
@@ -286,6 +288,14 @@ export async function sendKakaoFeedShare(opts: KakaoFeedShareOptions): Promise<v
           ? opts.imageUrl
           : FALLBACK_SHARE_IMAGE;
 
+  const landing =
+    opts.linkUrl &&
+    (opts.linkUrl.startsWith("https://www.studio-canvas-ai.com/") ||
+      opts.linkUrl.startsWith("https://studio-canvas-ai.com/") ||
+      /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//i.test(opts.linkUrl))
+      ? opts.linkUrl
+      : SHARE_LINK;
+
   const payload = {
     objectType: "feed",
     content: {
@@ -293,23 +303,26 @@ export async function sendKakaoFeedShare(opts: KakaoFeedShareOptions): Promise<v
       description,
       imageUrl,
       link: {
-        mobileWebUrl: "https://www.studio-canvas-ai.com",
-        webUrl: "https://www.studio-canvas-ai.com",
+        mobileWebUrl: landing,
+        webUrl: landing,
       },
     },
     buttons: [
       {
         title: buttonTitle,
         link: {
-          mobileWebUrl: "https://www.studio-canvas-ai.com",
-          webUrl: "https://www.studio-canvas-ai.com",
+          mobileWebUrl: landing,
+          webUrl: landing,
         },
       },
     ],
     installTalk: true,
   };
 
-  dbg("before-sendDefault", [`imageHost=${imageUrl.slice(0, 48)}`]);
+  dbg("before-sendDefault", [
+    `imageHost=${imageUrl.slice(0, 48)}`,
+    `landing=${landing.slice(0, 64)}`,
+  ]);
   Kakao.Share!.sendDefault(payload);
   dbg("after-sendDefault");
 }
@@ -346,6 +359,7 @@ export async function shareImageViaKakao(opts: {
     description: opts.description,
     imageUrl,
     buttonTitle: opts.buttonTitle,
+    linkUrl: opts.linkUrl,
   });
   return "kakao";
 }

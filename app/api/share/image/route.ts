@@ -9,6 +9,13 @@ import {
   isR2Configured,
   putR2Object,
 } from "@/lib/r2";
+import {
+  extFromContentType,
+  buildShareViewerUrl,
+  sharePublicImageKey,
+  sharePublicMetaKey,
+  type ShareImageMeta,
+} from "@/lib/shareImageStore";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -24,9 +31,14 @@ const ALLOWED_MIME = new Set([
 /** Long-lived share links when CDN public URL is unavailable. */
 const SIGNED_SHARE_TTL_SEC = 60 * 60 * 24 * 30;
 
+const DEFAULT_TITLE = "Studio Canvas AI로 만든 인쇄물";
+const DEFAULT_DESCRIPTION =
+  "Studio Canvas AI에서 디자인한 인쇄물입니다. 버튼을 눌러 이미지를 바로 저장하세요.";
+
 /**
- * Upload a canvas export and return a unique public image URL for clipboard share.
- * Body: multipart FormData with `file` (PNG/JPG/WebP).
+ * Upload a canvas export for Kakao / messenger share.
+ * Body: multipart FormData with `file` (+ optional title/description).
+ * Returns image URL + viewer page URL (`/share/{id}`).
  */
 export async function POST(req: Request) {
   try {
@@ -60,6 +72,11 @@ export async function POST(req: Request) {
 
     const form = await req.formData();
     const file = form.get("file");
+    const title =
+      String(form.get("title") ?? "").trim() || DEFAULT_TITLE;
+    const description =
+      String(form.get("description") ?? "").trim() || DEFAULT_DESCRIPTION;
+
     if (!file || !(file instanceof Blob)) {
       return NextResponse.json(
         { ok: false, error: "file_required", message: "이미지 파일이 필요합니다." },
@@ -85,29 +102,45 @@ export async function POST(req: Request) {
       );
     }
 
-    const ext =
-      contentType.includes("png")
-        ? "png"
-        : contentType.includes("webp")
-          ? "webp"
-          : "jpg";
+    const ext = extFromContentType(contentType);
     const shareId = randomUUID().replace(/-/g, "");
-    const key = `share/${userId}/${shareId}.${ext}`;
+    const imageKey = sharePublicImageKey(shareId, ext);
+    const metaKey = sharePublicMetaKey(shareId);
     const bytes = Buffer.from(await file.arrayBuffer());
 
     const config = getR2Config()!;
     const client = createR2Client(config);
-    await putR2Object(client, config.bucketName, key, bytes, contentType);
+    await putR2Object(client, config.bucketName, imageKey, bytes, contentType);
+
+    const meta: ShareImageMeta = {
+      id: shareId,
+      title,
+      description,
+      contentType,
+      imageKey,
+      createdAt: Date.now(),
+    };
+    await putR2Object(
+      client,
+      config.bucketName,
+      metaKey,
+      Buffer.from(JSON.stringify(meta), "utf8"),
+      "application/json"
+    );
 
     const resolved = await resolveDownloadUrl({
-      key,
+      key: imageKey,
       expiresInSec: SIGNED_SHARE_TTL_SEC,
     });
+
+    const viewerUrl = buildShareViewerUrl(shareId);
 
     return NextResponse.json({
       ok: true,
       id: shareId,
       url: resolved.url,
+      imageUrl: resolved.url,
+      viewerUrl,
       contentType,
       mode: resolved.mode,
     });

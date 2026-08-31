@@ -58,6 +58,7 @@ export function isTermsConsentExempt(pathname: string): boolean {
   if (p === "/terms-consent") return true;
   if (p === "/terms" || p === "/privacy") return true;
   if (p === "/admin" || p.startsWith("/admin/")) return true;
+  if (p === "/share" || p.startsWith("/share/")) return true;
   return false;
 }
 
