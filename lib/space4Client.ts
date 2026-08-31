@@ -122,6 +122,24 @@ export async function fetchSpace4VaultMeta(
   }
 }
 
+export async function deleteSpace4VaultItem(
+  id: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const res = await fetch(`/api/admin/space4/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      credentials: "same-origin",
+    });
+    if (!res.ok) {
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      return { ok: false, error: data.error || "delete_failed" };
+    }
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "network" };
+  }
+}
+
 export async function fetchSpace4SealedRecord(
   id: string
 ): Promise<

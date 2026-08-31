@@ -26,12 +26,15 @@ import {
   type WarehouseTemplate,
 } from "@/lib/templateWarehouse";
 import type { Template03PublicRecord } from "@/lib/template03Public";
+import { deleteTemplate03Public } from "@/lib/template03Client";
 import {
+  deleteSpace4VaultItem,
   fetchSpace4VaultMeta,
   openSpace4InEditorForReview,
   type Space4VaultMeta,
 } from "@/lib/space4Client";
 import Template01GridCard from "@/components/template-warehouse/Template01GridCard";
+import Template03PublicCard from "@/components/template-warehouse/Template03PublicCard";
 import Template04QueueCard from "@/components/template-warehouse/Template04QueueCard";
 
 const TABS: Array<{
@@ -64,6 +67,8 @@ const TABS: Array<{
 const REMOVE_ANIM_MS = 280;
 const GRID_CLASS =
   "grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-2.5 lg:grid-cols-5";
+const HORIZONTAL_ROW_CLASS =
+  "flex w-full flex-row flex-nowrap items-stretch gap-2 overflow-x-auto pb-1 [scrollbar-width:thin]";
 
 function publicRecordToWarehouse(
   item: Template03PublicRecord
@@ -90,7 +95,7 @@ export default function TemplateWarehouseModal() {
   const router = useRouter();
   const pathname = usePathname() || "/";
   const { isAdmin } = useCredits();
-  const { showToast } = useFeedback();
+  const { showToast, confirm } = useFeedback();
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<WarehouseTabId>("single");
   const [mounted, setMounted] = useState(false);
@@ -103,7 +108,15 @@ export default function TemplateWarehouseModal() {
   const [space4Items, setSpace4Items] = useState<Space4VaultMeta[]>([]);
   const [space4Loading, setSpace4Loading] = useState(false);
   const [openingId, setOpeningId] = useState<string | null>(null);
+  const [deletingPublicIds, setDeletingPublicIds] = useState<Set<string>>(
+    new Set()
+  );
+  const [deletingSpace4Ids, setDeletingSpace4Ids] = useState<Set<string>>(
+    new Set()
+  );
   const removeTimers = useRef<Map<number, number>>(new Map());
+  const publicRemoveTimers = useRef<Map<string, number>>(new Map());
+  const space4RemoveTimers = useRef<Map<string, number>>(new Map());
 
   const baseFallbackCards = BASE_A4_TEMPLATE_CARDS;
 
@@ -113,6 +126,10 @@ export default function TemplateWarehouseModal() {
     return () => {
       removeTimers.current.forEach((timer) => window.clearTimeout(timer));
       removeTimers.current.clear();
+      publicRemoveTimers.current.forEach((timer) => window.clearTimeout(timer));
+      publicRemoveTimers.current.clear();
+      space4RemoveTimers.current.forEach((timer) => window.clearTimeout(timer));
+      space4RemoveTimers.current.clear();
     };
   }, []);
 
@@ -245,6 +262,74 @@ export default function TemplateWarehouseModal() {
     }
   };
 
+  const animateRemovePublic = (id: string) => {
+    setDeletingPublicIds((prev) => new Set(prev).add(id));
+    const timer = window.setTimeout(() => {
+      setPublicTemplates((prev) => prev.filter((row) => row.id !== id));
+      setDeletingPublicIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      publicRemoveTimers.current.delete(id);
+    }, REMOVE_ANIM_MS);
+    publicRemoveTimers.current.set(id, timer);
+  };
+
+  const animateRemoveSpace4 = (id: string) => {
+    setDeletingSpace4Ids((prev) => new Set(prev).add(id));
+    const timer = window.setTimeout(() => {
+      setSpace4Items((prev) => prev.filter((row) => row.id !== id));
+      setDeletingSpace4Ids((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      space4RemoveTimers.current.delete(id);
+    }, REMOVE_ANIM_MS);
+    space4RemoveTimers.current.set(id, timer);
+  };
+
+  const onDeletePublic = async (item: Template03PublicRecord) => {
+    if (!isAdmin || deletingPublicIds.has(item.id)) return;
+    const approved = await confirm({
+      title: "템플릿 삭제",
+      message: "정말 삭제하시겠습니까?",
+      confirmLabel: "삭제",
+      cancelLabel: "취소",
+      tone: "danger",
+    });
+    if (!approved) return;
+
+    const result = await deleteTemplate03Public(item.id);
+    if (!result.ok) {
+      showToast("템플릿 삭제에 실패했습니다.", "error");
+      return;
+    }
+    animateRemovePublic(item.id);
+    showToast("공개 템플릿을 삭제했습니다.", "success");
+  };
+
+  const onDeleteSpace4 = async (item: Space4VaultMeta) => {
+    if (!isAdmin || deletingSpace4Ids.has(item.id)) return;
+    const approved = await confirm({
+      title: "적재함 삭제",
+      message: "정말 삭제하시겠습니까?",
+      confirmLabel: "삭제",
+      cancelLabel: "취소",
+      tone: "danger",
+    });
+    if (!approved) return;
+
+    const result = await deleteSpace4VaultItem(item.id);
+    if (!result.ok) {
+      showToast("적재함 항목 삭제에 실패했습니다.", "error");
+      return;
+    }
+    animateRemoveSpace4(item.id);
+    showToast("Template 04 적재함에서 삭제했습니다.", "success");
+  };
+
   const renderBaseGrid = (
     cards: Template01Card[],
     tabId: Exclude<WarehouseTabId, "space4">,
@@ -341,72 +426,39 @@ export default function TemplateWarehouseModal() {
           ) : null}
 
           {tab === "public" ? (
-            <div className="space-y-4">
+            <div>
+              <p className="mb-2 text-[11px] font-semibold text-emerald-800">
+                관리자 승인 공개 템플릿
+                {publicTemplates.length > 0
+                  ? ` · ${publicTemplates.length}건`
+                  : ""}
+              </p>
               {publicTemplates.length > 0 ? (
-                <div>
-                  <p className="mb-2 text-[11px] font-semibold text-emerald-800">
-                    관리자 승인 공개 템플릿
-                  </p>
-                  <ul className={GRID_CLASS}>
-                    {publicTemplates.map((item) => (
-                      <li key={item.id}>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            pickTemplate(publicRecordToWarehouse(item))
-                          }
-                          className="flex w-full flex-col overflow-hidden rounded-xl border border-emerald-200 bg-gradient-to-b from-emerald-50 to-white text-left shadow-sm transition hover:border-emerald-400"
-                        >
-                          <div
-                            className="relative w-full overflow-hidden bg-slate-100"
-                            style={{ aspectRatio: String(210 / 297) }}
-                            aria-hidden
-                          >
-                            {item.thumbSrc || item.backgroundUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={item.thumbSrc || item.backgroundUrl || ""}
-                                alt=""
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <div
-                                className={`h-full w-full ${item.thumbClass}`}
-                              />
-                            )}
-                          </div>
-                          <div className="space-y-0.5 border-t border-slate-100 px-2 py-1.5">
-                            <p className="line-clamp-2 text-[11px] font-semibold leading-snug text-slate-900">
-                              {item.title}
-                            </p>
-                            <p className="truncate text-[9px] text-slate-500">
-                              {item.subtitle}
-                            </p>
-                            {item.maskedNote ? (
-                              <p className="truncate text-[9px] text-amber-700">
-                                {item.maskedNote}
-                              </p>
-                            ) : null}
-                          </div>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-              <div>
-                <p className="mb-2 text-[11px] text-slate-500">
-                  기본 A4 템플릿 (공통 베이스)
+                <ul className={HORIZONTAL_ROW_CLASS}>
+                  {publicTemplates.map((item) => (
+                    <Template03PublicCard
+                      key={item.id}
+                      item={item}
+                      canDelete={isAdmin}
+                      deleting={deletingPublicIds.has(item.id)}
+                      onPick={() => pickTemplate(publicRecordToWarehouse(item))}
+                      onDelete={() => void onDeletePublic(item)}
+                    />
+                  ))}
+                </ul>
+              ) : (
+                <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-4 text-center text-[12px] text-slate-500">
+                  아직 공개된 템플릿이 없습니다. Template 04에서 검수·발행하면
+                  여기에 표시됩니다.
                 </p>
-                {renderBaseGrid(baseFallbackCards, "public", false)}
-              </div>
+              )}
             </div>
           ) : null}
 
           {tab === "space4" ? (
-            <div className="space-y-4">
+            <div>
               {isAdmin ? (
-                <div>
+                <>
                   <p className="mb-2 text-[11px] font-semibold text-amber-800">
                     유저 다운로드 적재함 · 최대 500 · FIFO (관리자)
                     {space4Loading
@@ -416,36 +468,32 @@ export default function TemplateWarehouseModal() {
                         : ""}
                   </p>
                   {space4Items.length > 0 ? (
-                    <ul className="flex w-full flex-row flex-nowrap items-stretch gap-2 overflow-x-auto pb-1 [scrollbar-width:thin]">
+                    <ul className={HORIZONTAL_ROW_CLASS}>
                       {space4Items.map((item) => (
                         <Template04QueueCard
                           key={item.id}
                           item={item}
                           opening={openingId === item.id}
+                          deleting={deletingSpace4Ids.has(item.id)}
+                          canDelete={isAdmin}
                           onOpenInEditor={() => void onOpenInEditor(item)}
+                          onDelete={() => void onDeleteSpace4(item)}
                           compact
                         />
                       ))}
                     </ul>
                   ) : space4Loading ? null : (
-                    <p className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-4 text-center text-[12px] text-slate-500">
+                    <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-4 text-center text-[12px] text-slate-500">
                       아직 적재된 다운로드 작업물이 없습니다. 유저가 Screen 26에서
                       다운로드하면 여기에 자동 저장됩니다.
                     </p>
                   )}
-                </div>
+                </>
               ) : (
-                <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-[12px] text-slate-500">
-                  Template 04 적재함은 관리자 전용입니다. 아래는 공통 기본 A4
-                  템플릿입니다.
+                <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-4 text-center text-[12px] text-slate-500">
+                  Template 04 적재함은 관리자 전용입니다.
                 </p>
               )}
-              <div>
-                <p className="mb-2 text-[11px] text-slate-500">
-                  기본 A4 템플릿 (공통 베이스)
-                </p>
-                {renderBaseGrid(baseFallbackCards, "single", false)}
-              </div>
             </div>
           ) : null}
         </div>

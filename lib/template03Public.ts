@@ -126,3 +126,30 @@ export async function listTemplate03Public(
   }
   return sortItems(items).slice(0, Math.max(1, Math.min(500, limit)));
 }
+
+/** Admin — remove one public template from the warehouse catalog. */
+export async function removeTemplate03Public(id: string): Promise<boolean> {
+  const key = id.trim();
+  if (!key) return false;
+  return withDbLock(async () => {
+    let items = mem();
+    if (isR2Configured()) {
+      const fromR2 = await loadR2Manifest();
+      if (fromR2) items = fromR2;
+    }
+    const next = items.filter((x) => x.id !== key);
+    if (next.length === items.length) return false;
+
+    globalThis.__scaTemplate03Memory = next;
+    try {
+      const db = getDb() as { template03Public?: Template03PublicRecord[] };
+      db.template03Public = next;
+    } catch {
+      /* ignore */
+    }
+    if (isR2Configured()) {
+      await saveR2Manifest(next);
+    }
+    return true;
+  });
+}
