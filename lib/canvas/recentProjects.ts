@@ -89,8 +89,8 @@ function projectThumb(project: StudioCanvasProjectV1): string | null {
   return null;
 }
 
-/** Drop oversized data-URLs so localStorage quota is less likely to blow up. */
-function shrinkProjectForStorage(
+/** Drop oversized data-URLs so localStorage / cloud payloads stay small. */
+export function shrinkProjectForStorage(
   project: StudioCanvasProjectV1
 ): StudioCanvasProjectV1 {
   const MAX_DATA = 180_000;
@@ -215,9 +215,15 @@ function writeDrawer(
     try {
       localStorage.setItem(drawerKey(namespace), JSON.stringify(shrunk));
     } catch (err) {
-      // Soft-fail: cloud gallery / Space4 must still run after this throws.
-      console.warn("[recentProjects] localStorage quota exceeded", err);
-      throw new Error("localstorage_quota_exceeded");
+      // Silent soft-fail — do not throw. Cloud gallery / Space4 must continue.
+      console.warn("[recentProjects] localStorage quota exceeded (ignored)", err);
+      if (opts?.persistCloud !== false) {
+        void saveCloudRecentFiles(namespace, shrunk);
+      }
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event(RECENT_PROJECTS_CHANGED_EVENT));
+      }
+      return;
     }
   }
   // Only sync IDB for 007/010 so print (008) never mixes into shared cloud bucket.
