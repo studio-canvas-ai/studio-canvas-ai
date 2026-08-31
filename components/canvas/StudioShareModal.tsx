@@ -12,9 +12,11 @@ export type StudioShareModalProps = {
   previewUrl: string | null;
   title: string;
   description: string;
-  pageUrl: string;
+  /** Unique image URL (or placeholder hint before upload). */
+  linkUrl: string;
   projectLabel?: string;
   sharing?: boolean;
+  copyBusy?: boolean;
   onNativeShare: () => void;
   onCopyLink: () => void;
   onDownloadImage?: () => void;
@@ -29,9 +31,10 @@ export default function StudioShareModal({
   previewUrl,
   title,
   description,
-  pageUrl,
+  linkUrl,
   projectLabel,
   sharing = false,
+  copyBusy = false,
   onNativeShare,
   onCopyLink,
   onDownloadImage,
@@ -42,6 +45,7 @@ export default function StudioShareModal({
 
   const canNativeShare =
     typeof navigator !== "undefined" && typeof navigator.share === "function";
+  const hasImage = Boolean(previewUrl) && !error && !loading;
 
   useEffect(() => {
     setPortalReady(true);
@@ -138,8 +142,11 @@ export default function StudioShareModal({
             )}
           </div>
 
-          <p className="mt-3 truncate text-[11px] text-slate-500" title={pageUrl}>
-            {pageUrl}
+          <p
+            className="mt-3 truncate text-[11px] text-slate-500"
+            title={linkUrl}
+          >
+            {linkUrl}
           </p>
         </div>
 
@@ -147,7 +154,7 @@ export default function StudioShareModal({
           {canNativeShare ? (
             <button
               type="button"
-              disabled={loading || !!error || !previewUrl || sharing}
+              disabled={!hasImage || sharing || copyBusy}
               onClick={onNativeShare}
               className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-3 text-sm font-semibold text-white shadow-md transition hover:brightness-110 disabled:opacity-50"
             >
@@ -161,17 +168,21 @@ export default function StudioShareModal({
           ) : null}
           <button
             type="button"
-            disabled={loading}
+            disabled={!hasImage || copyBusy || sharing}
             onClick={onCopyLink}
             className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50"
           >
-            <Copy className="h-4 w-4 shrink-0" aria-hidden />
-            링크 복사
+            {copyBusy ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            ) : (
+              <Copy className="h-4 w-4 shrink-0" aria-hidden />
+            )}
+            {copyBusy ? "고유 링크 생성 중…" : "링크 복사"}
           </button>
           {onDownloadImage ? (
             <button
               type="button"
-              disabled={loading || !!error || !previewUrl}
+              disabled={!hasImage || copyBusy}
               onClick={onDownloadImage}
               className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:opacity-50"
             >

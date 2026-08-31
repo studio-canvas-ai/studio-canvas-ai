@@ -35,9 +35,11 @@ export type PrintWizardShareModalProps = {
   previewUrl: string | null;
   title: string;
   description: string;
-  pageUrl: string;
+  /** Unique image URL when available; otherwise a short placeholder hint. */
+  linkUrl: string;
   projectLabel?: string;
   sharing: boolean;
+  copyBusy?: boolean;
   onNativeShare: () => void;
   onCopyLink: () => void;
   onDownloadImage: () => void;
@@ -88,6 +90,7 @@ export function usePrintWizardExport({
   const projectFileInputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [shareBusy, setShareBusy] = useState(false);
+  const [copyBusy, setCopyBusy] = useState(false);
   const sharePrepGenRef = useRef(0);
   const [shareState, setShareState] = useState<ShareModalState>({
     open: false,
@@ -96,10 +99,14 @@ export function usePrintWizardExport({
     file: null,
     error: null,
   });
+  /** Cached unique image URL for the current share modal session. */
+  const [sharedImageUrl, setSharedImageUrl] = useState<string | null>(null);
   const isPhoto = recentNamespace === "screen_010";
   const depositSpace4 = depositToSpace4;
 
   const closeSharePreview = useCallback(() => {
+    setSharedImageUrl(null);
+    setCopyBusy(false);
     setShareState((prev) => {
       if (prev.previewUrl) URL.revokeObjectURL(prev.previewUrl);
       return {
@@ -290,6 +297,8 @@ export function usePrintWizardExport({
   const openSharePreview = useCallback(() => {
     if (!requireSubscription()) return;
     dispatchScaGalleryVault({ action: "close" });
+    setSharedImageUrl(null);
+    setCopyBusy(false);
     setShareState((prev) => {
       if (prev.previewUrl) URL.revokeObjectURL(prev.previewUrl);
       return {
@@ -301,6 +310,22 @@ export function usePrintWizardExport({
       };
     });
   }, [requireSubscription]);
+
+  const uploadShareImage = useCallback(async (file: File): Promise<string> => {
+    const fd = new FormData();
+    fd.append("file", file, file.name || `share-${Date.now()}.png`);
+    const res = await fetch("/api/share/image", { method: "POST", body: fd });
+    const data = (await res.json().catch(() => null)) as {
+      ok?: boolean;
+      url?: string;
+      message?: string;
+      error?: string;
+    } | null;
+    if (!res.ok || !data?.ok || !data.url) {
+      throw new Error(data?.message || data?.error || "upload_failed");
+    }
+    return data.url;
+  }, []);
 
   useEffect(() => {
     if (!shareState.open || !shareState.loading) return;
@@ -371,19 +396,30 @@ export function usePrintWizardExport({
     if (!shareState.file) return;
     setShareBusy(true);
     try {
-      const pageUrl =
-        typeof window !== "undefined" ? window.location.href : "";
+      let imageUrl = sharedImageUrl;
+      if (!imageUrl) {
+        try {
+          imageUrl = await uploadShareImage(shareState.file);
+          setSharedImageUrl(imageUrl);
+        } catch {
+          imageUrl = null;
+        }
+      }
       const result = await shareWithFallback({
         title: "AI 1분 인쇄물 뚝딱 생성기",
         text: "Studio Canvas AI에서 만든 인쇄물 미리보기입니다.",
-        url: pageUrl,
+        url: imageUrl || undefined,
         file: shareState.file,
       });
       if (result === "shared") {
         showToast("기기 공유 시트로 이미지를 공유했습니다.", "success");
         closeSharePreview();
       } else if (result === "copied") {
-        showToast("공유가 지원되지 않아 링크를 복사했습니다.", "info");
+        if (imageUrl) {
+          showToast("개별 이미지 고유 링크가 복사되었습니다!", "success");
+        } else {
+          showToast("공유가 지원되지 않아 대체 텍스트를 복사했습니다.", "info");
+        }
       }
     } catch (err) {
       if (isShareAbortError(err)) return;
@@ -391,18 +427,38 @@ export function usePrintWizardExport({
     } finally {
       setShareBusy(false);
     }
-  }, [closeSharePreview, shareState.file, showToast]);
+  }, [
+    closeSharePreview,
+    shareState.file,
+    sharedImageUrl,
+    showToast,
+    uploadShareImage,
+  ]);
 
   const runCopyShareLink = useCallback(async () => {
-    const pageUrl = typeof window !== "undefined" ? window.location.href : "";
-    if (!pageUrl) return;
-    try {
-      await navigator.clipboard.writeText(pageUrl);
-      showToast("링크를 복사했습니다.", "success");
-    } catch {
-      showToast("링크 복사에 실패했습니다.", "error");
+    if (!shareState.file) {
+      showToast("공유할 이미지가 아직 준비되지 않았습니다.", "info");
+      return;
     }
-  }, [showToast]);
+    if (copyBusy) return;
+    setCopyBusy(true);
+    try {
+      let imageUrl = sharedImageUrl;
+      if (!imageUrl) {
+        imageUrl = await uploadShareImage(shareState.file);
+        setSharedImageUrl(imageUrl);
+      }
+      await navigator.clipboard.writeText(imageUrl);
+      showToast("개별 이미지 고유 링크가 복사되었습니다!", "success");
+    } catch {
+      showToast(
+        "개별 이미지 링크 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+        "error"
+      );
+    } finally {
+      setCopyBusy(false);
+    }
+  }, [copyBusy, shareState.file, sharedImageUrl, showToast, uploadShareImage]);
 
   const runDownloadShareImage = useCallback(() => {
     if (!shareState.file) return;
@@ -417,9 +473,6 @@ export function usePrintWizardExport({
     showToast("이미지를 저장했습니다.", "success");
   }, [shareState.file, showToast]);
 
-  const sharePageUrl =
-    typeof window !== "undefined" ? window.location.href : "";
-
   const shareModalProps: PrintWizardShareModalProps = {
     open: shareState.open,
     onClose: closeSharePreview,
@@ -428,9 +481,14 @@ export function usePrintWizardExport({
     previewUrl: shareState.previewUrl,
     title: "AI 1분 인쇄물 뚝딱 생성기",
     description: "Studio Canvas AI에서 만든 인쇄물 미리보기입니다.",
-    pageUrl: sharePageUrl,
+    linkUrl:
+      sharedImageUrl ||
+      (shareState.loading
+        ? "이미지 고유 링크 준비 중…"
+        : "링크 복사 시 이 디자인의 고유 이미지 URL이 생성됩니다"),
     projectLabel: titlePreview?.trim() || undefined,
     sharing: shareBusy,
+    copyBusy,
     onNativeShare: () => void runNativeShare(),
     onCopyLink: () => void runCopyShareLink(),
     onDownloadImage: runDownloadShareImage,
