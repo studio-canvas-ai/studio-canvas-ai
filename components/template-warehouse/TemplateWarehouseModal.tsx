@@ -191,6 +191,34 @@ export default function TemplateWarehouseModal() {
     if (tab === "space4") void refreshSpace4();
   }, [open, tab, refreshPublic, refreshSpace4]);
 
+  const handleDeleteTemplate = useCallback(
+    async (templateId: string) => {
+      if (!isAdmin || deletingPublicIds.has(templateId)) return;
+
+      const removed = publicTemplates.find((row) => row.id === templateId);
+      if (!removed) return;
+
+      setDeletingPublicIds((prev) => new Set(prev).add(templateId));
+      setPublicTemplates((prev) => prev.filter((row) => row.id !== templateId));
+
+      const result = await deleteTemplate03Public(templateId);
+      setDeletingPublicIds((prev) => {
+        const next = new Set(prev);
+        next.delete(templateId);
+        return next;
+      });
+
+      if (!result.ok) {
+        setPublicTemplates((prev) => {
+          if (prev.some((row) => row.id === templateId)) return prev;
+          return [removed, ...prev];
+        });
+        showToast("템플릿 삭제에 실패했습니다.", "error");
+      }
+    },
+    [deletingPublicIds, isAdmin, publicTemplates, showToast]
+  );
+
   if (!mounted || !open) return null;
 
   const pickTemplate = (template: WarehouseTemplate) => {
@@ -272,34 +300,6 @@ export default function TemplateWarehouseModal() {
     }, REMOVE_ANIM_MS);
     space4RemoveTimers.current.set(id, timer);
   };
-
-  const handleDeleteTemplate = useCallback(
-    async (templateId: string) => {
-      if (!isAdmin || deletingPublicIds.has(templateId)) return;
-
-      const removed = publicTemplates.find((row) => row.id === templateId);
-      if (!removed) return;
-
-      setDeletingPublicIds((prev) => new Set(prev).add(templateId));
-      setPublicTemplates((prev) => prev.filter((row) => row.id !== templateId));
-
-      const result = await deleteTemplate03Public(templateId);
-      setDeletingPublicIds((prev) => {
-        const next = new Set(prev);
-        next.delete(templateId);
-        return next;
-      });
-
-      if (!result.ok) {
-        setPublicTemplates((prev) => {
-          if (prev.some((row) => row.id === templateId)) return prev;
-          return [removed, ...prev];
-        });
-        showToast("템플릿 삭제에 실패했습니다.", "error");
-      }
-    },
-    [deletingPublicIds, isAdmin, publicTemplates, showToast]
-  );
 
   const onDeleteSpace4 = async (item: Space4VaultMeta) => {
     if (!isAdmin || deletingSpace4Ids.has(item.id)) return;
