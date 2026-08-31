@@ -324,7 +324,7 @@ export default function SpecSettingsPanel({
         data-spec-row
         className={
           compactSpecToolbar
-            ? "grid min-w-0 shrink-0 grid-cols-2 gap-1.5"
+            ? "flex min-w-0 shrink-0 flex-row flex-nowrap items-stretch gap-1 [&>*]:min-w-0 [&>*]:flex-1"
             : `flex min-w-0 shrink-0 flex-row flex-wrap items-stretch ${
                 isPhotoProduct ? "gap-2" : "gap-1.5"
               } [&>*]:min-w-0 [&>*]:flex-[1_1_7.5rem]`
@@ -332,6 +332,7 @@ export default function SpecSettingsPanel({
       >
         <ControlBarDropdown
           compact
+          dense={compactSpecToolbar}
           selected={specPicks.format}
           label={cs.specFormat}
           value={specPicks.format ? formatValueLabel : undefined}
@@ -487,6 +488,7 @@ export default function SpecSettingsPanel({
 
         <ControlBarDropdown
           compact
+          dense={compactSpecToolbar}
           selected={specPicks.style && Boolean(visualStyle.imageStyleId)}
           label={cs.specStyle}
           value={specPicks.style ? styleValueLabel || undefined : undefined}
@@ -539,6 +541,7 @@ export default function SpecSettingsPanel({
 
         <ControlBarDropdown
           compact
+          dense={compactSpecToolbar}
           selected={specPicks.use}
           label={cs.specUse}
           value={specPicks.use ? useValueLabel : undefined}
@@ -571,6 +574,7 @@ export default function SpecSettingsPanel({
         {!isPhotoProduct && !hidePageCountOption ? (
           <ControlBarDropdown
             compact
+            dense={compactSpecToolbar}
             label={cs.specPages}
             value={specPicks.pages ? pageValueLabel : undefined}
             open={openKey === "pages"}
@@ -594,6 +598,7 @@ export default function SpecSettingsPanel({
 
         <ControlBarDropdown
           compact
+          dense={compactSpecToolbar}
           selected={bgPromptSelected}
           label={cs.specExample}
           value={exampleValueLabel || undefined}
@@ -688,6 +693,7 @@ export default function SpecSettingsPanel({
         {!isPhotoProduct ? (
           <ControlBarDropdown
             compact
+            dense={compactSpecToolbar}
             selected={fieldSelected}
             label={cs.specBg}
             value={

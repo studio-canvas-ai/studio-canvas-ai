@@ -88,6 +88,8 @@ type ControlBarDropdownProps = {
   fullWidth?: boolean;
   /** Two-char chip: label only, equal flex share in a row. */
   compact?: boolean;
+  /** Screen 26 — tighter font/padding so five chips stay on one row. */
+  dense?: boolean;
   /** Option chosen — distinct from menu open state. */
   selected?: boolean;
 };
@@ -108,6 +110,7 @@ export default function ControlBarDropdown({
   className = "",
   fullWidth = false,
   compact = false,
+  dense = false,
   selected = false,
 }: ControlBarDropdownProps) {
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -160,7 +163,9 @@ export default function ControlBarDropdown({
         onClick={() => onOpenChange(!open)}
         className={`inline-flex max-w-full items-center text-left font-semibold transition ${
           compact
-            ? "h-9 w-full min-w-0 justify-center gap-0.5 rounded-lg px-1 text-[12px] sm:px-1.5 sm:text-[13px]"
+            ? dense
+              ? "h-8 w-full min-w-0 justify-center gap-0.5 rounded-lg px-0.5 text-[11px] sm:px-1 sm:text-[11px]"
+              : "h-9 w-full min-w-0 justify-center gap-0.5 rounded-lg px-1 text-[12px] sm:px-1.5 sm:text-[13px]"
             : `h-11 gap-2 rounded-xl px-3 text-[13px] font-medium ${
                 fullWidth ? "w-full" : "max-w-full"
               }`
@@ -194,7 +199,11 @@ export default function ControlBarDropdown({
         )}
         <ChevronDown
           className={`shrink-0 text-slate-800 transition ${
-            compact ? "h-3 w-3" : "h-3.5 w-3.5"
+            compact
+              ? dense
+                ? "h-2.5 w-2.5"
+                : "h-3 w-3"
+              : "h-3.5 w-3.5"
           } ${open ? "rotate-180" : ""}`}
           aria-hidden
         />
