@@ -12,31 +12,144 @@ import type { TextLayer } from "@/lib/thumbnailStyles";
 
 export const PRINT_WIZARD_SESSION_KEY = "sca_print_wizard_v5";
 
-/** Physical / digital format (규격) — drives preview aspect. Labels only, no category blurbs. */
+/** Physical / digital format (규격) — drives preview aspect. */
+export type PrintFormatDefinition = {
+  id: string;
+  label: string;
+  /** Parenthetical hint shown in Screen 26 preset rows, e.g. 롱폼 · 21 × 29.7 cm */
+  subtitle?: string;
+  aspect: number;
+  /** Trim size in cm when the preset is a physical print size. */
+  physicalCm?: { width: number; height: number };
+};
+
 export const PRINT_FORMATS = [
-  { id: "original", label: "원본", aspect: 1 },
-  { id: "ratio-1-1", label: "1:1", aspect: 1 },
-  { id: "ratio-16-9", label: "16:9", aspect: 16 / 9 },
-  { id: "ratio-4-3", label: "4:3", aspect: 4 / 3 },
-  { id: "ratio-9-16", label: "9:16", aspect: 9 / 16 },
-  { id: "ratio-3-1", label: "3:1", aspect: 3 },
-  { id: "ratio-4-1", label: "4:1", aspect: 4 },
-  { id: "ratio-4-5", label: "4:5", aspect: 4 / 5 },
-  { id: "a2", label: "A2", aspect: 420 / 594 },
-  { id: "a3", label: "A3", aspect: 297 / 420 },
-  { id: "a4", label: "A4", aspect: 210 / 297 },
-  { id: "id-photo", label: "3.5 x 4.5 cm", aspect: 3.5 / 4.5 },
-  { id: "invite-square-150", label: "150×150 mm", aspect: 1 },
-  { id: "invite-postcard-100x150", label: "100×150 mm", aspect: 100 / 150 },
+  { id: "ratio-16-9", label: "16:9", subtitle: "롱폼", aspect: 16 / 9 },
+  {
+    id: "b5",
+    label: "B5",
+    subtitle: "18.2 × 25.7 cm",
+    aspect: 182 / 257,
+    physicalCm: { width: 18.2, height: 25.7 },
+  },
+  { id: "ratio-9-16", label: "9:16", subtitle: "숏폼", aspect: 9 / 16 },
+  {
+    id: "ratio-1-2",
+    label: "1:2",
+    subtitle: "30 × 60 cm",
+    aspect: 1 / 2,
+    physicalCm: { width: 30, height: 60 },
+  },
+  { id: "ratio-4-5", label: "4:5", subtitle: "인스타그램등", aspect: 4 / 5 },
+  {
+    id: "ratio-4-3",
+    label: "4:3",
+    subtitle: "40 × 30 cm",
+    aspect: 4 / 3,
+    physicalCm: { width: 40, height: 30 },
+  },
+  { id: "ratio-1-1", label: "1:1", subtitle: "인스타그램등", aspect: 1 },
+  {
+    id: "ratio-3-1",
+    label: "3:1",
+    subtitle: "120 × 40 cm",
+    aspect: 3,
+    physicalCm: { width: 120, height: 40 },
+  },
+  {
+    id: "a4",
+    label: "A4",
+    subtitle: "21 × 29.7 cm",
+    aspect: 210 / 297,
+    physicalCm: { width: 21, height: 29.7 },
+  },
+  {
+    id: "banner-500x90",
+    label: "500 × 90 cm",
+    subtitle: "현수막",
+    aspect: 500 / 90,
+    physicalCm: { width: 500, height: 90 },
+  },
+  {
+    id: "a5",
+    label: "A5",
+    subtitle: "14.8 × 21 cm",
+    aspect: 148 / 210,
+    physicalCm: { width: 14.8, height: 21 },
+  },
+  {
+    id: "id-photo",
+    label: "증명사진",
+    subtitle: "3.5 × 4.5 cm",
+    aspect: 3.5 / 4.5,
+    physicalCm: { width: 3.5, height: 4.5 },
+  },
+  {
+    id: "a3",
+    label: "A3",
+    subtitle: "29.7 × 42 cm",
+    aspect: 297 / 420,
+    physicalCm: { width: 29.7, height: 42 },
+  },
+  {
+    id: "invite-square-150",
+    label: "150×150 mm",
+    aspect: 1,
+    physicalCm: { width: 15, height: 15 },
+  },
+  {
+    id: "a2",
+    label: "A2",
+    subtitle: "42 × 59.4 cm",
+    aspect: 420 / 594,
+    physicalCm: { width: 42, height: 59.4 },
+  },
+  {
+    id: "invite-postcard-100x150",
+    label: "100×150 mm",
+    aspect: 100 / 150,
+    physicalCm: { width: 10, height: 15 },
+  },
   { id: "free", label: "직접 입력 / 프리 사이즈", aspect: 1 },
-] as const;
+] as const satisfies readonly PrintFormatDefinition[];
 
 export type PrintFormatId = (typeof PRINT_FORMATS)[number]["id"];
+
+/**
+ * Screen 26 — fixed left/right 규격 pairs (do not reorder or omit).
+ * Left column = digital/social ratios + ISO A sizes.
+ * Right column = paired print / banner / ID sizes.
+ */
+export const SCREEN_26_FORMAT_PRESET_PAIRS = [
+  { left: "ratio-16-9", right: "b5" },
+  { left: "ratio-9-16", right: "ratio-1-2" },
+  { left: "ratio-4-5", right: "ratio-4-3" },
+  { left: "ratio-1-1", right: "ratio-3-1" },
+  { left: "a4", right: "banner-500x90" },
+  { left: "a5", right: "id-photo" },
+  { left: "a3", right: "invite-square-150" },
+  { left: "a2", right: "invite-postcard-100x150" },
+] as const satisfies ReadonlyArray<{
+  left: PrintFormatId;
+  right: PrintFormatId;
+}>;
+
+/** Screen 26 preset ids in display order (left column then right column per row). */
+export const SCREEN_26_PRESET_FORMAT_IDS = SCREEN_26_FORMAT_PRESET_PAIRS.flatMap(
+  (pair) => [pair.left, pair.right]
+) as PrintFormatId[];
+
+export function formatDisplayLabel(id: PrintFormatId | string): string {
+  const fmt = PRINT_FORMATS.find((f) => f.id === id);
+  if (!fmt) return String(id);
+  return fmt.subtitle ? `${fmt.label} (${fmt.subtitle})` : fmt.label;
+}
 
 /** Banner/hanging ratios excluded from the photo lookbook 규격 menu. */
 const PHOTO_EXCLUDED_FORMAT_IDS = new Set<PrintFormatId>([
   "ratio-3-1",
-  "ratio-4-1",
+  "ratio-1-2",
+  "banner-500x90",
 ]);
 
 /**
@@ -838,7 +951,7 @@ export function formatById(id: PrintFormatId | string) {
   return found ?? PRINT_FORMATS.find((f) => f.id === "a4")!;
 }
 
-/** Preview / export aspect — uses free-size when set. */
+/** Preview / export aspect — uses free-size when set, else physical trim or ratio. */
 export function resolvePrintAspect(
   formatId: PrintFormatId | string,
   customSize: PrintCustomSize | null | undefined
@@ -853,7 +966,11 @@ export function resolvePrintAspect(
   ) {
     return customSize.width / customSize.height;
   }
-  return formatById(formatId).aspect;
+  const fmt = formatById(formatId);
+  if (fmt.physicalCm) {
+    return fmt.physicalCm.width / fmt.physicalCm.height;
+  }
+  return fmt.aspect;
 }
 
 export function formatCustomSizeLabel(size: PrintCustomSize): string {
@@ -889,6 +1006,10 @@ export function normalizeFormatId(id: unknown): PrintFormatId | null {
     case "a4-landscape":
       return "a4";
     case "banner":
+      return "banner-500x90";
+    case "original":
+      return "ratio-1-1";
+    case "ratio-4-1":
       return "ratio-3-1";
     default:
       return null;

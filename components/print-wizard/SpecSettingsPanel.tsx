@@ -13,6 +13,8 @@ import {
   PRINT_PAGE_COUNTS,
   PRINT_CUSTOM_SIZE_MAX_CM,
   PRINT_CUSTOM_SIZE_MAX_INCH,
+  SCREEN_26_FORMAT_PRESET_PAIRS,
+  formatDisplayLabel,
   fieldById,
   emptySpecPicks,
   type BgPresetId,
@@ -129,10 +131,16 @@ export default function SpecSettingsPanel({
   const useTitle = (id: keyof typeof cs.uses, fallback: string) =>
     cs.uses[id] ?? fallback;
   const isPhotoProduct = productId === "photo";
+  const isScreen26Presets = fitContent && hidePageCountOption;
   const useCatalog = isPhotoProduct ? PHOTO_USES : PRINT_USES;
   const presetFormats = isPhotoProduct
     ? PHOTO_PRESET_FORMATS
     : PRINT_PRESET_FORMATS;
+  const resolveFormatLabel = (id: PrintFormatId) => {
+    if (id === "free") return cs.formatFree;
+    if (isScreen26Presets) return formatDisplayLabel(id);
+    return formatTitle(id, PRINT_FORMATS.find((f) => f.id === id)?.label ?? id);
+  };
   const resolveUseLabel = (id: PrintUseId | string, fallback: string) => {
     if (isPhotoProduct && id === "sns") {
       return cs.uses["profile-sns"] ?? fallback;
@@ -185,10 +193,7 @@ export default function SpecSettingsPanel({
       ? `${customSize.width}×${customSize.height}${
           customSize.unit === "cm" ? "cm" : cs.inch
         }`
-      : formatTitle(
-          formatId,
-          PRINT_FORMATS.find((f) => f.id === formatId)?.label ?? formatId
-        );
+      : resolveFormatLabel(formatId);
 
   const applyFreeSize = () => {
     const width = Number(widthInput);
@@ -329,17 +334,36 @@ export default function SpecSettingsPanel({
           menuMaxWidth={380}
         >
           <div className="grid grid-cols-2 gap-1">
-            {presetFormats.map((fmt) => (
-              <ControlMenuItem
-                key={fmt.id}
-                active={specPicks.format && formatId === fmt.id}
-                title={formatTitle(fmt.id, fmt.label)}
-                onClick={() => {
-                  onFormatChange(fmt.id);
-                  setOpenKey(null);
-                }}
-              />
-            ))}
+            {isScreen26Presets
+              ? SCREEN_26_FORMAT_PRESET_PAIRS.map((pair) => (
+                  <div
+                    key={`${pair.left}-${pair.right}`}
+                    className="col-span-2 grid grid-cols-2 gap-1"
+                  >
+                    {([pair.left, pair.right] as const).map((id) => (
+                      <ControlMenuItem
+                        key={id}
+                        active={specPicks.format && formatId === id}
+                        title={formatDisplayLabel(id)}
+                        onClick={() => {
+                          onFormatChange(id);
+                          setOpenKey(null);
+                        }}
+                      />
+                    ))}
+                  </div>
+                ))
+              : presetFormats.map((fmt) => (
+                  <ControlMenuItem
+                    key={fmt.id}
+                    active={specPicks.format && formatId === fmt.id}
+                    title={resolveFormatLabel(fmt.id)}
+                    onClick={() => {
+                      onFormatChange(fmt.id);
+                      setOpenKey(null);
+                    }}
+                  />
+                ))}
           </div>
 
           <div className="mt-1.5 border-t border-slate-200 pt-1.5">
