@@ -1,4 +1,10 @@
 {
+  "functions": {
+    "app/api/shorts/upload/route.ts": {
+      "maxDuration": 300,
+      "memory": 1024
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/retention",
