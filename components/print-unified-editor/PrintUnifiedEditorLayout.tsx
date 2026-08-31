@@ -22,7 +22,7 @@ function readIsDesktop(): boolean {
 
 /**
  * Screen 26 shell — left canvas (44%) | middle controls (26%) | right design tools (30%).
- * Mobile: stacked scroll with real min-height for style tools + [스타일] bottom sheet.
+ * Mobile: 50vh bottom sheet for style tools + in-page fallback stack.
  * designPanel is mounted once (desktop column XOR mobile portal).
  */
 export default function PrintUnifiedEditorLayout({
@@ -53,17 +53,23 @@ export default function PrintUnifiedEditorLayout({
       if (e.key === "Escape") setStyleSheetOpen(false);
     };
     document.addEventListener("keydown", onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
-    };
-  }, [styleSheetOpen]);
+    if (isDesktop) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.removeEventListener("keydown", onKey);
+        document.body.style.overflow = prev;
+      };
+    }
+    return () => document.removeEventListener("keydown", onKey);
+  }, [isDesktop, styleSheetOpen]);
 
   const closeStyleSheet = useCallback(() => {
     setStyleSheetOpen(false);
   }, []);
+
+  const mobileSheetBottom =
+    "calc(3.75rem + max(0.75rem, env(safe-area-inset-bottom)))";
 
   const mobilePanel =
     !isDesktop && portalReady && mobileHost
@@ -73,38 +79,45 @@ export default function PrintUnifiedEditorLayout({
               <button
                 type="button"
                 aria-label="닫기"
-                className="fixed inset-0 z-[740] bg-slate-900/45 backdrop-blur-[2px]"
+                className="fixed inset-0 z-[740] bg-slate-900/25 backdrop-blur-[1px]"
                 onClick={closeStyleSheet}
               />
             ) : null}
             <div
               id="unified-style-panel"
               data-unified-design-panel
+              style={styleSheetOpen ? { bottom: mobileSheetBottom } : undefined}
               className={
                 styleSheetOpen
-                  ? "pointer-events-auto fixed inset-x-0 bottom-0 z-[750] flex max-h-[min(88dvh,920px)] flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl"
+                  ? "pointer-events-auto fixed inset-x-0 z-[750] flex h-[50vh] max-h-[50dvh] flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-[0_-12px_40px_rgba(15,23,42,0.18)]"
                   : "pointer-events-auto relative flex min-h-[min(72vh,760px)] w-full flex-col overflow-y-auto overscroll-contain rounded-2xl border border-slate-200 bg-white pb-24 shadow-sm"
               }
             >
               {styleSheetOpen ? (
-                <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-2.5">
-                  <p className="text-sm font-bold text-slate-900">
-                    AI 배경 · 스타일 · 데코 · 폰트
-                  </p>
-                  <button
-                    type="button"
-                    onClick={closeStyleSheet}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-700"
-                    aria-label="닫기"
-                  >
-                    <X className="h-4 w-4" aria-hidden />
-                  </button>
-                </div>
+                <>
+                  <div
+                    className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-slate-300"
+                    aria-hidden
+                  />
+                  <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-2">
+                    <p className="text-sm font-bold text-slate-900">
+                      AI 배경 · 스타일 · 데코 · 폰트
+                    </p>
+                    <button
+                      type="button"
+                      onClick={closeStyleSheet}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-700"
+                      aria-label="닫기"
+                    >
+                      <X className="h-4 w-4" aria-hidden />
+                    </button>
+                  </div>
+                </>
               ) : null}
               <div
                 className={
                   styleSheetOpen
-                    ? "min-h-0 flex-1 overflow-y-auto overscroll-contain pb-24"
+                    ? "min-h-0 flex-1 overflow-y-auto overscroll-contain px-0 pb-3 [-webkit-overflow-scrolling:touch]"
                     : "flex min-h-[min(68vh,720px)] flex-1 flex-col"
                 }
               >
