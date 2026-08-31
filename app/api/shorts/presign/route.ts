@@ -4,8 +4,10 @@ import { resolveAppUser } from "@/lib/resolveAppUser";
 import { checkUploadRateLimit } from "@/lib/rateLimit";
 import {
   createSignedPutUrl,
+  getR2BucketName,
   getR2Config,
   isR2Configured,
+  normalizeR2Endpoint,
   publicObjectUrl,
 } from "@/lib/r2";
 import { resolveDownloadUrl } from "@/lib/downloadUrl";
@@ -90,6 +92,18 @@ export async function POST(req: Request) {
     }
 
     const config = getR2Config()!;
+    const bucketName = getR2BucketName();
+    if (!bucketName) {
+      return NextResponse.json({ error: "r2_bucket_not_configured" }, { status: 500 });
+    }
+
+    console.info("[shorts/presign] issuing presigned PUT", {
+      bucket: bucketName,
+      key,
+      contentType: check.contentType,
+      endpoint: normalizeR2Endpoint(config),
+    });
+
     const uploadUrl = await createSignedPutUrl(
       config,
       key,
@@ -112,9 +126,12 @@ export async function POST(req: Request) {
       key,
       contentType: check.contentType,
       uploadUrl,
+      /** Client PUT must send exactly this Content-Type (matches SigV4 presign). */
+      putContentType: check.contentType,
       requiredHeaders: {
         "Content-Type": check.contentType,
       },
+      bucket: bucketName,
       playbackUrl,
       maxBytes,
       expiresInSec: 900,

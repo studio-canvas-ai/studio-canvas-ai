@@ -51,14 +51,52 @@ export function isR2Configured(): boolean {
   return getR2Config() != null;
 }
 
+/** Resolved bucket name from env (e.g. studio-canvas-ai-storage). */
+export function getR2BucketName(): string | null {
+  return getR2Config()?.bucketName ?? null;
+}
+
+/**
+ * Account-level R2 S3 endpoint — must NOT embed the bucket name in the host.
+ * Path-style requests put the bucket in the URL path (`/{bucket}/{key}`).
+ */
+export function normalizeR2Endpoint(config: R2Config): string {
+  const accountId = config.accountId.trim();
+  const canonical = `https://${accountId}.r2.cloudflarestorage.com`;
+  const raw = config.endpoint?.trim().replace(/\/$/, "");
+  if (!raw) return canonical;
+
+  try {
+    const parsed = new URL(raw);
+    const host = parsed.hostname.toLowerCase();
+    const accountHost = `${accountId.toLowerCase()}.r2.cloudflarestorage.com`;
+
+    // Virtual-hosted style ({bucket}.{account}.r2...) → force account-level host.
+    if (
+      host.endsWith(".r2.cloudflarestorage.com") &&
+      host !== accountHost &&
+      host.endsWith(`.${accountHost}`)
+    ) {
+      return canonical;
+    }
+
+    if (host === accountHost) {
+      return canonical;
+    }
+
+    // Non-R2 custom endpoint — keep as configured (minus trailing path segments).
+    return `${parsed.protocol}//${parsed.host}`;
+  } catch {
+    return canonical;
+  }
+}
+
 export function createR2Client(config: R2Config): S3Client {
   // R2 is S3-compatible but rejects AWS SDK v3 default CRC32 checksums
   // and virtual-hosted bucket URLs. Path-style + checksums only when required.
   return new S3Client({
     region: "auto",
-    endpoint:
-      config.endpoint ||
-      `https://${config.accountId}.r2.cloudflarestorage.com`,
+    endpoint: normalizeR2Endpoint(config),
     forcePathStyle: true,
     credentials: {
       accessKeyId: config.accessKeyId,
@@ -78,22 +116,26 @@ export function publicObjectUrl(config: R2Config, key: string): string {
 
 /**
  * Browser → R2 direct upload (bypasses Vercel request body limits).
- * Content-Type is intentionally omitted from the signed PutObject — binding it
- * into SigV4 often causes 403 on mobile when MIME sniffing differs from the
- * presign request. The client still sends Content-Type on PUT for object metadata.
+ * Content-Type is bound into the presigned PUT — the client MUST send the same
+ * value on PUT (see /api/shorts/presign → shortsUploadClient).
  */
 export async function createSignedPutUrl(
   config: R2Config,
   key: string,
-  _contentType: string,
+  contentType: string,
   expiresInSec = 900
 ): Promise<string> {
   const client = createR2Client(config);
   const command = new PutObjectCommand({
     Bucket: config.bucketName,
     Key: key,
+    ContentType: contentType,
   });
-  return getSignedUrl(client, command, { expiresIn: expiresInSec });
+  return getSignedUrl(client, command, {
+    expiresIn: expiresInSec,
+    // Browser must send Content-Type; keep it out of query string hoisting.
+    unhoistableHeaders: new Set(["content-type"]),
+  });
 }
 
 export async function headR2Object(

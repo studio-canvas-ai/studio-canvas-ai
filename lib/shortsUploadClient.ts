@@ -18,8 +18,11 @@ export type ShortsPresignResponse =
       videoId: string;
       key: string;
       contentType: string;
+      /** Exact Content-Type the presigned PUT expects (SigV4-bound). */
+      putContentType?: string;
       uploadUrl: string;
       requiredHeaders?: Record<string, string>;
+      bucket?: string;
       playbackUrl?: string | null;
       maxBytes?: number;
     }
@@ -337,7 +340,8 @@ export async function uploadShortsVideoFile(
     };
   }
 
-  const putContentType = presign.contentType || check.contentType;
+  const putContentType =
+    presign.putContentType || presign.contentType || check.contentType;
 
   try {
     opts?.onProgress?.(0);
