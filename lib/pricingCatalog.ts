@@ -111,7 +111,7 @@ const MONTHLY_CREDIT_DISPLAY: Record<
     aiImageBg: 56,
     scaCloud: 10,
     worksGallery: 20,
-    license: "personal",
+    license: "commercial",
   },
   standard: {
     credits: 3_200,
@@ -156,7 +156,7 @@ const QUARTERLY_CREDIT_DISPLAY: Record<
     aiImageBg: 168,
     scaCloud: 10,
     worksGallery: 20,
-    license: "personal",
+    license: "commercial",
   },
   standard: {
     credits: 9_600,

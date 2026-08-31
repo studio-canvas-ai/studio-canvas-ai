@@ -32,7 +32,7 @@ const MONTHLY: Record<"starter" | "standard" | "pro", PlanQuotaDisplay> = {
     gallery: max(100),
     trainPhotos: max(100),
     generalPhotos: max(200),
-    license: "personal",
+    license: "commercial",
   },
   standard: {
     fhd: max(600),
@@ -62,7 +62,7 @@ const QUARTERLY: Record<"starter" | "standard" | "pro", PlanQuotaDisplay> = {
     gallery: max(150),
     trainPhotos: max(150),
     generalPhotos: max(300),
-    license: "personal",
+    license: "commercial",
   },
   standard: {
     fhd: max(2_000),

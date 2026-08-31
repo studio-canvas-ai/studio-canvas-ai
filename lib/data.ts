@@ -300,9 +300,9 @@ export const PLAN_OFFERS: Record<BillingInterval, readonly PlanOffer[]> = {
     {
       planId: "starter",
       interval: "monthly",
-      monthlyUsd: 7.99,
-      totalUsd: 7.99,
-      totalKrw: 7_900,
+      monthlyUsd: 8.99,
+      totalUsd: 8.99,
+      totalKrw: 8_900,
       credits: 30,
       profileSlots: 1,
       resolution: "FHD",
@@ -365,7 +365,7 @@ export function getPlanOffer(planId: PricingPlanId, interval: BillingInterval): 
 
 /** Fixed VAT-inclusive KRW for domestic monthly subscriptions (Toss / PortOne). */
 export const DOMESTIC_MONTHLY_PRICES_KRW = {
-  starter: 7_900,
+  starter: 8_900,
   standard: 15_900,
   pro: 29_900,
 } as const;
@@ -400,7 +400,7 @@ export function getDomesticQuarterlyPriceKrw(
 
 /** Legacy monthly maps retained for existing consumers. */
 export const pricingPrices: Record<PricingPlanId, number> = {
-  starter: 7.99,
+  starter: 8.99,
   standard: 15.99,
   pro: 29.99,
   enterprise: 199.99,

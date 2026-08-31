@@ -1249,7 +1249,7 @@ const en: Translations = {
           ".sca cloud vault: up to 10 files",
           "Works gallery vault: up to 20 items",
           "Automatic .sca project save and free download",
-          "Watermark in margin / personal license",
+          "Full watermark removal / commercial use",
         ],
       },
       standard: {
