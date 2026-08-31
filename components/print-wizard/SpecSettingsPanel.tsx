@@ -315,8 +315,8 @@ export default function SpecSettingsPanel({
     <section
       className={
         fitContent
-          ? "flex w-full min-w-0 flex-col gap-2.5 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-3.5"
-          : "flex h-full min-h-0 flex-col gap-2.5 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-3.5"
+          ? "flex w-full min-w-0 flex-col gap-2.5 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3 pb-4 shadow-sm sm:p-3.5"
+          : "flex h-full min-h-0 flex-col gap-2.5 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3 pb-4 shadow-sm sm:p-3.5"
       }
     >
       {/* 규격 · 스타일 · 용도 · (인쇄: 장수) · 배경 · (인쇄: 분야) */}

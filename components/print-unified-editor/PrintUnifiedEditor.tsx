@@ -1084,7 +1084,7 @@ export default function PrintUnifiedEditor() {
             />
           </div>
         ) : null}
-        <div className="min-h-0 flex-1">
+        <div className="min-h-0 flex-1 overflow-hidden">
           <PrintUnifiedEditorLayout
         canvas={
           <PrintUnifiedEditorCanvas
@@ -1158,9 +1158,9 @@ export default function PrintUnifiedEditor() {
           />
         }
         controls={
-          <div className="flex h-full min-h-0 flex-col gap-2 p-2 sm:p-2.5">
-            {/* Specs + AI generate: natural height, no inner scroll / clipped CTA */}
-            <div className="shrink-0 overflow-visible">
+          <div className="flex h-full min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-contain p-2 pb-4 sm:p-2.5">
+            {/* Specs + AI generate — scroll so the generate CTA stays reachable on mobile */}
+            <div className="min-h-0 shrink-0">
               <SpecSettingsPanel
                 fitContent
                 hidePageCountOption
