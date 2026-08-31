@@ -1,49 +1,38 @@
 "use client";
 
-import { Loader2, Trash2 } from "lucide-react";
 import type { Template03PublicRecord } from "@/lib/template03Public";
+import Template03AdminDeleteButton from "@/components/template-warehouse/Template03AdminDeleteButton";
 
 export type Template03PublicCardProps = {
   item: Template03PublicRecord;
   deleting?: boolean;
-  /** Admin-only delete control. */
-  canDelete?: boolean;
+  /** Admin-only — when false the delete control is not mounted. */
+  isAdmin?: boolean;
   onPick: () => void;
-  onDelete?: () => void;
+  onDelete?: (templateId: string) => void;
 };
 
 /** Template 03 public catalog card — horizontal scroll strip. */
 export default function Template03PublicCard({
   item,
   deleting = false,
-  canDelete = false,
+  isAdmin = false,
   onPick,
   onDelete,
 }: Template03PublicCardProps) {
   return (
     <li
-      className={`group relative flex w-[148px] shrink-0 flex-col overflow-hidden rounded-xl border border-emerald-200 bg-gradient-to-b from-emerald-50 to-white shadow-sm ring-1 ring-emerald-100 transition-all duration-300 ${
-        deleting ? "pointer-events-none scale-95 opacity-0" : ""
+      className={`group relative flex w-[148px] shrink-0 flex-col overflow-hidden rounded-xl border border-emerald-200 bg-gradient-to-b from-emerald-50 to-white shadow-sm ring-1 ring-emerald-100 transition-opacity duration-150 ${
+        deleting ? "pointer-events-none opacity-40" : ""
       }`}
     >
-      {canDelete ? (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete?.();
-          }}
-          disabled={deleting}
-          className="absolute right-1 top-1 z-[3] inline-flex h-6 w-6 items-center justify-center rounded-lg border border-white/15 bg-black/55 text-white/70 opacity-0 shadow-lg backdrop-blur-md transition-all duration-200 group-hover:opacity-100 hover:scale-105 hover:border-rose-400/60 hover:bg-rose-500/90 hover:text-white focus-visible:opacity-100 disabled:opacity-40"
-          aria-label={`${item.title} 삭제`}
-          title="템플릿 삭제"
-        >
-          {deleting ? (
-            <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-          ) : (
-            <Trash2 className="h-3 w-3" />
-          )}
-        </button>
+      {isAdmin && onDelete ? (
+        <Template03AdminDeleteButton
+          templateId={item.id}
+          templateTitle={item.title}
+          deleting={deleting}
+          onDelete={onDelete}
+        />
       ) : null}
       <button
         type="button"

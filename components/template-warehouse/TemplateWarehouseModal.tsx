@@ -115,7 +115,6 @@ export default function TemplateWarehouseModal() {
     new Set()
   );
   const removeTimers = useRef<Map<number, number>>(new Map());
-  const publicRemoveTimers = useRef<Map<string, number>>(new Map());
   const space4RemoveTimers = useRef<Map<string, number>>(new Map());
 
   const baseFallbackCards = BASE_A4_TEMPLATE_CARDS;
@@ -126,8 +125,6 @@ export default function TemplateWarehouseModal() {
     return () => {
       removeTimers.current.forEach((timer) => window.clearTimeout(timer));
       removeTimers.current.clear();
-      publicRemoveTimers.current.forEach((timer) => window.clearTimeout(timer));
-      publicRemoveTimers.current.clear();
       space4RemoveTimers.current.forEach((timer) => window.clearTimeout(timer));
       space4RemoveTimers.current.clear();
     };
@@ -262,20 +259,6 @@ export default function TemplateWarehouseModal() {
     }
   };
 
-  const animateRemovePublic = (id: string) => {
-    setDeletingPublicIds((prev) => new Set(prev).add(id));
-    const timer = window.setTimeout(() => {
-      setPublicTemplates((prev) => prev.filter((row) => row.id !== id));
-      setDeletingPublicIds((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-      publicRemoveTimers.current.delete(id);
-    }, REMOVE_ANIM_MS);
-    publicRemoveTimers.current.set(id, timer);
-  };
-
   const animateRemoveSpace4 = (id: string) => {
     setDeletingSpace4Ids((prev) => new Set(prev).add(id));
     const timer = window.setTimeout(() => {
@@ -290,25 +273,33 @@ export default function TemplateWarehouseModal() {
     space4RemoveTimers.current.set(id, timer);
   };
 
-  const onDeletePublic = async (item: Template03PublicRecord) => {
-    if (!isAdmin || deletingPublicIds.has(item.id)) return;
-    const approved = await confirm({
-      title: "템플릿 삭제",
-      message: "정말 삭제하시겠습니까?",
-      confirmLabel: "삭제",
-      cancelLabel: "취소",
-      tone: "danger",
-    });
-    if (!approved) return;
+  const handleDeleteTemplate = useCallback(
+    async (templateId: string) => {
+      if (!isAdmin || deletingPublicIds.has(templateId)) return;
 
-    const result = await deleteTemplate03Public(item.id);
-    if (!result.ok) {
-      showToast("템플릿 삭제에 실패했습니다.", "error");
-      return;
-    }
-    animateRemovePublic(item.id);
-    showToast("공개 템플릿을 삭제했습니다.", "success");
-  };
+      const removed = publicTemplates.find((row) => row.id === templateId);
+      if (!removed) return;
+
+      setDeletingPublicIds((prev) => new Set(prev).add(templateId));
+      setPublicTemplates((prev) => prev.filter((row) => row.id !== templateId));
+
+      const result = await deleteTemplate03Public(templateId);
+      setDeletingPublicIds((prev) => {
+        const next = new Set(prev);
+        next.delete(templateId);
+        return next;
+      });
+
+      if (!result.ok) {
+        setPublicTemplates((prev) => {
+          if (prev.some((row) => row.id === templateId)) return prev;
+          return [removed, ...prev];
+        });
+        showToast("템플릿 삭제에 실패했습니다.", "error");
+      }
+    },
+    [deletingPublicIds, isAdmin, publicTemplates, showToast]
+  );
 
   const onDeleteSpace4 = async (item: Space4VaultMeta) => {
     if (!isAdmin || deletingSpace4Ids.has(item.id)) return;
@@ -439,10 +430,10 @@ export default function TemplateWarehouseModal() {
                     <Template03PublicCard
                       key={item.id}
                       item={item}
-                      canDelete={isAdmin}
+                      isAdmin={isAdmin}
                       deleting={deletingPublicIds.has(item.id)}
                       onPick={() => pickTemplate(publicRecordToWarehouse(item))}
-                      onDelete={() => void onDeletePublic(item)}
+                      onDelete={handleDeleteTemplate}
                     />
                   ))}
                 </ul>
