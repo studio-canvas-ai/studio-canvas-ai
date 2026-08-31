@@ -10,6 +10,7 @@ import {
 } from "@/lib/supabase/config";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { formatOAuthError } from "@/lib/supabase/oauthErrors";
+import { APP_HOME_PATH } from "@/lib/appRoutes";
 
 export type SocialOAuthId =
   | "google"
@@ -89,7 +90,7 @@ function pickIdentity(
 }
 
 /** Safe in-app path for post-login redirect (blocks open redirects). */
-export function safeAuthNextPath(nextPath: string, fallback = "/"): string {
+export function safeAuthNextPath(nextPath: string, fallback = APP_HOME_PATH): string {
   if (nextPath.startsWith("/") && !nextPath.startsWith("//")) return nextPath;
   return fallback;
 }
@@ -101,7 +102,7 @@ export function safeAuthNextPath(nextPath: string, fallback = "/"): string {
  * Must match Supabase Redirect URL allow-list:
  *   ${origin}/**  for each of SUPABASE_AUTH_SITE_ORIGINS
  */
-export function buildAuthCallbackRedirectTo(nextPath = "/"): string {
+export function buildAuthCallbackRedirectTo(nextPath = APP_HOME_PATH): string {
   const origin =
     typeof window !== "undefined"
       ? window.location.origin.replace(/\/$/, "")
@@ -251,7 +252,7 @@ export function saveAuthNextPath(nextPath: string): void {
   }
 }
 
-export function peekAuthNextPath(fallback = "/"): string {
+export function peekAuthNextPath(fallback = APP_HOME_PATH): string {
   try {
     const raw = sessionStorage.getItem(AUTH_NEXT_KEY);
     if (raw && raw.startsWith("/") && !raw.startsWith("//")) return raw;
@@ -261,7 +262,7 @@ export function peekAuthNextPath(fallback = "/"): string {
   return fallback;
 }
 
-export function consumeAuthNextPath(fallback = "/"): string {
+export function consumeAuthNextPath(fallback = APP_HOME_PATH): string {
   try {
     const raw = sessionStorage.getItem(AUTH_NEXT_KEY);
     sessionStorage.removeItem(AUTH_NEXT_KEY);
@@ -285,7 +286,7 @@ export function consumeAuthNextPath(fallback = "/"): string {
  * Missing email → synthetic `@users.facebook.id` in extractSupabaseOAuthProfile.
  */
 export async function signInWithFacebook(
-  nextPath = "/"
+  nextPath = APP_HOME_PATH
 ): Promise<{ data: unknown; error: Error | null }> {
   try {
     if (!isSupabaseConfigured()) {
@@ -400,7 +401,7 @@ export async function signInWithSupabaseOAuth(
  * App flow: signInWithOAuth → /auth/callback?code → /auth/bridge → app session
  */
 export async function signInWithGoogle(
-  nextPath = "/"
+  nextPath = APP_HOME_PATH
 ): Promise<{ data: unknown; error: Error | null }> {
   try {
     if (!isSupabaseConfigured()) {
@@ -481,7 +482,7 @@ export async function signInWithGoogle(
  * App `redirectTo` is the site origin; middleware forwards `?code=` → /auth/callback.
  */
 export async function signInWithMicrosoft(
-  nextPath = "/"
+  nextPath = APP_HOME_PATH
 ): Promise<{ data: unknown; error: Error | null }> {
   try {
     if (!isSupabaseConfigured()) {
@@ -542,7 +543,7 @@ export async function signInWithMicrosoft(
  * App bridge synthesizes `{kakaoId}@users.kakao.id` when email is missing.
  */
 export async function signInWithKakao(
-  nextPath = "/"
+  nextPath = APP_HOME_PATH
 ): Promise<{ data: unknown; error: Error | null }> {
   try {
     if (!isSupabaseConfigured()) {
@@ -602,7 +603,7 @@ export async function signInWithKakao(
  * Scopes must be `profile` only (not `openid`), or Supabase skips userinfo.
  */
 export async function signInWithNaver(
-  nextPath = "/"
+  nextPath = APP_HOME_PATH
 ): Promise<{ data: unknown; error: Error | null }> {
   try {
     if (!isSupabaseConfigured()) {

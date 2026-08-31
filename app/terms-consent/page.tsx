@@ -6,6 +6,7 @@ import Footer from "@/components/Footer";
 import TermsConsentForm from "@/components/TermsConsentForm";
 import { authSessionCookieName } from "@/lib/authCookies";
 import { safePostConsentPath } from "@/lib/termsConsent";
+import { appPathWithAuthError } from "@/lib/appRoutes";
 
 export const metadata = {
   title: "약관 동의 | Studio Canvas AI",
@@ -29,7 +30,7 @@ export default async function TermsConsentPage({
     const raw = cookieStore.get(cookieName)?.value;
 
     if (!raw) {
-      redirect(`/generate?authError=${encodeURIComponent("sign_in_required")}`);
+      redirect(appPathWithAuthError("sign_in_required"));
     }
 
     const token = await decode({
@@ -39,7 +40,7 @@ export default async function TermsConsentPage({
     });
 
     if (!token) {
-      redirect(`/generate?authError=${encodeURIComponent("sign_in_required")}`);
+      redirect(appPathWithAuthError("sign_in_required"));
     }
 
     // Already registered — skip the form.

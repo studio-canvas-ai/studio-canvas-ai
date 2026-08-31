@@ -1058,6 +1058,77 @@ export default function PrintUnifiedEditor() {
     showToast("Template 04 검수 세션을 종료했습니다.", "info");
   }, [showToast]);
 
+  const specSettingsPanel = (
+    <SpecSettingsPanel
+      fitContent
+      hidePageCountOption
+      formatId={state.formatId}
+      useId={state.useId}
+      pageCount={state.pageCount}
+      customSize={state.customSize}
+      specPicks={state.specPicks}
+      bgKeyword={state.bgKeyword}
+      bgPresetId={state.bgPresetId}
+      selectedPromptPresetId={state.selectedPromptPresetId}
+      mainPrompt={state.mainPrompt}
+      visualStyle={state.visualStyle}
+      generating={generating}
+      onFormatChange={(id: PrintFormatId) =>
+        patch(
+          markSpecPick({ ...stateRef.current, formatId: id }, "format")
+        )
+      }
+      onCustomSizeApply={(size: PrintCustomSize) =>
+        patch(
+          markSpecPick(
+            { ...stateRef.current, formatId: "free", customSize: size },
+            "format"
+          )
+        )
+      }
+      onUseChange={(id: PrintUseId) =>
+        patch(markSpecPick({ ...stateRef.current, useId: id }, "use"))
+      }
+      onPageCountChange={(count: PrintPageCount) => {
+        patch({
+          ...markSpecPick({ ...stateRef.current, pageCount: count }, "pages"),
+          contentOffsetByPage: resizeContentOffsets(
+            stateRef.current.contentOffsetByPage,
+            count
+          ),
+          pageThumbUrls: resizePageThumbUrls(
+            stateRef.current.pageThumbUrls,
+            count
+          ),
+        });
+        setCurrentPage((p) => (p > count ? 0 : p));
+      }}
+      onBgKeywordChange={(keyword) => patch({ bgKeyword: keyword })}
+      onBgPresetPick={(id: BgPresetId) => patch({ bgPresetId: id })}
+      onGenerateBackground={() => void onGenerateBackground()}
+      onPromptPresetPick={(id, prompt) =>
+        patch({
+          selectedPromptPresetId: id,
+          mainPrompt: prompt,
+        })
+      }
+      onMainPromptChange={(value) => patch({ mainPrompt: value })}
+      onVisualStyleChange={(visualStyle) => {
+        const hasStyle = Boolean(
+          visualStyle.imageStyleId || visualStyle.moodStyleId
+        );
+        patch(
+          markSpecPick(
+            { ...stateRef.current, visualStyle },
+            "style",
+            hasStyle
+          )
+        );
+      }}
+      onClearSpecTag={clearSpecTag}
+    />
+  );
+
   if (!hydrated) {
     return (
       <div className="flex h-full min-h-[200px] items-center justify-center text-sm font-semibold text-slate-900">
@@ -1159,82 +1230,9 @@ export default function PrintUnifiedEditor() {
         }
         controls={
           <div className="flex h-full min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-contain p-2 pb-4 sm:p-2.5">
-            {/* Specs + AI generate — scroll so the generate CTA stays reachable on mobile */}
-            <div className="min-h-0 shrink-0">
-              <SpecSettingsPanel
-                fitContent
-                hidePageCountOption
-                formatId={state.formatId}
-                useId={state.useId}
-                pageCount={state.pageCount}
-                customSize={state.customSize}
-                specPicks={state.specPicks}
-                bgKeyword={state.bgKeyword}
-                bgPresetId={state.bgPresetId}
-                selectedPromptPresetId={state.selectedPromptPresetId}
-                mainPrompt={state.mainPrompt}
-                visualStyle={state.visualStyle}
-                generating={generating}
-                onFormatChange={(id: PrintFormatId) =>
-                  patch(
-                    markSpecPick({ ...stateRef.current, formatId: id }, "format")
-                  )
-                }
-                onCustomSizeApply={(size: PrintCustomSize) =>
-                  patch(
-                    markSpecPick(
-                      { ...stateRef.current, formatId: "free", customSize: size },
-                      "format"
-                    )
-                  )
-                }
-                onUseChange={(id: PrintUseId) =>
-                  patch(markSpecPick({ ...stateRef.current, useId: id }, "use"))
-                }
-                onPageCountChange={(count: PrintPageCount) => {
-                  patch({
-                    ...markSpecPick(
-                      { ...stateRef.current, pageCount: count },
-                      "pages"
-                    ),
-                    contentOffsetByPage: resizeContentOffsets(
-                      stateRef.current.contentOffsetByPage,
-                      count
-                    ),
-                    pageThumbUrls: resizePageThumbUrls(
-                      stateRef.current.pageThumbUrls,
-                      count
-                    ),
-                  });
-                  setCurrentPage((p) => (p > count ? 0 : p));
-                }}
-                onBgKeywordChange={(keyword) => patch({ bgKeyword: keyword })}
-                onBgPresetPick={(id: BgPresetId) => patch({ bgPresetId: id })}
-                onGenerateBackground={() => void onGenerateBackground()}
-                onPromptPresetPick={(id, prompt) =>
-                  patch({
-                    selectedPromptPresetId: id,
-                    mainPrompt: prompt,
-                  })
-                }
-                onMainPromptChange={(value) => patch({ mainPrompt: value })}
-                onVisualStyleChange={(visualStyle) => {
-                  const hasStyle = Boolean(
-                    visualStyle.imageStyleId || visualStyle.moodStyleId
-                  );
-                  patch(
-                    markSpecPick(
-                      { ...stateRef.current, visualStyle },
-                      "style",
-                      hasStyle
-                    )
-                  );
-                }}
-                onClearSpecTag={clearSpecTag}
-              />
-            </div>
-            {/* Empty flex space — do not stretch mini thumbs into the middle */}
-            <div className="min-h-0 flex-1" aria-hidden />
+            {/* Desktop middle column — mobile AI panel lives in designPanel */}
+            <div className="hidden min-h-0 shrink-0 lg:block">{specSettingsPanel}</div>
+            <div className="hidden min-h-0 flex-1 lg:block" aria-hidden />
             <div className="mt-auto shrink-0">
               <p className="mb-1.5 px-0.5 text-xs leading-snug text-pink-500 [word-break:keep-all]">
                 내가 만든 디자인은 운영자 검수 및 민감 개인정보 삭제를 거쳐
@@ -1257,50 +1255,53 @@ export default function PrintUnifiedEditor() {
         }
         designPanel={
           <div className="flex h-full min-h-0 w-full flex-col gap-2 p-2 max-lg:h-auto max-lg:min-h-0 sm:p-2.5">
-            {/* Mobile: downloads first, then style tools below. Desktop: tools then downloads. */}
-            <div className="order-1 min-h-0 max-lg:order-2 max-lg:min-h-[min(60vh,640px)] max-lg:flex-none max-lg:overflow-visible max-lg:pb-4 lg:order-1 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain lg:[scrollbar-gutter:stable]">
-              <AiTemplateStudio
-                key={`unified-studio-${pageIndex}`}
-                mode="agent"
-                embedded
-                panelOnly
-                tone="light"
-                hideExport
-                hideAiCommand
-                alwaysShowStylePanel
-                textLayersHost={hiddenTextHost}
-                initialBackgroundUrl={backgroundUrl}
-                controlledOverlayLayers={activeTextLayers}
-                onControlledOverlayLayersChange={(layers) => {
-                  const idx = currentPage > 0 ? currentPage - 1 : 0;
-                  if (currentPage <= 0) {
-                    setCurrentPage(1);
-                  }
-                  onTextLayersChange(
-                    idx,
-                    layers.map((layer) =>
-                      reconcileLayerTypographyBox(
-                        layer,
-                        typographyStage.w,
-                        typographyStage.h
-                      )
-                    ),
-                    { applyLayout: false }
-                  );
-                }}
-                controlledActiveLayerId={activeTextLayerId}
-                onControlledActiveLayerChange={(id) => {
-                  setActiveTextLayerId(id);
-                  if (id) {
-                    setActivePhotoLayerId(null);
-                    setActiveDecoLayerId(null);
-                  }
-                }}
-                formFields={{ ...state.inputs }}
-                initialVisualStyle={state.visualStyle}
-                onDecoCatalogPick={onDecoCatalogPick}
-                onCanvasSymbolPick={onCanvasSymbolPick}
-              />
+            {/* Mobile: AI background → style tools; desktop: style tools only (AI in middle column) */}
+            <div className="order-1 flex min-h-0 flex-col gap-2 max-lg:order-2 lg:order-1 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain lg:[scrollbar-gutter:stable]">
+              <div className="shrink-0 lg:hidden">{specSettingsPanel}</div>
+              <div className="min-h-0 max-lg:flex-none lg:flex-1 lg:min-h-0">
+                <AiTemplateStudio
+                  key={`unified-studio-${pageIndex}`}
+                  mode="agent"
+                  embedded
+                  panelOnly
+                  tone="light"
+                  hideExport
+                  hideAiCommand
+                  alwaysShowStylePanel
+                  textLayersHost={hiddenTextHost}
+                  initialBackgroundUrl={backgroundUrl}
+                  controlledOverlayLayers={activeTextLayers}
+                  onControlledOverlayLayersChange={(layers) => {
+                    const idx = currentPage > 0 ? currentPage - 1 : 0;
+                    if (currentPage <= 0) {
+                      setCurrentPage(1);
+                    }
+                    onTextLayersChange(
+                      idx,
+                      layers.map((layer) =>
+                        reconcileLayerTypographyBox(
+                          layer,
+                          typographyStage.w,
+                          typographyStage.h
+                        )
+                      ),
+                      { applyLayout: false }
+                    );
+                  }}
+                  controlledActiveLayerId={activeTextLayerId}
+                  onControlledActiveLayerChange={(id) => {
+                    setActiveTextLayerId(id);
+                    if (id) {
+                      setActivePhotoLayerId(null);
+                      setActiveDecoLayerId(null);
+                    }
+                  }}
+                  formFields={{ ...state.inputs }}
+                  initialVisualStyle={state.visualStyle}
+                  onDecoCatalogPick={onDecoCatalogPick}
+                  onCanvasSymbolPick={onCanvasSymbolPick}
+                />
+              </div>
             </div>
             <div className="order-2 shrink-0 max-lg:order-1 lg:order-2">
               <StudioExportButtonGroup

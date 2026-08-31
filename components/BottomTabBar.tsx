@@ -13,9 +13,10 @@ import {
 import { useI18n } from "@/components/I18nProvider";
 import { useCredits } from "@/components/CreditsProvider";
 import { SHORTS_THUMBNAIL_PATH } from "@/lib/shortsThumbnail";
+import { APP_HOME_PATH, normalizeAppTabPath } from "@/lib/appRoutes";
 
 const TAB_ITEMS = [
-  { href: "/", labelKey: "home" as const, Icon: Home, authRequired: false },
+  { href: APP_HOME_PATH, labelKey: "home" as const, Icon: Home, authRequired: false },
   { href: "/styles", labelKey: "styles" as const, Icon: LayoutGrid, authRequired: false },
   {
     href: SHORTS_THUMBNAIL_PATH,
@@ -29,14 +30,16 @@ const TAB_ITEMS = [
 ];
 
 function isTabActive(pathname: string, href: string) {
-  if (href === "/") return pathname === "/";
-  return pathname === href || pathname.startsWith(`${href}/`);
+  const current = normalizeAppTabPath(pathname);
+  const target = normalizeAppTabPath(href);
+  if (target === APP_HOME_PATH) return current === APP_HOME_PATH;
+  return current === target || current.startsWith(`${target}/`);
 }
 
 /** Fixed bottom tab bar — mobile only (hidden from md up). */
 export default function BottomTabBar() {
   const { t } = useI18n();
-  const pathname = usePathname() || "/";
+  const pathname = normalizeAppTabPath(usePathname() || APP_HOME_PATH);
   const { isAuthenticated } = useCredits();
 
   if (

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { exchangeSupabaseCode } from "@/lib/supabase/exchange";
 import { formatOAuthError } from "@/lib/supabase/oauthErrors";
+import { appPathWithAuthError } from "@/lib/appRoutes";
 
 function safeNextPath(raw: string | null): string {
   if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/";
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest) {
 
   if (oauthError) {
     return NextResponse.redirect(
-      `${origin}/generate?authError=${encodeURIComponent(formatOAuthError(oauthError))}`
+      `${origin}${appPathWithAuthError(formatOAuthError(oauthError))}`
     );
   }
 
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
     // Hash-based tokens are not used with PKCE; missing code usually means
     // a bad redirect allow-list or the user landed here without completing OAuth.
     return NextResponse.redirect(
-      `${origin}/generate?authError=${encodeURIComponent(formatOAuthError("missing_code"))}`
+      `${origin}${appPathWithAuthError(formatOAuthError("missing_code"))}`
     );
   }
 
@@ -47,14 +48,14 @@ export async function GET(request: NextRequest) {
     const { error } = await exchangeSupabaseCode(request, code, redirect);
     if (error) {
       return NextResponse.redirect(
-        `${origin}/generate?authError=${encodeURIComponent(formatOAuthError(error))}`
+        `${origin}${appPathWithAuthError(formatOAuthError(error))}`
       );
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : "code_exchange_failed";
     console.error("[auth/callback] exchange failed:", message);
     return NextResponse.redirect(
-      `${origin}/generate?authError=${encodeURIComponent(formatOAuthError(message))}`
+      `${origin}${appPathWithAuthError(formatOAuthError(message))}`
     );
   }
 

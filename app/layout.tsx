@@ -14,6 +14,7 @@ import AuthSessionProvider from "@/components/AuthSessionProvider";
 import AuthModal from "@/components/AuthModal";
 import SupabaseAuthBootstrap from "@/components/SupabaseAuthBootstrap";
 import StudioStoreRecoveryBootstrap from "@/components/StudioStoreRecoveryBootstrap";
+import InitialRouteSync from "@/components/InitialRouteSync";
 import CreditDepletionModal from "@/components/CreditDepletionModal";
 import PaymentModal from "@/components/PaymentModal";
 import CreditTopUpModal from "@/components/CreditTopUpModal";
@@ -88,6 +89,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
         <CreditsProvider>
           <SupabaseAuthBootstrap />
           <StudioStoreRecoveryBootstrap />
+          <InitialRouteSync />
           <SessionLockGuard />
           {children}
           <ScreenBadge />

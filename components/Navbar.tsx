@@ -17,6 +17,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { PRINT_UNIFIED_EDITOR_PATH } from "@/lib/printUnifiedEditor";
+import { APP_HOME_PATH, normalizeAppTabPath } from "@/lib/appRoutes";
 import { openTemplateWarehouse } from "@/lib/templateWarehouse";
 import TemplateWarehouseModal from "@/components/template-warehouse/TemplateWarehouseModal";
 
@@ -43,7 +44,7 @@ export type NavbarProps = {
 
 export default function Navbar({ printWizardBack }: NavbarProps = {}) {
   const { t, locale } = useI18n();
-  const pathname = usePathname() || "/";
+  const pathname = normalizeAppTabPath(usePathname() || APP_HOME_PATH);
   const router = useRouter();
   const {
     openAuthModal,
@@ -105,7 +106,7 @@ export default function Navbar({ printWizardBack }: NavbarProps = {}) {
     setProfileOpen(false);
     try {
       await signOutUser();
-      router.replace("/");
+      router.replace(APP_HOME_PATH);
       router.refresh();
     } finally {
       setLoggingOut(false);
@@ -113,8 +114,10 @@ export default function Navbar({ printWizardBack }: NavbarProps = {}) {
   };
 
   const isActive = (href: string) => {
-    if (href === "/") return pathname === "/";
-    return pathname === href || pathname.startsWith(`${href}/`);
+    const current = pathname;
+    const target = normalizeAppTabPath(href);
+    if (target === APP_HOME_PATH) return current === APP_HOME_PATH;
+    return current === target || current.startsWith(`${target}/`);
   };
 
   const displayName = authUser?.name || t.nav.myPage;

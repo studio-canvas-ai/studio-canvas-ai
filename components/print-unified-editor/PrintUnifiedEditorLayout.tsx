@@ -89,7 +89,7 @@ export default function PrintUnifiedEditorLayout({
               {styleSheetOpen ? (
                 <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-2.5">
                   <p className="text-sm font-bold text-slate-900">
-                    스타일 · 데코 · 폰트
+                    AI 배경 · 스타일 · 데코 · 폰트
                   </p>
                   <button
                     type="button"
@@ -157,7 +157,7 @@ export default function PrintUnifiedEditorLayout({
               className="inline-flex min-h-12 w-full max-w-sm items-center justify-center gap-2 rounded-2xl border border-indigo-200 bg-indigo-600 px-4 py-3 text-sm font-bold text-white shadow-[0_10px_28px_rgba(79,70,229,0.45)] transition hover:bg-indigo-500 active:scale-[0.99]"
             >
               <Palette className="h-4 w-4 shrink-0" aria-hidden />
-              {styleSheetOpen ? "스타일 닫기" : "스타일"}
+              {styleSheetOpen ? "스타일 닫기" : "편집 도구"}
             </button>
           </div>
         </div>

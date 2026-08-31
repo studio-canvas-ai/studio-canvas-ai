@@ -7,6 +7,7 @@ import {
 } from "@/lib/termsConsent";
 import AuthBridgeLoading from "./AuthBridgeLoading";
 import { getBridgeCopy } from "./bridgeCopy";
+import { APP_HOME_PATH, appPathWithAuthError } from "@/lib/appRoutes";
 
 const FETCH_TIMEOUT_MS = 8_000;
 /** Keep retries tight — callback already exchanged the code; only cover cookie race. */
@@ -28,7 +29,7 @@ function readNextPath(): string {
   } catch {
     /* ignore */
   }
-  return "/";
+  return APP_HOME_PATH;
 }
 
 function markDone() {
@@ -41,9 +42,7 @@ function markDone() {
 
 function failRedirect(detail: string) {
   markDone();
-  window.location.replace(
-    `/generate?authError=${encodeURIComponent(detail || "auth_bridge_failed")}`
-  );
+  window.location.replace(appPathWithAuthError(detail || "auth_bridge_failed"));
 }
 
 async function wait(ms: number) {

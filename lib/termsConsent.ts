@@ -3,7 +3,9 @@
  * Kept free of Next/Supabase imports so middleware and clients share one source of truth.
  */
 
-const DEFAULT_AFTER_CONSENT = "/";
+import { APP_HOME_PATH } from "@/lib/appRoutes";
+
+const DEFAULT_AFTER_CONSENT = APP_HOME_PATH;
 
 /** Collapse trailing slashes (except root) so `/terms-consent/` matches exemptions. */
 export function normalizeAppPathname(pathname: string): string {

@@ -21,6 +21,7 @@ import {
 import type { Locale } from "@/lib/i18n/types";
 import { LOCALES } from "@/lib/i18n/types";
 import { getSiteUrl } from "@/lib/site";
+import { appPathWithPaymentStatus } from "@/lib/appRoutes";
 import { resolveCheckoutRegion } from "@/lib/paymentRouting";
 import { ensureUsdKrwRate } from "@/lib/currency";
 import { resolveAppUser } from "@/lib/resolveAppUser";
@@ -81,11 +82,11 @@ export async function POST(req: Request) {
     const baseUrl = getSiteUrl();
     const successPath =
       body.kind === "credit_pack"
-        ? `/generate?payment=success&orderId=${order.id}`
+        ? appPathWithPaymentStatus("success", order.id)
         : `/pricing?payment=success&orderId=${order.id}`;
     const failPath =
       body.kind === "credit_pack"
-        ? `/generate?payment=fail&orderId=${order.id}`
+        ? appPathWithPaymentStatus("fail", order.id)
         : `/pricing?payment=fail&orderId=${order.id}`;
 
     const checkout = await createCheckoutForOrder({
