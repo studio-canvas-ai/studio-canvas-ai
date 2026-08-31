@@ -683,6 +683,282 @@ function GeometryShape({ variant }: { variant: number }) {
   }
 }
 
+function PromoShape({ variant }: { variant: number }) {
+  const kind = variant % 10;
+  switch (kind) {
+    case 0:
+      return (
+        <>
+          <circle cx="50" cy="50" r="36" fill={FILL} opacity="0.2" stroke={STROKE} strokeWidth="2.5" />
+          <circle cx="50" cy="50" r="26" fill="none" stroke={STROKE} strokeWidth="1.5" strokeDasharray="4 3" />
+        </>
+      );
+    case 1:
+      return <ellipse cx="50" cy="50" rx="40" ry="22" fill={FILL} opacity="0.85" />;
+    case 2:
+      return (
+        <path d="M8 42 H72 L88 50 L72 58 H8 Z" fill={FILL} opacity="0.9" stroke={STROKE} strokeWidth="1.2" />
+      );
+    case 3:
+      return (
+        <path d="M62 8 L92 8 L92 38 L78 28 L62 38 Z" fill={FILL} opacity="0.9" stroke={STROKE} strokeWidth="1.2" />
+      );
+    case 4:
+      return <rect x="18" y="28" width="64" height="44" rx="6" fill={FILL} opacity="0.85" stroke={STROKE} strokeWidth="1.5" />;
+    case 5:
+      return (
+        <>
+          <circle cx="50" cy="50" r="34" fill={FILL} opacity="0.25" stroke={STROKE} strokeWidth="2" />
+          <text x="50" y="56" textAnchor="middle" fontSize="18" fontWeight="700" fill={STROKE}>
+            1+1
+          </text>
+        </>
+      );
+    case 6:
+      return (
+        <polygon
+          points="50,8 58,32 84,32 64,48 72,74 50,58 28,74 36,48 16,32 42,32"
+          fill={FILL}
+          opacity="0.85"
+          stroke={STROKE}
+          strokeWidth="1.2"
+        />
+      );
+    case 7:
+      return (
+        <>
+          <circle cx="50" cy="50" r="34" fill={FILL} opacity="0.2" stroke={STROKE} strokeWidth="2" />
+          <circle cx="50" cy="50" r="18" fill="none" stroke={STROKE} strokeWidth="2.5" />
+          <line x1="50" y1="50" x2="50" y2="36" stroke={STROKE} strokeWidth="2.5" />
+          <line x1="50" y1="50" x2="62" y2="50" stroke={STROKE} strokeWidth="2" />
+        </>
+      );
+    case 8:
+      return (
+        <path d="M12 30 H70 L88 50 L70 70 H12 Z" fill={FILL} opacity="0.85" stroke={STROKE} strokeWidth="1.5" />
+      );
+    default:
+      return <rect x="10" y="38" width="80" height="24" rx="4" fill={FILL} opacity="0.85" />;
+  }
+}
+
+function FestivalShape({ variant }: { variant: number }) {
+  const kind = variant % 10;
+  switch (kind) {
+    case 0:
+      return (
+        <>
+          {[0, 45, 90, 135].map((deg) => (
+            <line
+              key={deg}
+              x1="50"
+              y1="50"
+              x2={50 + Math.cos((deg * Math.PI) / 180) * 38}
+              y2={50 + Math.sin((deg * Math.PI) / 180) * 38}
+              stroke={STROKE}
+              strokeWidth="2"
+            />
+          ))}
+          <circle cx="50" cy="50" r="8" fill={FILL} />
+        </>
+      );
+    case 1:
+      return (
+        <>
+          {[20, 40, 60, 80].map((x) => (
+            <circle key={x} cx={x} cy={30 + ((x * 3) % 20)} r="3" fill={FILL} opacity="0.8" />
+          ))}
+          {[25, 45, 65, 85].map((x) => (
+            <circle key={`b${x}`} cx={x} cy={55 + ((x * 5) % 18)} r="2.5" fill={FILL} opacity="0.6" />
+          ))}
+        </>
+      );
+    case 2:
+      return (
+        <>
+          <circle cx="50" cy="50" r="34" fill="none" stroke={STROKE} strokeWidth="2.5" />
+          <path d="M28 50 Q38 30 50 50 Q62 70 72 50" fill="none" stroke={STROKE} strokeWidth="2" />
+        </>
+      );
+    case 3:
+      return (
+        <>
+          {[16, 34, 52, 70].map((x) => (
+            <path key={x} d={`M${x} 28 L${x + 8} 40 L${x} 52 L${x + 8} 64`} fill="none" stroke={STROKE} strokeWidth="2" />
+          ))}
+        </>
+      );
+    case 4:
+      return (
+        <>
+          <ellipse cx="50" cy="78" rx="28" ry="8" fill={FILL} opacity="0.25" />
+          <path d="M35 78 L50 18 L65 78 Z" fill={FILL} opacity="0.35" stroke={STROKE} strokeWidth="1.5" />
+        </>
+      );
+    case 5:
+      return (
+        <>
+          <rect x="18" y="30" width="64" height="40" rx="4" fill={FILL} opacity="0.15" stroke={STROKE} strokeWidth="2" />
+          <path d="M18 30 H10 V70 H18" fill="none" stroke={STROKE} strokeWidth="2" />
+          <path d="M82 30 H90 V70 H82" fill="none" stroke={STROKE} strokeWidth="2" />
+        </>
+      );
+    case 6:
+      return (
+        <>
+          {[22, 34, 46, 58, 70].map((y) => (
+            <line key={y} x1="20" y1={y} x2="80" y2={y} stroke={STROKE} strokeWidth="1.5" strokeDasharray="2 3" />
+          ))}
+          <rect x="16" y="16" width="68" height="68" fill="none" stroke={STROKE} strokeWidth="2" rx="4" />
+        </>
+      );
+    case 7:
+      return (
+        <path d="M12 40 H70 V30 L92 50 L70 70 V60 H12 Z" fill={FILL} opacity="0.85" stroke={STROKE} strokeWidth="1.5" />
+      );
+    case 8:
+      return (
+        <>
+          <circle cx="50" cy="42" r="22" fill={FILL} opacity="0.25" stroke={STROKE} strokeWidth="2" />
+          <rect x="42" y="62" width="16" height="22" fill={FILL} opacity="0.7" />
+        </>
+      );
+    default:
+      return (
+        <rect x="14" y="20" width="72" height="60" rx="8" fill="none" stroke={STROKE} strokeWidth="2.5" strokeDasharray="6 4" />
+      );
+  }
+}
+
+function InfoShape({ variant }: { variant: number }) {
+  const kind = variant % 10;
+  switch (kind) {
+    case 0:
+      return (
+        <>
+          <circle cx="50" cy="50" r="34" fill={FILL} opacity="0.15" stroke={STROKE} strokeWidth="2.5" />
+          <path d="M34 52 L46 64 L68 36" fill="none" stroke={STROKE} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+        </>
+      );
+    case 1:
+      return (
+        <polygon points="50,12 88,82 12,82" fill={FILL} opacity="0.2" stroke={STROKE} strokeWidth="2.5" />
+      );
+    case 2:
+      return (
+        <>
+          <circle cx="50" cy="50" r="34" fill={FILL} opacity="0.15" stroke={STROKE} strokeWidth="2.5" />
+          <circle cx="50" cy="34" r="4" fill={FILL} />
+          <rect x="46" y="44" width="8" height="28" rx="2" fill={FILL} />
+        </>
+      );
+    case 3:
+      return (
+        <>
+          <circle cx="50" cy="50" r="34" fill={FILL} opacity="0.15" stroke={STROKE} strokeWidth="2.5" />
+          <circle cx="50" cy="68" r="4" fill={FILL} />
+          <path d="M42 34 Q50 22 58 34 Q58 46 50 50" fill="none" stroke={STROKE} strokeWidth="3.5" strokeLinecap="round" />
+        </>
+      );
+    case 4:
+    case 5:
+    case 6:
+    case 7:
+    case 8: {
+      const n = kind - 3;
+      return (
+        <>
+          <circle cx="50" cy="50" r="34" fill={FILL} opacity="0.2" stroke={STROKE} strokeWidth="2.5" />
+          <text x="50" y="58" textAnchor="middle" fontSize="28" fontWeight="800" fill={STROKE}>
+            {n}
+          </text>
+        </>
+      );
+    }
+    default:
+      return (
+        <>
+          <rect x="22" y="58" width="12" height="24" fill={FILL} opacity="0.7" />
+          <rect x="44" y="42" width="12" height="40" fill={FILL} opacity="0.7" />
+          <rect x="66" y="28" width="12" height="54" fill={FILL} opacity="0.7" />
+        </>
+      );
+  }
+}
+
+function ModernShape({ variant }: { variant: number }) {
+  const kind = variant % 14;
+  switch (kind) {
+    case 0:
+      return <line x1="4" y1="50" x2="96" y2="50" {...LINE_STROKE} strokeWidth="1.5" />;
+    case 1:
+      return <line x1="4" y1="50" x2="96" y2="50" {...LINE_STROKE} strokeWidth="3" />;
+    case 2:
+      return <line x1="4" y1="50" x2="96" y2="50" {...LINE_STROKE} strokeWidth="5" />;
+    case 3:
+      return <line x1="4" y1="50" x2="96" y2="50" {...LINE_STROKE} strokeWidth="2" strokeDasharray="3 4" />;
+    case 4:
+      return <line x1="4" y1="50" x2="96" y2="50" {...LINE_STROKE} strokeWidth="2.5" strokeDasharray="1 7" strokeLinecap="round" />;
+    case 5:
+      return <line x1="4" y1="50" x2="96" y2="50" {...LINE_STROKE} strokeWidth="2.5" strokeDasharray="10 4 2 4" />;
+    case 6:
+      return (
+        <>
+          <line x1="4" y1="46" x2="96" y2="46" {...LINE_STROKE} strokeWidth="1.2" />
+          <line x1="4" y1="54" x2="96" y2="54" {...LINE_STROKE} strokeWidth="1.2" />
+        </>
+      );
+    case 7:
+      return (
+        <>
+          <line x1="4" y1="44" x2="96" y2="44" {...LINE_STROKE} strokeWidth="1" />
+          <line x1="4" y1="50" x2="96" y2="50" {...LINE_STROKE} strokeWidth="2" />
+          <line x1="4" y1="56" x2="96" y2="56" {...LINE_STROKE} strokeWidth="1" />
+        </>
+      );
+    case 8:
+      return (
+        <>
+          <line x1="4" y1="50" x2="44" y2="50" {...LINE_STROKE} strokeWidth="2" />
+          <circle cx="50" cy="50" r="4" fill={FILL} />
+          <line x1="56" y1="50" x2="96" y2="50" {...LINE_STROKE} strokeWidth="2" />
+        </>
+      );
+    case 9:
+      return (
+        <>
+          <line x1="4" y1="50" x2="42" y2="50" {...LINE_STROKE} strokeWidth="2" />
+          <polygon points="50,42 58,50 50,58 42,50" fill={FILL} />
+          <line x1="58" y1="50" x2="96" y2="50" {...LINE_STROKE} strokeWidth="2" />
+        </>
+      );
+    case 10:
+      return (
+        <>
+          <line x1="50" y1="8" x2="50" y2="92" {...LINE_STROKE} strokeWidth="2" />
+          <line x1="8" y1="50" x2="92" y2="50" {...LINE_STROKE} strokeWidth="2" />
+        </>
+      );
+    case 11:
+      return (
+        <>
+          <path d="M20 20 H80 V36" fill="none" stroke={STROKE} strokeWidth="2.5" />
+          <path d="M20 80 H80 V64" fill="none" stroke={STROKE} strokeWidth="2.5" />
+        </>
+      );
+    case 12:
+      return <line x1="16" y1="70" x2="84" y2="30" {...LINE_STROKE} strokeWidth="2.5" />;
+    default:
+      return (
+        <>
+          <circle cx="30" cy="50" r="3.5" fill={FILL} />
+          <circle cx="50" cy="50" r="3.5" fill={FILL} />
+          <circle cx="70" cy="50" r="3.5" fill={FILL} />
+        </>
+      );
+  }
+}
+
 function ShapeBody({ category, variant }: { category: DecoCategoryId; variant: number }) {
   switch (category) {
     case "dividers":
@@ -695,6 +971,14 @@ function ShapeBody({ category, variant }: { category: DecoCategoryId; variant: n
       return <TraditionalShape variant={variant} />;
     case "geometry":
       return <GeometryShape variant={variant} />;
+    case "promo":
+      return <PromoShape variant={variant} />;
+    case "festival":
+      return <FestivalShape variant={variant} />;
+    case "info":
+      return <InfoShape variant={variant} />;
+    case "modern":
+      return <ModernShape variant={variant} />;
     default:
       return null;
   }
