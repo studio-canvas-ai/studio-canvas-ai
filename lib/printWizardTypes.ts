@@ -142,7 +142,8 @@ export const SCREEN_26_PRESET_FORMAT_IDS = SCREEN_26_FORMAT_PRESET_PAIRS.flatMap
 export function formatDisplayLabel(id: PrintFormatId | string): string {
   const fmt = PRINT_FORMATS.find((f) => f.id === id);
   if (!fmt) return String(id);
-  return fmt.subtitle ? `${fmt.label} (${fmt.subtitle})` : fmt.label;
+  const subtitle = "subtitle" in fmt ? fmt.subtitle : undefined;
+  return subtitle ? `${fmt.label} (${subtitle})` : fmt.label;
 }
 
 /** Banner/hanging ratios excluded from the photo lookbook 규격 menu. */
@@ -967,7 +968,7 @@ export function resolvePrintAspect(
     return customSize.width / customSize.height;
   }
   const fmt = formatById(formatId);
-  if (fmt.physicalCm) {
+  if ("physicalCm" in fmt && fmt.physicalCm) {
     return fmt.physicalCm.width / fmt.physicalCm.height;
   }
   return fmt.aspect;
