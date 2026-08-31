@@ -1,12 +1,11 @@
 import Navbar from "@/components/Navbar";
 import HeroSection from "@/components/HeroSection";
-import StyleCollection from "@/components/StyleCollection";
 import Footer from "@/components/Footer";
 import HashScroll from "@/components/HashScroll";
 
 /**
- * Marketing landing only: intro + CTA + official style showroom.
- * Personal works live exclusively under /gallery/my; creation under /generate.
+ * Marketing landing only: intro + primary CTAs.
+ * Style collection lives at /styles; personal works under /gallery/my.
  */
 export default function Home() {
   return (
@@ -14,7 +13,6 @@ export default function Home() {
       <HashScroll />
       <Navbar />
       <HeroSection />
-      <StyleCollection />
       <Footer />
     </main>
   );

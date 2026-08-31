@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Sparkles, Images, Lock } from "lucide-react";
+import { ArrowRight, Sparkles, Images } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { useCredits } from "@/components/CreditsProvider";
 import HeroDualShowcase from "@/components/HeroDualShowcase";
@@ -39,8 +39,6 @@ export default function HeroSection() {
     saveAuthNextPath(GALLERY_REGISTER_PATH);
     openAuthModal({ clearPending: true });
   };
-
-  const labEnabled = isAdmin;
 
   return (
     <section
@@ -102,14 +100,12 @@ export default function HeroSection() {
               </Link>
             </div>
 
-            {/* Incomplete / lab tools — 2 rows × 3 cols; disabled for non-admins */}
-            <div className="space-y-2 border-t border-white/10 pt-4">
-              <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/35">
-                <Lock className="h-3 w-3" aria-hidden />
-                {t.hero.labComingSoon}
-              </p>
-              <div className="grid w-full grid-cols-3 gap-1.5 sm:gap-2.5">
-                {labEnabled ? (
+            {isAdmin ? (
+              <div className="space-y-2 border-t border-white/10 pt-4">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-white/35">
+                  {t.hero.labComingSoon}
+                </p>
+                <div className="grid w-full grid-cols-3 gap-1.5 sm:gap-2.5">
                   <a
                     href="/generate?fresh=1"
                     className={`btn-secondary group ${HERO_SECONDARY} border-white/15`}
@@ -119,19 +115,6 @@ export default function HeroSection() {
                     </span>
                     <ArrowRight className="mt-0.5 h-3.5 w-3.5 opacity-70" />
                   </a>
-                ) : (
-                  <span
-                    aria-disabled="true"
-                    title={t.hero.labComingSoon}
-                    className={`${HERO_SECONDARY} cursor-not-allowed border-white/10 bg-white/[0.03] text-white/35`}
-                  >
-                    <span className="whitespace-nowrap font-semibold [word-break:keep-all]">
-                      {t.hero.ctaStart}
-                    </span>
-                  </span>
-                )}
-
-                {labEnabled ? (
                   <a
                     href="/styles"
                     className={`btn-secondary group ${HERO_SECONDARY} border-white/15`}
@@ -140,19 +123,6 @@ export default function HeroSection() {
                       {t.hero.ctaExplore}
                     </span>
                   </a>
-                ) : (
-                  <span
-                    aria-disabled="true"
-                    title={t.hero.labComingSoon}
-                    className={`${HERO_SECONDARY} cursor-not-allowed border-white/10 bg-white/[0.03] text-white/35`}
-                  >
-                    <span className="whitespace-nowrap font-semibold [word-break:keep-all]">
-                      {t.hero.ctaExplore}
-                    </span>
-                  </span>
-                )}
-
-                {labEnabled ? (
                   <Link
                     href="/template-studio"
                     className={`btn-secondary group ${HERO_SECONDARY} border-white/15`}
@@ -165,22 +135,6 @@ export default function HeroSection() {
                       {t.hero.ctaTemplateStudioLine2}
                     </span>
                   </Link>
-                ) : (
-                  <span
-                    aria-disabled="true"
-                    title={t.hero.labComingSoon}
-                    className={`${HERO_SECONDARY} cursor-not-allowed border-white/10 bg-white/[0.03] text-white/35`}
-                  >
-                    <span className="text-[11px] font-semibold leading-tight [word-break:keep-all] sm:text-sm">
-                      {t.hero.ctaTemplateStudioLine1}
-                    </span>
-                    <span className="text-[11px] font-semibold leading-tight [word-break:keep-all] sm:text-sm">
-                      {t.hero.ctaTemplateStudioLine2}
-                    </span>
-                  </span>
-                )}
-
-                {labEnabled ? (
                   <button
                     type="button"
                     onClick={goRegisterPhotos}
@@ -191,20 +145,6 @@ export default function HeroSection() {
                       {t.hero.ctaRegisterPhotos}
                     </span>
                   </button>
-                ) : (
-                  <span
-                    aria-disabled="true"
-                    title={t.hero.labComingSoon}
-                    className={`${HERO_SECONDARY} cursor-not-allowed border-white/10 bg-white/[0.03] text-white/35`}
-                  >
-                    <Images className="mb-0.5 h-3.5 w-3.5 opacity-50" />
-                    <span className="text-[10px] font-semibold leading-tight [word-break:keep-all] sm:text-xs">
-                      {t.hero.ctaRegisterPhotos}
-                    </span>
-                  </span>
-                )}
-
-                {labEnabled ? (
                   <Link
                     href={AI_PHOTO_GENERATOR_PATH}
                     className={`btn-secondary group ${HERO_SECONDARY} border-white/15`}
@@ -217,22 +157,6 @@ export default function HeroSection() {
                       {t.hero.ctaPhotoGeneratorLine2}
                     </span>
                   </Link>
-                ) : (
-                  <span
-                    aria-disabled="true"
-                    title={t.hero.labComingSoon}
-                    className={`${HERO_SECONDARY} cursor-not-allowed border-white/10 bg-white/[0.03] text-white/35`}
-                  >
-                    <span className="text-[11px] font-semibold leading-tight [word-break:keep-all] sm:text-sm">
-                      {t.hero.ctaPhotoGeneratorLine1}
-                    </span>
-                    <span className="text-[11px] font-semibold leading-tight [word-break:keep-all] sm:text-sm">
-                      {t.hero.ctaPhotoGeneratorLine2}
-                    </span>
-                  </span>
-                )}
-
-                {labEnabled ? (
                   <Link
                     href={PRINT_SMART_FORM_PATH}
                     className={`btn-secondary group ${HERO_SECONDARY} border-white/15`}
@@ -245,22 +169,9 @@ export default function HeroSection() {
                       {t.hero.ctaPrintSmartFormLine2}
                     </span>
                   </Link>
-                ) : (
-                  <span
-                    aria-disabled="true"
-                    title={t.hero.labComingSoon}
-                    className={`${HERO_SECONDARY} cursor-not-allowed border-white/10 bg-white/[0.03] text-white/35`}
-                  >
-                    <span className="text-[11px] font-semibold leading-tight [word-break:keep-all] sm:text-sm">
-                      {t.hero.ctaPrintSmartFormLine1}
-                    </span>
-                    <span className="text-[11px] font-semibold leading-tight [word-break:keep-all] sm:text-sm">
-                      {t.hero.ctaPrintSmartFormLine2}
-                    </span>
-                  </span>
-                )}
+                </div>
               </div>
-            </div>
+            ) : null}
 
             <div className="flex flex-wrap items-center gap-6 pt-1 sm:gap-8 sm:pt-2 [@media(max-height:760px)]:hidden">
               {stats.map((stat) => (
