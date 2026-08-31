@@ -1,6 +1,6 @@
 /**
- * Browser helper: FormData → POST /api/shorts/upload (server proxies to R2).
- * Avoids mobile CORS/network failures from direct presigned PUT to R2.
+ * Browser helper: presign → R2 PUT (with progress) → complete.
+ * Large clips bypass Vercel's 4.5 MB function body limit via direct R2 upload.
  */
 
 import {
@@ -11,16 +11,16 @@ import {
   type ShortsVideoAsset,
 } from "@/lib/shortsVideo";
 
-export type ShortsUploadResponse =
+export type ShortsPresignResponse =
   | {
       ok: true;
       mode: "r2";
       videoId: string;
       key: string;
       contentType: string;
+      uploadUrl: string;
+      requiredHeaders?: Record<string, string>;
       playbackUrl?: string | null;
-      fileName?: string;
-      sizeBytes?: number;
       maxBytes?: number;
     }
   | {
@@ -30,8 +30,6 @@ export type ShortsUploadResponse =
       key: null;
       contentType: string;
       playbackUrl?: string | null;
-      fileName?: string;
-      sizeBytes?: number;
       maxBytes?: number;
       note?: string;
     }
@@ -39,7 +37,8 @@ export type ShortsUploadResponse =
 
 export type ShortsUploadErrorStage =
   | "validate"
-  | "server_upload"
+  | "presign"
+  | "r2_put"
   | "complete";
 
 export class ShortsUploadError extends Error {
@@ -58,25 +57,36 @@ export class ShortsUploadError extends Error {
   }
 }
 
-function xhrFormUploadWithProgress(
+function uploadHostFromUrl(url: string): string | null {
+  try {
+    return new URL(url).host;
+  } catch {
+    return null;
+  }
+}
+
+/** Direct PUT to R2 — only Content-Type + raw file body (no cookies/extra headers). */
+function xhrPutWithProgress(
   url: string,
-  formData: FormData,
+  file: Blob,
+  contentType: string,
   onProgress?: (pct: number) => void,
   signal?: AbortSignal
-): Promise<{ status: number; responseText: string }> {
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", url, true);
-    xhr.withCredentials = true;
+    xhr.open("PUT", url, true);
 
     const onAbort = () => xhr.abort();
     if (signal) {
       if (signal.aborted) {
-        reject(new ShortsUploadError("server_upload", "upload_aborted", {}));
+        reject(new ShortsUploadError("r2_put", "r2_put_aborted", {}));
         return;
       }
       signal.addEventListener("abort", onAbort, { once: true });
     }
+
+    xhr.setRequestHeader("Content-Type", contentType);
 
     xhr.upload.onprogress = (ev) => {
       if (!ev.lengthComputable || !onProgress) return;
@@ -86,40 +96,33 @@ function xhrFormUploadWithProgress(
       if (signal) signal.removeEventListener("abort", onAbort);
       if (xhr.status >= 200 && xhr.status < 300) {
         onProgress?.(100);
-        resolve({
-          status: xhr.status,
-          responseText: xhr.responseText ?? "",
-        });
+        resolve();
         return;
       }
-      const fileField = formData.get("file");
       reject(
-        new ShortsUploadError(
-          "server_upload",
-          `upload_http_${xhr.status}`,
-          {
-            httpStatus: xhr.status,
-            responseText: (xhr.responseText ?? "").slice(0, 2000),
-            uploadPath: url,
-            blobSize: fileField instanceof Blob ? fileField.size : null,
-          }
-        )
+        new ShortsUploadError("r2_put", `r2_put_http_${xhr.status}`, {
+          httpStatus: xhr.status,
+          responseText: (xhr.responseText ?? "").slice(0, 2000),
+          uploadHost: uploadHostFromUrl(url),
+          blobSize: file.size,
+        })
       );
     };
     xhr.onerror = () => {
       if (signal) signal.removeEventListener("abort", onAbort);
       reject(
-        new ShortsUploadError("server_upload", "upload_network", {
-          hint: "Network error while uploading to /api/shorts/upload",
-          uploadPath: url,
+        new ShortsUploadError("r2_put", "r2_put_network", {
+          hint: "Network error during R2 PUT — verify bucket CORS allows PUT from this site",
+          uploadHost: uploadHostFromUrl(url),
+          blobSize: file.size,
         })
       );
     };
     xhr.onabort = () => {
       if (signal) signal.removeEventListener("abort", onAbort);
-      reject(new ShortsUploadError("server_upload", "upload_aborted", {}));
+      reject(new ShortsUploadError("r2_put", "r2_put_aborted", {}));
     };
-    xhr.send(formData);
+    xhr.send(file);
   });
 }
 
@@ -214,6 +217,9 @@ export function formatShortsUploadErrorForDisplay(err: unknown): string {
       if (meta.length) lines.push(meta.join(" · "));
     }
 
+    if (typeof d.uploadHost === "string" && d.uploadHost) {
+      lines.push(`host=${d.uploadHost}`);
+    }
     if (typeof d.uploadPath === "string" && d.uploadPath) {
       lines.push(`path=${d.uploadPath}`);
     }
@@ -260,63 +266,140 @@ export async function uploadShortsVideoFile(
   }
 
   const previewUrl = URL.createObjectURL(file);
-  const formData = new FormData();
-  formData.append("file", file, normalized.fileName);
-  formData.append("fileName", normalized.fileName);
-  formData.append("contentType", check.contentType);
 
-  console.info("[shorts/upload] POST /api/shorts/upload", {
+  console.info("[shorts/upload] POST /api/shorts/presign", {
     fileName: normalized.fileName,
     contentType: check.contentType,
     sizeBytes: normalized.sizeBytes,
   });
 
+  let presignRes: Response;
+  try {
+    presignRes = await fetch("/api/shorts/presign", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fileName: normalized.fileName,
+        contentType: check.contentType,
+        sizeBytes: normalized.sizeBytes,
+      }),
+      signal: opts?.signal,
+    });
+  } catch (cause) {
+    const err = new ShortsUploadError("presign", "presign_network", {
+      cause,
+      uploadPath: "/api/shorts/presign",
+    });
+    logR2UploadDetailError(err, {
+      fileName: normalized.fileName,
+      contentType: check.contentType,
+      sizeBytes: normalized.sizeBytes,
+    });
+    URL.revokeObjectURL(previewUrl);
+    throw err;
+  }
+
+  let presign: ShortsPresignResponse;
+  try {
+    presign = (await presignRes.json()) as ShortsPresignResponse;
+  } catch {
+    presign = {};
+  }
+
+  if (!presignRes.ok || !presign || !("mode" in presign)) {
+    const err = new ShortsUploadError(
+      "presign",
+      (presign as { error?: string })?.error ||
+        `presign_failed_${presignRes.status}`,
+      {
+        httpStatus: presignRes.status,
+        responseBody: JSON.stringify(presign).slice(0, 2000),
+        uploadPath: "/api/shorts/presign",
+      }
+    );
+    logR2UploadDetailError(err);
+    URL.revokeObjectURL(previewUrl);
+    throw err;
+  }
+
+  if (presign.mode === "local") {
+    opts?.onProgress?.(100);
+    return {
+      videoId: presign.videoId,
+      fileName: normalized.fileName,
+      sizeBytes: normalized.sizeBytes,
+      contentType: check.contentType,
+      previewUrl,
+      storageKey: null,
+      playbackUrl: presign.playbackUrl ?? null,
+      storage: "local" satisfies ShortsStorageMode,
+    };
+  }
+
+  const putContentType = presign.contentType || check.contentType;
+
   try {
     opts?.onProgress?.(0);
-    const uploadResult = await xhrFormUploadWithProgress(
-      "/api/shorts/upload",
-      formData,
+    await xhrPutWithProgress(
+      presign.uploadUrl,
+      file,
+      putContentType,
       opts?.onProgress,
       opts?.signal
     );
 
-    let payload: ShortsUploadResponse;
+    let completeRes: Response;
     try {
-      payload = JSON.parse(uploadResult.responseText) as ShortsUploadResponse;
-    } catch {
-      payload = {};
+      completeRes = await fetch("/api/shorts/complete", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          videoId: presign.videoId,
+          key: presign.key,
+        }),
+        signal: opts?.signal,
+      });
+    } catch (cause) {
+      console.warn("[shorts/upload] complete network failed:", cause);
+      return {
+        videoId: presign.videoId,
+        fileName: normalized.fileName,
+        sizeBytes: normalized.sizeBytes,
+        contentType: putContentType,
+        previewUrl,
+        storageKey: presign.key,
+        playbackUrl: presign.playbackUrl ?? null,
+        storage: "r2",
+      };
     }
 
-    if (!payload || !("ok" in payload) || !payload.ok || !("mode" in payload)) {
-      const err = new ShortsUploadError(
-        "server_upload",
-        (payload as { error?: string })?.error ||
-          `upload_failed_${uploadResult.status}`,
-        {
-          httpStatus: uploadResult.status,
-          responseBody: uploadResult.responseText.slice(0, 2000),
-        }
-      );
-      logR2UploadDetailError(err);
-      URL.revokeObjectURL(previewUrl);
-      throw err;
+    const complete = (await completeRes.json().catch(() => ({}))) as {
+      ok?: boolean;
+      playbackUrl?: string | null;
+      error?: string;
+    };
+
+    if (!completeRes.ok || !complete.ok) {
+      console.warn("[shorts/upload] complete failed:", complete.error);
     }
 
     return {
-      videoId: payload.videoId,
-      fileName: payload.fileName || normalized.fileName,
-      sizeBytes: payload.sizeBytes ?? normalized.sizeBytes,
-      contentType: payload.contentType || check.contentType,
+      videoId: presign.videoId,
+      fileName: normalized.fileName,
+      sizeBytes: normalized.sizeBytes,
+      contentType: putContentType,
       previewUrl,
-      storageKey: payload.mode === "r2" ? payload.key : null,
-      playbackUrl: payload.playbackUrl ?? null,
-      storage: (payload.mode === "r2" ? "r2" : "local") satisfies ShortsStorageMode,
+      storageKey: presign.key,
+      playbackUrl: complete.playbackUrl || presign.playbackUrl || null,
+      storage: "r2",
     };
   } catch (err) {
     URL.revokeObjectURL(previewUrl);
     logR2UploadDetailError(err, {
       fileName: normalized.fileName,
-      contentType: check.contentType,
+      contentType: putContentType,
       sizeBytes: normalized.sizeBytes,
     });
     throw err;
