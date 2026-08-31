@@ -409,24 +409,29 @@ export default function TemplateWarehouseModal() {
                 <div>
                   <p className="mb-2 text-[11px] font-semibold text-amber-800">
                     유저 다운로드 적재함 · 최대 500 · FIFO (관리자)
-                    {space4Loading ? " · 불러오는 중…" : ` · ${space4Items.length}건`}
+                    {space4Loading
+                      ? " · 불러오는 중…"
+                      : space4Items.length > 0
+                        ? ` · ${space4Items.length}건`
+                        : ""}
                   </p>
-                  {space4Items.length === 0 && !space4Loading ? (
-                    <p className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-4 text-center text-[12px] text-slate-500">
-                      아직 적재된 다운로드 작업물이 없습니다. 유저가 Screen 26에서
-                      다운로드하면 여기에 자동 저장됩니다.
-                    </p>
-                  ) : (
-                    <ul className={GRID_CLASS}>
+                  {space4Items.length > 0 ? (
+                    <ul className="flex w-full flex-row flex-nowrap items-stretch gap-2 overflow-x-auto pb-1 [scrollbar-width:thin]">
                       {space4Items.map((item) => (
                         <Template04QueueCard
                           key={item.id}
                           item={item}
                           opening={openingId === item.id}
                           onOpenInEditor={() => void onOpenInEditor(item)}
+                          compact
                         />
                       ))}
                     </ul>
+                  ) : space4Loading ? null : (
+                    <p className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-4 text-center text-[12px] text-slate-500">
+                      아직 적재된 다운로드 작업물이 없습니다. 유저가 Screen 26에서
+                      다운로드하면 여기에 자동 저장됩니다.
+                    </p>
                   )}
                 </div>
               ) : (

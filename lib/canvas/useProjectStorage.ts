@@ -56,8 +56,8 @@ export async function downloadImageAndRememberRecent(opts: {
     project: opts.project,
     baseName: opts.baseName,
     imageExt: opts.imageExt,
-    // Screen 26 multi-cloud sync: device keeps export only; .sca → clouds.
-    skipLocalProject: Boolean(opts.depositToSpace4),
+    // Device: final export + editable .sca. Clouds still get .sca below.
+    skipLocalProject: false,
   });
   try {
     await pushRecentProject(

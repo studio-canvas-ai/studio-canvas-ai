@@ -124,7 +124,18 @@ function LayerTextCanvas({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
     drawPrintLayerInBox(ctx, layer, width, height, scale);
-  }, [layer, width, height, scale]);
+  }, [
+    layer,
+    layer.fontWeight,
+    layer.fontSize,
+    layer.letterSpacing,
+    layer.lineHeight,
+    layer.text,
+    layer.fontPreset,
+    width,
+    height,
+    scale,
+  ]);
 
   return (
     <canvas
@@ -599,7 +610,14 @@ export default function PreviewTextOverlay({
         const layerPointerEvents =
           photoInteractionMode && !isActive && !isEditing
             ? "pointer-events-none"
-            : "pointer-events-auto";
+            : interactive &&
+                (activeLayerId || editingId) &&
+                !isActive &&
+                !isEditing
+              ? // Let blank clicks reach the deselect plane instead of
+                // re-hitting large inactive boxes (e.g. title "대한민국").
+                "pointer-events-none"
+              : "pointer-events-auto";
 
         return (
           <div

@@ -1063,10 +1063,10 @@ export default function AiTemplateStudio({
     if (stillValid) return;
     if (panelOnly) {
       // Controlled Screen 26: layers can lag one tick behind setActiveLayerId
-      // after quick-add — never steal selection back to layers[0].
+      // after quick-add — wait for the new id. Never reselect layers[0] when
+      // the user cleared selection (blank canvas click).
       if (activeLayerId) return;
-      selectionClearedRef.current = false;
-      setActiveLayerId(overlayLayers[0].id);
+      selectionClearedRef.current = true;
       return;
     }
     // Uncontrolled studios: auto-pick unless user explicitly cleared selection.
@@ -2307,10 +2307,6 @@ export default function AiTemplateStudio({
       showToast("먼저 텍스트 레이어를 선택해 주세요.", "info");
       return;
     }
-    if (!activeLayerId && panelOnly) {
-      selectionClearedRef.current = false;
-      setActiveLayerId(id);
-    }
     setOverlayLayers((prev) =>
       prev.map((l) => (l.id === id ? { ...l, ...patch } : l))
     );
@@ -2320,7 +2316,7 @@ export default function AiTemplateStudio({
     }
   };
 
-  /** Patch Konva text node immediately; commit TextLayer once on pointer-up. */
+  /** Patch active text style live; commit TextLayer once on pointer-up. */
   const patchActiveStyleLive = (patch: Partial<TextLayer>) => {
     const id =
       activeLayerId &&
@@ -2333,10 +2329,8 @@ export default function AiTemplateStudio({
       showToast("먼저 텍스트 레이어를 선택해 주세요.", "info");
       return;
     }
-    if (!activeLayerId && panelOnly) {
-      selectionClearedRef.current = false;
-      setActiveLayerId(id);
-    }
+    // Do not force-reselect on Screen 26 — blank-click clear must stick.
+    // Style tools still target the active layer (or layers[0] via stylePanelLayer).
     styleDragActiveRef.current = true;
     const nextDraft = { ...(styleDraftRef.current || {}), ...patch };
     styleDraftRef.current = nextDraft;
@@ -2354,16 +2348,11 @@ export default function AiTemplateStudio({
       useCanvasStore.getState().select(id);
       return;
     }
-    // PreviewCanvas reads overlay layers — rAF-batch commits while dragging.
-    if (styleCommitRafRef.current != null) return;
-    styleCommitRafRef.current = requestAnimationFrame(() => {
-      styleCommitRafRef.current = null;
-      const draft = styleDraftRef.current;
-      if (!draft) return;
-      setOverlayLayers((prev) =>
-        prev.map((l) => (l.id === id ? { ...l, ...draft } : l))
-      );
-    });
+    // Screen 26 / PreviewCanvas: push into controlled layers every tick so
+    // font-weight (and other sliders) update glyphs in real time.
+    setOverlayLayers((prev) =>
+      prev.map((l) => (l.id === id ? { ...l, ...nextDraft } : l))
+    );
   };
 
   const commitActiveStyleDrag = () => {

@@ -740,7 +740,9 @@ function applyReadableType(layer: TextLayer): TextLayer {
     ...layer,
     fontSize,
     fontWeight:
-      layer.fontWeight && layer.fontWeight >= 600 ? layer.fontWeight : 700,
+      typeof layer.fontWeight === "number" && Number.isFinite(layer.fontWeight)
+        ? Math.max(100, Math.min(900, Math.round(layer.fontWeight)))
+        : 700,
     align: layer.align || "center",
   };
 }

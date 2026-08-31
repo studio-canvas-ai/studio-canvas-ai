@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * Screen 26 — shared "내 갤러리" vault popover (save + list / load).
- * Top-left save trigger and bottom "내갤러리불러오기" open the same menu.
+ * Screen 26 — shared "내 갤러리" vault popover.
+ * Same chrome as "최근 파일 불러오기"; top save + bottom load share this menu.
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -27,7 +27,6 @@ import {
 
 type Props = {
   onSave: () => void | Promise<void>;
-  /** When set, list rows load the sealed .sca into the editor. */
   onLoadProject?: (project: StudioCanvasProjectV1) => void | Promise<void>;
   disabled?: boolean;
   busy?: boolean;
@@ -54,7 +53,6 @@ export default function ScaGallerySaveButton({
   const planMax = getPlanStorageLimits(planId, billingInterval).worksGallery;
 
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [loadBusy, setLoadBusy] = useState(false);
   const [projects, setProjects] = useState<ScaGalleryProjectMeta[]>([]);
   const [serverMax, setServerMax] = useState(planMax);
@@ -73,15 +71,12 @@ export default function ScaGallerySaveButton({
   const max = Math.max(planMax, serverMax);
 
   const refresh = useCallback(async () => {
-    setLoading(true);
     try {
       const data = await fetchScaGalleryProjects();
       setProjects(data.projects);
       setServerMax(data.max);
     } catch {
-      setProjects([]);
-    } finally {
-      setLoading(false);
+      /* keep last known list — no loading placeholder */
     }
   }, []);
 
@@ -100,7 +95,7 @@ export default function ScaGallerySaveButton({
     );
     const spaceBelow = window.innerHeight - rect.bottom - VIEWPORT_PAD;
     const spaceAbove = rect.top - VIEWPORT_PAD;
-    const estimatedH = Math.min(320, 96 + projects.length * 48);
+    const estimatedH = Math.min(320, 48 + projects.length * 48);
     const openUp = spaceBelow < estimatedH && spaceAbove > spaceBelow;
     let left = rect.left;
     if (left + width > window.innerWidth - VIEWPORT_PAD) {
@@ -151,7 +146,6 @@ export default function ScaGallerySaveButton({
         setOpen(true);
         return;
       }
-      // toggle
       setOpen((prev) => {
         if (prev) {
           externalAnchorRef.current = null;
@@ -242,85 +236,55 @@ export default function ScaGallerySaveButton({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="border-b border-slate-200 px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-indigo-800">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-800">
                 {cs.saveGalleryDrawerTitle}
               </p>
               <p className="text-[10px] text-slate-600">
                 {fillCanvas(cs.saveGalleryDrawerHint, { max })}
               </p>
             </div>
-            <div className="border-b border-slate-200 p-2">
-              <button
-                type="button"
-                role="menuitem"
-                disabled={disabled || busy || loadBusy}
-                onClick={() => void handleSave()}
-                className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-[11px] font-semibold text-indigo-900 transition hover:bg-indigo-100 disabled:opacity-40"
-              >
-                <ImageDown className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                {busy ? cs.saveGalleryBusy : cs.saveGalleryAction}
-              </button>
-            </div>
-            {loading ? (
-              <p className="px-3 py-3 text-center text-[11px] text-slate-600">
-                {cs.loadFromGalleryBusy}
-              </p>
-            ) : projects.length === 0 ? (
+            {projects.length === 0 ? (
               <p className="px-3 py-3 text-[11px] leading-relaxed text-slate-600">
                 {fillCanvas(cs.saveGalleryEmpty, { max })}
               </p>
             ) : (
-              projects.map((p) => {
-                const row = (
-                  <>
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-slate-100">
-                      {p.thumbSrc ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={p.thumbSrc}
-                          alt=""
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <Images
-                          className="h-3.5 w-3.5 text-slate-500"
-                          aria-hidden
-                        />
-                      )}
+              projects.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  role="menuitem"
+                  disabled={loadBusy || busy || !onLoadProject}
+                  onClick={() => void handlePick(p)}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-slate-100 disabled:opacity-50"
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-slate-100">
+                    {p.thumbSrc ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={p.thumbSrc}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <Images
+                        className="h-3.5 w-3.5 text-slate-500"
+                        aria-hidden
+                      />
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[11px] font-semibold text-slate-900">
+                      {p.label}
                     </span>
-                    <span className="min-w-0 flex-1 text-left">
-                      <span className="block truncate text-[11px] font-semibold text-slate-900">
-                        {p.label}
-                      </span>
-                      <span className="block text-[10px] text-slate-600">
-                        {p.mode === "agent"
-                          ? cs.recentModePrint
-                          : cs.recentModeTemplate}{" "}
-                        · .sca
-                      </span>
+                    <span className="block text-[10px] text-slate-600">
+                      {p.mode === "agent"
+                        ? cs.recentModePrint
+                        : cs.recentModeTemplate}{" "}
+                      · .sca
                     </span>
-                  </>
-                );
-                if (onLoadProject) {
-                  return (
-                    <button
-                      key={p.id}
-                      type="button"
-                      role="menuitem"
-                      disabled={loadBusy || busy}
-                      onClick={() => void handlePick(p)}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-slate-100 disabled:opacity-50"
-                    >
-                      {row}
-                    </button>
-                  );
-                }
-                return (
-                  <div key={p.id} className="flex w-full items-center gap-2 px-3 py-2">
-                    {row}
-                  </div>
-                );
-              })
+                  </span>
+                </button>
+              ))
             )}
           </div>,
           document.body
@@ -338,6 +302,8 @@ export default function ScaGallerySaveButton({
         onClick={() => {
           if (requireSubscription && !requireSubscription()) return;
           externalAnchorRef.current = null;
+          // Opening from the save trigger persists to gallery first.
+          if (!open) void handleSave();
           setOpen((v) => !v);
         }}
         title={fillCanvas(cs.saveGalleryDrawerHint, { max })}

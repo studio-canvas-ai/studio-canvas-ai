@@ -7,6 +7,8 @@ export type Template04QueueCardProps = {
   item: Space4VaultMeta;
   opening?: boolean;
   onOpenInEditor: () => void;
+  /** Horizontal Template 04 row — fixed width card in a scroll strip. */
+  compact?: boolean;
 };
 
 /** Template 04 admin queue card — open in Screen 26 for manual review & publish. */
@@ -14,6 +16,7 @@ export default function Template04QueueCard({
   item,
   opening = false,
   onOpenInEditor,
+  compact = false,
 }: Template04QueueCardProps) {
   const when = new Date(item.createdAt).toLocaleString("ko-KR", {
     month: "short",
@@ -24,7 +27,13 @@ export default function Template04QueueCard({
   const hasThumb = Boolean(item.thumbSrc?.trim());
 
   return (
-    <li className="flex flex-col overflow-hidden rounded-xl border border-amber-200 bg-gradient-to-b from-amber-50 to-white shadow-sm ring-1 ring-amber-100">
+    <li
+      className={
+        compact
+          ? "flex w-[148px] shrink-0 flex-col overflow-hidden rounded-xl border border-amber-200 bg-gradient-to-b from-amber-50 to-white shadow-sm ring-1 ring-amber-100"
+          : "flex flex-col overflow-hidden rounded-xl border border-amber-200 bg-gradient-to-b from-amber-50 to-white shadow-sm ring-1 ring-amber-100"
+      }
+    >
       <div
         className="relative w-full overflow-hidden border-b border-slate-100 bg-white p-1"
         style={{ aspectRatio: String(210 / 297) }}
@@ -64,7 +73,9 @@ export default function Template04QueueCard({
           ) : (
             <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
           )}
-          <span>에디터에서 열기 및 수정 후 공개(03) 발행</span>
+          <span className={compact ? "truncate" : undefined}>
+            {compact ? "에디터에서 열기" : "에디터에서 열기 및 수정 후 공개(03) 발행"}
+          </span>
         </button>
       </div>
     </li>
