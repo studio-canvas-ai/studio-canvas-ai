@@ -14,7 +14,7 @@ import { useI18n } from "@/components/I18nProvider";
 import { useCredits } from "@/components/CreditsProvider";
 import { captureCurrentVideoFrame } from "@/lib/shortsCaptureFrames";
 import type { ShortsHookFrame } from "@/lib/shortsHookShared";
-import { uploadShortsVideoFile } from "@/lib/shortsUploadClient";
+import { uploadShortsVideoFile, logR2UploadDetailError, ShortsUploadError } from "@/lib/shortsUploadClient";
 import { useShortsProjectStore } from "@/lib/shortsProjectStore";
 import { persistShortsVideoBlob } from "@/lib/shortsVideoIdb";
 import {
@@ -56,8 +56,14 @@ function mapUploadError(code: string, t: ReturnType<typeof useI18n>["t"]): strin
       return t.shorts.errorType;
     case "rate_limited":
       return t.shorts.errorRateLimit;
+    case "presign_network":
+      return t.shorts.errorGeneric;
     default:
-      if (code.includes("r2_put") || code.includes("CORS")) {
+      if (
+        code.includes("r2_put") ||
+        code.includes("CORS") ||
+        code.includes("missing_content_type")
+      ) {
         return t.shorts.errorR2;
       }
       return t.shorts.errorGeneric;
@@ -140,9 +146,15 @@ export default function ShortsVideoUpload({
         onPhaseChange("ready");
         onProgressChange(100);
       } catch (err) {
-        const raw = err instanceof Error ? err.message : "upload_failed";
+        logR2UploadDetailError(err, { phase: "shorts_video_upload" });
+        const code =
+          err instanceof ShortsUploadError
+            ? err.message
+            : err instanceof Error
+              ? err.message
+              : "upload_failed";
         onPhaseChange("error");
-        onError(mapUploadError(raw, t));
+        onError(mapUploadError(code, t));
       }
     },
     [

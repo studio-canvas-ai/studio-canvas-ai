@@ -20,15 +20,65 @@ export const SHORTS_ALLOWED_VIDEO_MIME = [
   "video/x-m4v",
   "video/x-msvideo",
   "video/avi",
+  /** Android / legacy mobile captures */
+  "video/3gpp",
+  "video/3gpp2",
 ] as const;
+
+/** Primary formats surfaced in UI copy (MP4 · MOV · WebM). */
+export const SHORTS_PRIMARY_VIDEO_EXTENSIONS = ["mp4", "mov", "webm"] as const;
 
 const EXT_TO_MIME: Record<string, string> = {
   mp4: "video/mp4",
   mov: "video/quicktime",
+  qt: "video/quicktime",
   webm: "video/webm",
   m4v: "video/x-m4v",
   avi: "video/x-msvideo",
+  "3gp": "video/3gpp",
+  "3gpp": "video/3gpp",
+  "3g2": "video/3gpp2",
 };
+
+export type ShortsUploadFileMeta = {
+  fileName: string;
+  mime: string;
+  sizeBytes: number;
+};
+
+/**
+ * Normalize mobile File objects — iOS/Android often ship empty names, "blob", or
+ * generic MIME types while the extension is still valid.
+ */
+export function normalizeShortsUploadFile(file: File): ShortsUploadFileMeta {
+  const rawName = (file.name || "").trim();
+  const mime = (file.type || "").trim().toLowerCase();
+  let fileName = rawName;
+
+  if (
+    !fileName ||
+    fileName === "blob" ||
+    fileName === "unknown" ||
+    fileName === "image.dat"
+  ) {
+    const extFromMime =
+      mime.includes("quicktime") || mime.includes("mov")
+        ? "mov"
+        : mime.includes("webm")
+          ? "webm"
+          : mime.includes("3gpp2")
+            ? "3g2"
+            : mime.includes("3gpp") || mime.includes("3gp")
+              ? "3gp"
+              : "mp4";
+    fileName = `shorts-upload-${Date.now()}.${extFromMime}`;
+  }
+
+  const sizeBytes =
+    typeof file.size === "number" && Number.isFinite(file.size) ? file.size : 0;
+
+  return { fileName, mime, sizeBytes };
+}
 
 export type ShortsStorageMode = "r2" | "local";
 
@@ -71,15 +121,29 @@ export function resolveShortsVideoContentType(
   fileName: string
 ): string | null {
   const t = (mime || "").trim().toLowerCase();
+  const ext = extensionOf(fileName);
+  const fromExt = ext ? EXT_TO_MIME[ext] : null;
+
   if (t && (SHORTS_ALLOWED_VIDEO_MIME as readonly string[]).includes(t)) {
     return t;
   }
+
+  // iOS gallery / Android content providers often report octet-stream.
+  if (
+    t === "application/octet-stream" ||
+    t === "binary/octet-stream" ||
+    t === "application/x-mp4"
+  ) {
+    return fromExt;
+  }
+
   if (t.startsWith("video/")) {
-    // Some mobile browsers send video/* subtypes we accept loosely.
+    // Prefer extension mapping when mobile sends a non-canonical video/* subtype.
+    if (fromExt) return fromExt;
     return t;
   }
-  const ext = extensionOf(fileName);
-  return EXT_TO_MIME[ext] ?? null;
+
+  return fromExt;
 }
 
 export function isAllowedShortsVideo(

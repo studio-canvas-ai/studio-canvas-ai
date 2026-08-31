@@ -76,18 +76,22 @@ export function publicObjectUrl(config: R2Config, key: string): string {
   return `https://${config.bucketName}.${config.accountId}.r2.cloudflarestorage.com/${key}`;
 }
 
-/** Browser → R2 direct upload (bypasses Vercel request body limits). */
+/**
+ * Browser → R2 direct upload (bypasses Vercel request body limits).
+ * Content-Type is intentionally omitted from the signed PutObject — binding it
+ * into SigV4 often causes 403 on mobile when MIME sniffing differs from the
+ * presign request. The client still sends Content-Type on PUT for object metadata.
+ */
 export async function createSignedPutUrl(
   config: R2Config,
   key: string,
-  contentType: string,
+  _contentType: string,
   expiresInSec = 900
 ): Promise<string> {
   const client = createR2Client(config);
   const command = new PutObjectCommand({
     Bucket: config.bucketName,
     Key: key,
-    ContentType: contentType,
   });
   return getSignedUrl(client, command, { expiresIn: expiresInSec });
 }

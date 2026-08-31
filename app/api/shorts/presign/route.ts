@@ -121,7 +121,11 @@ export async function POST(req: Request) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "presign_failed";
-    console.error("[shorts/presign]", message);
+    console.error("[shorts/presign] R2 Upload Detail Error:", {
+      message,
+      stack: err instanceof Error ? err.stack : undefined,
+      error: err,
+    });
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
