@@ -68,6 +68,16 @@ function uploadHostFromUrl(url: string): string | null {
   }
 }
 
+/** Single source for PUT Content-Type — always server-normalized, never raw file.type. */
+function resolveR2PutContentType(
+  presign: Extract<ShortsPresignResponse, { mode: "r2" }>,
+  validatedContentType: string
+): string {
+  const fromPresign =
+    presign.putContentType?.trim() || presign.contentType?.trim() || "";
+  return fromPresign || validatedContentType;
+}
+
 /** Direct PUT to R2 — only Content-Type + raw file body (no cookies/extra headers). */
 function xhrPutWithProgress(
   url: string,
@@ -340,8 +350,7 @@ export async function uploadShortsVideoFile(
     };
   }
 
-  const putContentType =
-    presign.putContentType || presign.contentType || check.contentType;
+  const putContentType = resolveR2PutContentType(presign, check.contentType);
 
   try {
     opts?.onProgress?.(0);

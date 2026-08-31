@@ -116,26 +116,22 @@ export function publicObjectUrl(config: R2Config, key: string): string {
 
 /**
  * Browser → R2 direct upload (bypasses Vercel request body limits).
- * Content-Type is bound into the presigned PUT — the client MUST send the same
- * value on PUT (see /api/shorts/presign → shortsUploadClient).
+ * Content-Type is intentionally omitted from SigV4 — binding it causes 403 on
+ * mobile when MIME sniffing differs; the client still sends Content-Type on PUT
+ * for object metadata (not part of the signature).
  */
 export async function createSignedPutUrl(
   config: R2Config,
   key: string,
-  contentType: string,
+  _contentType: string,
   expiresInSec = 900
 ): Promise<string> {
   const client = createR2Client(config);
   const command = new PutObjectCommand({
     Bucket: config.bucketName,
     Key: key,
-    ContentType: contentType,
   });
-  return getSignedUrl(client, command, {
-    expiresIn: expiresInSec,
-    // Browser must send Content-Type; keep it out of query string hoisting.
-    unhoistableHeaders: new Set(["content-type"]),
-  });
+  return getSignedUrl(client, command, { expiresIn: expiresInSec });
 }
 
 export async function headR2Object(

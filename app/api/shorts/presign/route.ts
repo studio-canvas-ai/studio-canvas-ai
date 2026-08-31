@@ -126,7 +126,7 @@ export async function POST(req: Request) {
       key,
       contentType: check.contentType,
       uploadUrl,
-      /** Client PUT must send exactly this Content-Type (matches SigV4 presign). */
+      /** Canonical Content-Type for client PUT metadata (not SigV4-bound). */
       putContentType: check.contentType,
       requiredHeaders: {
         "Content-Type": check.contentType,
