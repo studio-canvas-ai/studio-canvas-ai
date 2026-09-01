@@ -35,6 +35,10 @@ import ShortsPreviewControlBar, {
 import ShortsProjectToolbar from "@/components/ShortsProjectToolbar";
 import { useI18n } from "@/components/I18nProvider";
 import {
+  mobileDualPreviewHeightPx,
+  useVisualViewportFrame,
+} from "@/lib/useVisualViewportFrame";
+import {
   SHORTS_CAPTION_PRESETS,
   resolveCaptionStyle,
   type ShortsCaptionPresetId,
@@ -264,6 +268,7 @@ export default function ShortsFullStudio({
     mq.addEventListener("change", sync);
     return () => mq.removeEventListener("change", sync);
   }, []);
+
   /**
    * Active dual screen (blinking border): left = video edit, right = thumbnail.
    * Scale / posY sliders + pan only affect this screen's content.
@@ -432,14 +437,73 @@ export default function ShortsFullStudio({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
-    const prevOverflow = document.body.style.overflow;
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
     document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
     window.addEventListener("keydown", onKey);
     return () => {
-      document.body.style.overflow = prevOverflow;
+      document.body.style.overflow = prevBodyOverflow;
+      document.documentElement.style.overflow = prevHtmlOverflow;
       window.removeEventListener("keydown", onKey);
     };
   }, [open, onClose]);
+
+  // Mobile keyboard: stop the browser from scrolling the layout viewport under the fixed shell.
+  useEffect(() => {
+    if (!open || isDesktop) return;
+
+    const pinWindowScroll = () => {
+      if (window.scrollY !== 0 || window.scrollX !== 0) {
+        window.scrollTo(0, 0);
+      }
+    };
+
+    const onFocusIn = (e: FocusEvent) => {
+      const el = e.target;
+      if (!(el instanceof HTMLElement)) return;
+      if (
+        !el.matches(
+          "textarea, input:not([type]), input[type='text'], input[type='search'], input[type='email'], input[type='password'], input[type='url'], input[type='tel'], input[type='number'], [contenteditable='true']"
+        )
+      ) {
+        return;
+      }
+      pinWindowScroll();
+      // Keep the caret visible inside the bottom workspace scroller only.
+      requestAnimationFrame(() => {
+        pinWindowScroll();
+        try {
+          el.scrollIntoView({ block: "nearest", inline: "nearest" });
+        } catch {
+          /* ignore */
+        }
+      });
+    };
+
+    pinWindowScroll();
+    window.addEventListener("scroll", pinWindowScroll, { passive: true });
+    document.addEventListener("focusin", onFocusIn);
+    return () => {
+      window.removeEventListener("scroll", pinWindowScroll);
+      document.removeEventListener("focusin", onFocusIn);
+    };
+  }, [open, isDesktop]);
+
+  /** Mobile only: lock shell to visualViewport so soft keyboard does not push dual previews away. */
+  const vvFrame = useVisualViewportFrame(open && !isDesktop);
+  const mobilePreviewH = mobileDualPreviewHeightPx(vvFrame);
+  const mobileShellStyle: CSSProperties | undefined = !isDesktop
+    ? {
+        position: "fixed",
+        left: 0,
+        right: 0,
+        width: "100%",
+        top: vvFrame.offsetTop || 0,
+        height: vvFrame.height > 0 ? vvFrame.height : "100dvh",
+        maxHeight: vvFrame.height > 0 ? vvFrame.height : "100dvh",
+      }
+    : undefined;
 
   const pinManualCaption = useCallback((id: string, holdMs = 12_000) => {
     manualCapPinRef.current = {
@@ -1973,7 +2037,13 @@ export default function ShortsFullStudio({
       role="application"
       aria-label={t.shorts.fullStudioTitle}
       data-studio-shell="full-page"
-      className="fixed inset-0 z-[100] flex h-[100dvh] w-screen flex-col overflow-hidden bg-[#0b0d14] text-white"
+      data-keyboard-open={!isDesktop && vvFrame.keyboardOpen ? "1" : "0"}
+      className={
+        isDesktop
+          ? "fixed inset-0 z-[100] flex h-[100dvh] w-screen flex-col overflow-hidden bg-[#0b0d14] text-white"
+          : "fixed z-[100] flex w-screen flex-col overflow-hidden bg-[#0b0d14] text-white"
+      }
+      style={mobileShellStyle}
     >
       <header className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-b border-white/10 bg-white/[0.04] px-2 py-1.5 [-webkit-overflow-scrolling:touch] lg:justify-between lg:gap-3 lg:overflow-visible lg:px-4 lg:py-2.5">
         <button
@@ -2060,7 +2130,16 @@ export default function ShortsFullStudio({
               className={
                 isDesktop
                   ? "box-border flex min-h-0 min-w-0 flex-col overflow-hidden border-r border-white/10 bg-black/25"
-                  : "pointer-events-auto box-border flex h-[42vh] max-h-[45vh] min-h-[200px] shrink-0 flex-col overflow-hidden border-b border-white/10 bg-black/25"
+                  : "pointer-events-auto box-border flex shrink-0 flex-col overflow-hidden border-b border-white/10 bg-black/25"
+              }
+              style={
+                isDesktop
+                  ? undefined
+                  : {
+                      height: mobilePreviewH,
+                      minHeight: mobilePreviewH,
+                      maxHeight: mobilePreviewH,
+                    }
               }
             >
               <div
@@ -2364,6 +2443,7 @@ export default function ShortsFullStudio({
                   ? "contents"
                   : "pointer-events-auto flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]"
               }
+              data-studio-mobile-workspace={!isDesktop ? "1" : undefined}
             >
 
             {/* CENTER — caption workspace: min-width protected, never shrinks away */}
