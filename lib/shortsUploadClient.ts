@@ -4,6 +4,10 @@
  */
 
 import {
+  getShortsUploadProxyPutUrl,
+  isShortsUploadProxyConfigured,
+} from "@/lib/shortsUploadProxy";
+import {
   DEFAULT_SHORTS_MAX_VIDEO_BYTES,
   formatBytes,
   isAllowedShortsVideo,
@@ -34,6 +38,8 @@ export type ShortsPresignResponse =
       contentType: string;
       putContentType?: string;
       uploadUrl: string;
+      /** Cloudflare Worker PUT endpoint (mobile). */
+      uploadProxyPutUrl?: string | null;
       requiredHeaders?: Record<string, string>;
       bucket?: string;
       playbackUrl?: string | null;
@@ -83,7 +89,16 @@ function isMobileLikeUploadClient(): boolean {
 }
 
 function shouldUseServerChunkUpload(): boolean {
-  return isMobileLikeUploadClient();
+  return isMobileLikeUploadClient() && !isShortsUploadProxyConfigured();
+}
+
+function shouldUseWorkerProxyUpload(
+  presignProxyPutUrl?: string | null
+): boolean {
+  return (
+    isMobileLikeUploadClient() &&
+    isShortsUploadProxyConfigured(presignProxyPutUrl)
+  );
 }
 
 /** Avoid Chrome auto-attaching Content-Type from File.type on cross-origin PUT. */
@@ -163,6 +178,9 @@ type XhrPutOptions = {
   fileName?: string;
   /** Metadata for errors only — not sent as a request header. */
   contentType?: string;
+  /** Worker proxy: presigned R2 URL sent via X-R2-Upload-Url. */
+  r2PresignTargetUrl?: string;
+  uploadMode?: "r2_direct" | "worker_proxy";
 };
 
 /**
@@ -181,6 +199,9 @@ function xhrPutWithProgress(
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", url, true);
     if (timeoutMs > 0) xhr.timeout = timeoutMs;
+    if (opts.r2PresignTargetUrl) {
+      xhr.setRequestHeader("X-R2-Upload-Url", opts.r2PresignTargetUrl);
+    }
 
     const onAbort = () => xhr.abort();
     if (opts.signal) {
@@ -192,7 +213,9 @@ function xhrPutWithProgress(
     }
 
     const baseDetails = () => ({
-      uploadHost: uploadHostFromUrl(url),
+      uploadHost: uploadHostFromUrl(
+        opts.r2PresignTargetUrl ?? url
+      ),
       blobSize: file.size,
       sizeBytes: opts.sizeBytes ?? file.size,
       progressPct: lastProgressPct,
@@ -201,7 +224,8 @@ function xhrPutWithProgress(
       fileName: opts.fileName,
       contentType: opts.contentType ?? null,
       timeoutMs,
-      putHeaders: "none",
+      putHeaders: opts.r2PresignTargetUrl ? "X-R2-Upload-Url" : "none",
+      uploadMode: opts.uploadMode ?? (opts.r2PresignTargetUrl ? "worker_proxy" : "r2_direct"),
     });
 
     xhr.upload.onprogress = (ev) => {
@@ -1014,6 +1038,7 @@ export async function uploadShortsVideoFile(
     maxAttempts: R2_PUT_MAX_ATTEMPTS,
     putTimeoutMs: R2_PUT_TIMEOUT_MS,
     serverChunk: shouldUseServerChunkUpload(),
+    workerProxy: isShortsUploadProxyConfigured(),
   });
 
   if (shouldUseServerChunkUpload()) {
@@ -1079,19 +1104,28 @@ export async function uploadShortsVideoFile(
 
       presignR2 = presign;
       putContentType = resolveR2PutContentType(presign, check.contentType);
+      const proxyPutUrl = getShortsUploadProxyPutUrl(presign.uploadProxyPutUrl);
+      const useWorkerProxy = shouldUseWorkerProxyUpload(presign.uploadProxyPutUrl);
 
       try {
         opts?.onProgress?.(0);
-        await xhrPutWithProgress(presign.uploadUrl, file, {
-          onProgress: opts?.onProgress,
-          signal: opts?.signal,
-          timeoutMs: R2_PUT_TIMEOUT_MS,
-          attempt,
-          maxAttempts: R2_PUT_MAX_ATTEMPTS,
-          sizeBytes: normalized.sizeBytes,
-          fileName: normalized.fileName,
-          contentType: putContentType,
-        });
+        await xhrPutWithProgress(
+          useWorkerProxy && proxyPutUrl ? proxyPutUrl : presign.uploadUrl,
+          file,
+          {
+            onProgress: opts?.onProgress,
+            signal: opts?.signal,
+            timeoutMs: R2_PUT_TIMEOUT_MS,
+            attempt,
+            maxAttempts: R2_PUT_MAX_ATTEMPTS,
+            sizeBytes: normalized.sizeBytes,
+            fileName: normalized.fileName,
+            contentType: putContentType,
+            r2PresignTargetUrl:
+              useWorkerProxy && proxyPutUrl ? presign.uploadUrl : undefined,
+            uploadMode: useWorkerProxy ? "worker_proxy" : "r2_direct",
+          }
+        );
         lastPutError = null;
         break;
       } catch (err) {

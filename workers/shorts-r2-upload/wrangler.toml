@@ -1,0 +1,10 @@
+name = "studio-canvas-shorts-r2-upload"
+main = "src/index.ts"
+compatibility_date = "2024-09-01"
+
+# After first deploy, attach a route in Cloudflare dashboard, e.g.:
+#   upload.studio-canvas-ai.com/v1/*
+# Or set workers_dev route and use *.workers.dev URL in Vercel env.
+
+[vars]
+ALLOWED_ORIGINS = "https://www.studio-canvas-ai.com,https://studio-canvas-ai.com,http://localhost:3000"

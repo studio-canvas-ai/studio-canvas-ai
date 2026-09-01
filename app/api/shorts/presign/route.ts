@@ -16,6 +16,7 @@ import {
   isAllowedShortsVideo,
   shortsVideoKey,
 } from "@/lib/shortsVideo";
+import { resolveShortsUploadProxyPutUrl } from "@/lib/shortsUploadProxy.server";
 
 /** Presigned PUT URL lifetime (15 min — well above mobile 5 min minimum). */
 const SHORTS_PRESIGN_EXPIRES_SEC = 900;
@@ -129,6 +130,7 @@ export async function POST(req: Request) {
       key,
       contentType: check.contentType,
       uploadUrl,
+      uploadProxyPutUrl: resolveShortsUploadProxyPutUrl(),
       /** Metadata hint only — browser PUT must not send Content-Type (avoids mobile CORS preflight). */
       putContentType: check.contentType,
       requiredHeaders: {},
