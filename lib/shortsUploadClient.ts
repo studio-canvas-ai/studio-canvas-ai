@@ -140,17 +140,15 @@ type XhrPutOptions = {
 };
 
 /**
- * Direct PUT to R2 — no custom headers; raw ArrayBuffer body only.
- * Sending a File/Blob can make Chrome attach Content-Type and fail CORS preflight.
+ * Direct PUT to R2 — stream File/Blob body; no custom headers (avoids CORS preflight).
  */
-async function xhrPutWithProgress(
+function xhrPutWithProgress(
   url: string,
   file: Blob,
   opts: XhrPutOptions = {}
 ): Promise<void> {
   const timeoutMs = opts.timeoutMs ?? R2_PUT_TIMEOUT_MS;
   let lastProgressPct = 0;
-  const body = await file.arrayBuffer();
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -235,7 +233,7 @@ async function xhrPutWithProgress(
       );
     };
 
-    xhr.send(body);
+    xhr.send(file);
   });
 }
 
