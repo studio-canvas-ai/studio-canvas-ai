@@ -8,6 +8,7 @@ import {
   formatBytes,
   isAllowedShortsVideo,
   normalizeShortsUploadFile,
+  SHORTS_SERVER_CHUNK_BYTES,
   type ShortsStorageMode,
   type ShortsVideoAsset,
 } from "@/lib/shortsVideo";
@@ -54,6 +55,7 @@ export type ShortsUploadErrorStage =
   | "validate"
   | "presign"
   | "r2_put"
+  | "server_chunk"
   | "complete";
 
 export class ShortsUploadError extends Error {
@@ -80,8 +82,8 @@ function isMobileLikeUploadClient(): boolean {
   );
 }
 
-function shouldUseMultipartUpload(sizeBytes: number): boolean {
-  return sizeBytes >= MULTIPART_THRESHOLD_BYTES && isMobileLikeUploadClient();
+function shouldUseServerChunkUpload(): boolean {
+  return isMobileLikeUploadClient();
 }
 
 /** Avoid Chrome auto-attaching Content-Type from File.type on cross-origin PUT. */
@@ -514,6 +516,228 @@ async function uploadShortsVideoMultipart(
   };
 }
 
+type ServerChunkInitResponse = {
+  ok?: boolean;
+  mode?: "server_chunk" | "local";
+  videoId: string;
+  key: string | null;
+  uploadId?: string;
+  contentType: string;
+  playbackUrl?: string | null;
+  chunkBytes?: number;
+  totalChunks?: number;
+  error?: string;
+};
+
+async function uploadShortsVideoViaServerChunks(
+  file: File,
+  normalized: ReturnType<typeof normalizeShortsUploadFile>,
+  check: { ok: true; contentType: string },
+  previewUrl: string,
+  opts?: {
+    onProgress?: (pct: number) => void;
+    signal?: AbortSignal;
+  }
+): Promise<ShortsVideoAsset> {
+  const payload = {
+    fileName: normalized.fileName,
+    contentType: check.contentType,
+    sizeBytes: normalized.sizeBytes,
+  };
+
+  console.info("[shorts/upload] server-chunk start", payload);
+
+  let initRes: Response;
+  try {
+    initRes = await fetch("/api/shorts/chunk/init", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: opts?.signal,
+    });
+  } catch (cause) {
+    throw new ShortsUploadError("server_chunk", "chunk_init_network", {
+      cause,
+      uploadPath: "/api/shorts/chunk/init",
+      ...payload,
+    });
+  }
+
+  const init = (await initRes.json().catch(() => ({}))) as ServerChunkInitResponse;
+  if (!initRes.ok) {
+    throw new ShortsUploadError(
+      "server_chunk",
+      init.error || `chunk_init_failed_${initRes.status}`,
+      {
+        httpStatus: initRes.status,
+        responseBody: JSON.stringify(init).slice(0, 2000),
+        uploadPath: "/api/shorts/chunk/init",
+        ...payload,
+      }
+    );
+  }
+
+  if (init.mode === "local" || !init.uploadId || !init.key) {
+    opts?.onProgress?.(100);
+    return {
+      videoId: init.videoId,
+      fileName: normalized.fileName,
+      sizeBytes: normalized.sizeBytes,
+      contentType: check.contentType,
+      previewUrl,
+      storageKey: null,
+      playbackUrl: init.playbackUrl ?? null,
+      storage: "local",
+    };
+  }
+
+  const chunkBytes = init.chunkBytes ?? SHORTS_SERVER_CHUNK_BYTES;
+  const totalChunks =
+    init.totalChunks ?? Math.max(1, Math.ceil(file.size / chunkBytes));
+  const parts: { partNumber: number; etag: string }[] = [];
+
+  for (let partNumber = 1; partNumber <= totalChunks; partNumber++) {
+    const start = (partNumber - 1) * chunkBytes;
+    const end = Math.min(file.size, start + chunkBytes);
+    const chunk = file.slice(start, end, "");
+
+    let uploaded = false;
+    let lastErr: ShortsUploadError | null = null;
+
+    for (let attempt = 1; attempt <= R2_PUT_MAX_ATTEMPTS; attempt++) {
+      if (attempt > 1) {
+        await sleep(backoffMsBeforeRetry(attempt));
+      }
+
+      const form = new FormData();
+      form.append("key", init.key);
+      form.append("uploadId", init.uploadId);
+      form.append("partNumber", String(partNumber));
+      form.append("chunk", chunk, `part-${partNumber}`);
+
+      let chunkRes: Response;
+      try {
+        chunkRes = await fetch("/api/shorts/chunk", {
+          method: "POST",
+          credentials: "same-origin",
+          body: form,
+          signal: opts?.signal,
+        });
+      } catch (cause) {
+        lastErr = new ShortsUploadError("server_chunk", "chunk_upload_network", {
+          cause,
+          uploadPath: "/api/shorts/chunk",
+          partNumber,
+          attempt,
+          maxAttempts: R2_PUT_MAX_ATTEMPTS,
+          sizeBytes: end - start,
+          fileName: normalized.fileName,
+        });
+        if (attempt >= R2_PUT_MAX_ATTEMPTS) throw lastErr;
+        continue;
+      }
+
+      const chunkJson = (await chunkRes.json().catch(() => ({}))) as {
+        ok?: boolean;
+        etag?: string;
+        error?: string;
+      };
+
+      if (!chunkRes.ok || !chunkJson.etag) {
+        lastErr = new ShortsUploadError(
+          "server_chunk",
+          chunkJson.error || `chunk_upload_failed_${chunkRes.status}`,
+          {
+            httpStatus: chunkRes.status,
+            responseBody: JSON.stringify(chunkJson).slice(0, 2000),
+            uploadPath: "/api/shorts/chunk",
+            partNumber,
+            attempt,
+            maxAttempts: R2_PUT_MAX_ATTEMPTS,
+            sizeBytes: end - start,
+            fileName: normalized.fileName,
+          }
+        );
+        if (attempt >= R2_PUT_MAX_ATTEMPTS) throw lastErr;
+        continue;
+      }
+
+      parts.push({ partNumber, etag: chunkJson.etag });
+      uploaded = true;
+      opts?.onProgress?.(Math.min(100, Math.round((end / file.size) * 100)));
+      break;
+    }
+
+    if (!uploaded) {
+      throw (
+        lastErr ??
+        new ShortsUploadError("server_chunk", "chunk_upload_failed", {
+          partNumber,
+          fileName: normalized.fileName,
+        })
+      );
+    }
+  }
+
+  let completeRes: Response;
+  try {
+    completeRes = await fetch("/api/shorts/chunk/complete", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        videoId: init.videoId,
+        key: init.key,
+        uploadId: init.uploadId,
+        parts,
+      }),
+      signal: opts?.signal,
+    });
+  } catch (cause) {
+    throw new ShortsUploadError("server_chunk", "chunk_complete_network", {
+      cause,
+      uploadPath: "/api/shorts/chunk/complete",
+      videoId: init.videoId,
+    });
+  }
+
+  const complete = (await completeRes.json().catch(() => ({}))) as {
+    ok?: boolean;
+    playbackUrl?: string | null;
+    error?: string;
+  };
+
+  if (!completeRes.ok || !complete.ok) {
+    throw new ShortsUploadError(
+      "server_chunk",
+      complete.error || `chunk_complete_failed_${completeRes.status}`,
+      {
+        httpStatus: completeRes.status,
+        responseBody: JSON.stringify(complete).slice(0, 2000),
+        uploadPath: "/api/shorts/chunk/complete",
+      }
+    );
+  }
+
+  console.info("[shorts/upload] server-chunk success", {
+    videoId: init.videoId,
+    totalChunks,
+    sizeBytes: normalized.sizeBytes,
+  });
+
+  return {
+    videoId: init.videoId,
+    fileName: normalized.fileName,
+    sizeBytes: normalized.sizeBytes,
+    contentType: check.contentType,
+    previewUrl,
+    storageKey: init.key,
+    playbackUrl: complete.playbackUrl || init.playbackUrl || null,
+    storage: "r2",
+  };
+}
+
 async function fetchShortsPresign(
   payload: {
     fileName: string;
@@ -732,12 +956,12 @@ export async function uploadShortsVideoFile(
     ...presignPayload,
     maxAttempts: R2_PUT_MAX_ATTEMPTS,
     putTimeoutMs: R2_PUT_TIMEOUT_MS,
-    multipart: shouldUseMultipartUpload(normalized.sizeBytes),
+    serverChunk: shouldUseServerChunkUpload(),
   });
 
-  if (shouldUseMultipartUpload(normalized.sizeBytes)) {
+  if (shouldUseServerChunkUpload()) {
     try {
-      return await uploadShortsVideoMultipart(
+      return await uploadShortsVideoViaServerChunks(
         file,
         normalized,
         check,
@@ -750,7 +974,7 @@ export async function uploadShortsVideoFile(
         fileName: normalized.fileName,
         contentType: check.contentType,
         sizeBytes: normalized.sizeBytes,
-        uploadMode: "multipart",
+        uploadMode: "server_chunk",
       });
       throw err;
     }

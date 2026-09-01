@@ -11,6 +11,9 @@ export { SHORTS_THUMBNAIL_PATH };
 /** Default max clip size for Shorts upload (presigned R2). Override via SHORTS_MAX_VIDEO_BYTES. */
 export const DEFAULT_SHORTS_MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 
+/** Proxy chunk size — under Vercel's ~4.5 MB request body limit. */
+export const SHORTS_SERVER_CHUNK_BYTES = 4 * 1024 * 1024;
+
 export const SHORTS_VIDEO_ACCEPT = "video/*,.mp4,.mov,.webm,.m4v,.avi" as const;
 
 export const SHORTS_ALLOWED_VIDEO_MIME = [

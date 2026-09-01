@@ -209,6 +209,28 @@ export async function completeMultipartUpload(
   );
 }
 
+export async function uploadR2Part(
+  config: R2Config,
+  key: string,
+  uploadId: string,
+  partNumber: number,
+  body: Buffer | Uint8Array
+): Promise<string> {
+  const client = createR2Client(config);
+  const res = await client.send(
+    new UploadPartCommand({
+      Bucket: config.bucketName,
+      Key: key,
+      UploadId: uploadId,
+      PartNumber: partNumber,
+      Body: body,
+    })
+  );
+  const etag = res.ETag?.trim();
+  if (!etag) throw new Error("r2_part_etag_missing");
+  return etag;
+}
+
 export async function headR2Object(
   client: S3Client,
   bucket: string,
