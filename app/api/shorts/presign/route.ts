@@ -17,6 +17,9 @@ import {
   shortsVideoKey,
 } from "@/lib/shortsVideo";
 
+/** Presigned PUT URL lifetime (15 min — well above mobile 5 min minimum). */
+export const SHORTS_PRESIGN_EXPIRES_SEC = 900;
+
 export const runtime = "nodejs";
 
 /**
@@ -108,7 +111,7 @@ export async function POST(req: Request) {
       config,
       key,
       check.contentType,
-      900
+      SHORTS_PRESIGN_EXPIRES_SEC
     );
 
     let playbackUrl: string | null = null;
@@ -126,15 +129,13 @@ export async function POST(req: Request) {
       key,
       contentType: check.contentType,
       uploadUrl,
-      /** Canonical Content-Type for client PUT metadata (not SigV4-bound). */
+      /** Metadata hint only — browser PUT must not send Content-Type (avoids mobile CORS preflight). */
       putContentType: check.contentType,
-      requiredHeaders: {
-        "Content-Type": check.contentType,
-      },
+      requiredHeaders: {},
       bucket: bucketName,
       playbackUrl,
       maxBytes,
-      expiresInSec: 900,
+      expiresInSec: SHORTS_PRESIGN_EXPIRES_SEC,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "presign_failed";

@@ -135,18 +135,22 @@ type XhrPutOptions = {
   maxAttempts?: number;
   sizeBytes?: number;
   fileName?: string;
+  /** Metadata for errors only — not sent as a request header. */
   contentType?: string;
 };
 
-/** Direct PUT to R2 — only Content-Type + raw file body (no cookies/extra headers). */
-function xhrPutWithProgress(
+/**
+ * Direct PUT to R2 — no custom headers; raw ArrayBuffer body only.
+ * Sending a File/Blob can make Chrome attach Content-Type and fail CORS preflight.
+ */
+async function xhrPutWithProgress(
   url: string,
   file: Blob,
-  contentType: string,
   opts: XhrPutOptions = {}
 ): Promise<void> {
   const timeoutMs = opts.timeoutMs ?? R2_PUT_TIMEOUT_MS;
   let lastProgressPct = 0;
+  const body = await file.arrayBuffer();
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -162,8 +166,6 @@ function xhrPutWithProgress(
       opts.signal.addEventListener("abort", onAbort, { once: true });
     }
 
-    xhr.setRequestHeader("Content-Type", contentType);
-
     const baseDetails = () => ({
       uploadHost: uploadHostFromUrl(url),
       blobSize: file.size,
@@ -172,8 +174,9 @@ function xhrPutWithProgress(
       attempt: opts.attempt,
       maxAttempts: opts.maxAttempts,
       fileName: opts.fileName,
-      contentType,
+      contentType: opts.contentType ?? null,
       timeoutMs,
+      putHeaders: "none",
     });
 
     xhr.upload.onprogress = (ev) => {
@@ -232,7 +235,7 @@ function xhrPutWithProgress(
       );
     };
 
-    xhr.send(file);
+    xhr.send(body);
   });
 }
 
@@ -501,7 +504,7 @@ export async function uploadShortsVideoFile(
 
       try {
         opts?.onProgress?.(0);
-        await xhrPutWithProgress(presign.uploadUrl, file, putContentType, {
+        await xhrPutWithProgress(presign.uploadUrl, file, {
           onProgress: opts?.onProgress,
           signal: opts?.signal,
           timeoutMs: R2_PUT_TIMEOUT_MS,

@@ -116,9 +116,8 @@ export function publicObjectUrl(config: R2Config, key: string): string {
 
 /**
  * Browser → R2 direct upload (bypasses Vercel request body limits).
- * Content-Type is intentionally omitted from SigV4 — binding it causes 403 on
- * mobile when MIME sniffing differs; the client still sends Content-Type on PUT
- * for object metadata (not part of the signature).
+ * Content-Type is intentionally omitted from SigV4. Mobile Chrome must not send
+ * Content-Type on PUT (triggers CORS preflight failures at 0% progress).
  */
 export async function createSignedPutUrl(
   config: R2Config,
