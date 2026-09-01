@@ -5,11 +5,18 @@
 
 import {
   DEFAULT_SHORTS_MAX_VIDEO_BYTES,
+  formatBytes,
   isAllowedShortsVideo,
   normalizeShortsUploadFile,
   type ShortsStorageMode,
   type ShortsVideoAsset,
 } from "@/lib/shortsVideo";
+
+/** Initial PUT + up to 3 retries (4 presign+PUT rounds total). */
+export const R2_PUT_MAX_ATTEMPTS = 4;
+
+/** Mobile-friendly XHR timeout for large clips (5 min). */
+export const R2_PUT_TIMEOUT_MS = 300_000;
 
 export type ShortsPresignResponse =
   | {
@@ -18,7 +25,6 @@ export type ShortsPresignResponse =
       videoId: string;
       key: string;
       contentType: string;
-      /** Exact Content-Type the presigned PUT expects (SigV4-bound). */
       putContentType?: string;
       uploadUrl: string;
       requiredHeaders?: Record<string, string>;
@@ -60,12 +66,55 @@ export class ShortsUploadError extends Error {
   }
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function uploadHostFromUrl(url: string): string | null {
   try {
     return new URL(url).host;
   } catch {
     return null;
   }
+}
+
+function backoffMsBeforeRetry(attempt: number): number {
+  // attempt 2 → 1s, 3 → 2s, 4 → 4s (capped at 8s)
+  const exponent = Math.max(0, attempt - 2);
+  return Math.min(8000, 1000 * 2 ** exponent);
+}
+
+function isRetryablePutError(err: unknown): boolean {
+  if (!(err instanceof ShortsUploadError) || err.stage !== "r2_put") {
+    return false;
+  }
+  if (err.message === "r2_put_aborted") return false;
+  const status = err.details.httpStatus;
+  if (status === 413 || status === 415) return false;
+  return true;
+}
+
+function enrichPutError(
+  err: ShortsUploadError,
+  ctx: {
+    attempt: number;
+    maxAttempts: number;
+    progressPct: number;
+    sizeBytes: number;
+    fileName: string;
+    contentType: string;
+  }
+): ShortsUploadError {
+  return new ShortsUploadError(err.stage, err.message, {
+    ...err.details,
+    attempt: ctx.attempt,
+    maxAttempts: ctx.maxAttempts,
+    progressPct: ctx.progressPct,
+    sizeBytes: ctx.sizeBytes,
+    sizeHuman: formatBytes(ctx.sizeBytes),
+    fileName: ctx.fileName,
+    contentType: ctx.contentType,
+  });
 }
 
 /** Single source for PUT Content-Type — always server-normalized, never raw file.type. */
@@ -78,65 +127,164 @@ function resolveR2PutContentType(
   return fromPresign || validatedContentType;
 }
 
+type XhrPutOptions = {
+  onProgress?: (pct: number) => void;
+  signal?: AbortSignal;
+  timeoutMs?: number;
+  attempt?: number;
+  maxAttempts?: number;
+  sizeBytes?: number;
+  fileName?: string;
+  contentType?: string;
+};
+
 /** Direct PUT to R2 — only Content-Type + raw file body (no cookies/extra headers). */
 function xhrPutWithProgress(
   url: string,
   file: Blob,
   contentType: string,
-  onProgress?: (pct: number) => void,
-  signal?: AbortSignal
+  opts: XhrPutOptions = {}
 ): Promise<void> {
+  const timeoutMs = opts.timeoutMs ?? R2_PUT_TIMEOUT_MS;
+  let lastProgressPct = 0;
+
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", url, true);
+    if (timeoutMs > 0) xhr.timeout = timeoutMs;
 
     const onAbort = () => xhr.abort();
-    if (signal) {
-      if (signal.aborted) {
+    if (opts.signal) {
+      if (opts.signal.aborted) {
         reject(new ShortsUploadError("r2_put", "r2_put_aborted", {}));
         return;
       }
-      signal.addEventListener("abort", onAbort, { once: true });
+      opts.signal.addEventListener("abort", onAbort, { once: true });
     }
 
     xhr.setRequestHeader("Content-Type", contentType);
 
+    const baseDetails = () => ({
+      uploadHost: uploadHostFromUrl(url),
+      blobSize: file.size,
+      sizeBytes: opts.sizeBytes ?? file.size,
+      progressPct: lastProgressPct,
+      attempt: opts.attempt,
+      maxAttempts: opts.maxAttempts,
+      fileName: opts.fileName,
+      contentType,
+      timeoutMs,
+    });
+
     xhr.upload.onprogress = (ev) => {
-      if (!ev.lengthComputable || !onProgress) return;
-      onProgress(Math.min(100, Math.round((ev.loaded / ev.total) * 100)));
+      if (!ev.lengthComputable) return;
+      lastProgressPct = Math.min(
+        100,
+        Math.round((ev.loaded / ev.total) * 100)
+      );
+      opts.onProgress?.(lastProgressPct);
     };
+
     xhr.onload = () => {
-      if (signal) signal.removeEventListener("abort", onAbort);
+      if (opts.signal) opts.signal.removeEventListener("abort", onAbort);
       if (xhr.status >= 200 && xhr.status < 300) {
-        onProgress?.(100);
+        lastProgressPct = 100;
+        opts.onProgress?.(100);
         resolve();
         return;
       }
       reject(
         new ShortsUploadError("r2_put", `r2_put_http_${xhr.status}`, {
+          ...baseDetails(),
           httpStatus: xhr.status,
           responseText: (xhr.responseText ?? "").slice(0, 2000),
-          uploadHost: uploadHostFromUrl(url),
-          blobSize: file.size,
         })
       );
     };
+
     xhr.onerror = () => {
-      if (signal) signal.removeEventListener("abort", onAbort);
+      if (opts.signal) opts.signal.removeEventListener("abort", onAbort);
       reject(
         new ShortsUploadError("r2_put", "r2_put_network", {
-          hint: "Network error during R2 PUT — verify bucket CORS allows PUT from this site",
-          uploadHost: uploadHostFromUrl(url),
-          blobSize: file.size,
+          ...baseDetails(),
+          hint:
+            "Network error during R2 PUT (connection lost or blocked before response)",
         })
       );
     };
-    xhr.onabort = () => {
-      if (signal) signal.removeEventListener("abort", onAbort);
-      reject(new ShortsUploadError("r2_put", "r2_put_aborted", {}));
+
+    xhr.ontimeout = () => {
+      if (opts.signal) opts.signal.removeEventListener("abort", onAbort);
+      reject(
+        new ShortsUploadError("r2_put", "r2_put_timeout", {
+          ...baseDetails(),
+          hint: `R2 PUT timed out after ${Math.round(timeoutMs / 1000)}s`,
+        })
+      );
     };
+
+    xhr.onabort = () => {
+      if (opts.signal) opts.signal.removeEventListener("abort", onAbort);
+      reject(
+        new ShortsUploadError("r2_put", "r2_put_aborted", {
+          ...baseDetails(),
+        })
+      );
+    };
+
     xhr.send(file);
   });
+}
+
+async function fetchShortsPresign(
+  payload: {
+    fileName: string;
+    contentType: string;
+    sizeBytes: number;
+  },
+  signal?: AbortSignal
+): Promise<Extract<ShortsPresignResponse, { mode: "r2" } | { mode: "local" }>> {
+  let presignRes: Response;
+  try {
+    presignRes = await fetch("/api/shorts/presign", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal,
+    });
+  } catch (cause) {
+    throw new ShortsUploadError("presign", "presign_network", {
+      cause,
+      uploadPath: "/api/shorts/presign",
+      sizeBytes: payload.sizeBytes,
+      fileName: payload.fileName,
+    });
+  }
+
+  let presign: ShortsPresignResponse;
+  try {
+    presign = (await presignRes.json()) as ShortsPresignResponse;
+  } catch {
+    presign = {};
+  }
+
+  if (!presignRes.ok || !presign || !("mode" in presign)) {
+    throw new ShortsUploadError(
+      "presign",
+      (presign as { error?: string })?.error ||
+        `presign_failed_${presignRes.status}`,
+      {
+        httpStatus: presignRes.status,
+        responseBody: JSON.stringify(presign).slice(0, 2000),
+        uploadPath: "/api/shorts/presign",
+        sizeBytes: payload.sizeBytes,
+        fileName: payload.fileName,
+      }
+    );
+  }
+
+  return presign;
 }
 
 export function logR2UploadDetailError(
@@ -220,6 +368,23 @@ export function formatShortsUploadErrorForDisplay(err: unknown): string {
       if (cause) lines.push(cause);
     }
 
+    const uploadMeta = [
+      d.fileName != null ? `file=${detailToText(d.fileName)}` : null,
+      d.sizeHuman != null
+        ? `size=${detailToText(d.sizeHuman)}`
+        : d.sizeBytes != null
+          ? `size=${detailToText(d.sizeBytes)}B`
+          : null,
+      d.progressPct != null ? `progress=${detailToText(d.progressPct)}%` : null,
+      d.attempt != null && d.maxAttempts != null
+        ? `attempt=${detailToText(d.attempt)}/${detailToText(d.maxAttempts)}`
+        : null,
+      d.timeoutMs != null
+        ? `timeout=${Math.round(Number(d.timeoutMs) / 1000)}s`
+        : null,
+    ].filter(Boolean);
+    if (uploadMeta.length) lines.push(uploadMeta.join(" · "));
+
     if (err.stage === "validate") {
       const meta = [
         d.rawFileName != null ? `file=${detailToText(d.rawFileName)}` : null,
@@ -279,88 +444,115 @@ export async function uploadShortsVideoFile(
   }
 
   const previewUrl = URL.createObjectURL(file);
-
-  console.info("[shorts/upload] POST /api/shorts/presign", {
+  const presignPayload = {
     fileName: normalized.fileName,
     contentType: check.contentType,
     sizeBytes: normalized.sizeBytes,
+  };
+
+  console.info("[shorts/upload] start", {
+    ...presignPayload,
+    maxAttempts: R2_PUT_MAX_ATTEMPTS,
+    putTimeoutMs: R2_PUT_TIMEOUT_MS,
   });
 
-  let presignRes: Response;
-  try {
-    presignRes = await fetch("/api/shorts/presign", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        fileName: normalized.fileName,
-        contentType: check.contentType,
-        sizeBytes: normalized.sizeBytes,
-      }),
-      signal: opts?.signal,
-    });
-  } catch (cause) {
-    const err = new ShortsUploadError("presign", "presign_network", {
-      cause,
-      uploadPath: "/api/shorts/presign",
-    });
-    logR2UploadDetailError(err, {
-      fileName: normalized.fileName,
-      contentType: check.contentType,
-      sizeBytes: normalized.sizeBytes,
-    });
-    URL.revokeObjectURL(previewUrl);
-    throw err;
-  }
+  let lastPutError: ShortsUploadError | null = null;
+  let presignR2: Extract<ShortsPresignResponse, { mode: "r2" }> | null = null;
+  let putContentType = check.contentType;
 
-  let presign: ShortsPresignResponse;
   try {
-    presign = (await presignRes.json()) as ShortsPresignResponse;
-  } catch {
-    presign = {};
-  }
-
-  if (!presignRes.ok || !presign || !("mode" in presign)) {
-    const err = new ShortsUploadError(
-      "presign",
-      (presign as { error?: string })?.error ||
-        `presign_failed_${presignRes.status}`,
-      {
-        httpStatus: presignRes.status,
-        responseBody: JSON.stringify(presign).slice(0, 2000),
-        uploadPath: "/api/shorts/presign",
+    for (let attempt = 1; attempt <= R2_PUT_MAX_ATTEMPTS; attempt++) {
+      if (attempt > 1) {
+        const waitMs = backoffMsBeforeRetry(attempt);
+        console.info("[shorts/upload] PUT retry", {
+          attempt,
+          maxAttempts: R2_PUT_MAX_ATTEMPTS,
+          waitMs,
+          lastError: lastPutError?.message,
+          progressPct: lastPutError?.details.progressPct,
+        });
+        opts?.onProgress?.(0);
+        await sleep(waitMs);
       }
-    );
-    logR2UploadDetailError(err);
-    URL.revokeObjectURL(previewUrl);
-    throw err;
-  }
 
-  if (presign.mode === "local") {
-    opts?.onProgress?.(100);
-    return {
-      videoId: presign.videoId,
-      fileName: normalized.fileName,
-      sizeBytes: normalized.sizeBytes,
-      contentType: check.contentType,
-      previewUrl,
-      storageKey: null,
-      playbackUrl: presign.playbackUrl ?? null,
-      storage: "local" satisfies ShortsStorageMode,
-    };
-  }
+      console.info("[shorts/upload] POST /api/shorts/presign", {
+        attempt,
+        ...presignPayload,
+      });
 
-  const putContentType = resolveR2PutContentType(presign, check.contentType);
+      const presign = await fetchShortsPresign(presignPayload, opts?.signal);
 
-  try {
-    opts?.onProgress?.(0);
-    await xhrPutWithProgress(
-      presign.uploadUrl,
-      file,
-      putContentType,
-      opts?.onProgress,
-      opts?.signal
-    );
+      if (presign.mode === "local") {
+        opts?.onProgress?.(100);
+        return {
+          videoId: presign.videoId,
+          fileName: normalized.fileName,
+          sizeBytes: normalized.sizeBytes,
+          contentType: check.contentType,
+          previewUrl,
+          storageKey: null,
+          playbackUrl: presign.playbackUrl ?? null,
+          storage: "local" satisfies ShortsStorageMode,
+        };
+      }
+
+      presignR2 = presign;
+      putContentType = resolveR2PutContentType(presign, check.contentType);
+
+      try {
+        opts?.onProgress?.(0);
+        await xhrPutWithProgress(presign.uploadUrl, file, putContentType, {
+          onProgress: opts?.onProgress,
+          signal: opts?.signal,
+          timeoutMs: R2_PUT_TIMEOUT_MS,
+          attempt,
+          maxAttempts: R2_PUT_MAX_ATTEMPTS,
+          sizeBytes: normalized.sizeBytes,
+          fileName: normalized.fileName,
+          contentType: putContentType,
+        });
+        lastPutError = null;
+        break;
+      } catch (err) {
+        const putErr =
+          err instanceof ShortsUploadError
+            ? enrichPutError(err, {
+                attempt,
+                maxAttempts: R2_PUT_MAX_ATTEMPTS,
+                progressPct:
+                  typeof err.details.progressPct === "number"
+                    ? err.details.progressPct
+                    : 0,
+                sizeBytes: normalized.sizeBytes,
+                fileName: normalized.fileName,
+                contentType: putContentType,
+              })
+            : new ShortsUploadError("r2_put", "r2_put_failed", {
+                cause: err,
+                attempt,
+                maxAttempts: R2_PUT_MAX_ATTEMPTS,
+                sizeBytes: normalized.sizeBytes,
+                fileName: normalized.fileName,
+              });
+
+        lastPutError = putErr;
+        logR2UploadDetailError(putErr, { phase: "shorts_put_attempt" });
+
+        if (!isRetryablePutError(putErr) || attempt >= R2_PUT_MAX_ATTEMPTS) {
+          throw putErr;
+        }
+      }
+    }
+
+    if (!presignR2) {
+      throw (
+        lastPutError ??
+        new ShortsUploadError("r2_put", "r2_put_failed", {
+          sizeBytes: normalized.sizeBytes,
+          fileName: normalized.fileName,
+        })
+      );
+    }
 
     let completeRes: Response;
     try {
@@ -369,21 +561,21 @@ export async function uploadShortsVideoFile(
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          videoId: presign.videoId,
-          key: presign.key,
+          videoId: presignR2.videoId,
+          key: presignR2.key,
         }),
         signal: opts?.signal,
       });
     } catch (cause) {
       console.warn("[shorts/upload] complete network failed:", cause);
       return {
-        videoId: presign.videoId,
+        videoId: presignR2.videoId,
         fileName: normalized.fileName,
         sizeBytes: normalized.sizeBytes,
         contentType: putContentType,
         previewUrl,
-        storageKey: presign.key,
-        playbackUrl: presign.playbackUrl ?? null,
+        storageKey: presignR2.key,
+        playbackUrl: presignR2.playbackUrl ?? null,
         storage: "r2",
       };
     }
@@ -398,14 +590,19 @@ export async function uploadShortsVideoFile(
       console.warn("[shorts/upload] complete failed:", complete.error);
     }
 
+    console.info("[shorts/upload] success", {
+      videoId: presignR2.videoId,
+      sizeBytes: normalized.sizeBytes,
+    });
+
     return {
-      videoId: presign.videoId,
+      videoId: presignR2.videoId,
       fileName: normalized.fileName,
       sizeBytes: normalized.sizeBytes,
       contentType: putContentType,
       previewUrl,
-      storageKey: presign.key,
-      playbackUrl: complete.playbackUrl || presign.playbackUrl || null,
+      storageKey: presignR2.key,
+      playbackUrl: complete.playbackUrl || presignR2.playbackUrl || null,
       storage: "r2",
     };
   } catch (err) {
@@ -414,6 +611,7 @@ export async function uploadShortsVideoFile(
       fileName: normalized.fileName,
       contentType: putContentType,
       sizeBytes: normalized.sizeBytes,
+      maxAttempts: R2_PUT_MAX_ATTEMPTS,
     });
     throw err;
   }
