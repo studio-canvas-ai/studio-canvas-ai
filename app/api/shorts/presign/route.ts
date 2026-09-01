@@ -18,7 +18,7 @@ import {
 } from "@/lib/shortsVideo";
 
 /** Presigned PUT URL lifetime (15 min — well above mobile 5 min minimum). */
-export const SHORTS_PRESIGN_EXPIRES_SEC = 900;
+const SHORTS_PRESIGN_EXPIRES_SEC = 900;
 
 export const runtime = "nodejs";
 
