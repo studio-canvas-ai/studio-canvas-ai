@@ -18,6 +18,12 @@ export const R2_PUT_MAX_ATTEMPTS = 4;
 /** Mobile-friendly XHR timeout for large clips (5 min). */
 export const R2_PUT_TIMEOUT_MS = 300_000;
 
+/** Chunk size for mobile multipart uploads (5 MiB). */
+export const MULTIPART_PART_BYTES = 5 * 1024 * 1024;
+
+/** Use multipart on mobile when file exceeds this size. */
+export const MULTIPART_THRESHOLD_BYTES = 5 * 1024 * 1024;
+
 export type ShortsPresignResponse =
   | {
       ok: true;
@@ -64,6 +70,24 @@ export class ShortsUploadError extends Error {
     this.stage = stage;
     this.details = details;
   }
+}
+
+function isMobileLikeUploadClient(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return (
+    /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
+    window.matchMedia?.("(pointer: coarse)")?.matches === true
+  );
+}
+
+function shouldUseMultipartUpload(sizeBytes: number): boolean {
+  return sizeBytes >= MULTIPART_THRESHOLD_BYTES && isMobileLikeUploadClient();
+}
+
+/** Avoid Chrome auto-attaching Content-Type from File.type on cross-origin PUT. */
+function stripBlobMime(body: Blob): Blob {
+  if (!body.type) return body;
+  return body.slice(0, body.size, "");
 }
 
 function sleep(ms: number): Promise<void> {
@@ -146,9 +170,10 @@ function xhrPutWithProgress(
   url: string,
   file: Blob,
   opts: XhrPutOptions = {}
-): Promise<void> {
+): Promise<string | void> {
   const timeoutMs = opts.timeoutMs ?? R2_PUT_TIMEOUT_MS;
   let lastProgressPct = 0;
+  const body = stripBlobMime(file);
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -191,7 +216,7 @@ function xhrPutWithProgress(
       if (xhr.status >= 200 && xhr.status < 300) {
         lastProgressPct = 100;
         opts.onProgress?.(100);
-        resolve();
+        resolve(xhr.getResponseHeader("ETag") ?? undefined);
         return;
       }
       reject(
@@ -233,8 +258,260 @@ function xhrPutWithProgress(
       );
     };
 
-    xhr.send(file);
+    xhr.send(body);
   });
+}
+
+type MultipartInitResponse = {
+  ok?: boolean;
+  mode?: "r2_multipart";
+  videoId: string;
+  key: string;
+  uploadId: string;
+  contentType: string;
+  playbackUrl?: string | null;
+  error?: string;
+};
+
+async function fetchMultipartInit(
+  payload: {
+    fileName: string;
+    contentType: string;
+    sizeBytes: number;
+  },
+  signal?: AbortSignal
+): Promise<MultipartInitResponse> {
+  let res: Response;
+  try {
+    res = await fetch("/api/shorts/multipart/init", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal,
+    });
+  } catch (cause) {
+    throw new ShortsUploadError("presign", "multipart_init_network", {
+      cause,
+      uploadPath: "/api/shorts/multipart/init",
+      ...payload,
+    });
+  }
+
+  const json = (await res.json().catch(() => ({}))) as MultipartInitResponse;
+  if (!res.ok || !json.uploadId || !json.key || !json.videoId) {
+    throw new ShortsUploadError(
+      "presign",
+      json.error || `multipart_init_failed_${res.status}`,
+      {
+        httpStatus: res.status,
+        responseBody: JSON.stringify(json).slice(0, 2000),
+        uploadPath: "/api/shorts/multipart/init",
+        ...payload,
+      }
+    );
+  }
+  return json;
+}
+
+async function fetchMultipartPartUrl(
+  payload: { key: string; uploadId: string; partNumber: number },
+  signal?: AbortSignal
+): Promise<string> {
+  let res: Response;
+  try {
+    res = await fetch("/api/shorts/multipart/part", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal,
+    });
+  } catch (cause) {
+    throw new ShortsUploadError("presign", "multipart_part_network", {
+      cause,
+      uploadPath: "/api/shorts/multipart/part",
+      ...payload,
+    });
+  }
+
+  const json = (await res.json().catch(() => ({}))) as {
+    ok?: boolean;
+    uploadUrl?: string;
+    error?: string;
+  };
+  if (!res.ok || !json.uploadUrl) {
+    throw new ShortsUploadError(
+      "presign",
+      json.error || `multipart_part_failed_${res.status}`,
+      {
+        httpStatus: res.status,
+        responseBody: JSON.stringify(json).slice(0, 2000),
+        uploadPath: "/api/shorts/multipart/part",
+        ...payload,
+      }
+    );
+  }
+  return json.uploadUrl;
+}
+
+async function uploadShortsVideoMultipart(
+  file: File,
+  normalized: ReturnType<typeof normalizeShortsUploadFile>,
+  check: { ok: true; contentType: string },
+  previewUrl: string,
+  opts?: {
+    onProgress?: (pct: number) => void;
+    signal?: AbortSignal;
+  }
+): Promise<ShortsVideoAsset> {
+  const presignPayload = {
+    fileName: normalized.fileName,
+    contentType: check.contentType,
+    sizeBytes: normalized.sizeBytes,
+  };
+
+  console.info("[shorts/upload] multipart start", presignPayload);
+
+  const init = await fetchMultipartInit(presignPayload, opts?.signal);
+  const partCount = Math.max(1, Math.ceil(file.size / MULTIPART_PART_BYTES));
+  const parts: { partNumber: number; etag: string }[] = [];
+  let uploadedBytes = 0;
+
+  for (let partNumber = 1; partNumber <= partCount; partNumber++) {
+    const start = (partNumber - 1) * MULTIPART_PART_BYTES;
+    const end = Math.min(file.size, start + MULTIPART_PART_BYTES);
+    const chunk = stripBlobMime(file.slice(start, end, ""));
+
+    let etag: string | undefined;
+    let lastErr: ShortsUploadError | null = null;
+
+    for (let attempt = 1; attempt <= R2_PUT_MAX_ATTEMPTS; attempt++) {
+      if (attempt > 1) {
+        await sleep(backoffMsBeforeRetry(attempt));
+      }
+
+      const uploadUrl = await fetchMultipartPartUrl(
+        {
+          key: init.key,
+          uploadId: init.uploadId,
+          partNumber,
+        },
+        opts?.signal
+      );
+
+      try {
+        const reportPartProgress = (partPct: number) => {
+          const loaded = uploadedBytes + Math.round(((end - start) * partPct) / 100);
+          const totalPct = Math.min(
+            100,
+            Math.round((loaded / file.size) * 100)
+          );
+          opts?.onProgress?.(totalPct);
+        };
+
+        const partEtag = await xhrPutWithProgress(uploadUrl, chunk, {
+          onProgress: reportPartProgress,
+          signal: opts?.signal,
+          timeoutMs: R2_PUT_TIMEOUT_MS,
+          attempt,
+          maxAttempts: R2_PUT_MAX_ATTEMPTS,
+          sizeBytes: end - start,
+          fileName: normalized.fileName,
+          contentType: check.contentType,
+        });
+        if (!partEtag) {
+          throw new ShortsUploadError("r2_put", "multipart_part_etag_missing", {
+            partNumber,
+            hint:
+              "R2 did not return ETag — add ETag to R2 bucket CORS ExposeHeaders.",
+          });
+        }
+        etag = partEtag;
+        lastErr = null;
+        break;
+      } catch (err) {
+        lastErr =
+          err instanceof ShortsUploadError
+            ? err
+            : new ShortsUploadError("r2_put", "r2_put_failed", { cause: err });
+        if (!isRetryablePutError(lastErr) || attempt >= R2_PUT_MAX_ATTEMPTS) {
+          throw lastErr;
+        }
+      }
+    }
+
+    if (!etag) {
+      throw (
+        lastErr ??
+        new ShortsUploadError("r2_put", "multipart_part_etag_missing", {
+          partNumber,
+          hint:
+            "R2 did not return ETag — add ETag to R2 bucket CORS ExposeHeaders.",
+        })
+      );
+    }
+
+    parts.push({ partNumber, etag });
+    uploadedBytes = end;
+    opts?.onProgress?.(Math.min(100, Math.round((uploadedBytes / file.size) * 100)));
+  }
+
+  let completeRes: Response;
+  try {
+    completeRes = await fetch("/api/shorts/multipart/complete", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        videoId: init.videoId,
+        key: init.key,
+        uploadId: init.uploadId,
+        parts,
+      }),
+      signal: opts?.signal,
+    });
+  } catch (cause) {
+    throw new ShortsUploadError("complete", "multipart_complete_network", {
+      cause,
+      videoId: init.videoId,
+      key: init.key,
+    });
+  }
+
+  const complete = (await completeRes.json().catch(() => ({}))) as {
+    ok?: boolean;
+    playbackUrl?: string | null;
+    error?: string;
+  };
+
+  if (!completeRes.ok || !complete.ok) {
+    throw new ShortsUploadError(
+      "complete",
+      complete.error || `multipart_complete_failed_${completeRes.status}`,
+      {
+        httpStatus: completeRes.status,
+        responseBody: JSON.stringify(complete).slice(0, 2000),
+      }
+    );
+  }
+
+  console.info("[shorts/upload] multipart success", {
+    videoId: init.videoId,
+    partCount,
+    sizeBytes: normalized.sizeBytes,
+  });
+
+  return {
+    videoId: init.videoId,
+    fileName: normalized.fileName,
+    sizeBytes: normalized.sizeBytes,
+    contentType: check.contentType,
+    previewUrl,
+    storageKey: init.key,
+    playbackUrl: complete.playbackUrl || init.playbackUrl || null,
+    storage: "r2",
+  };
 }
 
 async function fetchShortsPresign(
@@ -455,7 +732,29 @@ export async function uploadShortsVideoFile(
     ...presignPayload,
     maxAttempts: R2_PUT_MAX_ATTEMPTS,
     putTimeoutMs: R2_PUT_TIMEOUT_MS,
+    multipart: shouldUseMultipartUpload(normalized.sizeBytes),
   });
+
+  if (shouldUseMultipartUpload(normalized.sizeBytes)) {
+    try {
+      return await uploadShortsVideoMultipart(
+        file,
+        normalized,
+        check,
+        previewUrl,
+        opts
+      );
+    } catch (err) {
+      URL.revokeObjectURL(previewUrl);
+      logR2UploadDetailError(err, {
+        fileName: normalized.fileName,
+        contentType: check.contentType,
+        sizeBytes: normalized.sizeBytes,
+        uploadMode: "multipart",
+      });
+      throw err;
+    }
+  }
 
   let lastPutError: ShortsUploadError | null = null;
   let presignR2: Extract<ShortsPresignResponse, { mode: "r2" }> | null = null;

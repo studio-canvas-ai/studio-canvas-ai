@@ -1,10 +1,13 @@
 import {
+  CompleteMultipartUploadCommand,
+  CreateMultipartUploadCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
+  UploadPartCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -54,6 +57,22 @@ export function isR2Configured(): boolean {
 /** Resolved bucket name from env (e.g. studio-canvas-ai-storage). */
 export function getR2BucketName(): string | null {
   return getR2Config()?.bucketName ?? null;
+}
+
+/** AWS SDK v3 adds CRC32 to presigned URLs; R2 rejects them (browser PUT fails at 0%). */
+const R2_PRESIGN_UNSIGNABLE_HEADERS = new Set([
+  "x-amz-checksum-crc32",
+  "x-amz-checksum-crc32c",
+  "x-amz-checksum-sha1",
+  "x-amz-checksum-sha256",
+  "x-amz-sdk-checksum-algorithm",
+]);
+
+function presignUrlOptions(expiresInSec: number) {
+  return {
+    expiresIn: expiresInSec,
+    unsignableHeaders: R2_PRESIGN_UNSIGNABLE_HEADERS,
+  };
 }
 
 /**
@@ -130,7 +149,64 @@ export async function createSignedPutUrl(
     Bucket: config.bucketName,
     Key: key,
   });
-  return getSignedUrl(client, command, { expiresIn: expiresInSec });
+  return getSignedUrl(client, command, presignUrlOptions(expiresInSec));
+}
+
+export async function createMultipartUpload(
+  config: R2Config,
+  key: string
+): Promise<string> {
+  const client = createR2Client(config);
+  const res = await client.send(
+    new CreateMultipartUploadCommand({
+      Bucket: config.bucketName,
+      Key: key,
+    })
+  );
+  const uploadId = res.UploadId?.trim();
+  if (!uploadId) throw new Error("multipart_upload_id_missing");
+  return uploadId;
+}
+
+export async function createSignedPartUploadUrl(
+  config: R2Config,
+  key: string,
+  uploadId: string,
+  partNumber: number,
+  expiresInSec = 900
+): Promise<string> {
+  const client = createR2Client(config);
+  const command = new UploadPartCommand({
+    Bucket: config.bucketName,
+    Key: key,
+    UploadId: uploadId,
+    PartNumber: partNumber,
+  });
+  return getSignedUrl(client, command, presignUrlOptions(expiresInSec));
+}
+
+export async function completeMultipartUpload(
+  config: R2Config,
+  key: string,
+  uploadId: string,
+  parts: { partNumber: number; etag: string }[]
+): Promise<void> {
+  const client = createR2Client(config);
+  await client.send(
+    new CompleteMultipartUploadCommand({
+      Bucket: config.bucketName,
+      Key: key,
+      UploadId: uploadId,
+      MultipartUpload: {
+        Parts: parts
+          .map((p) => ({
+            PartNumber: p.partNumber,
+            ETag: p.etag,
+          }))
+          .sort((a, b) => a.PartNumber - b.PartNumber),
+      },
+    })
+  );
 }
 
 export async function headR2Object(
