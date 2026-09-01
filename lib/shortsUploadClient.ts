@@ -516,6 +516,60 @@ async function uploadShortsVideoMultipart(
   };
 }
 
+/** Mobile chunk POST timeout (2 min per 1 MB slice). */
+const SERVER_CHUNK_TIMEOUT_MS = 120_000;
+
+function xhrPostForm(
+  url: string,
+  form: FormData,
+  opts: { signal?: AbortSignal; timeoutMs?: number } = {}
+): Promise<{ ok: boolean; status: number; body: Record<string, unknown> }> {
+  const timeoutMs = opts.timeoutMs ?? SERVER_CHUNK_TIMEOUT_MS;
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url, true);
+    xhr.timeout = timeoutMs;
+
+    const onAbort = () => xhr.abort();
+    if (opts.signal) {
+      if (opts.signal.aborted) {
+        reject(new DOMException("Aborted", "AbortError"));
+        return;
+      }
+      opts.signal.addEventListener("abort", onAbort, { once: true });
+    }
+
+    xhr.onload = () => {
+      if (opts.signal) opts.signal.removeEventListener("abort", onAbort);
+      let body: Record<string, unknown> = {};
+      try {
+        body = JSON.parse(xhr.responseText || "{}") as Record<string, unknown>;
+      } catch {
+        body = { raw: (xhr.responseText || "").slice(0, 500) };
+      }
+      resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, body });
+    };
+
+    xhr.onerror = () => {
+      if (opts.signal) opts.signal.removeEventListener("abort", onAbort);
+      reject(new TypeError("Failed to fetch"));
+    };
+
+    xhr.ontimeout = () => {
+      if (opts.signal) opts.signal.removeEventListener("abort", onAbort);
+      reject(new Error(`chunk_upload_timeout_${timeoutMs}ms`));
+    };
+
+    xhr.onabort = () => {
+      if (opts.signal) opts.signal.removeEventListener("abort", onAbort);
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+
+    xhr.send(form);
+  });
+}
+
 type ServerChunkInitResponse = {
   ok?: boolean;
   mode?: "server_chunk" | "local";
@@ -616,13 +670,11 @@ async function uploadShortsVideoViaServerChunks(
       form.append("partNumber", String(partNumber));
       form.append("chunk", chunk, `part-${partNumber}`);
 
-      let chunkRes: Response;
+      let chunkResult: { ok: boolean; status: number; body: Record<string, unknown> };
       try {
-        chunkRes = await fetch("/api/shorts/chunk", {
-          method: "POST",
-          credentials: "same-origin",
-          body: form,
+        chunkResult = await xhrPostForm("/api/shorts/chunk", form, {
           signal: opts?.signal,
+          timeoutMs: SERVER_CHUNK_TIMEOUT_MS,
         });
       } catch (cause) {
         lastErr = new ShortsUploadError("server_chunk", "chunk_upload_network", {
@@ -633,23 +685,24 @@ async function uploadShortsVideoViaServerChunks(
           maxAttempts: R2_PUT_MAX_ATTEMPTS,
           sizeBytes: end - start,
           fileName: normalized.fileName,
+          progressPct: Math.round((start / file.size) * 100),
         });
         if (attempt >= R2_PUT_MAX_ATTEMPTS) throw lastErr;
         continue;
       }
 
-      const chunkJson = (await chunkRes.json().catch(() => ({}))) as {
+      const chunkJson = chunkResult.body as {
         ok?: boolean;
         etag?: string;
         error?: string;
       };
 
-      if (!chunkRes.ok || !chunkJson.etag) {
+      if (!chunkResult.ok || !chunkJson.etag) {
         lastErr = new ShortsUploadError(
           "server_chunk",
-          chunkJson.error || `chunk_upload_failed_${chunkRes.status}`,
+          String(chunkJson.error || `chunk_upload_failed_${chunkResult.status}`),
           {
-            httpStatus: chunkRes.status,
+            httpStatus: chunkResult.status,
             responseBody: JSON.stringify(chunkJson).slice(0, 2000),
             uploadPath: "/api/shorts/chunk",
             partNumber,
@@ -657,6 +710,7 @@ async function uploadShortsVideoViaServerChunks(
             maxAttempts: R2_PUT_MAX_ATTEMPTS,
             sizeBytes: end - start,
             fileName: normalized.fileName,
+            progressPct: Math.round((start / file.size) * 100),
           }
         );
         if (attempt >= R2_PUT_MAX_ATTEMPTS) throw lastErr;
@@ -902,6 +956,9 @@ export function formatShortsUploadErrorForDisplay(err: unknown): string {
     }
     if (typeof d.uploadPath === "string" && d.uploadPath) {
       lines.push(`path=${d.uploadPath}`);
+    }
+    if (d.partNumber != null) {
+      lines.push(`part=${detailToText(d.partNumber)}`);
     }
     if (typeof d.note === "string" && d.note.trim()) {
       lines.push(d.note.trim());

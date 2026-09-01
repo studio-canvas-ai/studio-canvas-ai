@@ -49,7 +49,7 @@ export async function POST(req: Request) {
     if (!(chunk instanceof Blob) || chunk.size === 0) {
       return NextResponse.json({ error: "chunk_required" }, { status: 400 });
     }
-    if (chunk.size > SHORTS_SERVER_CHUNK_BYTES + 256 * 1024) {
+    if (chunk.size > SHORTS_SERVER_CHUNK_BYTES + 64 * 1024) {
       return NextResponse.json({ error: "chunk_too_large" }, { status: 413 });
     }
 

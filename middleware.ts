@@ -85,8 +85,12 @@ export async function middleware(request: NextRequest) {
   const { pathname, searchParams } = request.nextUrl;
   const normalizedPath = normalizeAppPathname(pathname);
 
-  // Auth routes: no Supabase refresh (avoids hanging SSR/hydration).
-  if (normalizedPath.startsWith("/api/auth") || normalizedPath.startsWith("/auth/")) {
+  // Auth routes + large chunk uploads: skip Supabase refresh on request body.
+  if (
+    normalizedPath.startsWith("/api/auth") ||
+    normalizedPath.startsWith("/auth/") ||
+    normalizedPath.startsWith("/api/shorts/chunk")
+  ) {
     return NextResponse.next({
       request: { headers: withPathnameHeader(request, pathname) },
     });
