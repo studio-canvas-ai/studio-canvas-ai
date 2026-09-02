@@ -41,6 +41,11 @@ import {
 } from "@/lib/shortsVideo";
 import { saveAuthNextPath } from "@/lib/supabase/oauth";
 import { SHORTS_THUMBNAIL_PATH } from "@/lib/shortsThumbnail";
+import {
+  clearShortsPlaybackSession,
+  readShortsPlaybackSession,
+  saveShortsPlaybackSession,
+} from "@/lib/shortsPlaybackSession";
 
 /** WASM transcode only for small clips — 57MB HEVC OOMs on phones. */
 const CLIENT_WASM_MAX_BYTES = 15 * 1024 * 1024;
@@ -103,9 +108,11 @@ export default function ShortsVideoUpload({
   const uploadStatusLabel = isMobileUpload
     ? t.shorts.mobileUploading
     : t.shorts.cloudSyncing;
-  const mobileVideoReady = Boolean(videoSrc) && !videoPlayError;
+  const mobileVideoReady =
+    Boolean(videoSrc) && (!videoPlayError || Boolean(serverPosterUrl));
   const mobileActionsLocked =
-    isMobileUpload && (cloudSyncing || mobilePlaybackLoading || !mobileVideoReady);
+    isMobileUpload &&
+    (cloudSyncing || (mobilePlaybackLoading && !videoSrc) || !mobileVideoReady);
 
   useEffect(() => {
     if (!asset) {
@@ -117,6 +124,105 @@ export default function ShortsVideoUpload({
     setVideoPlayError(false);
     setVideoSrc(asset.previewUrl || asset.playbackUrl || null);
   }, [asset?.videoId, asset?.previewUrl, asset?.playbackUrl]);
+
+  const upgradeMobilePlayback = useCallback(
+    async (
+      cloud: ShortsVideoAsset,
+      opts?: { file?: File | null; signal?: AbortSignal }
+    ) => {
+      if (!isMobileGalleryVideoClient() || !cloud.storageKey) return;
+
+      const session = readShortsPlaybackSession(cloud.videoId);
+      if (session?.h264Url) {
+        setVideoSrc(session.h264Url);
+        if (session.posterDataUrl) {
+          setServerPosterUrl((prev) => prev ?? session.posterDataUrl);
+        }
+        onAssetChange({ ...cloud, playbackUrl: session.h264Url });
+        setMobilePlaybackLoading(false);
+        return;
+      }
+
+      if (!cloud.playbackUrl && !videoSrc) {
+        setMobilePlaybackLoading(true);
+      }
+
+      try {
+        const tx = await requestPreviewTranscode({
+          videoId: cloud.videoId,
+          key: cloud.storageKey,
+          signal: opts?.signal,
+        });
+        if (opts?.signal?.aborted) return;
+
+        if (tx.posterDataUrl) {
+          setServerPosterUrl((prev) => prev ?? tx.posterDataUrl);
+        }
+        if (tx.playbackUrl) {
+          setVideoSrc(tx.playbackUrl);
+          setVideoPlayError(false);
+          videoPlayErrorRef.current = false;
+          onAssetChange({ ...cloud, playbackUrl: tx.playbackUrl });
+        }
+
+        saveShortsPlaybackSession({
+          videoId: cloud.videoId,
+          storageKey: cloud.storageKey,
+          playbackUrl: cloud.playbackUrl,
+          h264Url: tx.playbackUrl,
+          posterDataUrl: tx.posterDataUrl ?? session?.posterDataUrl ?? null,
+          savedAt: Date.now(),
+        });
+
+        if (opts?.file) {
+          void persistShortsVideoBlob(cloud.videoId, opts.file, {
+            fileName: cloud.fileName,
+            contentType: cloud.contentType,
+          }).catch((persistErr) => {
+            console.warn("[shorts/upload] idb persist", persistErr);
+          });
+          void useShortsProjectStore
+            .getState()
+            .hydrateFromAsset(cloud, opts.file)
+            .catch((err) => {
+              console.warn("[shorts/upload] store hydrate", err);
+            });
+        }
+      } catch (err) {
+        if (!opts?.signal?.aborted) {
+          console.warn("[shorts/upload] mobile playback upgrade", err);
+        }
+      } finally {
+        setMobilePlaybackLoading(false);
+      }
+    },
+    [onAssetChange, videoSrc]
+  );
+
+  useEffect(() => {
+    if (!isMobileGalleryVideoClient() || !asset) return;
+    if (asset.storage !== "r2" || !asset.storageKey) return;
+    if (videoSrc) return;
+
+    const session = readShortsPlaybackSession(asset.videoId);
+    const immediate =
+      session?.h264Url || session?.playbackUrl || asset.playbackUrl;
+    if (immediate) {
+      setVideoSrc(immediate);
+      if (session?.posterDataUrl) {
+        setServerPosterUrl((prev) => prev ?? session.posterDataUrl);
+      }
+      onProgressChange(100);
+      if (!session?.h264Url) {
+        void upgradeMobilePlayback(asset);
+      }
+    }
+  }, [
+    asset,
+    onProgressChange,
+    upgradeMobilePlayback,
+    videoSrc,
+  ]);
 
   const revokeClientPreviewBlobs = useCallback(() => {
     for (const url of clientBlobUrlsRef.current) {
@@ -228,34 +334,29 @@ export default function ShortsVideoUpload({
               let gotPlayable = false;
 
               if (isMobileGalleryVideoClient()) {
-                setMobilePlaybackLoading(true);
-                const tx = await requestPreviewTranscode({
-                  videoId: cloud.videoId,
-                  key: cloud.storageKey,
-                });
-                if (tx.playbackUrl) {
-                  gotPlayable = true;
-                  setVideoSrc(tx.playbackUrl);
+                const merged: ShortsVideoAsset = {
+                  ...cloud,
+                  previewUrl: localAsset.previewUrl || "",
+                };
+
+                if (merged.playbackUrl) {
+                  setVideoSrc(merged.playbackUrl);
                   setVideoPlayError(false);
                   videoPlayErrorRef.current = false;
-                }
-                if (tx.posterDataUrl) {
-                  setServerPosterUrl((prev) => prev ?? tx.posterDataUrl);
-                }
-                setMobilePlaybackLoading(false);
-
-                void persistShortsVideoBlob(localAsset.videoId, file, {
-                  fileName: localAsset.fileName,
-                  contentType: localAsset.contentType,
-                }).catch((persistErr) => {
-                  console.warn("[shorts/upload] idb persist", persistErr);
-                });
-                void useShortsProjectStore
-                  .getState()
-                  .hydrateFromAsset(localAsset, file)
-                  .catch((err) => {
-                    console.warn("[shorts/upload] store hydrate", err);
+                  saveShortsPlaybackSession({
+                    videoId: merged.videoId,
+                    storageKey: merged.storageKey!,
+                    playbackUrl: merged.playbackUrl,
+                    h264Url: null,
+                    posterDataUrl: null,
+                    savedAt: Date.now(),
                   });
+                }
+
+                void upgradeMobilePlayback(merged, {
+                  file,
+                  signal: ac.signal,
+                });
               }
 
               if (!gotPlayable && !isMobileGalleryVideoClient()) {
@@ -283,19 +384,45 @@ export default function ShortsVideoUpload({
           setCloudSyncError(formatShortsUploadErrorForDisplay(err));
         });
     },
-    [onAssetChange, onProgressChange]
+    [onAssetChange, onProgressChange, upgradeMobilePlayback]
   );
 
   const retryCloudSync = useCallback(() => {
+    if (!asset) return;
+    setCloudSyncError(null);
+
+    if (
+      isMobileGalleryVideoClient() &&
+      asset.storage === "r2" &&
+      asset.storageKey
+    ) {
+      onProgressChange(100);
+      const url =
+        readShortsPlaybackSession(asset.videoId)?.h264Url ||
+        readShortsPlaybackSession(asset.videoId)?.playbackUrl ||
+        asset.playbackUrl;
+      if (url) setVideoSrc(url);
+      void upgradeMobilePlayback(asset);
+      return;
+    }
+
     const file = localFileRef.current;
-    if (!asset || !file) return;
+    if (!file) {
+      setCloudSyncError(t.shorts.cloudSyncFailed);
+      return;
+    }
     backgroundUploadRef.current?.abort();
     const ac = new AbortController();
     backgroundUploadRef.current = ac;
-    setCloudSyncError(null);
     onProgressChange(0);
     startBackgroundUpload(file, asset, ac);
-  }, [asset, onProgressChange, startBackgroundUpload]);
+  }, [
+    asset,
+    onProgressChange,
+    startBackgroundUpload,
+    t.shorts.cloudSyncFailed,
+    upgradeMobilePlayback,
+  ]);
   const busy = phase === "extracting" || capturing;
 
   useEffect(() => {
@@ -314,6 +441,7 @@ export default function ShortsVideoUpload({
     revokeClientPreviewBlobs();
     localFileRef.current = null;
     if (asset?.previewUrl) URL.revokeObjectURL(asset.previewUrl);
+    if (asset?.videoId) clearShortsPlaybackSession(asset.videoId);
     void useShortsProjectStore.getState().clearProject();
     onAssetChange(null);
     onPhaseChange("idle");

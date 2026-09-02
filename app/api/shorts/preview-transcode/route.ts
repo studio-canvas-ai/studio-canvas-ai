@@ -54,6 +54,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ok: true,
+      cached: result.cached,
       playbackUrl: result.playbackUrl,
       posterDataUrl: result.posterDataUrl,
     });

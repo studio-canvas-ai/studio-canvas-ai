@@ -75,7 +75,11 @@ export async function requestPreviewTranscode(payload: {
   videoId: string;
   key: string;
   signal?: AbortSignal;
-}): Promise<{ playbackUrl: string | null; posterDataUrl: string | null }> {
+}): Promise<{
+  playbackUrl: string | null;
+  posterDataUrl: string | null;
+  cached?: boolean;
+}> {
   const res = await fetch("/api/shorts/preview-transcode", {
     method: "POST",
     credentials: "same-origin",
@@ -89,6 +93,7 @@ export async function requestPreviewTranscode(payload: {
 
   const json = (await res.json().catch(() => ({}))) as {
     ok?: boolean;
+    cached?: boolean;
     playbackUrl?: string | null;
     posterDataUrl?: string | null;
     error?: string;
@@ -96,12 +101,13 @@ export async function requestPreviewTranscode(payload: {
 
   if (!res.ok || !json.ok) {
     console.warn("[shorts/preview-transcode] failed", json.error || res.status);
-    return { playbackUrl: null, posterDataUrl: null };
+    return { playbackUrl: null, posterDataUrl: null, cached: false };
   }
 
   return {
     playbackUrl: json.playbackUrl ?? null,
     posterDataUrl: json.posterDataUrl ?? null,
+    cached: json.cached ?? false,
   };
 }
 

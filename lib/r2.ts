@@ -285,6 +285,30 @@ export async function getR2Object(
   }
 }
 
+/** Range GET — poster tail without downloading the full object. */
+export async function getR2ObjectRange(
+  client: S3Client,
+  bucket: string,
+  key: string,
+  start: number,
+  end: number
+): Promise<Buffer | null> {
+  if (end < start) return null;
+  try {
+    const res = await client.send(
+      new GetObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Range: `bytes=${start}-${end}`,
+      })
+    );
+    const bytes = await res.Body?.transformToByteArray();
+    return bytes ? Buffer.from(bytes) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function deleteR2Object(client: S3Client, bucket: string, key: string) {
   await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
 }
