@@ -98,6 +98,19 @@ export function pageBackgroundUrl(
   return null;
 }
 
+/** First empty background slot (0-based), or -1 when every page slot is filled. */
+export function nextEmptyBackgroundPageIndex(
+  urls: Array<string | null | undefined> | undefined,
+  fallback: string | null | undefined,
+  pageCount: number
+): number {
+  const count = Math.max(1, Math.min(10, pageCount));
+  for (let i = 0; i < count; i++) {
+    if (!pageBackgroundUrl(urls, fallback, i)) return i;
+  }
+  return -1;
+}
+
 async function generateMockBackgroundDataUrl(
   params: PrintBgGenerateParams
 ): Promise<string> {

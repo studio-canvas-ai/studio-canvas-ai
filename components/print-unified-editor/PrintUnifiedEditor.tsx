@@ -56,7 +56,8 @@ import {
 } from "@/lib/photoLookbookProject";
 import { buildPagePrintAiContext } from "@/lib/printWizardAiContext";
 import {
-  generatePrintBackgroundPages,
+  generatePrintBackgroundDataUrl,
+  nextEmptyBackgroundPageIndex,
   pageBackgroundUrl,
   resizeBackgroundPans,
 } from "@/lib/printWizardBg";
@@ -807,18 +808,27 @@ export default function PrintUnifiedEditor() {
   const onGenerateBackground = useCallback(async () => {
     if (generating) return;
     const s = stateRef.current;
-    const keywords = Array.from({ length: s.pageCount }, (_, i) =>
-      buildPagePrintAiContext(s, i)
+    const pageIndex = nextEmptyBackgroundPageIndex(
+      s.backgroundUrls,
+      s.backgroundUrl,
+      s.pageCount
     );
-    if (!keywords[0]) return;
+    if (pageIndex < 0) {
+      window.alert(
+        `${s.pageCount}페이지 배경이 모두 생성되었습니다. 미니 보기에서 페이지를 선택해 편집하거나, 배경을 삭제한 뒤 다시 생성해 주세요.`
+      );
+      return;
+    }
+    const keyword = buildPagePrintAiContext(s, pageIndex);
+    if (!keyword.trim()) return;
     setGenerating(true);
     try {
       const format = formatById(s.formatId);
       const use = useById(s.useId);
-      const urls = await generatePrintBackgroundPages({
-        keyword: keywords[0],
-        keywords,
+      const url = await generatePrintBackgroundDataUrl({
+        keyword,
         aspect: resolvePrintAspect(s.formatId, s.customSize),
+        pageIndex,
         pageCount: s.pageCount,
         formatLabel:
           s.formatId === "free" && s.customSize
@@ -828,14 +838,19 @@ export default function PrintUnifiedEditor() {
         imageStyleId: s.visualStyle.imageStyleId,
         moodStyleId: s.visualStyle.moodStyleId,
       });
+      const urls = Array.from({ length: s.pageCount }, (_, i) =>
+        s.backgroundUrls?.[i] ?? (i === 0 ? s.backgroundUrl ?? "" : "")
+      );
+      urls[pageIndex] = url;
       patch({
         backgroundUrls: urls,
         backgroundUrl: urls[0] ?? null,
-        backgroundPansByPage: resizeBackgroundPans(undefined, s.pageCount),
+        backgroundPansByPage: resizeBackgroundPans(
+          s.backgroundPansByPage,
+          s.pageCount
+        ),
       });
-      // Load page 1 onto the main canvas so editing can start immediately
-      // (mini thumbs alone leave currentPage at 0 → blank center stage).
-      activatePage(1);
+      activatePage(pageIndex + 1);
     } catch (err) {
       console.error("[unified-editor] AI background failed", err);
       window.alert(
