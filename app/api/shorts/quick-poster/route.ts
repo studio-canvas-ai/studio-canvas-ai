@@ -3,13 +3,15 @@ import { resolveAppUser } from "@/lib/resolveAppUser";
 import {
   extractPosterFromBuffer,
   extractPosterFromFragments,
+  extractPosterFromTail,
 } from "@/lib/shortsQuickPoster.server";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
 export const dynamic = "force-dynamic";
 
-const MAX_PART_BYTES = 4 * 1024 * 1024;
+/** Stay under Vercel ~4.5 MB request body limit per part. */
+const MAX_PART_BYTES = 3.8 * 1024 * 1024;
 
 /**
  * POST /api/shorts/quick-poster
@@ -31,21 +33,27 @@ export async function POST(req: Request) {
 
     let poster: Buffer | null = null;
 
-    if (head instanceof Blob && head.size > 0) {
-      const headBuf = Buffer.from(await head.arrayBuffer());
-      if (headBuf.length > MAX_PART_BYTES * 1.1) {
-        return NextResponse.json({ error: "head_too_large" }, { status: 413 });
+    if (tail instanceof Blob && tail.size > 0) {
+      const tailBuf = Buffer.from(await tail.arrayBuffer());
+      if (tailBuf.length > MAX_PART_BYTES) {
+        return NextResponse.json({ error: "tail_too_large" }, { status: 413 });
       }
 
-      if (tail instanceof Blob && tail.size > 0) {
-        const tailBuf = Buffer.from(await tail.arrayBuffer());
-        if (tailBuf.length > MAX_PART_BYTES * 1.1) {
-          return NextResponse.json({ error: "tail_too_large" }, { status: 413 });
+      if (head instanceof Blob && head.size > 0) {
+        const headBuf = Buffer.from(await head.arrayBuffer());
+        if (headBuf.length > MAX_PART_BYTES) {
+          return NextResponse.json({ error: "head_too_large" }, { status: 413 });
         }
         poster = await extractPosterFromFragments(headBuf, tailBuf);
       } else {
-        poster = await extractPosterFromBuffer(headBuf, "head.mp4");
+        poster = await extractPosterFromTail(tailBuf);
       }
+    } else if (head instanceof Blob && head.size > 0) {
+      const headBuf = Buffer.from(await head.arrayBuffer());
+      if (headBuf.length > MAX_PART_BYTES) {
+        return NextResponse.json({ error: "head_too_large" }, { status: 413 });
+      }
+      poster = await extractPosterFromBuffer(headBuf, "head.mp4");
     }
 
     if (!poster?.length) {

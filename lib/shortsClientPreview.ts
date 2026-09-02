@@ -169,6 +169,80 @@ export async function generateClientVideoPreview(
   return { posterUrl, playableUrl };
 }
 
+const FRAG_HEAD_BYTES = 1.5 * 1024 * 1024;
+const FRAG_TAIL_BYTES = 2.2 * 1024 * 1024;
+
+/** WASM poster from head+tail slices only (~4 MB) — safe on large Samsung HEVC files. */
+export async function generateFragmentVideoPoster(
+  file: File,
+  opts?: { signal?: AbortSignal }
+): Promise<string | null> {
+  if (opts?.signal?.aborted) return null;
+
+  const fragName = "frag.mp4";
+  const tailName = "frag_tail.mp4";
+  const posterName = "frag_poster.jpg";
+
+  const ffmpeg = await getFfmpeg();
+  if (opts?.signal?.aborted) return null;
+
+  await safeDelete(ffmpeg, fragName);
+  await safeDelete(ffmpeg, tailName);
+  await safeDelete(ffmpeg, posterName);
+
+  const headEnd = Math.min(file.size, FRAG_HEAD_BYTES);
+  const tailStart = Math.max(0, file.size - FRAG_TAIL_BYTES);
+  const headData = await fetchFile(file.slice(0, headEnd));
+  const tailData = await fetchFile(file.slice(tailStart, file.size));
+
+  const tryPoster = async (input: string, extraArgs: string[] = []) => {
+    const code = await ffmpeg.exec([
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-fflags",
+      "+genpts+discardcorrupt+igndts",
+      "-err_detect",
+      "ignore_err",
+      ...extraArgs,
+      "-i",
+      input,
+      "-an",
+      "-frames:v",
+      "1",
+      "-q:v",
+      "3",
+      "-y",
+      posterName,
+    ]);
+    if (code !== 0) return null;
+    const posterData = await ffmpeg.readFile(posterName);
+    return bytesToBlobUrl(posterData as Uint8Array, "image/jpeg");
+  };
+
+  if (file.size > headEnd) {
+    const combined = new Uint8Array(
+      (headData as Uint8Array).byteLength + (tailData as Uint8Array).byteLength
+    );
+    combined.set(headData as Uint8Array, 0);
+    combined.set(tailData as Uint8Array, (headData as Uint8Array).byteLength);
+    await ffmpeg.writeFile(fragName, combined);
+    const poster = await tryPoster(fragName);
+    if (poster) return poster;
+  }
+
+  await ffmpeg.writeFile(tailName, tailData);
+  const fromTail =
+    (await tryPoster(tailName, ["-sseof", "-1"])) ??
+    (await tryPoster(tailName, ["-sseof", "-0.5"])) ??
+    (await tryPoster(tailName));
+
+  await safeDelete(ffmpeg, fragName);
+  await safeDelete(ffmpeg, tailName);
+  await safeDelete(ffmpeg, posterName);
+  return fromTail;
+}
+
 export function isMobileGalleryVideoClient(): boolean {
   if (typeof navigator === "undefined") return false;
   return (

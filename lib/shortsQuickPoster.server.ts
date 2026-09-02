@@ -32,37 +32,66 @@ function runFfmpeg(bin: string, args: string[]): Promise<void> {
   });
 }
 
-async function tryExtractPoster(
+async function readPosterFile(outPath: string): Promise<Buffer | null> {
+  try {
+    const frame = await readFile(outPath);
+    return frame.byteLength > 0 ? frame : null;
+  } catch {
+    return null;
+  }
+}
+
+async function runPosterAttempts(
   bin: string,
   inputPath: string,
   outPath: string,
-  atSec: number
+  attempts: string[][]
 ): Promise<Buffer | null> {
+  for (const args of attempts) {
+    try {
+      await runFfmpeg(bin, args);
+      const frame = await readPosterFile(outPath);
+      if (frame?.byteLength) return frame;
+    } catch {
+      /* try next strategy */
+    }
+  }
+  return null;
+}
+
+const INPUT_FLAGS = [
+  "-hide_banner",
+  "-loglevel",
+  "error",
+  "-probesize",
+  "48M",
+  "-analyzeduration",
+  "48M",
+  "-fflags",
+  "+genpts+discardcorrupt+igndts",
+  "-err_detect",
+  "ignore_err",
+];
+
+/** Samsung moov-at-end: tail fragment + seek from EOF. */
+export async function extractPosterFromTail(tail: Buffer): Promise<Buffer | null> {
+  const bin = resolveFfmpegPath();
+  if (!bin || !tail.byteLength) return null;
+
+  const dir = await mkdtemp(path.join(tmpdir(), "sca-quick-tail-"));
+  const inputPath = path.join(dir, "tail.mp4");
+  const outPath = path.join(dir, "poster.jpg");
+
   try {
-    await runFfmpeg(bin, [
-      "-hide_banner",
-      "-loglevel",
-      "error",
-      "-probesize",
-      "32M",
-      "-analyzeduration",
-      "32M",
-      "-fflags",
-      "+genpts+discardcorrupt",
-      "-ss",
-      String(atSec),
-      "-i",
-      inputPath,
-      "-frames:v",
-      "1",
-      "-q:v",
-      "3",
-      "-y",
-      outPath,
+    await writeFile(inputPath, tail);
+    return await runPosterAttempts(bin, inputPath, outPath, [
+      [...INPUT_FLAGS, "-sseof", "-2", "-i", inputPath, "-frames:v", "1", "-q:v", "3", "-y", outPath],
+      [...INPUT_FLAGS, "-sseof", "-0.5", "-i", inputPath, "-frames:v", "1", "-q:v", "3", "-y", outPath],
+      [...INPUT_FLAGS, "-i", inputPath, "-vf", "thumbnail", "-frames:v", "1", "-q:v", "3", "-y", outPath],
+      [...INPUT_FLAGS, "-i", inputPath, "-frames:v", "1", "-q:v", "3", "-y", outPath],
     ]);
-    return await readFile(outPath);
-  } catch {
-    return null;
+  } finally {
+    await rm(dir, { recursive: true, force: true }).catch(() => undefined);
   }
 }
 
@@ -71,17 +100,23 @@ export async function extractPosterFromFragments(
   head: Buffer,
   tail: Buffer
 ): Promise<Buffer | null> {
-  const attempts: Array<{ name: string; data: Buffer }> = [];
-  if (tail.byteLength > 0) attempts.push({ name: "tail.mp4", data: tail });
-  if (head.byteLength > 0) attempts.push({ name: "head.mp4", data: head });
   if (head.byteLength > 0 && tail.byteLength > 0) {
-    attempts.push({ name: "frag.mp4", data: Buffer.concat([head, tail]) });
+    const concat = await extractPosterFromBuffer(
+      Buffer.concat([head, tail]),
+      "frag.mp4"
+    );
+    if (concat?.byteLength) return concat;
   }
 
-  for (const part of attempts) {
-    const frame = await extractPosterFromBuffer(part.data, part.name);
-    if (frame?.byteLength) return frame;
+  if (tail.byteLength > 0) {
+    const fromTail = await extractPosterFromTail(tail);
+    if (fromTail?.byteLength) return fromTail;
   }
+
+  if (head.byteLength > 0) {
+    return extractPosterFromBuffer(head, "head.mp4");
+  }
+
   return null;
 }
 
@@ -101,11 +136,12 @@ export async function extractPosterFromBuffer(
 
   try {
     await writeFile(inputPath, video);
-    for (const at of [0.5, 1, 2, 0]) {
-      const frame = await tryExtractPoster(bin, inputPath, outPath, at);
-      if (frame?.byteLength) return frame;
-    }
-    return null;
+    return await runPosterAttempts(bin, inputPath, outPath, [
+      [...INPUT_FLAGS, "-ss", "0", "-i", inputPath, "-frames:v", "1", "-q:v", "3", "-y", outPath],
+      [...INPUT_FLAGS, "-ss", "0.5", "-i", inputPath, "-frames:v", "1", "-q:v", "3", "-y", outPath],
+      [...INPUT_FLAGS, "-i", inputPath, "-vf", "thumbnail", "-frames:v", "1", "-q:v", "3", "-y", outPath],
+      [...INPUT_FLAGS, "-i", inputPath, "-frames:v", "1", "-q:v", "3", "-y", outPath],
+    ]);
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => undefined);
   }
