@@ -142,6 +142,95 @@ function cloneTextPagesFromWizard(
   return resizeBlankIsolatedPages(cloned, pageCount);
 }
 
+function cloneUnifiedPageLayers<T extends { id: string }>(layers: T[]): T[] {
+  return layers.map((layer) => ({
+    ...layer,
+    id:
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `${layer.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  }));
+}
+
+/** Copy page-1 work onto a target face when spawning a new background variant. */
+function copyPageOneWorkOntoTarget(
+  state: PrintWizardState,
+  targetPageIndex: number
+): Pick<
+  PrintWizardState,
+  | "textLayersByPage"
+  | "photoLayersByPage"
+  | "decoLayersByPage"
+  | "contentOffsetByPage"
+> {
+  const pageCount = state.pageCount;
+  const textPages = resizeBlankIsolatedPages(state.textLayersByPage, pageCount);
+  const photoPages = resizePhotoPages(state.photoLayersByPage, pageCount);
+  const decoPages = resizeDecoPages(state.decoLayersByPage, pageCount);
+  const offsets = resizeContentOffsets(state.contentOffsetByPage, pageCount);
+  const sourceIndex = 0;
+
+  const clonedText = (textPages[sourceIndex] ?? []).map((layer) =>
+    preserveRestoredTextLayer({
+      ...layer,
+      id:
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `${layer.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      ranges: layer.ranges?.map((range) => ({ ...range })) ?? [],
+    })
+  );
+
+  return {
+    textLayersByPage: textPages.map((page, i) =>
+      i === targetPageIndex ? clonedText : page
+    ),
+    photoLayersByPage: photoPages.map((page, i) =>
+      i === targetPageIndex
+        ? cloneUnifiedPageLayers(page ?? [])
+        : (page ?? [])
+    ),
+    decoLayersByPage: decoPages.map((page, i) =>
+      i === targetPageIndex
+        ? cloneUnifiedPageLayers(page ?? [])
+        : (page ?? [])
+    ),
+    contentOffsetByPage: offsets.map((offset, i) =>
+      i === targetPageIndex ? { ...offsets[sourceIndex] } : offset
+    ),
+  };
+}
+
+function resolveBackgroundGenerationTarget(
+  state: PrintWizardState,
+  selectedPage: number
+): { pageIndex: number; cloneFromPageOne: boolean } | null {
+  const pageOneHasBackground = Boolean(
+    pageBackgroundUrl(state.backgroundUrls, state.backgroundUrl, 0)
+  );
+  const effectivePage = selectedPage > 0 ? selectedPage : 1;
+
+  if (effectivePage === 1) {
+    if (!pageOneHasBackground) {
+      return { pageIndex: 0, cloneFromPageOne: false };
+    }
+    const nextEmpty = nextEmptyBackgroundPageIndex(
+      state.backgroundUrls,
+      state.backgroundUrl,
+      state.pageCount
+    );
+    if (nextEmpty < 0) return null;
+    if (nextEmpty === 0) {
+      return { pageIndex: 0, cloneFromPageOne: false };
+    }
+    return { pageIndex: nextEmpty, cloneFromPageOne: true };
+  }
+
+  const pageIndex = effectivePage - 1;
+  if (pageIndex < 0 || pageIndex >= state.pageCount) return null;
+  return { pageIndex, cloneFromPageOne: false };
+}
+
 function readSession(key: string): PrintWizardState | null {
   if (typeof window === "undefined") return null;
   try {
@@ -243,6 +332,8 @@ export default function PrintUnifiedEditor() {
   const [saveCanvasBusy, setSaveCanvasBusy] = useState(false);
   const stateRef = useRef(state);
   stateRef.current = state;
+  const currentPageRef = useRef(currentPage);
+  currentPageRef.current = currentPage;
   const formatSeedKeyRef = useRef("");
 
   const seedGuideLayersForPage = useCallback((pageIndexToSeed: number) => {
@@ -808,17 +899,17 @@ export default function PrintUnifiedEditor() {
   const onGenerateBackground = useCallback(async () => {
     if (generating) return;
     const s = stateRef.current;
-    const pageIndex = nextEmptyBackgroundPageIndex(
-      s.backgroundUrls,
-      s.backgroundUrl,
-      s.pageCount
+    const target = resolveBackgroundGenerationTarget(
+      s,
+      currentPageRef.current
     );
-    if (pageIndex < 0) {
+    if (!target) {
       window.alert(
         `${s.pageCount}페이지 배경이 모두 생성되었습니다. 미니 보기에서 페이지를 선택해 편집하거나, 배경을 삭제한 뒤 다시 생성해 주세요.`
       );
       return;
     }
+    const { pageIndex, cloneFromPageOne } = target;
     const keyword = buildPagePrintAiContext(s, pageIndex);
     if (!keyword.trim()) return;
     setGenerating(true);
@@ -842,6 +933,9 @@ export default function PrintUnifiedEditor() {
         s.backgroundUrls?.[i] ?? (i === 0 ? s.backgroundUrl ?? "" : "")
       );
       urls[pageIndex] = url;
+      const layerCopy = cloneFromPageOne
+        ? copyPageOneWorkOntoTarget(s, pageIndex)
+        : null;
       patch({
         backgroundUrls: urls,
         backgroundUrl: urls[0] ?? null,
@@ -849,6 +943,7 @@ export default function PrintUnifiedEditor() {
           s.backgroundPansByPage,
           s.pageCount
         ),
+        ...(layerCopy ?? {}),
       });
       activatePage(pageIndex + 1);
     } catch (err) {
