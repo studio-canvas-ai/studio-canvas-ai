@@ -1291,7 +1291,6 @@ export async function uploadShortsVideoFile(
           lastError: lastPutError?.message,
           progressPct: lastPutError?.details.progressPct,
         });
-        opts?.onProgress?.(0);
         await sleep(waitMs);
       }
 
@@ -1341,7 +1340,6 @@ export async function uploadShortsVideoFile(
       }
 
       try {
-        opts?.onProgress?.(0);
         await xhrPutWithProgress(putUrl, file, {
           onProgress: opts?.onProgress,
           signal: opts?.signal,

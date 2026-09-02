@@ -43,6 +43,10 @@ async function tryExtractPoster(
       "-hide_banner",
       "-loglevel",
       "error",
+      "-probesize",
+      "32M",
+      "-analyzeduration",
+      "32M",
       "-fflags",
       "+genpts+discardcorrupt",
       "-ss",
@@ -67,23 +71,18 @@ export async function extractPosterFromFragments(
   head: Buffer,
   tail: Buffer
 ): Promise<Buffer | null> {
-  const bin = resolveFfmpegPath();
-  if (!bin) return null;
-
-  const dir = await mkdtemp(path.join(tmpdir(), "sca-quick-poster-"));
-  const inputPath = path.join(dir, "frag.mp4");
-  const outPath = path.join(dir, "poster.jpg");
-
-  try {
-    await writeFile(inputPath, Buffer.concat([head, tail]));
-    for (const at of [0.5, 1, 2, 0]) {
-      const frame = await tryExtractPoster(bin, inputPath, outPath, at);
-      if (frame?.byteLength) return frame;
-    }
-    return null;
-  } finally {
-    await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+  const attempts: Array<{ name: string; data: Buffer }> = [];
+  if (tail.byteLength > 0) attempts.push({ name: "tail.mp4", data: tail });
+  if (head.byteLength > 0) attempts.push({ name: "head.mp4", data: head });
+  if (head.byteLength > 0 && tail.byteLength > 0) {
+    attempts.push({ name: "frag.mp4", data: Buffer.concat([head, tail]) });
   }
+
+  for (const part of attempts) {
+    const frame = await extractPosterFromBuffer(part.data, part.name);
+    if (frame?.byteLength) return frame;
+  }
+  return null;
 }
 
 export async function extractPosterFromBuffer(

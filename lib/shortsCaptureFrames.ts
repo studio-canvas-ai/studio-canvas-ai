@@ -148,6 +148,44 @@ export async function captureHookFramesFromVideoElement(
   return out;
 }
 
+/** Fast first-frame poster from a local blob URL (works when codec is browser-decodable). */
+export async function captureQuickPosterFromBlob(
+  previewUrl: string,
+  opts?: { signal?: AbortSignal; timeoutMs?: number }
+): Promise<string | null> {
+  const timeoutMs = opts?.timeoutMs ?? 2800;
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), timeoutMs);
+  const onAbort = () => ac.abort();
+  opts?.signal?.addEventListener("abort", onAbort, { once: true });
+
+  try {
+    const video = await loadVideo(previewUrl);
+    if (ac.signal.aborted) return null;
+    await seekTo(video, 0.25);
+    if (ac.signal.aborted) return null;
+    const blob = await canvasFrame(video);
+    return await new Promise<string | null>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        resolve(typeof reader.result === "string" ? reader.result : null);
+      };
+      reader.onerror = () => reject(reader.error ?? new Error("poster_read_failed"));
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+    opts?.signal?.removeEventListener("abort", onAbort);
+    videoCleanup(previewUrl);
+  }
+}
+
+function videoCleanup(_previewUrl: string) {
+  /* loadVideo creates detached elements — GC handles them */
+}
+
 /** Capture evenly spaced stills from a local/object URL video. */
 export async function captureHookFramesFromVideoUrl(
   previewUrl: string,

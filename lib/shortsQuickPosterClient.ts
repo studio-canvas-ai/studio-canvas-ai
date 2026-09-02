@@ -1,8 +1,10 @@
 "use client";
 
+import { ensureAppSessionFromSupabase } from "@/lib/ensureAppSession";
+
 /** Head + tail bytes for server FFmpeg (moov-at-end MP4 on Samsung). */
 const HEAD_BYTES = 2 * 1024 * 1024;
-const TAIL_BYTES = 2 * 1024 * 1024;
+const TAIL_BYTES = 4 * 1024 * 1024;
 
 function readBlobSlice(blob: Blob): Promise<ArrayBuffer> {
   return new Promise((resolve, reject) => {
@@ -19,17 +21,29 @@ function readBlobSlice(blob: Blob): Promise<ArrayBuffer> {
 /**
  * Fast server poster from file fragments — no full upload, no WASM OOM.
  */
+async function sliceToBlob(file: File, start: number, end: number): Promise<Blob> {
+  const slice = file.slice(start, end);
+  try {
+    const buf = await readBlobSlice(slice);
+    return new Blob([buf], { type: "application/octet-stream" });
+  } catch {
+    return slice;
+  }
+}
+
 export async function requestQuickPoster(
   file: File,
   opts?: { signal?: AbortSignal }
 ): Promise<string | null> {
+  await ensureAppSessionFromSupabase();
+
   const headEnd = Math.min(file.size, HEAD_BYTES);
   const tailStart = Math.max(0, file.size - TAIL_BYTES);
 
   const fd = new FormData();
-  fd.append("head", file.slice(0, headEnd), "head.mp4");
+  fd.append("head", await sliceToBlob(file, 0, headEnd), "head.mp4");
   if (file.size > HEAD_BYTES) {
-    fd.append("tail", file.slice(tailStart, file.size), "tail.mp4");
+    fd.append("tail", await sliceToBlob(file, tailStart, file.size), "tail.mp4");
   }
 
   const res = await fetch("/api/shorts/quick-poster", {

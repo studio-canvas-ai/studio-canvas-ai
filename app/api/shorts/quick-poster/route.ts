@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 export const dynamic = "force-dynamic";
 
-const MAX_PART_BYTES = 2 * 1024 * 1024;
+const MAX_PART_BYTES = 4 * 1024 * 1024;
 
 /**
  * POST /api/shorts/quick-poster

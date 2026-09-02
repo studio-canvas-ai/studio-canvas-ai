@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { useCredits } from "@/components/CreditsProvider";
-import { captureCurrentVideoFrame } from "@/lib/shortsCaptureFrames";
+import { captureCurrentVideoFrame, captureQuickPosterFromBlob } from "@/lib/shortsCaptureFrames";
 import type { ShortsHookFrame } from "@/lib/shortsHookShared";
 import {
   uploadShortsVideoFile,
@@ -119,7 +119,7 @@ export default function ShortsVideoUpload({
     clientBlobUrlsRef.current = [];
   }, []);
 
-  const startQuickPreview = useCallback((file: File) => {
+  const startQuickPreview = useCallback((file: File, previewBlobUrl?: string | null) => {
     clientPreviewRef.current?.abort();
     const ac = new AbortController();
     clientPreviewRef.current = ac;
@@ -138,20 +138,31 @@ export default function ShortsVideoUpload({
       videoPlayErrorRef.current = false;
     };
 
+    const finishLoading = () => {
+      if (!ac.signal.aborted && !posterReady) {
+        setClientPreviewLoading(false);
+      }
+    };
+
+    if (previewBlobUrl) {
+      void captureQuickPosterFromBlob(previewBlobUrl, { signal: ac.signal })
+        .then((posterUrl) => {
+          if (ac.signal.aborted || !posterUrl || posterReady) return;
+          markPosterReady(posterUrl);
+        })
+        .catch(() => undefined);
+    }
+
     void requestQuickPoster(file, { signal: ac.signal })
       .then((posterUrl) => {
-        if (ac.signal.aborted || !posterUrl) return;
+        if (ac.signal.aborted || !posterUrl || posterReady) return;
         markPosterReady(posterUrl);
       })
       .catch((err) => {
         if (ac.signal.aborted) return;
         console.warn("[shorts] quick poster failed", err);
       })
-      .finally(() => {
-        if (!ac.signal.aborted && !posterReady && file.size > CLIENT_WASM_MAX_BYTES) {
-          setClientPreviewLoading(false);
-        }
-      });
+      .finally(finishLoading);
 
     if (file.size <= CLIENT_WASM_MAX_BYTES) {
       void generateClientVideoPreview(file, {
@@ -175,11 +186,7 @@ export default function ShortsVideoUpload({
           if (ac.signal.aborted) return;
           console.warn("[shorts] wasm preview failed", err);
         })
-        .finally(() => {
-          if (!ac.signal.aborted && !posterReady) {
-            setClientPreviewLoading(false);
-          }
-        });
+        .finally(finishLoading);
     }
   }, []);
 
@@ -352,9 +359,15 @@ export default function ShortsVideoUpload({
         setVideoSrc(null);
         setVideoPlayError(false);
         videoPlayErrorRef.current = false;
-        startQuickPreview(file);
+        startQuickPreview(file, localAsset.previewUrl);
+        window.setTimeout(() => {
+          if (!ac.signal.aborted) {
+            startBackgroundUpload(file, localAsset, ac);
+          }
+        }, 1800);
       } else {
         setVideoSrc(localAsset.previewUrl);
+        startBackgroundUpload(file, localAsset, ac);
       }
 
       void persistShortsVideoBlob(localAsset.videoId, file, {
@@ -364,8 +377,6 @@ export default function ShortsVideoUpload({
         console.warn("[shorts/upload] idb persist", persistErr);
       });
       void useShortsProjectStore.getState().hydrateFromAsset(localAsset, file);
-
-      startBackgroundUpload(file, localAsset, ac);
     },
     [
       asset,
@@ -576,7 +587,9 @@ export default function ShortsVideoUpload({
                     setVideoPlayError(true);
                     videoPlayErrorRef.current = true;
                     const file = localFileRef.current;
-                    if (file && !clientPreviewLoading) startQuickPreview(file);
+                    if (file && !clientPreviewLoading) {
+                      startQuickPreview(file, asset.previewUrl);
+                    }
                   }}
                   onDoubleClick={(e) => {
                     e.preventDefault();
@@ -600,11 +613,16 @@ export default function ShortsVideoUpload({
                 <div className="flex min-h-[200px] flex-col items-center justify-center gap-3 px-4 py-10 text-center sm:min-h-[280px]">
                   <Clapperboard className="h-10 w-10 text-white/40" aria-hidden />
                   <p className="text-sm font-medium text-white/85">
-                    {t.shorts.clientPreviewPreparing}
+                    {clientPreviewLoading
+                      ? t.shorts.clientPreviewPreparing
+                      : cloudSyncing
+                        ? t.shorts.cloudSyncing
+                        : t.shorts.clientPreviewPreparing}
                   </p>
                 </div>
               )}
-              {clientPreviewLoading && !serverPosterUrl && (
+              {(clientPreviewLoading || (!serverPosterUrl && !videoSrc && cloudSyncing)) &&
+                !serverPosterUrl && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/55">
                   <Loader2 className="h-8 w-8 animate-spin text-white/80" aria-hidden />
                   <p className="px-4 text-center text-[11px] text-white/85">
