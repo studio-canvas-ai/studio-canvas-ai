@@ -23,7 +23,7 @@ import {
 import { extractShortsHookFrames } from "@/lib/shortsExtractClient";
 import {
   generateClientVideoPreview,
-  generateFragmentVideoPoster,
+  generateFragmentVideoPreview,
   isMobileGalleryVideoClient,
 } from "@/lib/shortsClientPreview";
 import {
@@ -139,77 +139,70 @@ export default function ShortsVideoUpload({
       videoPlayErrorRef.current = false;
     };
 
-    const finishLoading = () => {
-      if (!ac.signal.aborted && !posterReady) {
-        setClientPreviewLoading(false);
-      }
+    const markPlayable = (url: string) => {
+      clientBlobUrlsRef.current.push(url);
+      setVideoSrc(url);
+      setVideoPlayError(false);
+      videoPlayErrorRef.current = false;
     };
 
-    const tasks: Promise<unknown>[] = [];
+    void (async () => {
+      try {
+        const lightTasks: Promise<string | null>[] = [
+          requestQuickPoster(file, { signal: ac.signal }),
+        ];
+        if (previewBlobUrl) {
+          lightTasks.push(
+            captureQuickPosterFromBlob(previewBlobUrl, { signal: ac.signal })
+          );
+        }
 
-    if (previewBlobUrl) {
-      tasks.push(
-        captureQuickPosterFromBlob(previewBlobUrl, { signal: ac.signal })
-          .then((posterUrl) => {
-            if (ac.signal.aborted || !posterUrl || posterReady) return;
-            markPosterReady(posterUrl);
-          })
-          .catch(() => undefined)
-      );
-    }
+        const lightResults = await Promise.allSettled(lightTasks);
+        for (const result of lightResults) {
+          if (ac.signal.aborted || posterReady) break;
+          if (result.status === "fulfilled" && result.value) {
+            markPosterReady(result.value);
+          }
+        }
 
-    tasks.push(
-      requestQuickPoster(file, { signal: ac.signal })
-        .then((posterUrl) => {
-          if (ac.signal.aborted || !posterUrl || posterReady) return;
-          markPosterReady(posterUrl);
-        })
-        .catch((err) => {
+        if (ac.signal.aborted) return;
+
+        if (file.size <= CLIENT_WASM_MAX_BYTES) {
+          const wasm = await generateClientVideoPreview(file, {
+            signal: ac.signal,
+            onProgress: ({ ratio }) => setClientPreviewPct(ratio),
+          });
           if (ac.signal.aborted) return;
-          console.warn("[shorts] quick poster failed", err);
-        })
-    );
+          if (wasm.posterUrl && !posterReady) {
+            clientBlobUrlsRef.current.push(wasm.posterUrl);
+            markPosterReady(wasm.posterUrl);
+          }
+          if (wasm.playableUrl) markPlayable(wasm.playableUrl);
+          return;
+        }
 
-    if (file.size <= CLIENT_WASM_MAX_BYTES) {
-      tasks.push(
-        generateClientVideoPreview(file, {
-          signal: ac.signal,
-          onProgress: ({ ratio }) => setClientPreviewPct(ratio),
-        })
-          .then(({ posterUrl, playableUrl }) => {
-            if (ac.signal.aborted) return;
-            if (posterUrl && !posterReady) {
-              clientBlobUrlsRef.current.push(posterUrl);
-              markPosterReady(posterUrl);
-            }
-            if (playableUrl) {
-              clientBlobUrlsRef.current.push(playableUrl);
-              setVideoSrc(playableUrl);
-              setVideoPlayError(false);
-              videoPlayErrorRef.current = false;
-            }
-          })
-          .catch((err) => {
-            if (ac.signal.aborted) return;
-            console.warn("[shorts] wasm preview failed", err);
-          })
-      );
-    } else if (isMobileGalleryVideoClient()) {
-      tasks.push(
-        generateFragmentVideoPoster(file, { signal: ac.signal })
-          .then((posterUrl) => {
-            if (ac.signal.aborted || !posterUrl || posterReady) return;
-            clientBlobUrlsRef.current.push(posterUrl);
-            markPosterReady(posterUrl);
-          })
-          .catch((err) => {
-            if (ac.signal.aborted) return;
-            console.warn("[shorts] fragment wasm poster failed", err);
-          })
-      );
-    }
-
-    void Promise.allSettled(tasks).finally(finishLoading);
+        // Heavy WASM only when server quick-poster failed — avoids freezing home navigation.
+        if (!posterReady && isMobileGalleryVideoClient()) {
+          const frag = await generateFragmentVideoPreview(file, {
+            signal: ac.signal,
+          });
+          if (ac.signal.aborted) return;
+          if (frag.posterUrl && !posterReady) {
+            clientBlobUrlsRef.current.push(frag.posterUrl);
+            markPosterReady(frag.posterUrl);
+          }
+          if (frag.playableUrl) markPlayable(frag.playableUrl);
+        }
+      } catch (err) {
+        if (!ac.signal.aborted) {
+          console.warn("[shorts] quick preview failed", err);
+        }
+      } finally {
+        if (!ac.signal.aborted && !posterReady) {
+          setClientPreviewLoading(false);
+        }
+      }
+    })();
   }, []);
 
   const recoverVideoPreview = useCallback(async () => {
@@ -386,7 +379,7 @@ export default function ShortsVideoUpload({
           if (!ac.signal.aborted) {
             startBackgroundUpload(file, localAsset, ac);
           }
-        }, 1800);
+        }, 600);
       } else {
         setVideoSrc(localAsset.previewUrl);
         startBackgroundUpload(file, localAsset, ac);
@@ -592,20 +585,24 @@ export default function ShortsVideoUpload({
 
           <div className="space-y-2">
             <div className="relative overflow-hidden rounded-xl bg-black/40 ring-1 ring-white/10">
-              {videoSrc && !videoPlayError ? (
+              {videoSrc || serverPosterUrl ? (
                 <video
                   ref={videoRef}
-                  key={`${asset.videoId}_${videoSrc}`}
-                  src={videoSrc}
+                  key={`${asset.videoId}_${videoSrc || "poster"}`}
+                  src={videoSrc ?? undefined}
+                  poster={serverPosterUrl ?? undefined}
                   crossOrigin={
-                    videoSrc.startsWith("blob:") ? undefined : "anonymous"
+                    videoSrc && !videoSrc.startsWith("blob:")
+                      ? "anonymous"
+                      : undefined
                   }
                   controls
                   playsInline
-                  preload="auto"
+                  preload={videoSrc ? "auto" : "metadata"}
                   className="mx-auto max-h-[min(60vh,420px)] w-full bg-black object-contain"
                   onLoadedData={() => setVideoPlayError(false)}
                   onError={() => {
+                    if (!videoSrc) return;
                     setVideoPlayError(true);
                     videoPlayErrorRef.current = true;
                     const file = localFileRef.current;
@@ -613,18 +610,6 @@ export default function ShortsVideoUpload({
                       startQuickPreview(file, asset.previewUrl);
                     }
                   }}
-                  onDoubleClick={(e) => {
-                    e.preventDefault();
-                    void captureManualFrame();
-                  }}
-                  title={t.shorts.manualCaptureHint}
-                />
-              ) : serverPosterUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={serverPosterUrl}
-                  alt=""
-                  className="mx-auto max-h-[min(60vh,420px)] w-full bg-black object-contain"
                   onDoubleClick={(e) => {
                     e.preventDefault();
                     void captureManualFrame();
@@ -645,12 +630,9 @@ export default function ShortsVideoUpload({
                   </p>
                 </div>
               )}
-              {!clientPreviewLoading && !serverPosterUrl && !videoSrc && cloudSyncing && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/50">
-                  <Loader2 className="h-7 w-7 animate-spin text-white/70" aria-hidden />
-                  <p className="px-4 text-center text-[11px] text-white/75">
-                    {t.shorts.cloudSyncing}
-                  </p>
+              {!videoSrc && serverPosterUrl && cloudSyncing && (
+                <div className="pointer-events-none absolute bottom-2 left-2 right-2 rounded-lg bg-black/75 px-2 py-1.5 text-center text-[10px] text-white/85">
+                  {t.shorts.cloudSyncing} · {uploadProgress}%
                 </div>
               )}
               {serverPosterLoading && serverPosterUrl && !videoSrc && (

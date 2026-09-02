@@ -73,7 +73,7 @@ export default function HeroSection() {
             </p>
 
             {/* Primary product CTAs — two oversized buttons */}
-            <div className="grid w-full grid-cols-1 gap-3 pt-1 sm:grid-cols-2 sm:gap-4">
+            <div className="relative z-20 grid w-full touch-manipulation grid-cols-1 gap-3 pt-1 sm:grid-cols-2 sm:gap-4">
               <Link
                 href={PRINT_UNIFIED_EDITOR_PATH}
                 className={`${HERO_PRIMARY} border-2 border-sky-300/70 bg-gradient-to-br from-sky-500 to-blue-600 shadow-[0_10px_36px_rgba(56,189,248,0.45)] hover:from-sky-400 hover:to-blue-500 hover:shadow-[0_14px_44px_rgba(56,189,248,0.55)]`}
@@ -101,7 +101,7 @@ export default function HeroSection() {
             </div>
 
             {isAdmin ? (
-              <div className="space-y-2 border-t border-white/10 pt-4">
+              <div className="relative z-20 touch-manipulation space-y-2 border-t border-white/10 pt-4">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-white/35">
                   {t.hero.labComingSoon}
                 </p>

@@ -69,7 +69,7 @@ export default function BottomTabBar() {
                   role="link"
                   aria-disabled="true"
                   title={t.nav.login}
-                  className="flex min-w-0 flex-1 cursor-default flex-col items-center justify-center gap-0.5 px-0.5 text-[10px] font-medium text-zinc-600 select-none"
+                  className="flex min-h-[44px] min-w-0 flex-1 cursor-default touch-manipulation flex-col items-center justify-center gap-0.5 px-0.5 text-[10px] font-medium text-zinc-600 select-none"
                 >
                   <Icon
                     className="h-[1.15rem] w-[1.15rem] shrink-0 text-current"
@@ -86,7 +86,7 @@ export default function BottomTabBar() {
             <li key={href} className="flex min-w-0 flex-1">
               <Link
                 href={href}
-                className={`flex min-w-0 flex-1 cursor-pointer flex-col items-center justify-center gap-0.5 px-0.5 text-[10px] font-medium transition-colors ${
+                className={`flex min-h-[44px] min-w-0 flex-1 touch-manipulation cursor-pointer flex-col items-center justify-center gap-0.5 px-0.5 text-[10px] font-medium transition-colors ${
                   active
                     ? "text-white"
                     : "text-zinc-400 hover:text-zinc-200"

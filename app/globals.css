@@ -249,6 +249,14 @@
     pointer-events: none;
   }
 
+  @media (max-width: 767px) {
+    a,
+    button,
+    [role="button"] {
+      touch-action: manipulation;
+    }
+  }
+
   .shimmer-bg {
     background: linear-gradient(
       90deg,
