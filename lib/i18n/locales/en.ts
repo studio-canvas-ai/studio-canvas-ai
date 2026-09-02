@@ -94,19 +94,29 @@ const en: Translations = {
     dropHint: "Tap to open your gallery, or drag & drop an MP4 / MOV file here.",
     sizeHint: "MP4, MOV, WebM · up to {max} · stored on Cloudflare R2 when configured",
     uploading: "Uploading to secure storage…",
+    cloudSyncing: "Syncing to cloud… You can edit right away",
+    serverPosterLoading: "Generating server preview… (HEVC / unsupported mobile codec)",
+    cloudSyncFailed:
+      "Cloud sync failed — editing still works. Try again on Wi-Fi.",
+    cloudSyncRetry: "Retry cloud sync",
     storageR2: "Cloudflare R2",
     storageLocal: "Local preview (R2 not configured)",
+    storageEditingLocal: "Editing locally",
     clearVideo: "Remove video",
     startHookExtract: "✨ Start AI hook-frame extraction",
     extracting: "Extracting hook frames…",
     extractPending:
-      "Sampling peak moments and saving thumbnail candidates to secure storage.",
+      "Extracting key moments from your local video…",
     reExtract: "✨ Extract hook frames again",
     manualCaptureCta: "📷 Use this frame as thumbnail",
     manualCapturing: "Capturing frame…",
     manualCaptureHint:
       "Double-click the preview (or tap Capture) to set this frame as the Screen 13 thumbnail.",
     manualCaptureError: "Could not capture this frame. Please try again.",
+    clientPreviewPreparing:
+      "Converting phone video for preview automatically — no settings to change",
+    videoPreviewError:
+      "Could not load preview. The file may use an unsupported codec or be corrupted.",
     hooksTitle: "AI hook-frame candidates",
     hooksHint: "Tap the frame you want for your Shorts thumbnail.",
     hookLabel: "Hook",

@@ -11,8 +11,8 @@ export { SHORTS_THUMBNAIL_PATH };
 /** Default max clip size for Shorts upload (presigned R2). Override via SHORTS_MAX_VIDEO_BYTES. */
 export const DEFAULT_SHORTS_MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 
-/** Proxy chunk size — under Vercel's ~4.5 MB request body limit. */
-export const SHORTS_SERVER_CHUNK_BYTES = 1 * 1024 * 1024;
+/** Proxy chunk size — under Vercel's ~4.5 MB request body limit (incl. JSON/base64 overhead). */
+export const SHORTS_SERVER_CHUNK_BYTES = 512 * 1024;
 
 export const SHORTS_VIDEO_ACCEPT = "video/*,.mp4,.mov,.webm,.m4v,.avi" as const;
 
@@ -104,6 +104,43 @@ export type ShortsVideoAsset = {
   playbackUrl: string | null;
   storage: ShortsStorageMode;
 };
+
+const CLIENT_VIDEO_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function isClientVideoId(value: string): boolean {
+  return CLIENT_VIDEO_ID_RE.test(value.trim());
+}
+
+/** Instant local asset — enter Screen 12 before cloud upload finishes. */
+export function createOptimisticShortsVideoAsset(file: File):
+  | { ok: true; asset: ShortsVideoAsset }
+  | { ok: false; error: string; maxBytes?: number } {
+  const normalized = normalizeShortsUploadFile(file);
+  const maxBytes = getShortsMaxVideoBytes();
+  const check = isAllowedShortsVideo(
+    normalized.mime,
+    normalized.fileName,
+    normalized.sizeBytes,
+    maxBytes
+  );
+  if (!check.ok) {
+    return { ok: false, error: check.error, maxBytes };
+  }
+  return {
+    ok: true,
+    asset: {
+      videoId: crypto.randomUUID(),
+      fileName: normalized.fileName,
+      sizeBytes: normalized.sizeBytes,
+      contentType: check.contentType,
+      previewUrl: URL.createObjectURL(file),
+      storageKey: null,
+      playbackUrl: null,
+      storage: "local",
+    },
+  };
+}
 
 export function getShortsMaxVideoBytes(): number {
   const raw = process.env.SHORTS_MAX_VIDEO_BYTES?.trim();

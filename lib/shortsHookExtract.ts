@@ -35,8 +35,8 @@ export {
   type ShortsHookFrame,
 };
 
-/** Server-side R2 download cap for FFmpeg (Vercel memory). Larger → client canvas. */
-export const SHORTS_EXTRACT_MAX_DOWNLOAD_BYTES = 45 * 1024 * 1024;
+/** Server-side R2 download cap for FFmpeg — match upload max (100 MB). */
+export const SHORTS_EXTRACT_MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024;
 
 function resolveFfmpegPath(): string | null {
   try {

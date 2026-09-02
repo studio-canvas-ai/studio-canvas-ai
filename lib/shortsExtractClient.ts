@@ -3,7 +3,10 @@
  */
 
 import type { ShortsHookFrame } from "@/lib/shortsHookShared";
-import { captureHookFramesFromVideoUrl } from "@/lib/shortsCaptureFrames";
+import {
+  captureHookFramesFromVideoElement,
+  captureHookFramesFromVideoUrl,
+} from "@/lib/shortsCaptureFrames";
 import type { ShortsVideoAsset } from "@/lib/shortsVideo";
 
 export type ExtractHooksResult = {
@@ -84,11 +87,40 @@ async function postClientFrames(
 }
 
 /**
- * Prefer server FFmpeg from R2; fall back to canvas sampling + multipart upload.
+ * Prefer local canvas on the mounted preview; cloud FFmpeg only when no local file.
  */
 export async function extractShortsHookFrames(
-  asset: ShortsVideoAsset
+  asset: ShortsVideoAsset,
+  opts?: { previewVideo?: HTMLVideoElement | null }
 ): Promise<ExtractHooksResult> {
+  const previewVideo = opts?.previewVideo;
+  const hasLocalPreview =
+    (previewVideo?.videoWidth && previewVideo.videoHeight) ||
+    asset.previewUrl.startsWith("blob:");
+
+  if (hasLocalPreview) {
+    const captured =
+      previewVideo?.videoWidth && previewVideo.videoHeight
+        ? await captureHookFramesFromVideoElement(previewVideo)
+        : await captureHookFramesFromVideoUrl(asset.previewUrl);
+    try {
+      return await postClientFrames(asset, captured);
+    } catch (err) {
+      console.warn("[shorts/extract] server score failed, using local hooks", err);
+      return {
+        hooks: captured.map((f, i) => ({
+          id: `hook_local_${i}_${Date.now().toString(36)}`,
+          index: i,
+          timestampSec: f.timestampSec,
+          score: Math.max(0.2, 1 - i * 0.08),
+          imageUrl: URL.createObjectURL(f.blob),
+          storageKey: null,
+        })),
+        method: "client_frames",
+      };
+    }
+  }
+
   if (asset.storage === "r2" && asset.storageKey) {
     const server = await postJsonExtract(asset.videoId, asset.storageKey);
     if (server.ok) return { hooks: server.hooks, method: server.method };

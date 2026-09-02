@@ -5,7 +5,12 @@
 
 import {
   getShortsUploadProxyPutUrl,
+  getShortsUploadProxySessionUrl,
+  isSameOriginStreamUpload,
   isShortsUploadProxyConfigured,
+  LEGACY_WORKERS_DEV_PROXY_URL,
+  STREAM_UPLOAD_PATH,
+  type WorkerUploadSessionResponse,
 } from "@/lib/shortsUploadProxy";
 import {
   DEFAULT_SHORTS_MAX_VIDEO_BYTES,
@@ -88,22 +93,31 @@ function isMobileLikeUploadClient(): boolean {
   );
 }
 
+/** Mobile: worker stream PUT (whole File via XHR). Server-chunk file.slice() fails on Android gallery files. */
 function shouldUseServerChunkUpload(): boolean {
-  return isMobileLikeUploadClient() && !isShortsUploadProxyConfigured();
+  return false;
+}
+
+/** Direct R2 multipart from mobile browsers is unreliable (CORS + cellular drops). */
+function shouldUseMultipartUpload(_sizeBytes: number): boolean {
+  return false;
 }
 
 function shouldUseWorkerProxyUpload(
   presignProxyPutUrl?: string | null
 ): boolean {
-  return (
-    isMobileLikeUploadClient() &&
-    isShortsUploadProxyConfigured(presignProxyPutUrl)
-  );
+  if (!isShortsUploadProxyConfigured(presignProxyPutUrl)) return false;
+  // Desktop on production: direct R2 presigned PUT (fast, bypasses Vercel/CF proxy limits).
+  if (isSameOriginStreamUpload() && !isMobileLikeUploadClient()) return false;
+  // Mobile on production: Worker stream proxy (short session URL + PUT).
+  if (isSameOriginStreamUpload()) return true;
+  return isMobileLikeUploadClient();
 }
 
-/** Avoid Chrome auto-attaching Content-Type from File.type on cross-origin PUT. */
+/** Avoid re-slicing large Android gallery Files — hangs before XHR send. */
 function stripBlobMime(body: Blob): Blob {
   if (!body.type) return body;
+  if (body.size > 2 * 1024 * 1024) return body;
   return body.slice(0, body.size, "");
 }
 
@@ -178,9 +192,10 @@ type XhrPutOptions = {
   fileName?: string;
   /** Metadata for errors only — not sent as a request header. */
   contentType?: string;
-  /** Worker proxy: presigned R2 URL sent via X-R2-Upload-Url. */
+  /** Worker proxy: presigned R2 URL (metadata only). */
   r2PresignTargetUrl?: string;
-  uploadMode?: "r2_direct" | "worker_proxy";
+  uploadMode?: "r2_direct" | "worker_proxy" | "worker_proxy_session" | "same_origin_stream";
+  uploadPath?: string;
 };
 
 /**
@@ -199,9 +214,6 @@ function xhrPutWithProgress(
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", url, true);
     if (timeoutMs > 0) xhr.timeout = timeoutMs;
-    if (opts.r2PresignTargetUrl) {
-      xhr.setRequestHeader("X-R2-Upload-Url", opts.r2PresignTargetUrl);
-    }
 
     const onAbort = () => xhr.abort();
     if (opts.signal) {
@@ -213,9 +225,10 @@ function xhrPutWithProgress(
     }
 
     const baseDetails = () => ({
-      uploadHost: uploadHostFromUrl(
-        opts.r2PresignTargetUrl ?? url
-      ),
+      uploadHost: uploadHostFromUrl(url),
+      r2Host: opts.r2PresignTargetUrl
+        ? uploadHostFromUrl(opts.r2PresignTargetUrl)
+        : null,
       blobSize: file.size,
       sizeBytes: opts.sizeBytes ?? file.size,
       progressPct: lastProgressPct,
@@ -224,8 +237,15 @@ function xhrPutWithProgress(
       fileName: opts.fileName,
       contentType: opts.contentType ?? null,
       timeoutMs,
-      putHeaders: opts.r2PresignTargetUrl ? "X-R2-Upload-Url" : "none",
-      uploadMode: opts.uploadMode ?? (opts.r2PresignTargetUrl ? "worker_proxy" : "r2_direct"),
+      putHeaders: "none",
+      uploadMode:
+        opts.uploadMode ??
+        (opts.r2PresignTargetUrl
+          ? isSameOriginStreamUpload()
+            ? "same_origin_stream"
+            : "worker_proxy_session"
+          : "r2_direct"),
+      uploadPath: opts.uploadPath ?? null,
     });
 
     xhr.upload.onprogress = (ev) => {
@@ -288,6 +308,70 @@ function xhrPutWithProgress(
   });
 }
 
+/** POST presign URL in JSON body → short PUT URL (avoids long ?u= on mobile). */
+async function registerWorkerUploadSession(
+  sessionUrl: string,
+  r2PresignUrl: string,
+  signal?: AbortSignal
+): Promise<{ putUrl: string; uploadId: string }> {
+  let res: Response;
+  try {
+    res = await fetch(sessionUrl, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ target: r2PresignUrl }),
+      signal,
+    });
+  } catch (err) {
+    throw new ShortsUploadError("presign", "worker_session_network", {
+      uploadPath: "POST /v1/session",
+      uploadHost: uploadHostFromUrl(sessionUrl),
+      cause: err,
+      hint: "Network error registering Worker upload session",
+    });
+  }
+
+  let data: WorkerUploadSessionResponse;
+  try {
+    data = (await res.json()) as WorkerUploadSessionResponse;
+  } catch {
+    throw new ShortsUploadError("presign", "worker_session_invalid_response", {
+      uploadPath: "POST /v1/session",
+      httpStatus: res.status,
+      uploadHost: uploadHostFromUrl(sessionUrl),
+    });
+  }
+
+  const putUrl = data.putUrl?.trim();
+  if (!res.ok || !putUrl) {
+    throw new ShortsUploadError("presign", "worker_session_failed", {
+      uploadPath: "POST /v1/session",
+      httpStatus: res.status,
+      uploadHost: uploadHostFromUrl(sessionUrl),
+      responseBody: JSON.stringify(data).slice(0, 500),
+      error: data.error ?? null,
+    });
+  }
+
+  return {
+    putUrl: resolveWorkerStreamPutUrl(data.uploadId?.trim() ?? "", putUrl),
+    uploadId: data.uploadId?.trim() ?? "",
+  };
+}
+
+/** Large PUT must hit workers.dev — same-origin path proxies through Vercel (413 on ~50MB+). */
+function resolveWorkerStreamPutUrl(uploadId: string, fallbackPutUrl: string): string {
+  const id = uploadId.trim();
+  if (id) {
+    return `${LEGACY_WORKERS_DEV_PROXY_URL.replace(/\/$/, "")}${STREAM_UPLOAD_PATH}/v1/put/${id}`;
+  }
+  return fallbackPutUrl;
+}
+
 type MultipartInitResponse = {
   ok?: boolean;
   mode?: "r2_multipart";
@@ -304,6 +388,7 @@ async function fetchMultipartInit(
     fileName: string;
     contentType: string;
     sizeBytes: number;
+    videoId?: string;
   },
   signal?: AbortSignal
 ): Promise<MultipartInitResponse> {
@@ -389,12 +474,15 @@ async function uploadShortsVideoMultipart(
   opts?: {
     onProgress?: (pct: number) => void;
     signal?: AbortSignal;
+    videoId?: string;
+    reusePreviewUrl?: boolean;
   }
 ): Promise<ShortsVideoAsset> {
   const presignPayload = {
     fileName: normalized.fileName,
     contentType: check.contentType,
     sizeBytes: normalized.sizeBytes,
+    videoId: opts?.videoId,
   };
 
   console.info("[shorts/upload] multipart start", presignPayload);
@@ -540,58 +628,149 @@ async function uploadShortsVideoMultipart(
   };
 }
 
-/** Mobile chunk POST timeout (2 min per 1 MB slice). */
+/** Mobile chunk POST timeout (2 min per slice). */
 const SERVER_CHUNK_TIMEOUT_MS = 120_000;
 
-function xhrPostForm(
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const step = 0x8000;
+  for (let i = 0; i < bytes.length; i += step) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + step));
+  }
+  return btoa(binary);
+}
+
+async function readFileSliceBuffer(
+  file: File,
+  start: number,
+  end: number,
+  partNumber: number
+): Promise<ArrayBuffer> {
+  const slice = file.slice(start, end, "");
+  try {
+    return await slice.arrayBuffer();
+  } catch {
+    /* Android gallery files often reject slice.arrayBuffer() — FileReader fallback */
+  }
+
+  return new Promise<ArrayBuffer>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (result instanceof ArrayBuffer) resolve(result);
+      else reject(new Error("filereader_empty"));
+    };
+    reader.onerror = () => {
+      reject(
+        new ShortsUploadError("server_chunk", "chunk_read_failed", {
+          partNumber,
+          sizeBytes: end - start,
+          cause: reader.error,
+        })
+      );
+    };
+    reader.readAsArrayBuffer(slice);
+  });
+}
+
+async function fetchPostChunk(
   url: string,
-  form: FormData,
-  opts: { signal?: AbortSignal; timeoutMs?: number } = {}
+  body: BodyInit,
+  contentType: string,
+  opts: { signal?: AbortSignal; timeoutMs?: number }
 ): Promise<{ ok: boolean; status: number; body: Record<string, unknown> }> {
   const timeoutMs = opts.timeoutMs ?? SERVER_CHUNK_TIMEOUT_MS;
-
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", url, true);
-    xhr.timeout = timeoutMs;
-
-    const onAbort = () => xhr.abort();
-    if (opts.signal) {
-      if (opts.signal.aborted) {
-        reject(new DOMException("Aborted", "AbortError"));
-        return;
-      }
-      opts.signal.addEventListener("abort", onAbort, { once: true });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const onParentAbort = () => controller.abort();
+  if (opts.signal) {
+    if (opts.signal.aborted) {
+      clearTimeout(timer);
+      throw new DOMException("Aborted", "AbortError");
     }
+    opts.signal.addEventListener("abort", onParentAbort, { once: true });
+  }
 
-    xhr.onload = () => {
-      if (opts.signal) opts.signal.removeEventListener("abort", onAbort);
-      let body: Record<string, unknown> = {};
-      try {
-        body = JSON.parse(xhr.responseText || "{}") as Record<string, unknown>;
-      } catch {
-        body = { raw: (xhr.responseText || "").slice(0, 500) };
-      }
-      resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, body });
-    };
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": contentType,
+      },
+      body,
+      signal: controller.signal,
+    });
+    const parsed = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    return { ok: res.ok, status: res.status, body: parsed };
+  } finally {
+    clearTimeout(timer);
+    opts.signal?.removeEventListener("abort", onParentAbort);
+  }
+}
 
-    xhr.onerror = () => {
-      if (opts.signal) opts.signal.removeEventListener("abort", onAbort);
-      reject(new TypeError("Failed to fetch"));
-    };
-
-    xhr.ontimeout = () => {
-      if (opts.signal) opts.signal.removeEventListener("abort", onAbort);
-      reject(new Error(`chunk_upload_timeout_${timeoutMs}ms`));
-    };
-
-    xhr.onabort = () => {
-      if (opts.signal) opts.signal.removeEventListener("abort", onAbort);
-      reject(new DOMException("Aborted", "AbortError"));
-    };
-
-    xhr.send(form);
+/** Same-origin chunk POST — JSON/base64 on mobile; binary fallback on desktop. */
+async function postServerChunk(
+  meta: { key: string; uploadId: string; partNumber: number },
+  buffer: ArrayBuffer,
+  opts: { signal?: AbortSignal; timeoutMs?: number }
+): Promise<{ ok: boolean; status: number; body: Record<string, unknown> }> {
+  const chunkUrl =
+    `/api/shorts/chunk?key=${encodeURIComponent(meta.key)}` +
+    `&uploadId=${encodeURIComponent(meta.uploadId)}` +
+    `&partNumber=${meta.partNumber}`;
+  const jsonPayload = JSON.stringify({
+    key: meta.key,
+    uploadId: meta.uploadId,
+    partNumber: meta.partNumber,
+    data: arrayBufferToBase64(buffer),
   });
+
+  if (isMobileLikeUploadClient()) {
+    try {
+      return await fetchPostChunk(
+        "/api/shorts/chunk",
+        jsonPayload,
+        "application/json",
+        opts
+      );
+    } catch (jsonErr) {
+      console.warn("[shorts/upload] JSON chunk POST failed; retrying binary", {
+        partNumber: meta.partNumber,
+        bytes: buffer.byteLength,
+        cause: jsonErr,
+      });
+      return await fetchPostChunk(
+        chunkUrl,
+        buffer,
+        "application/octet-stream",
+        opts
+      );
+    }
+  }
+
+  try {
+    return await fetchPostChunk(
+      chunkUrl,
+      buffer,
+      "application/octet-stream",
+      opts
+    );
+  } catch (binaryErr) {
+    console.warn("[shorts/upload] binary chunk POST failed; retrying JSON/base64", {
+      partNumber: meta.partNumber,
+      bytes: buffer.byteLength,
+      cause: binaryErr,
+    });
+    return await fetchPostChunk(
+      "/api/shorts/chunk",
+      jsonPayload,
+      "application/json",
+      opts
+    );
+  }
 }
 
 type ServerChunkInitResponse = {
@@ -615,12 +794,14 @@ async function uploadShortsVideoViaServerChunks(
   opts?: {
     onProgress?: (pct: number) => void;
     signal?: AbortSignal;
+    videoId?: string;
   }
 ): Promise<ShortsVideoAsset> {
   const payload = {
     fileName: normalized.fileName,
     contentType: check.contentType,
     sizeBytes: normalized.sizeBytes,
+    videoId: opts?.videoId,
   };
 
   console.info("[shorts/upload] server-chunk start", payload);
@@ -678,7 +859,6 @@ async function uploadShortsVideoViaServerChunks(
   for (let partNumber = 1; partNumber <= totalChunks; partNumber++) {
     const start = (partNumber - 1) * chunkBytes;
     const end = Math.min(file.size, start + chunkBytes);
-    const chunk = file.slice(start, end, "");
 
     let uploaded = false;
     let lastErr: ShortsUploadError | null = null;
@@ -688,18 +868,32 @@ async function uploadShortsVideoViaServerChunks(
         await sleep(backoffMsBeforeRetry(attempt));
       }
 
-      const form = new FormData();
-      form.append("key", init.key);
-      form.append("uploadId", init.uploadId);
-      form.append("partNumber", String(partNumber));
-      form.append("chunk", chunk, `part-${partNumber}`);
+      let chunkBuffer: ArrayBuffer;
+      try {
+        chunkBuffer = await readFileSliceBuffer(file, start, end, partNumber);
+      } catch (err) {
+        throw err instanceof ShortsUploadError
+          ? err
+          : new ShortsUploadError("server_chunk", "chunk_read_failed", {
+              partNumber,
+              cause: err,
+            });
+      }
 
       let chunkResult: { ok: boolean; status: number; body: Record<string, unknown> };
       try {
-        chunkResult = await xhrPostForm("/api/shorts/chunk", form, {
-          signal: opts?.signal,
-          timeoutMs: SERVER_CHUNK_TIMEOUT_MS,
-        });
+        chunkResult = await postServerChunk(
+          {
+            key: init.key,
+            uploadId: init.uploadId,
+            partNumber,
+          },
+          chunkBuffer,
+          {
+            signal: opts?.signal,
+            timeoutMs: SERVER_CHUNK_TIMEOUT_MS,
+          }
+        );
       } catch (cause) {
         lastErr = new ShortsUploadError("server_chunk", "chunk_upload_network", {
           cause,
@@ -821,6 +1015,7 @@ async function fetchShortsPresign(
     fileName: string;
     contentType: string;
     sizeBytes: number;
+    videoId?: string;
   },
   signal?: AbortSignal
 ): Promise<Extract<ShortsPresignResponse, { mode: "r2" } | { mode: "local" }>> {
@@ -922,73 +1117,64 @@ function compactResponseSnippet(text: string): string {
   return trimmed.length > 480 ? `${trimmed.slice(0, 480)}…` : trimmed;
 }
 
-/** User-visible upload failure copy — actual server/network cause, not a fixed R2 banner. */
+/** User-visible upload failure copy — short summary first, details optional. */
 export function formatShortsUploadErrorForDisplay(err: unknown): string {
   if (err instanceof ShortsUploadError) {
-    const lines: string[] = [`[${err.stage}] ${err.message}`];
     const d = err.details;
-
-    if (typeof d.httpStatus === "number") {
-      lines.push(`HTTP ${d.httpStatus}`);
-    }
-    if (typeof d.hint === "string" && d.hint.trim()) {
-      lines.push(d.hint.trim());
-    }
-
-    const responseSnippet =
-      typeof d.responseBody === "string"
-        ? compactResponseSnippet(d.responseBody)
-        : typeof d.responseText === "string"
-          ? compactResponseSnippet(d.responseText)
-          : "";
-    if (responseSnippet) lines.push(responseSnippet);
-
-    if (d.cause != null) {
-      const cause = detailToText(d.cause);
-      if (cause) lines.push(cause);
-    }
-
-    const uploadMeta = [
-      d.fileName != null ? `file=${detailToText(d.fileName)}` : null,
-      d.sizeHuman != null
-        ? `size=${detailToText(d.sizeHuman)}`
-        : d.sizeBytes != null
-          ? `size=${detailToText(d.sizeBytes)}B`
-          : null,
-      d.progressPct != null ? `progress=${detailToText(d.progressPct)}%` : null,
-      d.attempt != null && d.maxAttempts != null
-        ? `attempt=${detailToText(d.attempt)}/${detailToText(d.maxAttempts)}`
-        : null,
-      d.timeoutMs != null
-        ? `timeout=${Math.round(Number(d.timeoutMs) / 1000)}s`
-        : null,
-    ].filter(Boolean);
-    if (uploadMeta.length) lines.push(uploadMeta.join(" · "));
+    const sizeLabel =
+      typeof d.sizeHuman === "string"
+        ? d.sizeHuman
+        : typeof d.sizeBytes === "number"
+          ? formatBytes(d.sizeBytes)
+          : null;
 
     if (err.stage === "validate") {
-      const meta = [
-        d.rawFileName != null ? `file=${detailToText(d.rawFileName)}` : null,
-        d.rawMime != null ? `mime=${detailToText(d.rawMime)}` : null,
-        d.sizeBytes != null ? `size=${detailToText(d.sizeBytes)}` : null,
-        d.maxBytes != null ? `max=${detailToText(d.maxBytes)}` : null,
-      ].filter(Boolean);
-      if (meta.length) lines.push(meta.join(" · "));
+      if (err.message === "file_too_large") {
+        return `파일이 너무 큽니다 (최대 100MB).${sizeLabel ? ` 현재: ${sizeLabel}` : ""}`;
+      }
+      if (err.message === "unsupported_type") {
+        return "MP4, MOV, WebM 영상만 업로드할 수 있습니다.";
+      }
+      return "선택한 파일을 업로드할 수 없습니다.";
     }
 
-    if (typeof d.uploadHost === "string" && d.uploadHost) {
-      lines.push(`host=${d.uploadHost}`);
-    }
-    if (typeof d.uploadPath === "string" && d.uploadPath) {
-      lines.push(`path=${d.uploadPath}`);
-    }
-    if (d.partNumber != null) {
-      lines.push(`part=${detailToText(d.partNumber)}`);
-    }
-    if (typeof d.note === "string" && d.note.trim()) {
-      lines.push(d.note.trim());
+    if (err.stage === "server_chunk") {
+      const part =
+        d.partNumber != null ? ` (${d.partNumber}번째 조각)` : "";
+      if (
+        err.message === "auth_session_required" ||
+        d.httpStatus === 401
+      ) {
+        return "로그인 세션이 만료되었습니다. 로그아웃 후 다시 로그인해 주세요.";
+      }
+      if (err.message === "chunk_read_failed") {
+        return `영상 파일을 읽을 수 없습니다${part}. 다른 영상으로 시도해 주세요.`;
+      }
+      if (typeof d.httpStatus === "number") {
+        return `영상 업로드 실패${part} (HTTP ${d.httpStatus}). Wi-Fi에서 다시 시도해 주세요.`;
+      }
+      return `영상 업로드 중 연결 오류${part}. Wi-Fi에서 다시 시도해 주세요.`;
     }
 
-    return lines.join("\n");
+    if (err.stage === "r2_put" && err.message === "r2_put_network") {
+      return "영상 전송 중 연결이 끊겼습니다. 네트워크 상태를 확인하고 다시 시도해 주세요.";
+    }
+
+    if (err.stage === "presign") {
+      return "업로드 준비에 실패했습니다. 새로고침 후 다시 시도해 주세요.";
+    }
+
+    if (err.stage === "complete") {
+      return "업로드는 됐지만 마무리 처리에 실패했습니다. 다시 시도해 주세요.";
+    }
+
+    const progress =
+      typeof d.progressPct === "number" ? ` · ${d.progressPct}%` : "";
+    const code = `[${err.stage}] ${err.message}${progress}`;
+    if (typeof d.hint === "string" && d.hint.trim()) {
+      return `${code}\n${d.hint.trim()}`;
+    }
+    return code;
   }
 
   if (err instanceof Error) {
@@ -1003,6 +1189,8 @@ export async function uploadShortsVideoFile(
   opts?: {
     onProgress?: (pct: number) => void;
     signal?: AbortSignal;
+    videoId?: string;
+    previewUrl?: string;
   }
 ): Promise<ShortsVideoAsset> {
   const normalized = normalizeShortsUploadFile(file);
@@ -1026,11 +1214,13 @@ export async function uploadShortsVideoFile(
     throw err;
   }
 
-  const previewUrl = URL.createObjectURL(file);
+  const reusePreview = Boolean(opts?.previewUrl);
+  const previewUrl = opts?.previewUrl ?? URL.createObjectURL(file);
   const presignPayload = {
     fileName: normalized.fileName,
     contentType: check.contentType,
     sizeBytes: normalized.sizeBytes,
+    videoId: opts?.videoId,
   };
 
   console.info("[shorts/upload] start", {
@@ -1038,8 +1228,32 @@ export async function uploadShortsVideoFile(
     maxAttempts: R2_PUT_MAX_ATTEMPTS,
     putTimeoutMs: R2_PUT_TIMEOUT_MS,
     serverChunk: shouldUseServerChunkUpload(),
+    multipart: shouldUseMultipartUpload(normalized.sizeBytes),
     workerProxy: isShortsUploadProxyConfigured(),
   });
+
+  opts?.onProgress?.(1);
+
+  if (shouldUseMultipartUpload(normalized.sizeBytes)) {
+    try {
+      return await uploadShortsVideoMultipart(
+        file,
+        normalized,
+        check,
+        previewUrl,
+        opts
+      );
+    } catch (err) {
+      if (!reusePreview) URL.revokeObjectURL(previewUrl);
+      logR2UploadDetailError(err, {
+        fileName: normalized.fileName,
+        contentType: check.contentType,
+        sizeBytes: normalized.sizeBytes,
+        uploadMode: "r2_multipart",
+      });
+      throw err;
+    }
+  }
 
   if (shouldUseServerChunkUpload()) {
     try {
@@ -1051,7 +1265,7 @@ export async function uploadShortsVideoFile(
         opts
       );
     } catch (err) {
-      URL.revokeObjectURL(previewUrl);
+      if (!reusePreview) URL.revokeObjectURL(previewUrl);
       logR2UploadDetailError(err, {
         fileName: normalized.fileName,
         contentType: check.contentType,
@@ -1105,27 +1319,50 @@ export async function uploadShortsVideoFile(
       presignR2 = presign;
       putContentType = resolveR2PutContentType(presign, check.contentType);
       const proxyPutUrl = getShortsUploadProxyPutUrl(presign.uploadProxyPutUrl);
-      const useWorkerProxy = shouldUseWorkerProxyUpload(presign.uploadProxyPutUrl);
+      const useStreamUpload = shouldUseWorkerProxyUpload(presign.uploadProxyPutUrl);
+      let putUrl = presign.uploadUrl;
+      let workerSessionId: string | null = null;
+      const sameOrigin = isSameOriginStreamUpload();
+
+      if (useStreamUpload && proxyPutUrl) {
+        const sessionUrl = getShortsUploadProxySessionUrl(presign.uploadProxyPutUrl);
+        if (!sessionUrl) {
+          throw new ShortsUploadError("presign", "worker_session_url_missing", {
+            hint: "Stream upload session URL is not configured",
+          });
+        }
+        const session = await registerWorkerUploadSession(
+          sessionUrl,
+          presign.uploadUrl,
+          opts?.signal
+        );
+        putUrl = session.putUrl;
+        workerSessionId = session.uploadId || null;
+      }
 
       try {
         opts?.onProgress?.(0);
-        await xhrPutWithProgress(
-          useWorkerProxy && proxyPutUrl ? proxyPutUrl : presign.uploadUrl,
-          file,
-          {
-            onProgress: opts?.onProgress,
-            signal: opts?.signal,
-            timeoutMs: R2_PUT_TIMEOUT_MS,
-            attempt,
-            maxAttempts: R2_PUT_MAX_ATTEMPTS,
-            sizeBytes: normalized.sizeBytes,
-            fileName: normalized.fileName,
-            contentType: putContentType,
-            r2PresignTargetUrl:
-              useWorkerProxy && proxyPutUrl ? presign.uploadUrl : undefined,
-            uploadMode: useWorkerProxy ? "worker_proxy" : "r2_direct",
-          }
-        );
+        await xhrPutWithProgress(putUrl, file, {
+          onProgress: opts?.onProgress,
+          signal: opts?.signal,
+          timeoutMs: R2_PUT_TIMEOUT_MS,
+          attempt,
+          maxAttempts: R2_PUT_MAX_ATTEMPTS,
+          sizeBytes: normalized.sizeBytes,
+          fileName: normalized.fileName,
+          contentType: putContentType,
+          r2PresignTargetUrl: useStreamUpload ? presign.uploadUrl : undefined,
+          uploadMode: useStreamUpload
+            ? sameOrigin
+              ? "same_origin_stream"
+              : "worker_proxy_session"
+            : "r2_direct",
+          uploadPath: useStreamUpload
+            ? sameOrigin
+              ? `POST ${STREAM_UPLOAD_PATH}/v1/session → PUT ${STREAM_UPLOAD_PATH}/v1/put/${workerSessionId ?? ":id"}`
+              : `POST /v1/session → PUT /v1/put/${workerSessionId ?? ":id"}`
+            : undefined,
+        });
         lastPutError = null;
         break;
       } catch (err) {
@@ -1221,7 +1458,7 @@ export async function uploadShortsVideoFile(
       storage: "r2",
     };
   } catch (err) {
-    URL.revokeObjectURL(previewUrl);
+    if (!reusePreview) URL.revokeObjectURL(previewUrl);
     logR2UploadDetailError(err, {
       fileName: normalized.fileName,
       contentType: putContentType,

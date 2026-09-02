@@ -14,6 +14,7 @@ import { resolveDownloadUrl } from "@/lib/downloadUrl";
 import {
   getShortsMaxVideoBytes,
   isAllowedShortsVideo,
+  isClientVideoId,
   shortsVideoKey,
 } from "@/lib/shortsVideo";
 
@@ -53,6 +54,7 @@ export async function POST(req: Request) {
       fileName?: string;
       contentType?: string;
       sizeBytes?: number;
+      videoId?: string;
     } | null;
 
     const fileName = String(body?.fileName ?? "").trim() || "shorts.mp4";
@@ -84,7 +86,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "r2_bucket_not_configured" }, { status: 500 });
     }
 
-    const videoId = randomUUID();
+    const requestedId = String(body?.videoId ?? "").trim();
+    const videoId =
+      requestedId && isClientVideoId(requestedId) ? requestedId : randomUUID();
     const key = shortsVideoKey(userId, videoId, fileName);
 
     console.info("[shorts/multipart/init] creating upload", {

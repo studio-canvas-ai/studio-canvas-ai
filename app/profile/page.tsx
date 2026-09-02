@@ -123,11 +123,12 @@ const titleClass = "font-display text-3xl font-bold text-slate-50";
 export default function ProfilePage() {
   const { t, locale } = useI18n();
   const router = useRouter();
-  const { isAuthenticated, openAuthModal, refreshAccount, signOutUser } =
+  const { isAuthenticated, openAuthModal, refreshAccount, signOutUser, authUser, planId } =
     useCredits();
   const [account, setAccount] = useState<AccountSnapshot | null>(null);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [accountLoading, setAccountLoading] = useState(false);
+  const [receiptsLoading, setReceiptsLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -136,33 +137,67 @@ export default function ProfilePage() {
   const [refundingId, setRefundingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!isAuthenticated) {
+      setAccount(null);
+      setReceipts([]);
+      return;
+    }
+
+    setAccountLoading(true);
     try {
-      const [meRes, receiptsRes] = await Promise.all([
-        fetch("/api/account/me"),
-        fetch("/api/payments/receipts"),
-      ]);
+      const meRes = await fetch("/api/account/me", {
+        credentials: "same-origin",
+        cache: "no-store",
+      });
       const me = (await meRes.json()) as {
         authenticated?: boolean;
         user?: AccountSnapshot | null;
       };
       if (!me.authenticated || !me.user) {
         setAccount(null);
-        return;
+      } else {
+        setAccount(me.user);
       }
-      setAccount(me.user);
+    } finally {
+      setAccountLoading(false);
+    }
+
+    setReceiptsLoading(true);
+    try {
+      const receiptsRes = await fetch("/api/payments/receipts", {
+        credentials: "same-origin",
+        cache: "no-store",
+      });
       if (receiptsRes.ok) {
         const data = (await receiptsRes.json()) as { receipts?: Receipt[] };
         setReceipts(data.receipts ?? []);
+      } else {
+        setReceipts([]);
       }
+    } catch {
+      setReceipts([]);
     } finally {
-      setLoading(false);
+      setReceiptsLoading(false);
     }
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     void load();
-  }, [load, isAuthenticated]);
+  }, [load]);
+
+  const displayAccount: AccountSnapshot | null =
+    account ??
+    (isAuthenticated && authUser
+      ? {
+          id: authUser.id ?? "",
+          email: authUser.email,
+          name: authUser.name,
+          credits: 0,
+          planId: planId ?? "free",
+          billingInterval: null,
+          currentPeriodEnd: null,
+        }
+      : null);
 
   const backHomeLink = (
     <Link
@@ -174,16 +209,7 @@ export default function ProfilePage() {
     </Link>
   );
 
-  if (loading) {
-    return (
-      <main className={`${pageShell} flex items-center justify-center pt-16 md:pt-24`} style={pageShellStyle}>
-        <Navbar />
-        <Loader2 className="h-8 w-8 animate-spin text-emerald-400" />
-      </main>
-    );
-  }
-
-  if (!account) {
+  if (!displayAccount && !isAuthenticated && !accountLoading) {
     return (
       <main className={`${pageShell} px-4 pt-16 pb-16 md:pt-28`} style={pageShellStyle}>
         <Navbar />
@@ -204,16 +230,38 @@ export default function ProfilePage() {
     );
   }
 
+  if (!displayAccount) {
+    return (
+      <main className={`${pageShell} px-4 pt-16 pb-16 md:pt-28`} style={pageShellStyle}>
+        <Navbar />
+        <div className="mx-auto flex max-w-lg flex-col items-center gap-4 pt-12">
+          <Loader2 className="h-8 w-8 animate-spin text-emerald-400" />
+          <button
+            type="button"
+            onClick={() => void signOutUser().then(() => router.replace("/"))}
+            disabled={loggingOut}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-500/40 px-4 py-2 text-sm text-slate-200"
+          >
+            <LogOut className="h-4 w-4" />
+            {t.mypage.logout}
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  const accountView = displayAccount;
+
   const lifecycle = normalizeSubscriptionLifecycle({
-    subscriptionLifecycle: account.subscriptionLifecycle as
+    subscriptionLifecycle: accountView.subscriptionLifecycle as
       | "ACTIVE"
       | "CANCELED_PENDING"
       | "EXPIRED"
       | undefined,
     subscriptionStatus: undefined,
-    planId: account.planId as "free" | "starter" | "standard" | "pro" | "enterprise",
-    currentPeriodEnd: account.currentPeriodEnd ?? undefined,
-    cancelAtPeriodEnd: account.cancelAtPeriodEnd,
+    planId: accountView.planId as "free" | "starter" | "standard" | "pro" | "enterprise",
+    currentPeriodEnd: accountView.currentPeriodEnd ?? undefined,
+    cancelAtPeriodEnd: accountView.cancelAtPeriodEnd,
   });
 
   const lifecycleLabel =
@@ -359,13 +407,13 @@ export default function ProfilePage() {
             <div>
               <p className={labelClass}>{t.mypage.currentPlan}</p>
               <p className="mt-1 text-2xl font-semibold text-slate-50">
-                {account.planId === "free"
+                {accountView.planId === "free"
                   ? t.mypage.freePlan
-                  : `${intervalLabel(account.billingInterval, t.mypage)} ${planLabel(account.planId)}`}
+                  : `${intervalLabel(accountView.billingInterval, t.mypage)} ${planLabel(accountView.planId)}`}
               </p>
               <p className={`mt-1 ${mutedClass}`}>
                 {remainingDaysWithExpiryLabel(
-                  account,
+                  accountView,
                   t.mypage.remainingDaysWithExpiry
                 )}
               </p>
@@ -374,34 +422,34 @@ export default function ProfilePage() {
               <span className="rounded-full border border-slate-400/40 bg-slate-600/60 px-3 py-1 text-xs text-slate-100">
                 {lifecycleLabel}
               </span>
-              {account.planId !== "free" && (
+              {accountView.planId !== "free" && (
                 <span className="rounded-full border border-emerald-400/35 bg-emerald-500/15 px-3 py-1 text-xs text-emerald-100">
-                  {account.autoRenew ? t.mypage.autoRenewOn : t.mypage.autoRenewOff}
+                  {accountView.autoRenew ? t.mypage.autoRenewOn : t.mypage.autoRenewOff}
                 </span>
               )}
             </div>
           </div>
 
-          {account.planId !== "free" && (
+          {accountView.planId !== "free" && (
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
               <div className={insetClass}>
                 <p className={labelClass}>{t.mypage.billingInterval}</p>
                 <p className="mt-1 text-sm text-slate-50">
-                  {intervalLabel(account.billingInterval, t.mypage)}
+                  {intervalLabel(accountView.billingInterval, t.mypage)}
                 </p>
               </div>
               <div className={insetClass}>
                 <p className={labelClass}>{t.mypage.expiryDate}</p>
                 <p className="mt-1 font-mono text-sm text-slate-50">
-                  {account.expiryDate ||
-                    formatSubscriptionEndDate(account.currentPeriodEnd) ||
+                  {accountView.expiryDate ||
+                    formatSubscriptionEndDate(accountView.currentPeriodEnd) ||
                     "—"}
                 </p>
               </div>
               <div className={`${insetClass} sm:col-span-2`}>
                 <p className={labelClass}>{t.mypage.paymentMethod}</p>
                 <p className="mt-1 text-sm text-slate-50">
-                  {account.defaultPaymentMethodLabel || account.stripeCustomerId
+                  {accountView.defaultPaymentMethodLabel || accountView.stripeCustomerId
                     ? "Stripe"
                     : "—"}
                 </p>
@@ -409,12 +457,12 @@ export default function ProfilePage() {
             </div>
           )}
 
-          {account.planId !== "free" &&
-            account.billingInterval &&
-            isPrepaidPass(account.billingInterval) &&
-            !account.autoRenew && (
+          {accountView.planId !== "free" &&
+            accountView.billingInterval &&
+            isPrepaidPass(accountView.billingInterval) &&
+            !accountView.autoRenew && (
               <p className="mt-4 rounded-xl border border-amber-300/35 bg-amber-400/15 px-4 py-3 text-sm text-amber-50">
-                {account.billingInterval === "quarterly"
+                {accountView.billingInterval === "quarterly"
                   ? t.mypage.quarterlyNoRenewNotice
                   : t.mypage.annualNoRenewNotice}
               </p>
@@ -425,7 +473,7 @@ export default function ProfilePage() {
           )}
 
           <div className="mt-6 flex flex-wrap gap-3">
-            {account.stripeCustomerId && account.billingInterval === "monthly" && (
+            {accountView.stripeCustomerId && accountView.billingInterval === "monthly" && (
               <button
                 type="button"
                 disabled={busy}
@@ -436,8 +484,8 @@ export default function ProfilePage() {
                 {t.mypage.changePayment}
               </button>
             )}
-            {account.planId !== "free" &&
-              account.billingInterval === "monthly" &&
+            {accountView.planId !== "free" &&
+              accountView.billingInterval === "monthly" &&
               lifecycle === "ACTIVE" && (
                 <button
                   type="button"
@@ -449,7 +497,7 @@ export default function ProfilePage() {
                   {t.mypage.cancelSubscription}
                 </button>
               )}
-            {account.billingInterval === "monthly" &&
+            {accountView.billingInterval === "monthly" &&
               lifecycle === "CANCELED_PENDING" && (
                 <button
                   type="button"

@@ -16,7 +16,9 @@ function loadVideo(url: string): Promise<HTMLVideoElement> {
     video.muted = true;
     video.playsInline = true;
     video.preload = "auto";
-    video.crossOrigin = "anonymous";
+    if (!url.startsWith("blob:")) {
+      video.crossOrigin = "anonymous";
+    }
     const onError = () => {
       cleanup();
       reject(new Error("video_load_failed"));
@@ -107,21 +109,31 @@ export async function captureCurrentVideoFrame(
   return { blob, timestampSec };
 }
 
-/** Capture evenly spaced stills from a local/object URL video. */
-export async function captureHookFramesFromVideoUrl(
-  previewUrl: string,
+/** Capture evenly spaced stills from an already-mounted preview <video>. */
+export async function captureHookFramesFromVideoElement(
+  video: HTMLVideoElement,
   count = SHORTS_HOOK_SAMPLE_COUNT
 ): Promise<CapturedHookFrame[]> {
-  const video = await loadVideo(previewUrl);
+  if (!video.videoWidth || !video.videoHeight) {
+    throw new Error("video_not_ready");
+  }
+
   const duration =
     Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 8;
   const stamps = buildHookTimestamps(duration, count);
-  const out: CapturedHookFrame[] = [];
+  const wasPlaying = !video.paused && !video.ended;
+  if (wasPlaying) {
+    try {
+      video.pause();
+    } catch {
+      /* ignore */
+    }
+  }
 
+  const out: CapturedHookFrame[] = [];
   for (const t of stamps) {
     try {
       await seekTo(video, t);
-      // Let the decoder paint one frame.
       await new Promise((r) => requestAnimationFrame(() => r(undefined)));
       const blob = await canvasFrame(video);
       out.push({ blob, timestampSec: t });
@@ -130,11 +142,22 @@ export async function captureHookFramesFromVideoUrl(
     }
   }
 
-  video.removeAttribute("src");
-  video.load();
-
   if (out.length < 3) {
     throw new Error("capture_too_few_frames");
   }
   return out;
+}
+
+/** Capture evenly spaced stills from a local/object URL video. */
+export async function captureHookFramesFromVideoUrl(
+  previewUrl: string,
+  count = SHORTS_HOOK_SAMPLE_COUNT
+): Promise<CapturedHookFrame[]> {
+  const video = await loadVideo(previewUrl);
+  try {
+    return await captureHookFramesFromVideoElement(video, count);
+  } finally {
+    video.removeAttribute("src");
+    video.load();
+  }
 }

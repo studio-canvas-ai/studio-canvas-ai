@@ -1562,20 +1562,6 @@ export default function ShortsFullStudio({
     <>
       <button
         type="button"
-        disabled={sttGenerating || !videoUrl}
-        onClick={onGenerateStt}
-        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-glow-emerald/40 bg-glow-emerald/15 disabled:opacity-50"
-        aria-label={t.shorts.studioCaptionsGenerate}
-        title={t.shorts.studioCaptionsGenerate}
-      >
-        {sttGenerating ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        ) : (
-          <Sparkles className="h-3.5 w-3.5" />
-        )}
-      </button>
-      <button
-        type="button"
         disabled={polishing || !captions.length}
         onClick={onPolish}
         className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/10 disabled:opacity-50"
@@ -1586,21 +1572,6 @@ export default function ShortsFullStudio({
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
         ) : (
           <Wand2 className="h-3.5 w-3.5" />
-        )}
-      </button>
-      <button
-        type="button"
-        disabled={mixing}
-        onClick={onMixRender}
-        className="inline-flex h-8 min-w-8 shrink-0 items-center justify-center rounded-lg bg-glow-emerald/20 px-1.5 text-[10px] font-bold tabular-nums ring-1 ring-glow-emerald/40 disabled:opacity-50"
-        aria-busy={mixing}
-        aria-label={t.shorts.studioMixRender}
-        title={t.shorts.studioMixRender}
-      >
-        {mixing ? (
-          `${mixProgress}%`
-        ) : (
-          <Clapperboard className="h-3.5 w-3.5" />
         )}
       </button>
       <button
@@ -1618,6 +1589,49 @@ export default function ShortsFullStudio({
         )}
       </button>
     </>
+  );
+
+  const mobileBottomActions = (
+    <div
+      className="shrink-0 border-t border-white/10 bg-[#0b0d14]/95 px-2.5 py-2 backdrop-blur-md"
+      style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
+      role="toolbar"
+      aria-label={t.shorts.fullStudioTitle}
+    >
+      <div className="flex flex-col gap-2">
+        <button
+          type="button"
+          disabled={sttGenerating || !videoUrl}
+          onClick={onGenerateStt}
+          className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-glow-emerald/40 bg-glow-emerald/15 px-3 py-2.5 text-[12px] font-bold leading-tight disabled:opacity-50"
+        >
+          {sttGenerating ? (
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4 shrink-0" />
+          )}
+          <span className="whitespace-pre-line text-center">
+            {t.shorts.studioCaptionsGenerate}
+          </span>
+        </button>
+        <button
+          type="button"
+          disabled={mixing}
+          onClick={onMixRender}
+          className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-glow-emerald/25 px-3 py-2.5 text-[12px] font-bold leading-tight ring-1 ring-glow-emerald/40 disabled:opacity-50"
+          aria-busy={mixing}
+        >
+          {mixing ? (
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+          ) : (
+            <Clapperboard className="h-4 w-4 shrink-0" />
+          )}
+          <span className="whitespace-pre-line text-center">
+            {mixing ? `${mixProgress}%` : t.shorts.studioMixRender}
+          </span>
+        </button>
+      </div>
+    </div>
   );
 
   /** Fit two 9:16 stages into the preview row (capped so timeline stays visible). */
@@ -3384,6 +3398,8 @@ export default function ShortsFullStudio({
           </div>
         ) : null}
       </div>
+
+      {!isDesktop ? mobileBottomActions : null}
     </div>
   );
 }

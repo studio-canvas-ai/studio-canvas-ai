@@ -39,6 +39,8 @@ import {
 } from "@/lib/unlimitedAccount";
 import { shouldApplyBrandWatermark } from "@/lib/watermarkPolicy";
 import { stashAuthErrorForModal } from "@/lib/supabase/oauthErrors";
+import { bridgeSupabaseAccessToken } from "@/lib/supabase/emailAuth";
+import { buildTermsConsentUrl, safePostConsentPath } from "@/lib/termsConsent";
 import { clearAuthStorageOnly } from "@/lib/auth/clearAuthStorage";
 import { SESSION_LOCK_STORAGE_KEY } from "@/lib/auth/sessionLockShared";
 import type { PlanUsageSnapshot } from "@/lib/planQuotas";
@@ -47,14 +49,16 @@ const PLAN_USAGE_CACHE_KEY = "sca_plan_usage_v2";
 
 type CachedPlanUsagePayload = PlanUsageSnapshot & {
   quotaPeriodStart?: number;
+  userId?: string;
 };
 
-function readCachedPlanUsage(): PlanUsageSnapshot | null {
+function readCachedPlanUsage(userId?: string | null): PlanUsageSnapshot | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = localStorage.getItem(PLAN_USAGE_CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as CachedPlanUsagePayload;
+    if (userId && parsed.userId && parsed.userId !== userId) return null;
     if (
       typeof parsed?.fhdRemaining !== "number" ||
       typeof parsed?.uhd4kRemaining !== "number"
@@ -75,7 +79,7 @@ function readCachedPlanUsage(): PlanUsageSnapshot | null {
 
 function writeCachedPlanUsage(
   usage: PlanUsageSnapshot | null,
-  quotaPeriodStart?: number
+  opts?: { quotaPeriodStart?: number; userId?: string | null }
 ) {
   if (typeof window === "undefined") return;
   try {
@@ -85,7 +89,10 @@ function writeCachedPlanUsage(
     }
     const payload: CachedPlanUsagePayload = {
       ...usage,
-      ...(typeof quotaPeriodStart === "number" ? { quotaPeriodStart } : {}),
+      ...(typeof opts?.quotaPeriodStart === "number"
+        ? { quotaPeriodStart: opts.quotaPeriodStart }
+        : {}),
+      ...(opts?.userId ? { userId: opts.userId } : {}),
     };
     localStorage.setItem(PLAN_USAGE_CACHE_KEY, JSON.stringify(payload));
   } catch {
@@ -236,10 +243,16 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
   const [socialProvidersLoaded, setSocialProvidersLoaded] = useState(false);
   const [planUsage, setPlanUsageState] = useState<PlanUsageSnapshot | null>(null);
   const quotaPeriodStartRef = useRef<number | null>(null);
-  const setPlanUsage = useCallback((usage: PlanUsageSnapshot | null) => {
-    setPlanUsageState(usage);
-    writeCachedPlanUsage(usage, quotaPeriodStartRef.current ?? undefined);
-  }, []);
+  const setPlanUsage = useCallback(
+    (usage: PlanUsageSnapshot | null, userId?: string | null) => {
+      setPlanUsageState(usage);
+      writeCachedPlanUsage(usage, {
+        quotaPeriodStart: quotaPeriodStartRef.current ?? undefined,
+        userId: userId ?? authUser?.id ?? undefined,
+      });
+    },
+    [authUser?.id]
+  );
   const [portraits, setPortraits] = useState<Record<string, PortraitRetouchState>>({});
   const [dailyRetouchCount, setDailyRetouchCount] = useState(0);
   const [dailyKey, setDailyKey] = useState(todayKey);
@@ -265,17 +278,6 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const cached = readCachedPlanUsage();
     if (cached) setPlanUsageState(cached);
-    const meta = getAccountMeta();
-    if (meta.hadPaidPlan || meta.lastLoginAt) setIsAuthenticated(true);
-    if (meta.planId && meta.planId !== "free") {
-      setPlanId(meta.planId);
-      if (meta.planId === "enterprise") setBillingInterval("annual");
-      setCredits(0);
-      setMaxCredits(0);
-      setIsAuthenticated(true);
-    } else if (meta.planId === "free") {
-      setPlanId("free");
-    }
     const stored = readPendingCheckout();
     if (stored) {
       setPendingPlanId(stored.planId);
@@ -369,7 +371,9 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
           typeof data.user.currentPeriodStart === "number"
             ? data.user.currentPeriodStart
             : null;
-        if (data.user.usage) setPlanUsage(data.user.usage);
+        if (data.user.usage) {
+          setPlanUsage(data.user.usage, data.user.id ?? null);
+        }
         patchAccountMeta({
           lastLoginAt: Date.now(),
           planId: data.user.planId,
@@ -506,10 +510,11 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
             id: string;
             email?: string | null;
             user_metadata?: Record<string, unknown> | null;
-          } | null
+          } | null,
+          accessToken?: string | null
         ) => {
-          if (cancelled) return;
-          if (!sbUser) return;
+          if (cancelled || !sbUser) return;
+
           const meta = sbUser.user_metadata ?? {};
           const image =
             (typeof meta.avatar_url === "string" && meta.avatar_url) ||
@@ -526,15 +531,39 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
             name: name ?? prev?.name ?? null,
             image: image ?? prev?.image ?? null,
           }));
+          const cachedUsage = readCachedPlanUsage(sbUser.id);
+          if (cachedUsage) setPlanUsageState(cachedUsage);
           setShowAuthModal(false);
+
+          void refreshServerState();
+
+          const token = accessToken?.trim();
+          if (token) {
+            void bridgeSupabaseAccessToken(token).then((bridge) => {
+              if (cancelled || !bridge.ok) return;
+              if (bridge.needsTermsConsent && typeof window !== "undefined") {
+                window.location.assign(
+                  buildTermsConsentUrl(
+                    safePostConsentPath(window.location.pathname)
+                  )
+                );
+                return;
+              }
+              void refreshServerState();
+            });
+          }
         };
 
         const { data: initial } = await supabase.auth.getSession();
         if (cancelled) return;
         if (initial.session?.user) {
-          applySupabaseUser(initial.session.user);
+          applySupabaseUser(
+            initial.session.user,
+            initial.session.access_token
+          );
+        } else {
+          await refreshServerState();
         }
-        await refreshServerState();
 
         const {
           data: { subscription },
@@ -547,8 +576,7 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
             return;
           }
           if (session?.user) {
-            applySupabaseUser(session.user);
-            void refreshServerState();
+            applySupabaseUser(session.user, session.access_token);
           }
         });
         unsubscribe = () => subscription.unsubscribe();

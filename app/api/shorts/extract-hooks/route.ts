@@ -13,7 +13,7 @@ import {
 import type { ShortsHookFrame } from "@/lib/shortsHookShared";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 type ScoredBuffer = {
   timestampSec: number;

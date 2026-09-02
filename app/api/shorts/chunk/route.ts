@@ -13,7 +13,9 @@ export const dynamic = "force-dynamic";
 
 /**
  * POST /api/shorts/chunk
- * Receive one 4 MB chunk and upload as an R2 multipart part (same-origin — no CORS).
+ * Receive one 1 MB chunk and upload as an R2 multipart part (same-origin — no CORS).
+ * Accepts multipart/form-data (legacy), application/octet-stream + query params,
+ * or application/json { key, uploadId, partNumber, data: base64 }.
  */
 export async function POST(req: Request) {
   try {
@@ -27,15 +29,51 @@ export async function POST(req: Request) {
     const userId = resolved.user.id;
 
     const contentTypeHeader = req.headers.get("content-type") || "";
-    if (!contentTypeHeader.includes("multipart/form-data")) {
-      return NextResponse.json({ error: "multipart_required" }, { status: 400 });
-    }
+    const url = new URL(req.url);
 
-    const form = await req.formData();
-    const key = String(form.get("key") ?? "").trim();
-    const uploadId = String(form.get("uploadId") ?? "").trim();
-    const partNumber = Number(form.get("partNumber") ?? 0);
-    const chunk = form.get("chunk");
+    let key = "";
+    let uploadId = "";
+    let partNumber = 0;
+    let chunk: Blob | null = null;
+
+    if (contentTypeHeader.includes("application/json")) {
+      const json = (await req.json().catch(() => null)) as {
+        key?: string;
+        uploadId?: string;
+        partNumber?: number;
+        data?: string;
+      } | null;
+      key = String(json?.key ?? "").trim();
+      uploadId = String(json?.uploadId ?? "").trim();
+      partNumber = Number(json?.partNumber ?? 0);
+      const encoded = String(json?.data ?? "").trim();
+      if (encoded) {
+        const bytes = Buffer.from(encoded, "base64");
+        if (bytes.byteLength > 0) {
+          chunk = new Blob([bytes]);
+        }
+      }
+    } else if (contentTypeHeader.includes("application/octet-stream")) {
+      key = String(url.searchParams.get("key") ?? "").trim();
+      uploadId = String(url.searchParams.get("uploadId") ?? "").trim();
+      partNumber = Number(url.searchParams.get("partNumber") ?? 0);
+      const bytes = await req.arrayBuffer();
+      if (bytes.byteLength > 0) {
+        chunk = new Blob([bytes]);
+      }
+    } else if (contentTypeHeader.includes("multipart/form-data")) {
+      const form = await req.formData();
+      key = String(form.get("key") ?? "").trim();
+      uploadId = String(form.get("uploadId") ?? "").trim();
+      partNumber = Number(form.get("partNumber") ?? 0);
+      const formChunk = form.get("chunk");
+      chunk = formChunk instanceof Blob && formChunk.size > 0 ? formChunk : null;
+    } else {
+      return NextResponse.json(
+        { error: "octet_stream_json_or_multipart_required" },
+        { status: 400 }
+      );
+    }
 
     if (!key || !uploadId || !Number.isInteger(partNumber) || partNumber < 1) {
       return NextResponse.json(

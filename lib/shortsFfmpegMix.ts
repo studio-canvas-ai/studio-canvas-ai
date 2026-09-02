@@ -104,7 +104,7 @@ function resetFfmpegSingleton() {
   loadPromise = null;
 }
 
-async function getFfmpeg(
+export async function getFfmpeg(
   onProgress?: (p: ShortsMixProgress) => void
 ): Promise<FFmpeg> {
   if (ffmpegSingleton?.loaded) return ffmpegSingleton;

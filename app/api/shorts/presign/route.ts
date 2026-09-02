@@ -14,6 +14,7 @@ import { resolveDownloadUrl } from "@/lib/downloadUrl";
 import {
   getShortsMaxVideoBytes,
   isAllowedShortsVideo,
+  isClientVideoId,
   shortsVideoKey,
 } from "@/lib/shortsVideo";
 import { resolveShortsUploadProxyPutUrl } from "@/lib/shortsUploadProxy.server";
@@ -56,6 +57,7 @@ export async function POST(req: Request) {
       fileName?: string;
       contentType?: string;
       sizeBytes?: number;
+      videoId?: string;
     } | null;
 
     const fileName = String(body?.fileName ?? "").trim() || "shorts.mp4";
@@ -80,7 +82,9 @@ export async function POST(req: Request) {
       );
     }
 
-    const videoId = randomUUID();
+    const requestedId = String(body?.videoId ?? "").trim();
+    const videoId =
+      requestedId && isClientVideoId(requestedId) ? requestedId : randomUUID();
     const key = shortsVideoKey(userId, videoId, fileName);
 
     if (!isR2Configured()) {

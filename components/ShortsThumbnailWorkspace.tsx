@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Clapperboard, Film, Smartphone, Type } from "lucide-react";
+import { Clapperboard } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import ShortsHookFrameGrid from "@/components/ShortsHookFrameGrid";
 import ShortsProjectToolbar from "@/components/ShortsProjectToolbar";
@@ -53,24 +53,27 @@ export default function ShortsThumbnailWorkspace() {
     setSelectedHook(null);
   }, []);
 
-  const onStartHookExtract = useCallback(async () => {
-    if (!asset) return;
-    setPhase("extracting");
-    setErrorMessage(null);
-    setHooks([]);
-    setSelectedHook(null);
-    try {
-      const result = await extractShortsHookFrames(asset);
-      setHooks(result.hooks);
-      setPhase("hooks_ready");
-    } catch (err) {
-      const raw = err instanceof Error ? err.message : "extract_failed";
-      setPhase("ready");
-      setErrorMessage(
-        raw.includes("auth") ? t.shorts.errorAuth : t.shorts.errorExtract
-      );
-    }
-  }, [asset, t.shorts.errorAuth, t.shorts.errorExtract]);
+  const onStartHookExtract = useCallback(
+    async (previewVideo?: HTMLVideoElement | null) => {
+      if (!asset) return;
+      setPhase("extracting");
+      setErrorMessage(null);
+      setHooks([]);
+      setSelectedHook(null);
+      try {
+        const result = await extractShortsHookFrames(asset, { previewVideo });
+        setHooks(result.hooks);
+        setPhase("hooks_ready");
+      } catch (err) {
+        const raw = err instanceof Error ? err.message : "extract_failed";
+        setPhase("ready");
+        setErrorMessage(
+          raw.includes("auth") ? t.shorts.errorAuth : t.shorts.errorExtract
+        );
+      }
+    },
+    [asset, t.shorts.errorAuth, t.shorts.errorExtract]
+  );
 
   const onSelectHook = useCallback((frame: ShortsHookFrame) => {
     setSelectedHook(frame);
@@ -167,13 +170,13 @@ export default function ShortsThumbnailWorkspace() {
   return (
     <section
       id="shorts-thumbnail"
-      className="relative mx-auto max-w-5xl px-3 py-8 sm:px-6 sm:py-12 lg:px-8"
+      className="relative mx-auto max-w-5xl px-3 py-4 sm:px-6 sm:py-12 lg:px-8"
       aria-labelledby="shorts-thumbnail-title"
     >
       <div className="ambient-glow -top-20 left-1/4 h-64 w-64 bg-glow-emerald/15" />
       <div className="ambient-glow top-1/3 -right-16 h-56 w-56 bg-glow-purple/10" />
 
-      <div className="relative space-y-8">
+      <div className="relative space-y-4 sm:space-y-8">
         <header className="space-y-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0 space-y-3 text-center sm:text-left">
@@ -196,7 +199,7 @@ export default function ShortsThumbnailWorkspace() {
             </div>
             <div className="flex shrink-0 flex-col items-center gap-1.5 sm:items-end">
               <ShortsProjectToolbar
-                busy={projectBusy || phase === "uploading" || phase === "extracting"}
+                busy={projectBusy || phase === "extracting"}
                 onLoadProject={onLoadShortsProject}
               />
               <p className="max-w-[16rem] text-center text-[10px] leading-snug text-white/80 sm:text-right">
@@ -205,31 +208,6 @@ export default function ShortsThumbnailWorkspace() {
             </div>
           </div>
         </header>
-
-        <div className="grid gap-4 md:grid-cols-3">
-          <PlaceholderCard
-            icon={Smartphone}
-            title={t.shorts.stepUploadTitle}
-            body={t.shorts.stepUploadDesc}
-            active={Boolean(asset) || phase === "uploading"}
-          />
-          <PlaceholderCard
-            icon={Film}
-            title={t.shorts.stepFramesTitle}
-            body={t.shorts.stepFramesDesc}
-            active={
-              phase === "extracting" ||
-              phase === "hooks_ready" ||
-              hooks.length > 0
-            }
-          />
-          <PlaceholderCard
-            icon={Type}
-            title={t.shorts.stepEditTitle}
-            body={t.shorts.stepEditDesc}
-            active={Boolean(selectedHook)}
-          />
-        </div>
 
         <ShortsVideoUpload
           asset={asset}
@@ -240,8 +218,8 @@ export default function ShortsThumbnailWorkspace() {
           onPhaseChange={setPhase}
           onProgressChange={setUploadProgress}
           onError={setErrorMessage}
-          onStartHookExtract={() => {
-            void onStartHookExtract();
+          onStartHookExtract={(previewVideo) => {
+            void onStartHookExtract(previewVideo);
           }}
           onManualFrameCaptured={onManualFrameCaptured}
         />
@@ -256,31 +234,5 @@ export default function ShortsThumbnailWorkspace() {
         )}
       </div>
     </section>
-  );
-}
-
-function PlaceholderCard({
-  icon: Icon,
-  title,
-  body,
-  active,
-}: {
-  icon: typeof Smartphone;
-  title: string;
-  body: string;
-  active?: boolean;
-}) {
-  return (
-    <div
-      className={`glass-card flex flex-col gap-2 rounded-xl border px-4 py-5 transition ${
-        active
-          ? "border-glow-emerald/40 bg-glow-emerald/5"
-          : "border-white/10"
-      }`}
-    >
-      <Icon className="h-5 w-5 text-glow-emerald" aria-hidden />
-      <h2 className="text-sm font-semibold text-white">{title}</h2>
-      <p className="text-xs leading-relaxed text-white/85">{body}</p>
-    </div>
   );
 }

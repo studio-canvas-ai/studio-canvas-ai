@@ -133,8 +133,13 @@ export interface Translations {
     dropHint: string;
     sizeHint: string;
     uploading: string;
+    cloudSyncing: string;
+    serverPosterLoading: string;
+    cloudSyncFailed: string;
+    cloudSyncRetry: string;
     storageR2: string;
     storageLocal: string;
+    storageEditingLocal: string;
     clearVideo: string;
     startHookExtract: string;
     extracting: string;
@@ -144,6 +149,8 @@ export interface Translations {
     manualCapturing: string;
     manualCaptureHint: string;
     manualCaptureError: string;
+    videoPreviewError: string;
+    clientPreviewPreparing: string;
     hooksTitle: string;
     hooksHint: string;
     hookLabel: string;
