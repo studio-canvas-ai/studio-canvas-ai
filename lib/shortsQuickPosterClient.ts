@@ -41,7 +41,7 @@ async function postQuickPosterPart(
 
 /**
  * Fast server poster from file fragments — no full upload, no WASM OOM.
- * Sends head+tail in one request when under Vercel body limit; otherwise tail then head.
+ * Tail-first for ~1s poster on Samsung moov-at-end HEVC; then head, then combined.
  */
 export async function requestQuickPoster(
   file: File,
@@ -56,23 +56,19 @@ export async function requestQuickPoster(
   const headBlob = file.slice(0, headEnd);
   const tailBlob = file.size > HEAD_BYTES ? file.slice(tailStart, file.size) : null;
 
-  const combined =
-    headBlob.size + (tailBlob?.size ?? 0);
-
-  if (tailBlob && combined <= MAX_REQUEST_BYTES) {
-    const poster = await postQuickPosterPart(
-      { head: headBlob, tail: tailBlob },
-      opts?.signal
-    );
-    if (poster) return poster;
-  }
-
   if (tailBlob) {
-    const poster = await postQuickPosterPart({ tail: tailBlob }, opts?.signal);
-    if (poster) return poster;
+    const tailPoster = await postQuickPosterPart({ tail: tailBlob }, opts?.signal);
+    if (tailPoster) return tailPoster;
   }
 
-  return postQuickPosterPart({ head: headBlob }, opts?.signal);
+  const headPoster = await postQuickPosterPart({ head: headBlob }, opts?.signal);
+  if (headPoster) return headPoster;
+
+  if (tailBlob && headBlob.size + tailBlob.size <= MAX_REQUEST_BYTES) {
+    return postQuickPosterPart({ head: headBlob, tail: tailBlob }, opts?.signal);
+  }
+
+  return null;
 }
 
 export async function requestPreviewTranscode(payload: {

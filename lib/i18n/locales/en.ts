@@ -95,6 +95,9 @@ const en: Translations = {
     sizeHint: "MP4, MOV, WebM · up to {max} · stored on Cloudflare R2 when configured",
     uploading: "Uploading to secure storage…",
     cloudSyncing: "Syncing to cloud… You can edit right away",
+    mobileUploading: "Uploading… playback starts when complete",
+    mobileUploadWifiHint: "Faster on Wi-Fi",
+    mobilePlaybackPreparing: "Preparing playback…",
     serverPosterLoading: "Generating server preview… (HEVC / unsupported mobile codec)",
     cloudSyncFailed:
       "Cloud sync failed — editing still works. Try again on Wi-Fi.",

@@ -90,9 +90,8 @@ export default function ShortsVideoUpload({
   const [cloudSyncError, setCloudSyncError] = useState<string | null>(null);
   const [videoPlayError, setVideoPlayError] = useState(false);
   const [serverPosterUrl, setServerPosterUrl] = useState<string | null>(null);
-  const [serverPosterLoading, setServerPosterLoading] = useState(false);
   const [clientPreviewLoading, setClientPreviewLoading] = useState(false);
-  const [clientPreviewPct, setClientPreviewPct] = useState(0);
+  const [mobilePlaybackLoading, setMobilePlaybackLoading] = useState(false);
   const videoPlayErrorRef = useRef(false);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const cloudSyncing =
@@ -100,6 +99,13 @@ export default function ShortsVideoUpload({
     uploadProgress < 100 &&
     phase !== "error" &&
     !cloudSyncError;
+  const isMobileUpload = isMobileGalleryVideoClient();
+  const uploadStatusLabel = isMobileUpload
+    ? t.shorts.mobileUploading
+    : t.shorts.cloudSyncing;
+  const mobileVideoReady = Boolean(videoSrc) && !videoPlayError;
+  const mobileActionsLocked =
+    isMobileUpload && (cloudSyncing || mobilePlaybackLoading || !mobileVideoReady);
 
   useEffect(() => {
     if (!asset) {
@@ -124,7 +130,6 @@ export default function ShortsVideoUpload({
     const ac = new AbortController();
     clientPreviewRef.current = ac;
     setClientPreviewLoading(true);
-    setClientPreviewPct(0);
     setServerPosterUrl(null);
     setVideoPlayError(false);
     videoPlayErrorRef.current = false;
@@ -150,7 +155,7 @@ export default function ShortsVideoUpload({
         const lightTasks: Promise<string | null>[] = [
           requestQuickPoster(file, { signal: ac.signal }),
         ];
-        if (previewBlobUrl) {
+        if (previewBlobUrl && !isMobileGalleryVideoClient()) {
           lightTasks.push(
             captureQuickPosterFromBlob(previewBlobUrl, { signal: ac.signal })
           );
@@ -166,10 +171,9 @@ export default function ShortsVideoUpload({
 
         if (ac.signal.aborted) return;
 
-        if (file.size <= CLIENT_WASM_MAX_BYTES) {
+        if (file.size <= CLIENT_WASM_MAX_BYTES && !isMobileGalleryVideoClient()) {
           const wasm = await generateClientVideoPreview(file, {
             signal: ac.signal,
-            onProgress: ({ ratio }) => setClientPreviewPct(ratio),
           });
           if (ac.signal.aborted) return;
           if (wasm.posterUrl && !posterReady) {
@@ -214,17 +218,17 @@ export default function ShortsVideoUpload({
           if (ac.signal.aborted) return;
           onAssetChange({
             ...cloud,
-            previewUrl: localAsset.previewUrl,
+            previewUrl: localAsset.previewUrl || cloud.playbackUrl || "",
           });
           onProgressChange(100);
           setCloudSyncError(null);
 
           if (cloud.storage === "r2" && cloud.storageKey) {
-            setServerPosterLoading(true);
             try {
               let gotPlayable = false;
 
               if (isMobileGalleryVideoClient()) {
+                setMobilePlaybackLoading(true);
                 const tx = await requestPreviewTranscode({
                   videoId: cloud.videoId,
                   key: cloud.storageKey,
@@ -238,9 +242,23 @@ export default function ShortsVideoUpload({
                 if (tx.posterDataUrl) {
                   setServerPosterUrl((prev) => prev ?? tx.posterDataUrl);
                 }
+                setMobilePlaybackLoading(false);
+
+                void persistShortsVideoBlob(localAsset.videoId, file, {
+                  fileName: localAsset.fileName,
+                  contentType: localAsset.contentType,
+                }).catch((persistErr) => {
+                  console.warn("[shorts/upload] idb persist", persistErr);
+                });
+                void useShortsProjectStore
+                  .getState()
+                  .hydrateFromAsset(localAsset, file)
+                  .catch((err) => {
+                    console.warn("[shorts/upload] store hydrate", err);
+                  });
               }
 
-              if (!gotPlayable) {
+              if (!gotPlayable && !isMobileGalleryVideoClient()) {
                 const result = await extractShortsHookFrames({
                   ...cloud,
                   previewUrl: localAsset.previewUrl,
@@ -254,13 +272,13 @@ export default function ShortsVideoUpload({
               }
             } catch (posterErr) {
               console.warn("[shorts/upload] server preview failed", posterErr);
-            } finally {
-              setServerPosterLoading(false);
+              setMobilePlaybackLoading(false);
             }
           }
         })
         .catch((err) => {
           if (ac.signal.aborted) return;
+          setMobilePlaybackLoading(false);
           logR2UploadDetailError(err, { phase: "shorts_background_upload" });
           setCloudSyncError(formatShortsUploadErrorForDisplay(err));
         });
@@ -305,7 +323,7 @@ export default function ShortsVideoUpload({
     setVideoPlayError(false);
     videoPlayErrorRef.current = false;
     setServerPosterUrl(null);
-    setServerPosterLoading(false);
+    setMobilePlaybackLoading(false);
     setVideoSrc(null);
     if (inputRef.current) inputRef.current.value = "";
   }, [asset, onAssetChange, onPhaseChange, onProgressChange, onError, revokeClientPreviewBlobs]);
@@ -321,7 +339,10 @@ export default function ShortsVideoUpload({
         return;
       }
 
-      const optimistic = createOptimisticShortsVideoAsset(file);
+      const isMobile = isMobileGalleryVideoClient();
+      const optimistic = createOptimisticShortsVideoAsset(file, {
+        deferLocalPreview: isMobile,
+      });
       if (!optimistic.ok) {
         onPhaseChange("error");
         onError(
@@ -339,43 +360,32 @@ export default function ShortsVideoUpload({
       const ac = new AbortController();
       backgroundUploadRef.current = ac;
 
+      if (asset?.previewUrl) URL.revokeObjectURL(asset.previewUrl);
+      const localAsset = optimistic.asset;
+      localFileRef.current = file;
+      previewRecoverAttemptRef.current = 0;
+
+      // Start PUT before React state / File reads (Samsung gallery).
+      startBackgroundUpload(file, localAsset, ac);
+
       onError(null);
       setCloudSyncError(null);
       setVideoPlayError(false);
       videoPlayErrorRef.current = false;
       setServerPosterUrl(null);
       setClientPreviewLoading(false);
-      setClientPreviewPct(0);
+      setMobilePlaybackLoading(false);
       revokeClientPreviewBlobs();
       onProgressChange(0);
-
-      if (asset?.previewUrl) URL.revokeObjectURL(asset.previewUrl);
-      const localAsset = optimistic.asset;
-      localFileRef.current = file;
-      previewRecoverAttemptRef.current = 0;
       onAssetChange(localAsset);
       onPhaseChange("ready");
 
-      // Upload FIRST — never read/slice the gallery File before XHR PUT (Samsung breaks at 1%).
-      startBackgroundUpload(file, localAsset, ac);
-
-      if (isMobileGalleryVideoClient()) {
+      if (isMobile) {
         setVideoSrc(null);
-        setVideoPlayError(false);
-        videoPlayErrorRef.current = false;
-        window.setTimeout(() => {
-          if (!ac.signal.aborted) {
-            startQuickPreview(file, localAsset.previewUrl);
-          }
-        }, 3000);
       } else {
         setVideoSrc(localAsset.previewUrl);
         startQuickPreview(file, localAsset.previewUrl);
-      }
-
-      void useShortsProjectStore.getState().hydrateFromAsset(localAsset, null);
-
-      const persistLocal = () => {
+        void useShortsProjectStore.getState().hydrateFromAsset(localAsset, null);
         void persistShortsVideoBlob(localAsset.videoId, file, {
           fileName: localAsset.fileName,
           contentType: localAsset.contentType,
@@ -388,12 +398,6 @@ export default function ShortsVideoUpload({
           .catch((err) => {
             console.warn("[shorts/upload] store hydrate", err);
           });
-      };
-
-      if (isMobileGalleryVideoClient()) {
-        window.setTimeout(persistLocal, 12_000);
-      } else {
-        persistLocal();
       }
     },
     [
@@ -565,14 +569,12 @@ export default function ShortsVideoUpload({
                 {formatBytes(asset.sizeBytes, locale)}
                 {" · "}
                 {asset.contentType}
-                {" · "}
-                {cloudSyncing
-                  ? t.shorts.cloudSyncing
-                  : asset.storage === "local"
-                    ? t.shorts.storageEditingLocal
-                    : asset.storage === "r2"
-                      ? t.shorts.storageR2
-                      : t.shorts.storageLocal}
+                {asset.storage === "r2" ? (
+                  <>
+                    {" · "}
+                    {t.shorts.storageR2}
+                  </>
+                ) : null}
               </p>
             </div>
             <button
@@ -609,7 +611,7 @@ export default function ShortsVideoUpload({
                     setVideoPlayError(true);
                     videoPlayErrorRef.current = true;
                     const file = localFileRef.current;
-                    if (file && !clientPreviewLoading) {
+                    if (file && !clientPreviewLoading && !isMobileUpload) {
                       startQuickPreview(file, asset.previewUrl);
                     }
                   }}
@@ -622,34 +624,30 @@ export default function ShortsVideoUpload({
               ) : (
                 <div className="flex min-h-[200px] flex-col items-center justify-center gap-3 px-4 py-10 text-center sm:min-h-[280px]">
                   <Clapperboard className="h-10 w-10 text-white/40" aria-hidden />
+                  {cloudSyncing ? (
+                    <>
+                      <Loader2 className="h-7 w-7 animate-spin text-glow-emerald" aria-hidden />
+                      <p className="text-sm font-medium text-white/90">
+                        {uploadStatusLabel} · {uploadProgress}%
+                      </p>
+                    </>
+                  ) : mobilePlaybackLoading ? (
+                    <>
+                      <Loader2 className="h-7 w-7 animate-spin text-white/70" aria-hidden />
+                      <p className="text-sm text-white/85">
+                        {t.shorts.mobilePlaybackPreparing}
+                      </p>
+                    </>
+                  ) : clientPreviewLoading ? (
+                    <p className="text-[11px] text-white/80">
+                      {t.shorts.clientPreviewPreparing}
+                    </p>
+                  ) : null}
                 </div>
               )}
-              {clientPreviewLoading && !serverPosterUrl && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/55">
-                  <Loader2 className="h-8 w-8 animate-spin text-white/80" aria-hidden />
-                  <p className="px-4 text-center text-[11px] text-white/85">
-                    {t.shorts.clientPreviewPreparing}
-                    {clientPreviewPct > 0 ? ` · ${clientPreviewPct}%` : ""}
-                  </p>
-                </div>
-              )}
-              {!videoSrc && serverPosterUrl && cloudSyncing && (
+              {!videoSrc && serverPosterUrl && cloudSyncing && !isMobileUpload && (
                 <div className="pointer-events-none absolute bottom-2 left-2 right-2 rounded-lg bg-black/75 px-2 py-1.5 text-center text-[10px] text-white/85">
-                  {t.shorts.cloudSyncing} · {uploadProgress}%
-                </div>
-              )}
-              {serverPosterLoading && serverPosterUrl && !videoSrc && (
-                <div className="absolute bottom-2 left-2 right-2 rounded-lg bg-black/70 px-2 py-1.5 text-center text-[10px] text-white/85">
-                  <Loader2 className="mr-1 inline h-3 w-3 animate-spin" aria-hidden />
-                  {t.shorts.serverPosterLoading}
-                </div>
-              )}
-              {serverPosterLoading && !serverPosterUrl && !clientPreviewLoading && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/55">
-                  <Loader2 className="h-8 w-8 animate-spin text-white/80" aria-hidden />
-                  <p className="px-4 text-center text-[11px] text-white/85">
-                    {t.shorts.serverPosterLoading}
-                  </p>
+                  {uploadStatusLabel} · {uploadProgress}%
                 </div>
               )}
             </div>
@@ -657,8 +655,7 @@ export default function ShortsVideoUpload({
             !serverPosterUrl &&
             !videoSrc &&
             !clientPreviewLoading &&
-            !serverPosterLoading &&
-            !(cloudSyncing && uploadProgress < 100) ? (
+            !cloudSyncing ? (
               <p className="text-center text-[11px] text-amber-200/90">
                 {t.shorts.videoPreviewError}
               </p>
@@ -670,15 +667,20 @@ export default function ShortsVideoUpload({
 
           {cloudSyncing && (
             <div className="space-y-1">
-              <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+              <div className="h-2 overflow-hidden rounded-full bg-white/10">
                 <div
-                  className="h-full rounded-full bg-glow-emerald transition-[width] duration-200"
+                  className="h-full rounded-full bg-glow-emerald transition-[width] duration-150"
                   style={{ width: `${uploadProgress}%` }}
                 />
               </div>
-              <p className="text-center text-[11px] text-white/80">
-                {t.shorts.cloudSyncing} · {uploadProgress}%
+              <p className="text-center text-xs font-medium text-white/90">
+                {uploadStatusLabel} · {uploadProgress}%
               </p>
+              {isMobileUpload ? (
+                <p className="text-center text-[10px] text-white/65">
+                  {t.shorts.mobileUploadWifiHint}
+                </p>
+              ) : null}
             </div>
           )}
 
@@ -704,7 +706,7 @@ export default function ShortsVideoUpload({
           <div className="grid gap-2 sm:grid-cols-2">
             <button
               type="button"
-              disabled={busy || !onManualFrameCaptured}
+              disabled={busy || !onManualFrameCaptured || mobileActionsLocked}
               onClick={() => void captureManualFrame()}
               className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-sky-400/40 bg-sky-500/15 px-5 py-3 text-sm font-semibold text-sky-100 transition hover:bg-sky-500/25 disabled:opacity-60"
             >
@@ -721,7 +723,7 @@ export default function ShortsVideoUpload({
             </button>
             <button
               type="button"
-              disabled={busy}
+              disabled={busy || mobileActionsLocked}
               onClick={() => onStartHookExtract(videoRef.current)}
               className="btn-primary flex w-full items-center justify-center gap-2 px-5 py-3 text-sm font-semibold sm:text-base disabled:opacity-60"
             >

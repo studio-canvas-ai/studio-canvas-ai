@@ -113,7 +113,10 @@ export function isClientVideoId(value: string): boolean {
 }
 
 /** Instant local asset — enter Screen 12 before cloud upload finishes. */
-export function createOptimisticShortsVideoAsset(file: File):
+export function createOptimisticShortsVideoAsset(
+  file: File,
+  opts?: { deferLocalPreview?: boolean }
+):
   | { ok: true; asset: ShortsVideoAsset }
   | { ok: false; error: string; maxBytes?: number } {
   const normalized = normalizeShortsUploadFile(file);
@@ -134,7 +137,7 @@ export function createOptimisticShortsVideoAsset(file: File):
       fileName: normalized.fileName,
       sizeBytes: normalized.sizeBytes,
       contentType: check.contentType,
-      previewUrl: URL.createObjectURL(file),
+      previewUrl: opts?.deferLocalPreview ? "" : URL.createObjectURL(file),
       storageKey: null,
       playbackUrl: null,
       storage: "local",

@@ -53,7 +53,7 @@ export default function BottomTabBar() {
   return (
     <nav
       data-bottom-tabs
-      className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-navy/95 pb-[env(safe-area-inset-bottom,0px)] backdrop-blur-2xl md:hidden"
+      className="fixed inset-x-0 bottom-0 z-[100] border-t border-white/10 bg-navy/95 pb-[env(safe-area-inset-bottom,0px)] backdrop-blur-2xl md:hidden"
       aria-label={t.nav.menu}
     >
       <ul className="mx-auto flex h-[3.75rem] max-w-lg items-stretch justify-between px-1">

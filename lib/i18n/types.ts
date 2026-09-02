@@ -134,6 +134,9 @@ export interface Translations {
     sizeHint: string;
     uploading: string;
     cloudSyncing: string;
+    mobileUploading: string;
+    mobileUploadWifiHint: string;
+    mobilePlaybackPreparing: string;
     serverPosterLoading: string;
     cloudSyncFailed: string;
     cloudSyncRetry: string;

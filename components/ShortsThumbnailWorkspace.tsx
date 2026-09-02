@@ -20,6 +20,7 @@ import {
   SHORTS_STUDIO_PATH,
 } from "@/lib/shortsStudioSession";
 import type { ShortsUploadPhase, ShortsVideoAsset } from "@/lib/shortsVideo";
+import { isMobileGalleryVideoClient } from "@/lib/shortsClientPreview";
 
 /**
  * ShortsThumbnailWorkspace — 영상/썸네일 스튜디오 (Screen 12).
@@ -39,6 +40,7 @@ export default function ShortsThumbnailWorkspace() {
   const [asset, setAsset] = useState<ShortsVideoAsset | null>(null);
   const [phase, setPhase] = useState<ShortsUploadPhase>("idle");
   const [uploadProgress, setUploadProgress] = useState(0);
+  const lastProgressRef = useRef(-1);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [hooks, setHooks] = useState<ShortsHookFrame[]>([]);
   const [selectedHook, setSelectedHook] = useState<ShortsHookFrame | null>(
@@ -51,6 +53,25 @@ export default function ShortsThumbnailWorkspace() {
     setAsset(next);
     setHooks([]);
     setSelectedHook(null);
+    if (next) {
+      lastProgressRef.current = -1;
+      setUploadProgress(0);
+    }
+  }, []);
+
+  const handleUploadProgress = useCallback((pct: number) => {
+    const step = isMobileGalleryVideoClient() ? 1 : 2;
+    if (
+      pct === 0 ||
+      pct === 1 ||
+      pct === 2 ||
+      pct === 100 ||
+      pct - lastProgressRef.current >= step ||
+      lastProgressRef.current < 0
+    ) {
+      lastProgressRef.current = pct;
+      setUploadProgress(pct);
+    }
   }, []);
 
   const onStartHookExtract = useCallback(
@@ -216,7 +237,7 @@ export default function ShortsThumbnailWorkspace() {
           errorMessage={errorMessage}
           onAssetChange={handleAssetChange}
           onPhaseChange={setPhase}
-          onProgressChange={setUploadProgress}
+          onProgressChange={handleUploadProgress}
           onError={setErrorMessage}
           onStartHookExtract={(previewVideo) => {
             void onStartHookExtract(previewVideo);

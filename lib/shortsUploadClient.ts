@@ -1214,8 +1214,12 @@ export async function uploadShortsVideoFile(
     throw err;
   }
 
-  const reusePreview = Boolean(opts?.previewUrl);
-  const previewUrl = opts?.previewUrl ?? URL.createObjectURL(file);
+  const reusePreview =
+    opts?.previewUrl !== undefined && opts.previewUrl.length > 0;
+  const previewUrl =
+    opts?.previewUrl !== undefined
+      ? opts.previewUrl
+      : URL.createObjectURL(file);
   const presignPayload = {
     fileName: normalized.fileName,
     contentType: check.contentType,
@@ -1340,6 +1344,7 @@ export async function uploadShortsVideoFile(
       }
 
       try {
+        opts?.onProgress?.(2);
         await xhrPutWithProgress(putUrl, file, {
           onProgress: opts?.onProgress,
           signal: opts?.signal,
