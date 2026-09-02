@@ -201,6 +201,15 @@ function copyPageOneWorkOntoTarget(
   };
 }
 
+/**
+ * Screen 26 — where the next AI background lands (PC + mobile, same rules).
+ *
+ * A) Page 1 selected, work exists, no background yet → page 1 only (background
+ *    overlay; text/photo/deco on page 1 unchanged).
+ * B) Page 1 selected, page 1 already has a background → page 1 untouched; next
+ *    empty face gets new background + copy of page-1 work.
+ * C) Page 2+ selected → that page gets background only (no clone from page 1).
+ */
 function resolveBackgroundGenerationTarget(
   state: PrintWizardState,
   selectedPage: number
@@ -211,6 +220,7 @@ function resolveBackgroundGenerationTarget(
   const effectivePage = selectedPage > 0 ? selectedPage : 1;
 
   if (effectivePage === 1) {
+    // A: first background on page 1 — layers stay, only backgroundUrl updates.
     if (!pageOneHasBackground) {
       return { pageIndex: 0, cloneFromPageOne: false };
     }
@@ -220,12 +230,15 @@ function resolveBackgroundGenerationTarget(
       state.pageCount
     );
     if (nextEmpty < 0) return null;
+    // Page 1 slot empty again (e.g. user cleared bg) — refill page 1, no clone.
     if (nextEmpty === 0) {
       return { pageIndex: 0, cloneFromPageOne: false };
     }
+    // B: spawn variant on next face with page-1 work copied.
     return { pageIndex: nextEmpty, cloneFromPageOne: true };
   }
 
+  // C: explicit page 2+ selection — background only on that face.
   const pageIndex = effectivePage - 1;
   if (pageIndex < 0 || pageIndex >= state.pageCount) return null;
   return { pageIndex, cloneFromPageOne: false };
