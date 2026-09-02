@@ -10,28 +10,6 @@ const HEAD_BYTES = 1.5 * 1024 * 1024;
 const TAIL_BYTES = 2.2 * 1024 * 1024;
 const MAX_REQUEST_BYTES = 3.8 * 1024 * 1024;
 
-function readBlobSlice(blob: Blob): Promise<ArrayBuffer> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (reader.result instanceof ArrayBuffer) resolve(reader.result);
-      else reject(new Error("filereader_empty"));
-    };
-    reader.onerror = () => reject(reader.error ?? new Error("filereader_failed"));
-    reader.readAsArrayBuffer(blob);
-  });
-}
-
-async function sliceToBlob(file: File, start: number, end: number): Promise<Blob> {
-  const slice = file.slice(start, end);
-  try {
-    const buf = await readBlobSlice(slice);
-    return new Blob([buf], { type: "application/octet-stream" });
-  } catch {
-    return slice;
-  }
-}
-
 async function postQuickPosterPart(
   parts: { head?: Blob; tail?: Blob },
   signal?: AbortSignal
@@ -69,15 +47,14 @@ export async function requestQuickPoster(
   file: File,
   opts?: { signal?: AbortSignal }
 ): Promise<string | null> {
-  await ensureAppSessionFromSupabase();
+  // Do not block on session bridge — upload must stay priority on mobile LTE.
+  void ensureAppSessionFromSupabase().catch(() => undefined);
 
   const headEnd = Math.min(file.size, HEAD_BYTES);
   const tailStart = Math.max(0, file.size - TAIL_BYTES);
-  const headBlob = await sliceToBlob(file, 0, headEnd);
-  const tailBlob =
-    file.size > HEAD_BYTES
-      ? await sliceToBlob(file, tailStart, file.size)
-      : null;
+  // Never FileReader the gallery File before upload finishes — breaks Android XHR PUT.
+  const headBlob = file.slice(0, headEnd);
+  const tailBlob = file.size > HEAD_BYTES ? file.slice(tailStart, file.size) : null;
 
   const combined =
     headBlob.size + (tailBlob?.size ?? 0);
@@ -132,4 +109,4 @@ export async function requestPreviewTranscode(payload: {
   };
 }
 
-export { readBlobSlice, HEAD_BYTES, TAIL_BYTES };
+export { HEAD_BYTES, TAIL_BYTES };

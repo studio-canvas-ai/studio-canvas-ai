@@ -23,7 +23,6 @@ import {
 import { extractShortsHookFrames } from "@/lib/shortsExtractClient";
 import {
   generateClientVideoPreview,
-  generateFragmentVideoPreview,
   isMobileGalleryVideoClient,
 } from "@/lib/shortsClientPreview";
 import {
@@ -178,21 +177,8 @@ export default function ShortsVideoUpload({
             markPosterReady(wasm.posterUrl);
           }
           if (wasm.playableUrl) markPlayable(wasm.playableUrl);
-          return;
         }
-
-        // Heavy WASM only when server quick-poster failed — avoids freezing home navigation.
-        if (!posterReady && isMobileGalleryVideoClient()) {
-          const frag = await generateFragmentVideoPreview(file, {
-            signal: ac.signal,
-          });
-          if (ac.signal.aborted) return;
-          if (frag.posterUrl && !posterReady) {
-            clientBlobUrlsRef.current.push(frag.posterUrl);
-            markPosterReady(frag.posterUrl);
-          }
-          if (frag.playableUrl) markPlayable(frag.playableUrl);
-        }
+        // Large mobile: server quick-poster only — no WASM slice reads during upload.
       } catch (err) {
         if (!ac.signal.aborted) {
           console.warn("[shorts] quick preview failed", err);
@@ -370,28 +356,45 @@ export default function ShortsVideoUpload({
       onAssetChange(localAsset);
       onPhaseChange("ready");
 
+      // Upload FIRST — never read/slice the gallery File before XHR PUT (Samsung breaks at 1%).
+      startBackgroundUpload(file, localAsset, ac);
+
       if (isMobileGalleryVideoClient()) {
         setVideoSrc(null);
         setVideoPlayError(false);
         videoPlayErrorRef.current = false;
-        startQuickPreview(file, localAsset.previewUrl);
         window.setTimeout(() => {
           if (!ac.signal.aborted) {
-            startBackgroundUpload(file, localAsset, ac);
+            startQuickPreview(file, localAsset.previewUrl);
           }
-        }, 600);
+        }, 3000);
       } else {
         setVideoSrc(localAsset.previewUrl);
-        startBackgroundUpload(file, localAsset, ac);
+        startQuickPreview(file, localAsset.previewUrl);
       }
 
-      void persistShortsVideoBlob(localAsset.videoId, file, {
-        fileName: localAsset.fileName,
-        contentType: localAsset.contentType,
-      }).catch((persistErr) => {
-        console.warn("[shorts/upload] idb persist", persistErr);
-      });
-      void useShortsProjectStore.getState().hydrateFromAsset(localAsset, file);
+      void useShortsProjectStore.getState().hydrateFromAsset(localAsset, null);
+
+      const persistLocal = () => {
+        void persistShortsVideoBlob(localAsset.videoId, file, {
+          fileName: localAsset.fileName,
+          contentType: localAsset.contentType,
+        }).catch((persistErr) => {
+          console.warn("[shorts/upload] idb persist", persistErr);
+        });
+        void useShortsProjectStore
+          .getState()
+          .hydrateFromAsset(localAsset, file)
+          .catch((err) => {
+            console.warn("[shorts/upload] store hydrate", err);
+          });
+      };
+
+      if (isMobileGalleryVideoClient()) {
+        window.setTimeout(persistLocal, 12_000);
+      } else {
+        persistLocal();
+      }
     },
     [
       asset,
