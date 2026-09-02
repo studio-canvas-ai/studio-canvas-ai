@@ -1593,41 +1593,43 @@ export default function ShortsFullStudio({
 
   const mobileBottomActions = (
     <div
-      className="shrink-0 border-t border-white/10 bg-[#0b0d14]/95 px-2.5 py-2 backdrop-blur-md"
+      className="shrink-0 border-t border-white/10 bg-[#0b0d14]/95 px-2 py-1.5 backdrop-blur-md"
       style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
       role="toolbar"
       aria-label={t.shorts.fullStudioTitle}
     >
-      <div className="flex flex-col gap-2">
+      <div className="grid grid-cols-2 gap-2">
         <button
           type="button"
           disabled={sttGenerating || !videoUrl}
           onClick={onGenerateStt}
-          className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-glow-emerald/40 bg-glow-emerald/15 px-3 py-2.5 text-[12px] font-bold leading-tight disabled:opacity-50"
+          className="inline-flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-lg border border-glow-emerald/40 bg-glow-emerald/15 px-2 py-2 text-[10px] font-bold leading-tight disabled:opacity-50 sm:text-[11px]"
         >
           {sttGenerating ? (
-            <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
           ) : (
-            <Sparkles className="h-4 w-4 shrink-0" />
+            <Sparkles className="h-3.5 w-3.5 shrink-0" />
           )}
-          <span className="whitespace-pre-line text-center">
-            {t.shorts.studioCaptionsGenerate}
+          <span className="truncate text-center">
+            {t.shorts.studioCaptionsGenerate.replace(/\n/g, " ")}
           </span>
         </button>
         <button
           type="button"
           disabled={mixing}
           onClick={onMixRender}
-          className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-glow-emerald/25 px-3 py-2.5 text-[12px] font-bold leading-tight ring-1 ring-glow-emerald/40 disabled:opacity-50"
+          className="inline-flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-lg bg-glow-emerald/25 px-2 py-2 text-[10px] font-bold leading-tight ring-1 ring-glow-emerald/40 disabled:opacity-50 sm:text-[11px]"
           aria-busy={mixing}
         >
           {mixing ? (
-            <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
           ) : (
-            <Clapperboard className="h-4 w-4 shrink-0" />
+            <Clapperboard className="h-3.5 w-3.5 shrink-0" />
           )}
-          <span className="whitespace-pre-line text-center">
-            {mixing ? `${mixProgress}%` : t.shorts.studioMixRender}
+          <span className="truncate text-center">
+            {mixing
+              ? `${mixProgress}%`
+              : t.shorts.studioMixRender.replace(/\n/g, " ")}
           </span>
         </button>
       </div>

@@ -1229,12 +1229,12 @@ export default function PrintUnifiedEditor() {
           />
         }
         controls={
-          <div className="flex h-full min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-contain p-2 pb-4 sm:p-2.5">
+          <div className="flex flex-col gap-2 p-1.5 max-lg:shrink-0 sm:p-2 lg:h-full lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain lg:p-2.5 lg:pb-4">
             {/* Desktop middle column — mobile AI panel lives in designPanel */}
             <div className="hidden min-h-0 shrink-0 lg:block">{specSettingsPanel}</div>
             <div className="hidden min-h-0 flex-1 lg:block" aria-hidden />
-            <div className="mt-auto shrink-0">
-              <p className="mb-1.5 px-0.5 text-xs leading-snug text-pink-500 [word-break:keep-all]">
+            <div className="max-lg:shrink-0 lg:mt-auto lg:shrink-0">
+              <p className="mb-1.5 hidden px-0.5 text-xs leading-snug text-pink-500 [word-break:keep-all] lg:block">
                 내가 만든 디자인은 운영자 검수 및 민감 개인정보 삭제를 거쳐
                 템플릿창고(Template 03)에 공개 템플릿으로 등록되며, 다른
                 사용자들의 무료 디자인 참고 자료로 활용될 수 있음을 고지합니다.
@@ -1256,7 +1256,7 @@ export default function PrintUnifiedEditor() {
         designPanel={
           <div className="flex h-full min-h-0 w-full flex-col gap-2 p-2 max-lg:h-auto max-lg:min-h-0 sm:p-2.5">
             {/* Mobile: AI background → style tools; desktop: style tools only (AI in middle column) */}
-            <div className="order-1 flex min-h-0 flex-col gap-2 max-lg:order-2 lg:order-1 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain lg:[scrollbar-gutter:stable]">
+            <div className="order-1 flex min-h-0 flex-col gap-2 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain lg:[scrollbar-gutter:stable]">
               <div className="shrink-0 lg:hidden">{specSettingsPanel}</div>
               <div className="min-h-0 max-lg:flex-none lg:flex-1 lg:min-h-0">
                 <AiTemplateStudio
@@ -1303,7 +1303,7 @@ export default function PrintUnifiedEditor() {
                 />
               </div>
             </div>
-            <div className="order-2 shrink-0 max-lg:order-1 lg:order-2">
+            <div className="order-2 shrink-0">
               <StudioExportButtonGroup
                 busy={exportBusy}
                 onDownloadStandard={() => void downloadWithProject("standard")}

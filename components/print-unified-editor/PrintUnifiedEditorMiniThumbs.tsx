@@ -29,7 +29,7 @@ export type PrintUnifiedEditorMiniThumbsProps = {
 const THUMB_PAGES = Array.from({ length: EDITOR_PAGE_SLOTS }, (_, i) => i + 1);
 
 /**
- * Compact 8-page mini strip — ~half prior height, pinned to column bottom.
+ * Compact 8-page mini strip — mobile ~half height; desktop full size, pinned to column bottom.
  */
 export default function PrintUnifiedEditorMiniThumbs({
   formatId,
@@ -49,7 +49,6 @@ export default function PrintUnifiedEditorMiniThumbs({
   const thumbStyle = useMemo(
     () => ({
       aspectRatio: `${aspect}`,
-      height: "3.25rem",
       width: "auto",
       maxWidth: "100%",
     }),
@@ -57,16 +56,16 @@ export default function PrintUnifiedEditorMiniThumbs({
   );
 
   return (
-    <div className="w-full shrink-0 rounded-xl border border-sky-200 bg-sky-50 px-1.5 py-1.5 shadow-sm">
-      <div className="mb-1 flex items-center justify-between gap-1.5">
-        <p className="text-[10px] font-semibold leading-none text-slate-800">
+    <div className="w-full shrink-0 rounded-lg border border-sky-200 bg-sky-50 px-1 py-1 shadow-sm lg:rounded-xl lg:px-1.5 lg:py-1.5">
+      <div className="mb-0.5 flex items-center justify-between gap-1 lg:mb-1 lg:gap-1.5">
+        <p className="text-[9px] font-semibold leading-none text-slate-800 lg:text-[10px]">
           {fillCanvas(cs.miniView, { label: "8페이지" })}
         </p>
-        <span className="text-[9px] font-semibold tabular-nums leading-none text-slate-900">
+        <span className="text-[8px] font-semibold tabular-nums leading-none text-slate-900 lg:text-[9px]">
           8면
         </span>
       </div>
-      <div className="grid grid-cols-4 gap-1">
+      <div className="grid grid-cols-4 gap-0.5 lg:gap-1">
         {THUMB_PAGES.map((page) => {
           const index = page - 1;
           const disabled = false;
@@ -95,7 +94,7 @@ export default function PrintUnifiedEditorMiniThumbs({
               }`}
             >
               <div
-                className={`relative mx-auto overflow-hidden rounded border bg-white ${
+                className={`relative mx-auto h-[1.625rem] overflow-hidden rounded border bg-white lg:h-[3.25rem] ${
                   active
                     ? "border-emerald-400 shadow-sm"
                     : "border-slate-200 group-hover:border-slate-300"
