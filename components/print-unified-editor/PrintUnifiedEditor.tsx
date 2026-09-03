@@ -16,7 +16,6 @@ import {
   DEFAULT_CONTENT_OFFSET,
   PRINT_UNIFIED_EDITOR_SESSION_KEY,
   applyUnifiedEditorPageLayout,
-  isBlankUnifiedTextPage,
   resizeBlankIsolatedPages,
   resizeContentOffsets,
   resizePageThumbUrls,
@@ -151,87 +150,22 @@ function cloneTextPagesFromWizard(
   return resizeBlankIsolatedPages(cloned, pageCount);
 }
 
-function cloneUnifiedPageLayers<T extends { id: string }>(layers: T[]): T[] {
-  return layers.map((layer) => ({
-    ...layer,
-    id:
-      typeof crypto !== "undefined" && crypto.randomUUID
-        ? crypto.randomUUID()
-        : `${layer.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-  }));
-}
-
-/** Copy page-1 work onto a target face when spawning a new background variant. */
-function copyPageOneWorkOntoTarget(
-  state: PrintWizardState,
-  targetPageIndex: number
-): Pick<
-  PrintWizardState,
-  | "textLayersByPage"
-  | "photoLayersByPage"
-  | "decoLayersByPage"
-  | "contentOffsetByPage"
-> {
-  const pageCount = state.pageCount;
-  const textPages = resizeBlankIsolatedPages(state.textLayersByPage, pageCount);
-  const photoPages = resizePhotoPages(state.photoLayersByPage, pageCount);
-  const decoPages = resizeDecoPages(state.decoLayersByPage, pageCount);
-  const offsets = resizeContentOffsets(state.contentOffsetByPage, pageCount);
-  const sourceIndex = 0;
-
-  const clonedText = (textPages[sourceIndex] ?? []).map((layer) =>
-    preserveRestoredTextLayer({
-      ...layer,
-      id:
-        typeof crypto !== "undefined" && crypto.randomUUID
-          ? crypto.randomUUID()
-          : `${layer.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      ranges: layer.ranges?.map((range) => ({ ...range })) ?? [],
-    })
-  );
-
-  return {
-    textLayersByPage: textPages.map((page, i) =>
-      i === targetPageIndex ? clonedText : page
-    ),
-    photoLayersByPage: photoPages.map((page, i) =>
-      i === targetPageIndex
-        ? cloneUnifiedPageLayers(page ?? [])
-        : (page ?? [])
-    ),
-    decoLayersByPage: decoPages.map((page, i) =>
-      i === targetPageIndex
-        ? cloneUnifiedPageLayers(page ?? [])
-        : (page ?? [])
-    ),
-    contentOffsetByPage: offsets.map((offset, i) =>
-      i === targetPageIndex ? { ...offsets[sourceIndex] } : offset
-    ),
-  };
-}
-
 /**
- * Screen 26 — where the next AI background lands (PC + mobile, same rules).
- *
- * A) Page 1 selected, work exists, no background yet → page 1 only (background
- *    overlay; text/photo/deco on page 1 unchanged).
- * B) Page 1 selected, page 1 already has a background → page 1 untouched; next
- *    empty face gets new background + copy of page-1 work.
- * C) Page 2+ selected → that page gets background only (no clone from page 1).
+ * Screen 26 — target page for Magic Layout + Fal background.
+ * Page 1 + existing bg → next empty slot; else the selected page.
  */
 function resolveBackgroundGenerationTarget(
   state: PrintWizardState,
   selectedPage: number
-): { pageIndex: number; cloneFromPageOne: boolean } | null {
+): { pageIndex: number } | null {
   const pageOneHasBackground = Boolean(
     pageBackgroundUrl(state.backgroundUrls, state.backgroundUrl, 0)
   );
   const effectivePage = selectedPage > 0 ? selectedPage : 1;
 
   if (effectivePage === 1) {
-    // A: first background on page 1 — layers stay, only backgroundUrl updates.
     if (!pageOneHasBackground) {
-      return { pageIndex: 0, cloneFromPageOne: false };
+      return { pageIndex: 0 };
     }
     const nextEmpty = nextEmptyBackgroundPageIndex(
       state.backgroundUrls,
@@ -239,18 +173,12 @@ function resolveBackgroundGenerationTarget(
       state.pageCount
     );
     if (nextEmpty < 0) return null;
-    // Page 1 slot empty again (e.g. user cleared bg) — refill page 1, no clone.
-    if (nextEmpty === 0) {
-      return { pageIndex: 0, cloneFromPageOne: false };
-    }
-    // B: spawn variant on next face with page-1 work copied.
-    return { pageIndex: nextEmpty, cloneFromPageOne: true };
+    return { pageIndex: nextEmpty };
   }
 
-  // C: explicit page 2+ selection — background only on that face.
   const pageIndex = effectivePage - 1;
   if (pageIndex < 0 || pageIndex >= state.pageCount) return null;
-  return { pageIndex, cloneFromPageOne: false };
+  return { pageIndex };
 }
 
 function readSession(key: string): PrintWizardState | null {
@@ -953,7 +881,7 @@ export default function PrintUnifiedEditor() {
       );
       return;
     }
-    const { pageIndex, cloneFromPageOne } = target;
+    const { pageIndex } = target;
     const userTheme =
       s.bgKeyword.trim() ||
       fieldById(s.bgPresetId)?.keyword?.trim() ||
@@ -975,41 +903,33 @@ export default function PrintUnifiedEditor() {
         s.formatId === "free" && s.customSize
           ? `${s.customSize.width}×${s.customSize.height}${s.customSize.unit}`
           : format.label;
+      const prompt =
+        userTheme || buildPagePrintAiContext(s, pageIndex);
 
-      // 1) Gemini Magic Layout (dynamic atoms: text/rect/circle/line/icon). Soft-fail → legacy.
-      let layoutText: TextLayer[] | null = null;
-      let layoutDeco: PrintDecoLayer[] | null = null;
-      let directEnglishPrompt: string | undefined;
-      try {
-        const plan = await requestGenerateLayout({
-          formatLabel,
-          styleLabel: stylePreset?.labelKo || "모던",
-          useLabel: use.label,
-          backgroundFieldLabel: field?.label || field?.keyword || "일반",
-          categoryLabel: fieldCategory?.label,
-          prompt: userTheme || buildPagePrintAiContext(s, pageIndex),
-          canvasWidth: stage.w,
-          canvasHeight: stage.h,
-          pageIndex,
-          pageCount: s.pageCount,
-        });
-        directEnglishPrompt = plan.bg_prompt;
-        const mapped = mapLayoutPlanToCanvasLayers(plan, stage.w, stage.h);
-        layoutText = mapped.textLayers;
-        layoutDeco = mapped.decoLayers;
-      } catch (layoutErr) {
-        console.warn(
-          "[unified-editor] Magic layout failed — falling back to background-only",
-          layoutErr
+      // 1) Gemini Magic Layout — required (no soft-fail to background-only).
+      const plan = await requestGenerateLayout({
+        formatLabel,
+        styleLabel: stylePreset?.labelKo || "모던",
+        useLabel: use.label,
+        backgroundFieldLabel: field?.label || field?.keyword || "일반",
+        categoryLabel: fieldCategory?.label,
+        prompt,
+        canvasWidth: stage.w,
+        canvasHeight: stage.h,
+        pageIndex,
+        pageCount: s.pageCount,
+      });
+      const mapped = mapLayoutPlanToCanvasLayers(plan, stage.w, stage.h);
+      if (!mapped.textLayers.length && !mapped.decoLayers.length) {
+        throw new Error(
+          "레이아웃 요소가 비어 있습니다. 옵션/프롬프트를 확인한 뒤 다시 생성해 주세요."
         );
       }
 
-      // 2) Fal background (prefer layout bg_prompt; else classic context string).
-      const keyword =
-        directEnglishPrompt || buildPagePrintAiContext(s, pageIndex);
+      // 2) Fal background from Gemini bg_prompt.
       const url = await generatePrintBackgroundDataUrl({
-        keyword,
-        directEnglishPrompt,
+        keyword: plan.bg_prompt,
+        directEnglishPrompt: plan.bg_prompt,
         aspect,
         pageIndex,
         pageCount: s.pageCount,
@@ -1019,6 +939,7 @@ export default function PrintUnifiedEditor() {
         moodStyleId: s.visualStyle.moodStyleId,
       });
 
+      // 3) Atomic inject: background + all layout layers on the target page.
       const urls = Array.from({ length: s.pageCount }, (_, i) =>
         s.backgroundUrls?.[i] ?? (i === 0 ? s.backgroundUrl ?? "" : "")
       );
@@ -1027,34 +948,13 @@ export default function PrintUnifiedEditor() {
       const textPages = resizeBlankIsolatedPages(
         s.textLayersByPage,
         s.pageCount
+      ).map((page, i) => (i === pageIndex ? mapped.textLayers : page));
+      const decoPages = resizeDecoPages(s.decoLayersByPage, s.pageCount).map(
+        (page, i) => (i === pageIndex ? mapped.decoLayers : page)
       );
-      const decoPages = resizeDecoPages(s.decoLayersByPage, s.pageCount);
-      const existingOnTarget = textPages[pageIndex] ?? [];
-      // Case A: page 1 already has real copy — only swap background, keep work.
-      const keepExistingWork =
-        pageIndex === 0 &&
-        !cloneFromPageOne &&
-        !isBlankUnifiedTextPage(existingOnTarget);
-
-      let nextTextPages = textPages;
-      let nextDecoPages = decoPages;
-      let layerCopy: ReturnType<typeof copyPageOneWorkOntoTarget> | null = null;
-
-      if (
-        layoutText &&
-        layoutText.length > 0 &&
-        !keepExistingWork
-      ) {
-        nextTextPages = textPages.map((page, i) =>
-          i === pageIndex ? layoutText! : page
-        );
-        nextDecoPages = decoPages.map((page, i) =>
-          i === pageIndex ? layoutDeco ?? [] : page
-        );
-      } else if (!layoutText && cloneFromPageOne) {
-        // Legacy fallback when layout API fails on page-1 spawn.
-        layerCopy = copyPageOneWorkOntoTarget(s, pageIndex);
-      }
+      const photoPages = resizePhotoPages(s.photoLayersByPage, s.pageCount).map(
+        (page, i) => (i === pageIndex ? [] : page)
+      );
 
       patch({
         backgroundUrls: urls,
@@ -1063,27 +963,30 @@ export default function PrintUnifiedEditor() {
           s.backgroundPansByPage,
           s.pageCount
         ),
-        textLayersByPage: layerCopy?.textLayersByPage ?? nextTextPages,
-        decoLayersByPage: layerCopy?.decoLayersByPage ?? nextDecoPages,
-        ...(layerCopy
-          ? {
-              photoLayersByPage: layerCopy.photoLayersByPage,
-              contentOffsetByPage: layerCopy.contentOffsetByPage,
-            }
-          : {}),
+        textLayersByPage: textPages,
+        decoLayersByPage: decoPages,
+        photoLayersByPage: photoPages,
       });
-      activatePage(pageIndex + 1);
+
+      const firstText = mapped.textLayers.find((layer) =>
+        Boolean(String(layer.text || "").replace(/\u200B/g, "").trim())
+      );
+      // activatePage clears selection — set page then re-select main text.
+      setCurrentPage(pageIndex + 1);
+      setActiveTextLayerId(firstText?.id ?? null);
+      setActiveDecoLayerId(null);
+      setActivePhotoLayerId(null);
     } catch (err) {
-      console.error("[unified-editor] AI background failed", err);
+      console.error("[unified-editor] Magic template generate failed", err);
       window.alert(
         err instanceof Error
           ? err.message
-          : "AI 배경 생성에 실패했습니다. 잠시 후 다시 시도해 주세요."
+          : "AI 템플릿 생성에 실패했습니다. 잠시 후 다시 시도해 주세요."
       );
     } finally {
       setGenerating(false);
     }
-  }, [activatePage, generating, patch]);
+  }, [generating, patch]);
 
   const selectPage = useCallback(
     (page: number) => {
