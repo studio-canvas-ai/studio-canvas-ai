@@ -13,6 +13,7 @@ import PrintUnifiedEditorMiniThumbs from "@/components/print-unified-editor/Prin
 import PrintUnifiedEditorLayout from "@/components/print-unified-editor/PrintUnifiedEditorLayout";
 import Space4AdminReviewBar from "@/components/print-unified-editor/Space4AdminReviewBar";
 import {
+  DEFAULT_CONTENT_OFFSET,
   PRINT_UNIFIED_EDITOR_SESSION_KEY,
   applyUnifiedEditorPageLayout,
   isBlankUnifiedTextPage,
@@ -56,6 +57,7 @@ import {
 } from "@/lib/photoLookbookProject";
 import { buildPagePrintAiContext } from "@/lib/printWizardAiContext";
 import {
+  DEFAULT_BG_PAN,
   generatePrintBackgroundDataUrl,
   nextEmptyBackgroundPageIndex,
   pageBackgroundUrl,
@@ -637,71 +639,83 @@ export default function PrintUnifiedEditor() {
     });
   }, []);
 
-  const clearCurrentPageCompletely = useCallback(() => {
+  const deleteCurrentPageSlide = useCallback(() => {
     if (!pageActivated || pageIndex < 0) {
       showToast("페이지를 먼저 선택해 주세요.", "info");
       return;
     }
-    const clearedIndex = pageIndex;
-    const pageCount = stateRef.current.pageCount;
+    const removeIndex = pageIndex;
 
     setState((prev) => {
-      const urls = Array.from({ length: prev.pageCount }, (_, i) =>
-        prev.backgroundUrls?.[i] ?? (i === 0 ? prev.backgroundUrl ?? "" : "")
+      const n = Math.max(1, prev.pageCount);
+
+      const splicePad = <T,>(
+        arr: T[] | undefined,
+        empty: () => T
+      ): T[] => {
+        const next = Array.from({ length: n }, (_, i) =>
+          arr?.[i] !== undefined ? (arr[i] as T) : empty()
+        );
+        if (removeIndex >= 0 && removeIndex < next.length) {
+          next.splice(removeIndex, 1);
+        }
+        while (next.length < n) next.push(empty());
+        return next.slice(0, n);
+      };
+
+      const backgroundUrls = splicePad<string>(
+        Array.from({ length: n }, (_, i) =>
+          prev.backgroundUrls?.[i] ??
+          (i === 0 ? prev.backgroundUrl ?? "" : "")
+        ),
+        () => ""
       );
-      urls[clearedIndex] = "";
-      const textPages = resizeBlankIsolatedPages(
-        prev.textLayersByPage,
-        prev.pageCount
-      ).map((page, i) => (i === clearedIndex ? [] : page));
-      const photoPages = resizePhotoPages(
-        prev.photoLayersByPage,
-        prev.pageCount
-      ).map((page, i) => (i === clearedIndex ? [] : page));
-      const decoPages = resizeDecoPages(
-        prev.decoLayersByPage,
-        prev.pageCount
-      ).map((page, i) => (i === clearedIndex ? [] : page));
-      const thumbs = resizePageThumbUrls(
-        prev.pageThumbUrls,
-        prev.pageCount
+      const textLayersByPage = splicePad(
+        resizeBlankIsolatedPages(prev.textLayersByPage, n),
+        () => [] as TextLayer[]
       );
-      if (thumbs[clearedIndex] !== undefined) thumbs[clearedIndex] = "";
+      const photoLayersByPage = splicePad(
+        resizePhotoPages(prev.photoLayersByPage, n),
+        () => []
+      );
+      const decoLayersByPage = splicePad(
+        resizeDecoPages(prev.decoLayersByPage, n),
+        () => []
+      );
+      const pageThumbUrls = splicePad(
+        resizePageThumbUrls(prev.pageThumbUrls, n),
+        () => ""
+      );
+      const contentOffsetByPage = splicePad(
+        resizeContentOffsets(prev.contentOffsetByPage, n),
+        () => ({ ...DEFAULT_CONTENT_OFFSET })
+      );
+      const backgroundPansByPage = splicePad(
+        resizeBackgroundPans(prev.backgroundPansByPage, n),
+        () => ({ ...DEFAULT_BG_PAN })
+      );
 
       const next: PrintWizardState = {
         ...prev,
-        backgroundUrls: urls,
-        backgroundUrl:
-          clearedIndex === 0
-            ? urls.find((u) => u.trim()) || null
-            : prev.backgroundUrl && urls.some((u) => u.trim())
-              ? prev.backgroundUrl
-              : urls.find((u) => u.trim()) ?? null,
-        textLayersByPage: textPages,
-        photoLayersByPage: photoPages,
-        decoLayersByPage: decoPages,
-        pageThumbUrls: thumbs,
-        backgroundPansByPage: resizeBackgroundPans(
-          prev.backgroundPansByPage,
-          prev.pageCount
-        ),
+        backgroundUrls,
+        backgroundUrl: backgroundUrls.find((u) => u.trim()) || null,
+        textLayersByPage,
+        photoLayersByPage,
+        decoLayersByPage,
+        pageThumbUrls,
+        contentOffsetByPage,
+        backgroundPansByPage,
       };
       saveSession(next);
       return next;
     });
 
-    // Move to next page, or previous if this was the last face.
-    const nextPageNum =
-      clearedIndex + 1 < pageCount
-        ? clearedIndex + 2
-        : clearedIndex > 0
-          ? clearedIndex
-          : 1;
-    activatePage(nextPageNum);
+    // Keep the same slot active so old page N+1 becomes the new page at this index.
+    activatePage(removeIndex + 1);
     setActiveTextLayerId(null);
     setActiveDecoLayerId(null);
     setActivePhotoLayerId(null);
-    showToast("현재 페이지를 초기화했습니다.", "success");
+    showToast("페이지를 삭제하고 뒤 페이지를 앞으로 당겼습니다.", "success");
   }, [activatePage, pageActivated, pageIndex, showToast]);
 
   const onOpenRecentProject = useCallback(
@@ -1430,7 +1444,7 @@ export default function PrintUnifiedEditor() {
             onOpenRecentProject={onOpenRecentProject}
             onSaveCanvas={() => void saveCanvasToSlotAndGallery()}
             saveCanvasBusy={saveCanvasBusy || exportBusy}
-            onClearCanvasImage={clearCurrentPageCompletely}
+            onClearCanvasImage={deleteCurrentPageSlide}
             recentNamespace="screen_008"
           />
         }
