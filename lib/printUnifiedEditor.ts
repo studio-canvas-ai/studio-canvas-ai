@@ -281,3 +281,45 @@ export function resizeBlankIsolatedPages(
   }
   return out;
 }
+
+const LEGACY_ZONE_LABEL_RE = /^(상단문구|중간문구|하단문구)(:.*)?$/;
+
+/** Drop legacy Screen-26 guide placeholders that ghost over Magic Layout plates. */
+export function stripLegacyUnifiedGuideLayers(
+  pages: TextLayer[][] | undefined,
+  pageCount: number
+): TextLayer[][] {
+  const resized = resizeBlankIsolatedPages(pages, pageCount);
+  return resized.map((page) => {
+    const cleaned = page.filter((layer) => {
+      const raw = String(layer.text || "").replace(/\u200B/g, "").trim();
+      if (LEGACY_ZONE_LABEL_RE.test(raw)) return false;
+      // Empty non-box zone guides (old top/center/bottom seeds).
+      if (!raw && !layer.showBox && !layer.boxManual) return false;
+      if (
+        !raw &&
+        !layer.showBox &&
+        layer.layoutLocked &&
+        layer.boxManual &&
+        typeof layer.boxW === "number" &&
+        layer.boxW > 0 &&
+        // Wide empty guide boxes from createDefaultUnifiedGuideLayers
+        !layer.boxColor
+      ) {
+        return false;
+      }
+      return true;
+    });
+    // If only empty dashed guides remain, clear the page entirely.
+    if (
+      cleaned.length > 0 &&
+      cleaned.every(
+        (l) =>
+          !String(l.text || "").replace(/\u200B/g, "").trim() && !l.showBox
+      )
+    ) {
+      return [];
+    }
+    return cleaned;
+  });
+}

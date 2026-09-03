@@ -134,7 +134,8 @@ export async function compositePrintWizardPageBlob(opts: {
     opts.state.pageCount || 1
   );
   for (const layer of textLayers) {
-    if (!layer?.text?.trim()) continue;
+    const visible = String(layer?.text || "").replace(/\u200B/g, "").trim();
+    if (!visible && !layer?.showBox) continue;
     const box = layerToBox(layer, stageW, stageH);
     ctx.save();
     ctx.translate(box.x, box.y);
@@ -166,25 +167,32 @@ export async function compositePrintWizardPageBlob(opts: {
   return blob;
 }
 
-export function printWizardHasExportableFrame(state: PrintWizardState): boolean {
-  const pageIndex = 0;
+export function printWizardHasExportableFrame(
+  state: PrintWizardState,
+  pageIndex = 0
+): boolean {
+  const idx = Math.max(0, Math.floor(pageIndex));
   const bg = pageBackgroundUrl(
     state.backgroundUrls,
     state.backgroundUrl,
-    pageIndex
+    idx
   );
-  const photos = state.photoLayersByPage?.[pageIndex] ?? [];
+  const photos = state.photoLayersByPage?.[idx] ?? [];
   const texts = resolvePageTextLayersForExport(
     state.textLayersByPage,
-    pageIndex,
+    idx,
     state.inputs,
     state.pageCount || 1
   );
-  const decos = state.decoLayersByPage?.[pageIndex] ?? [];
+  const decos = state.decoLayersByPage?.[idx] ?? [];
   return (
     Boolean(bg) ||
     photos.some((l) => Boolean(l?.src?.trim())) ||
-    texts.some((l) => Boolean(l?.text?.trim())) ||
+    texts.some(
+      (l) =>
+        Boolean(l?.showBox) ||
+        Boolean(String(l?.text || "").replace(/\u200B/g, "").trim())
+    ) ||
     decos.some((l) => Boolean(l?.symbol || l?.decoId))
   );
 }

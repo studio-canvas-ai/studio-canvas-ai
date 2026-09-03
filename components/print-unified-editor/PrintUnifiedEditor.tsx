@@ -15,11 +15,11 @@ import Space4AdminReviewBar from "@/components/print-unified-editor/Space4AdminR
 import {
   PRINT_UNIFIED_EDITOR_SESSION_KEY,
   applyUnifiedEditorPageLayout,
-  createDefaultUnifiedGuideLayers,
   isBlankUnifiedTextPage,
   resizeBlankIsolatedPages,
   resizeContentOffsets,
   resizePageThumbUrls,
+  stripLegacyUnifiedGuideLayers,
   type PrintContentOffset,
   type PrintUnifiedZoom,
 } from "@/lib/printUnifiedEditor";
@@ -285,8 +285,8 @@ function hydrateInitialState(): PrintWizardState {
       })();
   if (wizard) {
     const pageCount = coercePrintPageCount(wizard.pageCount, 8);
-    // Drop all-empty placeholder pages left by the old cross-page seed bug.
-    const textLayersByPage = resizeBlankIsolatedPages(
+    // Drop legacy 상단/중간/하단 guide ghosts and empty seed pages.
+    const textLayersByPage = stripLegacyUnifiedGuideLayers(
       wizard.textLayersByPage,
       pageCount
     );
@@ -356,43 +356,12 @@ export default function PrintUnifiedEditor() {
   currentPageRef.current = currentPage;
   const formatSeedKeyRef = useRef("");
 
-  const seedGuideLayersForPage = useCallback((pageIndexToSeed: number) => {
-    if (pageIndexToSeed < 0) return;
-    setState((prev) => {
-      const pages = resizeBlankIsolatedPages(
-        prev.textLayersByPage,
-        prev.pageCount
-      );
-      if (pageIndexToSeed >= pages.length) return prev;
-      const existing = pages[pageIndexToSeed] ?? [];
-      if (!isBlankUnifiedTextPage(existing)) return prev;
-
-      const stage = referencePrintStageSize(
-        resolvePrintAspect(prev.formatId, prev.customSize)
-      );
-      const seeded = createDefaultUnifiedGuideLayers(
-        pageIndexToSeed,
-        stage.w,
-        stage.h
-      );
-      const nextPages = pages.map((page, i) =>
-        i === pageIndexToSeed ? seeded : page
-      );
-      const next = { ...prev, textLayersByPage: nextPages };
-      saveSession(next);
-      return next;
-    });
-  }, []);
-
   const activatePage = useCallback((page: number) => {
     setCurrentPage(page);
     setActiveTextLayerId(null);
     setActiveDecoLayerId(null);
     setActivePhotoLayerId(null);
-    if (page > 0) {
-      seedGuideLayersForPage(page - 1);
-    }
-  }, [seedGuideLayersForPage]);
+  }, []);
 
   useEffect(() => {
     setState(hydrateInitialState());
@@ -668,31 +637,72 @@ export default function PrintUnifiedEditor() {
     });
   }, []);
 
-  const clearCurrentPageBackground = useCallback(() => {
+  const clearCurrentPageCompletely = useCallback(() => {
     if (!pageActivated || pageIndex < 0) {
       showToast("페이지를 먼저 선택해 주세요.", "info");
       return;
     }
+    const clearedIndex = pageIndex;
+    const pageCount = stateRef.current.pageCount;
+
     setState((prev) => {
       const urls = Array.from({ length: prev.pageCount }, (_, i) =>
         prev.backgroundUrls?.[i] ?? (i === 0 ? prev.backgroundUrl ?? "" : "")
       );
-      urls[pageIndex] = "";
+      urls[clearedIndex] = "";
+      const textPages = resizeBlankIsolatedPages(
+        prev.textLayersByPage,
+        prev.pageCount
+      ).map((page, i) => (i === clearedIndex ? [] : page));
+      const photoPages = resizePhotoPages(
+        prev.photoLayersByPage,
+        prev.pageCount
+      ).map((page, i) => (i === clearedIndex ? [] : page));
+      const decoPages = resizeDecoPages(
+        prev.decoLayersByPage,
+        prev.pageCount
+      ).map((page, i) => (i === clearedIndex ? [] : page));
+      const thumbs = resizePageThumbUrls(
+        prev.pageThumbUrls,
+        prev.pageCount
+      );
+      if (thumbs[clearedIndex] !== undefined) thumbs[clearedIndex] = "";
+
       const next: PrintWizardState = {
         ...prev,
         backgroundUrls: urls,
         backgroundUrl:
-          pageIndex === 0
-            ? null
+          clearedIndex === 0
+            ? urls.find((u) => u.trim()) || null
             : prev.backgroundUrl && urls.some((u) => u.trim())
               ? prev.backgroundUrl
               : urls.find((u) => u.trim()) ?? null,
+        textLayersByPage: textPages,
+        photoLayersByPage: photoPages,
+        decoLayersByPage: decoPages,
+        pageThumbUrls: thumbs,
+        backgroundPansByPage: resizeBackgroundPans(
+          prev.backgroundPansByPage,
+          prev.pageCount
+        ),
       };
       saveSession(next);
       return next;
     });
-    showToast("현재 캔버스 배경 이미지를 삭제했습니다.", "success");
-  }, [pageActivated, pageIndex, showToast]);
+
+    // Move to next page, or previous if this was the last face.
+    const nextPageNum =
+      clearedIndex + 1 < pageCount
+        ? clearedIndex + 2
+        : clearedIndex > 0
+          ? clearedIndex
+          : 1;
+    activatePage(nextPageNum);
+    setActiveTextLayerId(null);
+    setActiveDecoLayerId(null);
+    setActivePhotoLayerId(null);
+    showToast("현재 페이지를 초기화했습니다.", "success");
+  }, [activatePage, pageActivated, pageIndex, showToast]);
 
   const onOpenRecentProject = useCallback(
     (project: StudioCanvasProjectV1) => {
@@ -1079,26 +1089,7 @@ export default function PrintUnifiedEditor() {
     }
     if (formatSeedKeyRef.current === formatSeedKey) return;
     formatSeedKeyRef.current = formatSeedKey;
-
-    setState((prev) => {
-      const pages = resizeBlankIsolatedPages(
-        prev.textLayersByPage,
-        prev.pageCount
-      );
-      const stage = referencePrintStageSize(
-        resolvePrintAspect(prev.formatId, prev.customSize)
-      );
-      let changed = false;
-      const nextPages = pages.map((page, i) => {
-        if (!isBlankUnifiedTextPage(page)) return page;
-        changed = true;
-        return createDefaultUnifiedGuideLayers(i, stage.w, stage.h);
-      });
-      if (!changed) return prev;
-      const next = { ...prev, textLayersByPage: nextPages };
-      saveSession(next);
-      return next;
-    });
+    // Format change: keep absolute / Magic Layout pages; never re-seed zone guides.
   }, [formatSeedKey, pageActivated, pageIndex]);
 
   const backgroundUrl = useMemo(() => {
@@ -1142,7 +1133,9 @@ export default function PrintUnifiedEditor() {
         photoLayersByPage,
       }),
     resolveExportImage: async (quality) => {
-      if (!pageActivated || pageIndex < 0) {
+      const activePage = currentPageRef.current;
+      const exportPageIndex = activePage > 0 ? activePage - 1 : -1;
+      if (exportPageIndex < 0) {
         throw new Error("no_page_selected");
       }
       const exportState: PrintWizardState = {
@@ -1151,12 +1144,12 @@ export default function PrintUnifiedEditor() {
         decoLayersByPage,
         photoLayersByPage,
       };
-      if (!printWizardHasExportableFrame(exportState)) {
+      if (!printWizardHasExportableFrame(exportState, exportPageIndex)) {
         throw new Error("nothing_to_export");
       }
       return compositePrintWizardPageBlob({
         state: exportState,
-        pageIndex,
+        pageIndex: exportPageIndex,
         quality,
       });
     },
@@ -1437,7 +1430,7 @@ export default function PrintUnifiedEditor() {
             onOpenRecentProject={onOpenRecentProject}
             onSaveCanvas={() => void saveCanvasToSlotAndGallery()}
             saveCanvasBusy={saveCanvasBusy || exportBusy}
-            onClearCanvasImage={clearCurrentPageBackground}
+            onClearCanvasImage={clearCurrentPageCompletely}
             recentNamespace="screen_008"
           />
         }

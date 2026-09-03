@@ -1006,7 +1006,16 @@ export function resolvePageTextLayersForExport(
     Math.max(1, pageCount || 1)
   );
   const page = resized[Math.max(0, pageIndex)] ?? [];
-  if (page.some((l) => Boolean(l.text?.trim()))) {
+  const hasStoredContent = page.some(
+    (l) =>
+      Boolean(l.showBox) ||
+      Boolean(String(l.text || "").replace(/\u200B/g, "").trim()) ||
+      (l.layoutLocked &&
+        typeof l.manualX === "number" &&
+        typeof l.boxW === "number" &&
+        l.boxW > 0)
+  );
+  if (hasStoredContent) {
     return page.map((l) => ({
       ...l,
       fontSize: Math.max(10, Math.round(l.fontSize || PAGE_TEXT_SIZE)),
@@ -1016,10 +1025,12 @@ export function resolvePageTextLayersForExport(
     page.length ? page : createDefaultPageLayers(pageIndex),
     inputs
   );
-  if (merged.some((l) => Boolean(l.text?.trim()))) return merged;
+  if (merged.some((l) => Boolean(String(l.text || "").replace(/\u200B/g, "").trim()))) {
+    return merged;
+  }
   // Last resort: build fresh form layers from inputs.
   const fresh = smartInputsToTextLayers(inputs).filter((l) =>
-    Boolean(l.text?.trim())
+    Boolean(String(l.text || "").replace(/\u200B/g, "").trim())
   );
   return fresh.length ? fresh : merged;
 }

@@ -343,9 +343,9 @@ export default function PrintUnifiedEditorCanvas({
             <button
               type="button"
               onClick={onClearCanvasImage}
-              disabled={exportBusy || generating || !pageBg}
-              title="현재 캔버스 배경 이미지 삭제"
-              aria-label="현재 캔버스 배경 이미지 삭제"
+              disabled={exportBusy || generating}
+              title="현재 페이지 전체 삭제"
+              aria-label="현재 페이지 전체 삭제"
               className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 bg-white/95 text-slate-700 shadow-md backdrop-blur-sm transition hover:border-red-300 hover:bg-red-50 hover:text-red-700 disabled:pointer-events-none disabled:opacity-35"
             >
               <Trash2 className="h-4 w-4" aria-hidden />
@@ -461,7 +461,7 @@ export default function PrintUnifiedEditorCanvas({
                         onTextLayersChange(pageIndex, layers)
                       }
                       interactive
-                      showEmptyGuideBoxes
+                      showEmptyGuideBoxes={false}
                       enlargedResizeHandles
                       activeLayerId={activeTextLayerId ?? null}
                       onActiveLayerChange={onActiveTextLayerChange}

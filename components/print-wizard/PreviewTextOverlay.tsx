@@ -784,6 +784,7 @@ export default function PreviewTextOverlay({
                   />
                   {showEmptyGuideBoxes &&
                   !hideGuideLabels &&
+                  !layer.showBox &&
                   isLayerQuickInputPlaceholder(layer.text) &&
                   !isEditing ? (
                     <span className="pointer-events-none absolute inset-0 flex items-center justify-center px-2 text-center text-[11px] font-medium text-white/35">
