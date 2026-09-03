@@ -1,10 +1,11 @@
 /**
- * Canvas export helpers for Lucide vectors + decorative shapes (client-only).
+ * Canvas export helpers for Lucide vectors + decorative shapes.
+ * Uses react-dom/server (no react-dom/client) so API/server imports stay valid.
  */
 
 import dynamicIconImports from "lucide-react/dynamicIconImports";
 import { createElement, type ComponentType } from "react";
-import { createRoot } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
 import type { LucideProps } from "lucide-react";
 import { normalizeLucideIconName, isEmojiGlyph } from "@/lib/printWizardLucide";
 import type { PrintDecoLayer, PrintDecoShapeType } from "@/lib/printWizardTypes";
@@ -36,6 +37,10 @@ async function loadIcon(name: string): Promise<LucideIconComponent | null> {
 
 function svgToImage(svgMarkup: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
+    if (typeof Image === "undefined") {
+      reject(new Error("image_unavailable"));
+      return;
+    }
     const img = new Image();
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error("svg_image_failed"));
@@ -49,38 +54,27 @@ async function lucideToImage(
   color: string
 ): Promise<HTMLImageElement | null> {
   const Comp = await loadIcon(name);
-  if (!Comp || typeof document === "undefined") return null;
-
-  const host = document.createElement("div");
-  host.style.cssText =
-    "position:fixed;left:-10000px;top:0;width:0;height:0;overflow:hidden;";
-  document.body.appendChild(host);
-  const root = createRoot(host);
+  if (!Comp) return null;
   try {
-    await new Promise<void>((resolve) => {
-      root.render(
-        createElement(Comp, {
-          size: Math.round(size),
-          color,
-          strokeWidth: 2,
-          absoluteStrokeWidth: true,
-        })
-      );
-      requestAnimationFrame(() => resolve());
-    });
-    const svg = host.querySelector("svg");
-    if (!svg) return null;
-    svg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-    return await svgToImage(svg.outerHTML);
+    const markup = renderToStaticMarkup(
+      createElement(Comp, {
+        size: Math.round(size),
+        color,
+        strokeWidth: 2,
+        absoluteStrokeWidth: true,
+        xmlns: "http://www.w3.org/2000/svg",
+      })
+    );
+    // Ensure xmlns for data-URL rasterization.
+    const withNs = markup.includes("xmlns=")
+      ? markup
+      : markup.replace(
+          "<svg",
+          '<svg xmlns="http://www.w3.org/2000/svg"'
+        );
+    return await svgToImage(withNs);
   } catch {
     return null;
-  } finally {
-    try {
-      root.unmount();
-    } catch {
-      /* ignore */
-    }
-    host.remove();
   }
 }
 
@@ -150,7 +144,7 @@ export async function drawDecoLayerOnCanvas(
       const img = await svgToImage(markup);
       ctx.drawImage(img, -box.width / 2, -box.height / 2, box.width, box.height);
     } catch {
-      /* skip */
+      /* skip when Image API unavailable (non-browser) */
     }
     ctx.restore();
     return;
