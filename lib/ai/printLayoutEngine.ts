@@ -3,9 +3,9 @@
  * Coordinates: pixels (canvas W×H) or normalized 0–1 (auto-detected).
  *
  * Element types: text | rect | circle | line | icon | shape | box (legacy rect).
- * Screen-26 uses HTML overlays; plates map to TextLayer showBox; icons → Lucide
- * SVG deco layers; decorative shapes → vector deco (ribbon/frame/pill/stamp…).
- * NEVER map icons to smartphone emoji.
+ * Screen-26 uses HTML overlays; pure plates = TextLayer showBox (ZWSP, no copy);
+ * text = independent TextLayer atoms; icons → Lucide SVG deco; shapes → vector deco.
+ * NEVER merge text into plates. NEVER map icons to smartphone emoji.
  */
 
 import { createLayer, type TextLayer } from "@/lib/thumbnailStyles";
@@ -20,6 +20,7 @@ import {
   inferBackgroundTone,
   resolveContrastTextAppearance,
 } from "@/lib/ai/textContrastSafety";
+import { expandInfoGridSeeds } from "@/lib/ai/layoutInfoGrid";
 
 export type PrintLayoutElementText = {
   id?: string;
@@ -175,8 +176,12 @@ COORDINATE SYSTEM (critical — wrong coords cause rightward drift):
 3. Every element must stay inside the canvas: 0 ≤ x, x+width ≤ canvasWidth, 0 ≤ y, y+height ≤ canvasHeight (4% safe margin preferred).
 4. Horizontally centered elements: set width first, then x = (canvasWidth - width) / 2. Do NOT put the center x into the x field.
 5. Full-bleed / main titles (hero headline near the top): ALWAYS use x = 0, width = canvasWidth, align = "center".
-6. Text that sits on a rect/card: use THE SAME x and width as that rect, align = "center", and y/height so the text is vertically centered inside the rect. Prefer backgroundFill on the text itself instead of a separate empty rect when they form one badge/card.
-7. Circle: x,y are CENTER; radius in pixels. Label text for a circle badge should share the circle's horizontal center (text.x = circle.x - text.width/2) with align "center".
+6. ATOMIC SEPARATION (absolute): Every rect/circle/shape is a PURE backdrop with NO embedded text/label. Every title, subtitle, and body line is its OWN independent "text" element. Never put copy inside a rect object. Never rely on backgroundFill to glue title+panel into one node — emit a rect AND a separate text.
+7. INFO / GUIDE LISTS (일시·장소·입장…): NEVER pack into one multiline text blob. Emit a 2-COLUMN GRID of separate text nodes:
+   - Left column labels ("일시","장소","입장",…) share the SAME x, align "left" (or all "right"), fixed width ~90–140px.
+   - Right column values share a SECOND fixed x (labelX + labelWidth + 16–24), align "left".
+   - Row y = firstRowY + rowIndex * 32 (exact 32px step). One label text + one value text per row.
+8. Circle: x,y are CENTER; radius in pixels. Label text for a circle badge is a SEPARATE text node (not inside the circle object).
 
 CONTRAST / READABILITY (absolute — never bury type in the photo):
 1. Analyze background/style/bg_prompt tone BEFORE choosing text fill:
@@ -190,8 +195,8 @@ CONTRAST / READABILITY (absolute — never bury type in the photo):
 
 DYNAMIC LAYOUT:
 1. Do NOT hardcode counts. Infer structure from 용도 + 분야 + prompt.
-2. ATOMIZE: split into independent objects (title, subtitle, badge, price, date, place, captions).
-3. Prefer 12–22 elements (min 6). Stack plates before overlapping text in the array.
+2. ATOMIZE: every editable string is its own text node (title, "축제안내", each info label, each info value, captions). Users must move/delete each text alone.
+3. Prefer 12–28 elements (min 6). List pure plates/shapes before overlapping text in the array.
 4. Korean copy finished and purpose-fit. High-contrast colors; rgba plates OK.
 5. bg_prompt English only with negative space matching text clusters.
 6. STRICT JSON only.`
@@ -378,28 +383,6 @@ function rectContainsPoint(
     py >= rect.y - pad &&
     py <= rect.y + rect.h + pad
   );
-}
-
-function findBestPlateForText(
-  text: PixelText,
-  plates: PixelRect[]
-): number {
-  const cx = text.x + text.w / 2;
-  const cy = text.y + text.h / 2;
-  let best = -1;
-  let bestArea = Number.POSITIVE_INFINITY;
-  for (let i = 0; i < plates.length; i++) {
-    const plate = plates[i]!;
-    const pad = Math.min(plate.w, plate.h) * 0.08;
-    if (!rectContainsPoint(plate, cx, cy, pad)) continue;
-    // Prefer the smallest containing plate (badge over full-bleed panel).
-    const area = plate.w * plate.h;
-    if (area < bestArea) {
-      bestArea = area;
-      best = i;
-    }
-  }
-  return best;
 }
 
 function parseRgba(fill: string | undefined): {
@@ -883,72 +866,45 @@ export function mapLayoutPlanToCanvasLayers(
     }
   });
 
-  const plateUsed = new Set<number>();
-  const textUsed = new Set<number>();
+  // Detach text.backgroundFill into pure plates (never tattoo text onto a box).
+  let bgPlateSeq = 0;
+  for (const text of texts) {
+    if (!text.el.backgroundFill) continue;
+    const bg = parseRgba(text.el.backgroundFill);
+    plates.push({
+      x: text.x,
+      y: text.y,
+      w: text.w,
+      h: Math.max(text.h, text.fontSize * 1.6),
+      fill: text.el.backgroundFill,
+      cornerRadius: text.el.cornerRadius,
+      id: text.el.id ? `${text.el.id}-bg` : `text-bg-${bgPlateSeq++}`,
+      sourceIndex: text.sourceIndex,
+    });
+    text.el = {
+      ...text.el,
+      backgroundFill: undefined,
+      backgroundOpacity: undefined,
+    };
+    void bg;
+  }
 
-  // Merge text into containing plates (same width + center align — no split drift).
-  texts.forEach((text, ti) => {
-    const plateIdx = findBestPlateForText(text, plates);
-    if (plateIdx < 0) return;
-    const plate = plates[plateIdx]!;
-    const firstOnPlate = !plateUsed.has(plateIdx);
-    plateUsed.add(plateIdx);
-    textUsed.add(ti);
+  // Expand multiline info blobs + snap 2-column label/value grids.
+  const gridSeeds = expandInfoGridSeeds(
+    texts.map((t) => ({
+      el: t.el,
+      x: t.x,
+      y: t.y,
+      w: t.w,
+      h: t.h,
+      fontSize: t.fontSize,
+      sourceIndex: t.sourceIndex,
+    })),
+    stageW
+  );
 
-    const fill = parseRgba(plate.fill);
-    const minSide = Math.min(plate.w, plate.h) || 1;
-    const radiusFrac = plate.circle
-      ? 0.5
-      : Math.max(
-          0,
-          Math.min(0.5, (plate.cornerRadius ?? 8) / minSide)
-        );
-
-    // Keep every in-plate text on the plate's exact width; only the first draws the fill.
-    const contrast = appearanceForText(text.el, fill.hex);
-    textLayers.push(
-      createLayer({
-        id: text.el.id || (firstOnPlate ? plate.id : undefined) || newLayerId("card"),
-        text: text.el.text,
-        pos: inferPos(plate.y / stageH, plate.h / stageH),
-        layoutLocked: true,
-        boxManual: true,
-        manualX: plate.x / stageW,
-        manualY: firstOnPlate
-          ? plate.y / stageH
-          : (text.y + Math.max(0, (text.h - text.fontSize) / 2)) / stageH,
-        boxW: plate.w / stageW,
-        boxH: firstOnPlate
-          ? plate.h / stageH
-          : Math.max(text.h, text.fontSize * 1.35) / stageH,
-        maxWidth: plate.w / stageW,
-        showBox: firstOnPlate,
-        showBoxBorder: firstOnPlate && Boolean(plate.stroke),
-        boxBorderColor: plate.stroke
-          ? parseRgba(plate.stroke).hex
-          : undefined,
-        boxColor: fill.hex,
-        boxOpacity: firstOnPlate ? fill.opacity : 0,
-        boxRadius: radiusFrac,
-        color: contrast.color as TextLayer["color"],
-        fontSize: text.fontSize,
-        fontWeight: parseFontWeight(text.el.fontWeight),
-        align: "center",
-        lineHeight: 1.25,
-        fontPreset: "pretendard",
-        textShadowColor: contrast.textShadowColor,
-        textShadowBlur: contrast.textShadowBlur,
-        textShadowOffsetX: contrast.textShadowOffsetX,
-        textShadowOffsetY: contrast.textShadowOffsetY,
-        textStroke: contrast.textStroke,
-        textStrokeWidth: contrast.textStrokeWidth,
-      })
-    );
-  });
-
-  // Remaining plates (empty decorative shapes).
-  plates.forEach((plate, pi) => {
-    if (plateUsed.has(pi)) return;
+  // Pure backdrop plates first (ZWSP showBox only — no copy).
+  plates.forEach((plate) => {
     textLayers.push(
       makePlateLayer({
         id: plate.id,
@@ -1025,35 +981,49 @@ export function mapLayoutPlanToCanvasLayers(
     );
   }
 
-  // Standalone text — hero full-bleed center or mathematical center snap.
-  texts.forEach((text, ti) => {
-    if (textUsed.has(ti)) return;
-    const normalized = normalizeStandaloneTextBox(
-      text.x,
-      text.y,
-      text.w,
-      text.h,
-      text.fontSize,
-      text.el.align,
-      stageW,
-      stageH,
-      text.el.text
-    );
-    const bg = text.el.backgroundFill
-      ? parseRgba(text.el.backgroundFill)
-      : null;
-    const opacity =
-      typeof text.el.backgroundOpacity === "number"
-        ? Math.max(0, Math.min(1, text.el.backgroundOpacity))
-        : bg?.opacity ?? 0.85;
-    const minSide = Math.min(normalized.w, normalized.h) || 1;
-    const radiusPx = text.el.cornerRadius ?? 8;
+  // Independent text atoms (never showBox — plates are separate layers).
+  for (const seed of gridSeeds) {
+    const el = seed.el as PrintLayoutElementText;
+    const isInfoAtom =
+      seed.el.id?.includes("info-") ||
+      seed.el.id?.includes("-label-") ||
+      seed.el.id?.includes("-value-");
+    const normalized = isInfoAtom
+      ? {
+          x: seed.x,
+          y: seed.y,
+          w: seed.w,
+          h: seed.h,
+          align: (el.align || "left") as "left" | "center" | "right",
+        }
+      : normalizeStandaloneTextBox(
+          seed.x,
+          seed.y,
+          seed.w,
+          seed.h,
+          seed.fontSize,
+          el.align,
+          stageW,
+          stageH,
+          el.text
+        );
 
-    const contrast = appearanceForText(text.el, bg?.hex);
+    // Contrast vs nearest plate under the glyph (if any).
+    const cx = normalized.x + normalized.w / 2;
+    const cy = normalized.y + normalized.h / 2;
+    let localHex: string | undefined;
+    for (const plate of plates) {
+      if (rectContainsPoint(plate, cx, cy, 4)) {
+        localHex = parseRgba(plate.fill).hex;
+        break;
+      }
+    }
+
+    const contrast = appearanceForText(el, localHex);
     textLayers.push(
       createLayer({
-        id: text.el.id || newLayerId("text"),
-        text: text.el.text,
+        id: el.id || newLayerId("text"),
+        text: el.text,
         pos: inferPos(normalized.y / stageH, normalized.h / stageH),
         layoutLocked: true,
         boxManual: true,
@@ -1062,14 +1032,12 @@ export function mapLayoutPlanToCanvasLayers(
         boxW: normalized.w / stageW,
         boxH: normalized.h / stageH,
         maxWidth: normalized.w / stageW,
-        showBox: Boolean(bg),
+        showBox: false,
         showBoxBorder: false,
-        boxColor: bg?.hex ?? "#000000",
-        boxOpacity: bg ? opacity : 0,
-        boxRadius: Math.max(0, Math.min(0.5, radiusPx / minSide)),
+        boxOpacity: 0,
         color: contrast.color as TextLayer["color"],
-        fontSize: text.fontSize,
-        fontWeight: parseFontWeight(text.el.fontWeight),
+        fontSize: seed.fontSize,
+        fontWeight: parseFontWeight(el.fontWeight),
         align: normalized.align,
         lineHeight: 1.25,
         fontPreset: "pretendard",
@@ -1081,7 +1049,7 @@ export function mapLayoutPlanToCanvasLayers(
         textStrokeWidth: contrast.textStrokeWidth,
       })
     );
-  });
+  }
 
   for (const el of icons) {
     const sizePx =
@@ -1168,7 +1136,8 @@ export function buildLayoutUserPrompt(req: GenerateLayoutRequest): string {
     `COORDINATES: every x,y,width,height,fontSize MUST be PIXELS for ${W}x${H} only (top-left origin).`,
     `Centered element formula: x = (${W} - elementWidth) / 2. Never put the center point into x.`,
     `Main title / hero headline: x=0, width=${W}, align="center".`,
-    `Text inside a rect: same x and width as the rect, align="center".`,
+    `ATOMIC: rect/shape = pure backdrop only. Every text string is a separate text node (never glued into a box).`,
+    `INFO GRID: 일시/장소/입장 etc. = two columns (shared labelX + shared valueX), row y step exactly 32px. No multiline blobs.`,
     `ICONS: Lucide kebab-case vectors only — zero emoji. Never default to calendar/map-pin/gift/trophy.`,
     `Prefer 2–6 decorative shapes (ribbon/frame/pill/stamp/line) + 0–4 unique theme icons.`,
     `CONTRAST: If background/theme is bright (shoji, sunlight, ivory, pastel), text fill must be #1A1A1A/#2B2B2B — never solo white.`,
