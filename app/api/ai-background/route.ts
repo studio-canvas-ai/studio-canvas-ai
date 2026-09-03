@@ -35,6 +35,8 @@ function isGeneratedImageUrl(url: unknown): url is string {
 type Body = {
   prompt?: string;
   keyword?: string;
+  /** Skip CommandRouter when layout engine already produced English Flux text. */
+  directEnglishPrompt?: string;
   aspectRatio?: string;
   imageSize?: FalImageSizePreset | { width: number; height: number };
   pageIndex?: number;
@@ -132,54 +134,70 @@ export async function POST(req: Request) {
           ? ` (variation ${pageIndex + 1})`
           : "";
 
-    // Atomic multilingual parse — English only for Flux (no prior-request residue).
-    const routed = await CommandRouter(
-      `${promptRaw}${pageHint}`,
-      {
+    const directEnglish =
+      typeof raw?.directEnglishPrompt === "string"
+        ? sanitizeCommandInput(raw.directEnglishPrompt).trim()
+        : "";
+
+    let falPrompt = "";
+    let requestId = `bg-${Date.now()}`;
+    let language = "en";
+    let routerError: { code: string; message: string } | null = null;
+
+    if (directEnglish && isFluxSafeEnglishPrompt(directEnglish)) {
+      falPrompt = applyVisualOnlyPolicy(directEnglish);
+      requestId = `layout-${Date.now()}`;
+      language = "en";
+    } else {
+      // Atomic multilingual parse — English only for Flux (no prior-request residue).
+      const routed = await CommandRouter(`${promptRaw}${pageHint}`, {
         styleSelection: {
           imageStyleId:
             typeof raw?.imageStyleId === "string" ? raw.imageStyleId : null,
           moodStyleId:
             typeof raw?.moodStyleId === "string" ? raw.moodStyleId : null,
         },
-      }
-    );
-    const falPrompt = applyVisualOnlyPolicy(routed.englishPrompt.trim());
-
-    if (
-      !falPrompt ||
-      (routed.routerError &&
-        !falPrompt &&
-        (routed.routerError.code === "gemini_api_key_missing" ||
-          routed.routerError.code === "offline_translation_unavailable" ||
-          routed.routerError.code === "gemini_json_parse_failed" ||
-          routed.routerError.code === "gemini_api_error" ||
-          routed.routerError.code === "gemini_empty_english_prompt" ||
-          routed.routerError.code === "gemini_english_prompt_contaminated"))
-    ) {
-      console.error("[ai-background] blocked — no Flux-safe English prompt", {
-        requestId: routed.requestId,
-        routerError: routed.routerError,
       });
-      return NextResponse.json(
-        {
-          ok: false,
-          error: routed.routerError?.code || "gemini_empty_english_prompt",
-          message:
-            routed.routerError?.message ||
-            "Cannot generate background without a safe English Flux prompt. Check GEMINI_API_KEY.",
+      falPrompt = applyVisualOnlyPolicy(routed.englishPrompt.trim());
+      requestId = routed.requestId;
+      language = routed.language;
+      routerError = routed.routerError ?? null;
+
+      if (
+        !falPrompt ||
+        (routed.routerError &&
+          !falPrompt &&
+          (routed.routerError.code === "gemini_api_key_missing" ||
+            routed.routerError.code === "offline_translation_unavailable" ||
+            routed.routerError.code === "gemini_json_parse_failed" ||
+            routed.routerError.code === "gemini_api_error" ||
+            routed.routerError.code === "gemini_empty_english_prompt" ||
+            routed.routerError.code === "gemini_english_prompt_contaminated"))
+      ) {
+        console.error("[ai-background] blocked — no Flux-safe English prompt", {
           requestId: routed.requestId,
-          routerError: routed.routerError ?? null,
-        },
-        { status: 503 }
-      );
+          routerError: routed.routerError,
+        });
+        return NextResponse.json(
+          {
+            ok: false,
+            error: routed.routerError?.code || "gemini_empty_english_prompt",
+            message:
+              routed.routerError?.message ||
+              "Cannot generate background without a safe English Flux prompt. Check GEMINI_API_KEY.",
+            requestId: routed.requestId,
+            routerError: routed.routerError ?? null,
+          },
+          { status: 503 }
+        );
+      }
     }
 
     if (!isFluxSafeEnglishPrompt(falPrompt)) {
       console.error("[ai-background] blocked — Flux-unsafe prompt", {
-        requestId: routed.requestId,
+        requestId,
         preview: falPrompt.slice(0, 80),
-        language: routed.language,
+        language,
       });
       return NextResponse.json(
         {
@@ -187,7 +205,7 @@ export async function POST(req: Request) {
           error: "gemini_english_prompt_contaminated",
           message:
             "Flux prompt was not safe English (Hangul/CJK or too weak) and was blocked.",
-          requestId: routed.requestId,
+          requestId,
         },
         { status: 500 }
       );
@@ -201,11 +219,12 @@ export async function POST(req: Request) {
       2_147_483_647;
 
     console.info("[ai-background] atomic fal", {
-      requestId: routed.requestId,
+      requestId,
       userPrompt: promptRaw,
-      language: routed.language,
+      language,
       falPrompt: falPrompt.slice(0, 200),
-      routerError: routed.routerError?.code || null,
+      routerError: routerError?.code || null,
+      directEnglish: Boolean(directEnglish),
       seed,
     });
 
@@ -261,8 +280,8 @@ export async function POST(req: Request) {
       prompt: promptRaw,
       falPrompt,
       englishPrompt: falPrompt,
-      language: routed.language,
-      requestId: routed.requestId,
+      language,
+      requestId,
       images: candidates,
       seed: result.seed ?? seed,
       amount: FEATURE_CREDIT_COST.aiBackground,

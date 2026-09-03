@@ -73,6 +73,8 @@ import {
 } from "@/lib/printWizardPhotoLayers";
 import {
   defaultPrintWizardState,
+  FIELD_CATEGORIES,
+  fieldById,
   formatById,
   markSpecPick,
   normalizeFormatId,
@@ -91,7 +93,12 @@ import {
 import { PRINT_WIZARD_SESSION_KEY } from "@/lib/printWizardTypes";
 import { toDisplayImageSrc } from "@/lib/resultSession";
 import type { TextLayer } from "@/lib/thumbnailStyles";
-import { emptyVisualStyleSelection } from "@/lib/ai/visualStylePresets";
+import {
+  emptyVisualStyleSelection,
+  resolveVisualStylePreset,
+} from "@/lib/ai/visualStylePresets";
+import { mapLayoutElementsToTextLayers } from "@/lib/ai/printLayoutEngine";
+import { requestGenerateLayout } from "@/lib/ai/requestGenerateLayout";
 
 const AiTemplateStudio = dynamic(
   () => import("@/components/AiTemplateStudio"),
@@ -923,32 +930,96 @@ export default function PrintUnifiedEditor() {
       return;
     }
     const { pageIndex, cloneFromPageOne } = target;
-    const keyword = buildPagePrintAiContext(s, pageIndex);
-    if (!keyword.trim()) return;
+    const userTheme =
+      s.bgKeyword.trim() ||
+      fieldById(s.bgPresetId)?.keyword?.trim() ||
+      s.mainPrompt.trim();
+    if (!userTheme && !buildPagePrintAiContext(s, pageIndex).trim()) return;
+
     setGenerating(true);
     try {
       const format = formatById(s.formatId);
       const use = useById(s.useId);
+      const field = fieldById(s.bgPresetId);
+      const fieldCategory = FIELD_CATEGORIES.find((group) =>
+        group.items.some((item) => item.id === s.bgPresetId)
+      );
+      const stylePreset = resolveVisualStylePreset(s.visualStyle.imageStyleId);
+      const aspect = resolvePrintAspect(s.formatId, s.customSize);
+      const stage = referencePrintStageSize(aspect);
+      const formatLabel =
+        s.formatId === "free" && s.customSize
+          ? `${s.customSize.width}×${s.customSize.height}${s.customSize.unit}`
+          : format.label;
+
+      // 1) Gemini Magic Layout (bg_prompt + copy + boxes). Soft-fail → legacy path.
+      let layoutLayers: TextLayer[] | null = null;
+      let directEnglishPrompt: string | undefined;
+      try {
+        const plan = await requestGenerateLayout({
+          formatLabel,
+          styleLabel: stylePreset?.labelKo || "모던",
+          useLabel: use.label,
+          backgroundFieldLabel: field?.label || field?.keyword || "일반",
+          categoryLabel: fieldCategory?.label,
+          prompt: userTheme || buildPagePrintAiContext(s, pageIndex),
+          canvasWidth: stage.w,
+          canvasHeight: stage.h,
+          pageIndex,
+          pageCount: s.pageCount,
+        });
+        directEnglishPrompt = plan.bg_prompt;
+        layoutLayers = mapLayoutElementsToTextLayers(plan, stage.w, stage.h);
+      } catch (layoutErr) {
+        console.warn(
+          "[unified-editor] Magic layout failed — falling back to background-only",
+          layoutErr
+        );
+      }
+
+      // 2) Fal background (prefer layout bg_prompt; else classic context string).
+      const keyword =
+        directEnglishPrompt || buildPagePrintAiContext(s, pageIndex);
       const url = await generatePrintBackgroundDataUrl({
         keyword,
-        aspect: resolvePrintAspect(s.formatId, s.customSize),
+        directEnglishPrompt,
+        aspect,
         pageIndex,
         pageCount: s.pageCount,
-        formatLabel:
-          s.formatId === "free" && s.customSize
-            ? `${s.customSize.width}×${s.customSize.height}${s.customSize.unit}`
-            : format.label,
+        formatLabel,
         useLabel: use.label,
         imageStyleId: s.visualStyle.imageStyleId,
         moodStyleId: s.visualStyle.moodStyleId,
       });
+
       const urls = Array.from({ length: s.pageCount }, (_, i) =>
         s.backgroundUrls?.[i] ?? (i === 0 ? s.backgroundUrl ?? "" : "")
       );
       urls[pageIndex] = url;
-      const layerCopy = cloneFromPageOne
-        ? copyPageOneWorkOntoTarget(s, pageIndex)
-        : null;
+
+      const textPages = resizeBlankIsolatedPages(
+        s.textLayersByPage,
+        s.pageCount
+      );
+      const existingOnTarget = textPages[pageIndex] ?? [];
+      // Case A: page 1 already has real copy — only swap background, keep work.
+      const keepExistingWork =
+        pageIndex === 0 &&
+        !cloneFromPageOne &&
+        !isBlankUnifiedTextPage(existingOnTarget);
+
+      let nextTextPages = textPages;
+      let layerCopy: ReturnType<typeof copyPageOneWorkOntoTarget> | null = null;
+
+      if (layoutLayers && layoutLayers.length > 0 && !keepExistingWork) {
+        nextTextPages = textPages.map((page, i) =>
+          i === pageIndex ? layoutLayers! : page
+        );
+      } else if (!layoutLayers && cloneFromPageOne) {
+        // Legacy fallback when layout API fails on page-1 spawn.
+        layerCopy = copyPageOneWorkOntoTarget(s, pageIndex);
+      }
+
       patch({
         backgroundUrls: urls,
         backgroundUrl: urls[0] ?? null,
@@ -956,7 +1027,14 @@ export default function PrintUnifiedEditor() {
           s.backgroundPansByPage,
           s.pageCount
         ),
-        ...(layerCopy ?? {}),
+        textLayersByPage: layerCopy?.textLayersByPage ?? nextTextPages,
+        ...(layerCopy
+          ? {
+              photoLayersByPage: layerCopy.photoLayersByPage,
+              decoLayersByPage: layerCopy.decoLayersByPage,
+              contentOffsetByPage: layerCopy.contentOffsetByPage,
+            }
+          : {}),
       });
       activatePage(pageIndex + 1);
     } catch (err) {

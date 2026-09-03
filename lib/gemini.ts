@@ -123,20 +123,32 @@ export type GeminiGenerateParams = {
   model?: string;
   /** When true (default), retry GEMINI_MODEL_FALLBACKS on 404/unavailable. */
   withFallback?: boolean;
+  /** Force JSON responses (Gemini responseMimeType). */
+  responseMimeType?: "application/json" | "text/plain";
 };
 
 async function generateOnce(
   ai: GoogleGenAI,
   resolvedModel: string,
   prompt: string,
-  systemInstruction?: string
+  systemInstruction?: string,
+  responseMimeType?: "application/json" | "text/plain"
 ): Promise<{ text: string; model: string }> {
+  const config: {
+    systemInstruction?: string;
+    responseMimeType?: "application/json" | "text/plain";
+  } = {};
+  if (systemInstruction?.trim()) {
+    config.systemInstruction = systemInstruction.trim();
+  }
+  if (responseMimeType) {
+    config.responseMimeType = responseMimeType;
+  }
+
   const response = await ai.models.generateContent({
     model: resolvedModel,
     contents: prompt,
-    config: systemInstruction?.trim()
-      ? { systemInstruction: systemInstruction.trim() }
-      : undefined,
+    config: Object.keys(config).length ? config : undefined,
   });
 
   const text = response.text?.trim() ?? "";
@@ -152,6 +164,7 @@ export async function generateGeminiText({
   systemInstruction,
   model,
   withFallback = true,
+  responseMimeType,
 }: GeminiGenerateParams): Promise<{ text: string; model: string }> {
   const ai = getGeminiClient();
   const primary = resolveGeminiModel(model);
@@ -161,7 +174,13 @@ export async function generateGeminiText({
   for (let i = 0; i < candidates.length; i++) {
     const candidate = candidates[i]!;
     try {
-      const result = await generateOnce(ai, candidate, prompt, systemInstruction);
+      const result = await generateOnce(
+        ai,
+        candidate,
+        prompt,
+        systemInstruction,
+        responseMimeType
+      );
       if (i > 0) {
         console.warn("[gemini] fell back after unavailable model", {
           from: primary,

@@ -5,6 +5,11 @@
 export type AiBackgroundRequest = {
   /** User keyword / scene description — sent as both `prompt` and `keyword`. */
   prompt: string;
+  /**
+   * Pre-translated English Flux prompt (e.g. from /api/generate-layout).
+   * When set, the server skips CommandRouter and uses this string for Fal.
+   */
+  directEnglishPrompt?: string;
   aspectRatio?: string;
   pageIndex?: number;
   pageCount?: number;
@@ -62,6 +67,9 @@ export async function requestAiBackground(
     body: JSON.stringify({
       prompt,
       keyword: prompt,
+      ...(params.directEnglishPrompt?.trim()
+        ? { directEnglishPrompt: params.directEnglishPrompt.trim() }
+        : {}),
       ...(params.aspectRatio ? { aspectRatio: params.aspectRatio } : {}),
       ...(typeof params.pageIndex === "number"
         ? { pageIndex: params.pageIndex }

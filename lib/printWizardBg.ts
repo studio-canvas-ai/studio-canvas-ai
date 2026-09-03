@@ -33,6 +33,8 @@ export type PrintBgGenerateParams = {
   allowMockFallback?: boolean;
   imageStyleId?: string | null;
   moodStyleId?: string | null;
+  /** Pre-built English Flux prompt from Magic Layout — skips CommandRouter. */
+  directEnglishPrompt?: string;
 };
 
 export const DEFAULT_BG_PAN: PrintBackgroundPan = { x: 0, y: 0 };
@@ -188,6 +190,7 @@ export async function generatePrintBackgroundDataUrl(
     // Unified print context (options + keyword tags) as a single prompt.
     const { imageUrl } = await requestAiBackground({
       prompt: keyword,
+      directEnglishPrompt: params.directEnglishPrompt,
       aspectRatio: String(aspect),
       pageIndex,
       pageCount: params.pageCount,
