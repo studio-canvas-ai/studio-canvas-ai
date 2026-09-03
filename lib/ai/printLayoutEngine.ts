@@ -179,21 +179,26 @@ Return ONE JSON object only (no markdown fences, no commentary):
 Element types (use freely, mix as needed):
 - "text": { id, type, text, x, y, width, height?, fontSize, fontWeight, fill, align, fontFamily?, backgroundFill?, backgroundOpacity?, cornerRadius? }
 - "rect": { id, type, x, y, width, height, fill, stroke?, strokeWidth?, cornerRadius? }
-- "circle": { id, type, x, y, radius, fill, stroke?, strokeWidth? }  // x,y = center
+- "circle": { id, type, x, y, radius, fill, stroke?, strokeWidth? }  // x,y = CENTER of circle
 - "line": { id, type, x, y, width, height?, stroke?, strokeWidth?, fill? }  // thin bar (prefer horizontal)
 - "icon": { id, type, iconName, x, y, size, fill? }  // iconName = lucide-like keyword (camera, calendar, map-pin, phone, star, gift, food, music, ticket, …) OR a single emoji
 
-DYNAMIC LAYOUT (critical):
-1. Do NOT hardcode counts (e.g. always 3 badges). Infer structure from 용도 + 분야 + prompt.
-   Examples: festival course → 3–5 circular step badges + labels; menu → 6–10 price rows; sale → 1 big coupon card + period emphasis; invitation → title + date/place cards + RSVP.
-2. ATOMIZE: never dump many sentences into one text box. Split into independent objects (main title, subtitle, badge label, price, date, place, organizer, small captions).
-3. Typical finished templates have 8–28 elements. Prefer 12–22 for richness without clutter. Minimum 6 (unless ultra-minimal brief).
-4. Coordinates are PIXELS relative to the given canvas width×height. Top-left origin. Keep 4% safe margin.
-5. Stack order: draw plates/rects/circles/lines first conceptually, then icons, then text on top (list plates before overlapping text in the array).
-6. Korean copy must be finished and purpose-fit — no lorem, no placeholder brackets.
-7. Colors: high-contrast text vs plates; use rgba for translucent cards over photo backgrounds.
-8. bg_prompt English only; emphasize negative space matching where you place the densest text cluster.
-9. STRICT JSON only.`;
+COORDINATE SYSTEM (critical — wrong coords cause rightward drift):
+1. All x,y,width,height,fontSize,radius,size MUST be PIXELS for the exact canvasWidth×canvasHeight from the user message. Never invent another resolution (no 1920×1080 when canvas is 1080×1920). Never use 0–1 normalized fractions.
+2. Origin is TOP-LEFT. For every element except circle, (x,y) is the TOP-LEFT of the bounding box — NEVER the visual center.
+3. Every element must stay inside the canvas: 0 ≤ x, x+width ≤ canvasWidth, 0 ≤ y, y+height ≤ canvasHeight (4% safe margin preferred).
+4. Horizontally centered elements: set width first, then x = (canvasWidth - width) / 2. Do NOT put the center x into the x field.
+5. Full-bleed / main titles (hero headline near the top): ALWAYS use x = 0, width = canvasWidth, align = "center".
+6. Text that sits on a rect/card: use THE SAME x and width as that rect, align = "center", and y/height so the text is vertically centered inside the rect. Prefer backgroundFill on the text itself instead of a separate empty rect when they form one badge/card.
+7. Circle: x,y are CENTER; radius in pixels. Label text for a circle badge should share the circle's horizontal center (text.x = circle.x - text.width/2) with align "center".
+
+DYNAMIC LAYOUT:
+1. Do NOT hardcode counts. Infer structure from 용도 + 분야 + prompt.
+2. ATOMIZE: split into independent objects (title, subtitle, badge, price, date, place, captions).
+3. Prefer 12–22 elements (min 6). Stack plates before overlapping text in the array.
+4. Korean copy finished and purpose-fit. High-contrast colors; rgba plates OK.
+5. bg_prompt English only with negative space matching text clusters.
+6. STRICT JSON only.`
 
 function clamp01(n: number): number {
   if (!Number.isFinite(n)) return 0;
@@ -211,6 +216,194 @@ export function toNormalized(
     return clamp01(value / axisSize);
   }
   return clamp01(value);
+}
+
+/** Detect whether a layout payload is in pixel space vs 0–1 fractions. */
+export function layoutPlanUsesPixels(
+  elements: PrintLayoutElement[],
+  stageW: number,
+  stageH: number
+): boolean {
+  let maxAbs = 0;
+  for (const el of elements) {
+    maxAbs = Math.max(maxAbs, Math.abs(el.x), Math.abs(el.y));
+    if ("width" in el && typeof el.width === "number") {
+      maxAbs = Math.max(maxAbs, Math.abs(el.width));
+    }
+    if ("height" in el && typeof el.height === "number") {
+      maxAbs = Math.max(maxAbs, Math.abs(el.height));
+    }
+    if (el.type === "circle" && typeof el.radius === "number") {
+      maxAbs = Math.max(maxAbs, Math.abs(el.radius));
+    }
+    if (el.type === "text" && typeof el.fontSize === "number") {
+      maxAbs = Math.max(maxAbs, Math.abs(el.fontSize));
+    }
+    if (el.type === "icon" && typeof el.size === "number") {
+      maxAbs = Math.max(maxAbs, Math.abs(el.size));
+    }
+  }
+  // Values clearly beyond unit interval → pixels. Also treat near-stage sizes as pixels.
+  if (maxAbs > 1.5) return true;
+  if (maxAbs > 1 && (stageW > 2 || stageH > 2)) return true;
+  return false;
+}
+
+export function toStagePixels(
+  value: number,
+  axisSize: number,
+  usePixels: boolean
+): number {
+  if (!Number.isFinite(value)) return 0;
+  if (usePixels) return value;
+  return value * axisSize;
+}
+
+type PixelRect = {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  fill?: string;
+  stroke?: string;
+  cornerRadius?: number;
+  circle?: boolean;
+  id?: string;
+  sourceIndex: number;
+};
+
+type PixelText = {
+  el: PrintLayoutElementText;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  fontSize: number;
+  sourceIndex: number;
+};
+
+function clampBoxPx(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  stageW: number,
+  stageH: number
+): { x: number; y: number; w: number; h: number } {
+  const width = Math.max(8, Math.min(w, stageW));
+  const height = Math.max(8, Math.min(h, stageH));
+  return {
+    x: Math.max(0, Math.min(x, stageW - width)),
+    y: Math.max(0, Math.min(y, stageH - height)),
+    w: width,
+    h: height,
+  };
+}
+
+/** If Gemini put center-x into x for a center-aligned box, convert to top-left. */
+function coerceTopLeftFromPossibleCenter(
+  x: number,
+  w: number,
+  stageW: number,
+  align: PrintLayoutElementText["align"]
+): number {
+  if (align !== "center" && align !== undefined) return x;
+  const asLeft = x;
+  const asCenter = x - w / 2;
+  const leftFits =
+    asLeft >= -stageW * 0.02 && asLeft + w <= stageW * 1.02;
+  const centerFits =
+    asCenter >= -stageW * 0.02 && asCenter + w <= stageW * 1.02;
+  // Classic drift: x near mid while width is large → x was center.
+  const looksLikeCenterPoint =
+    Math.abs(x - stageW / 2) < stageW * 0.12 &&
+    w > stageW * 0.25 &&
+    asLeft + w > stageW * 1.02;
+  if (looksLikeCenterPoint && centerFits) return asCenter;
+  // Overflow on the right when treating as left → prefer center interpretation.
+  if (!leftFits && centerFits) return asCenter;
+  return asLeft;
+}
+
+/**
+ * Standalone / title text: full-bleed center or snap x = (W - w) / 2.
+ */
+export function normalizeStandaloneTextBox(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  fontSize: number,
+  align: PrintLayoutElementText["align"],
+  stageW: number,
+  stageH: number,
+  text: string
+): { x: number; y: number; w: number; h: number; align: "left" | "center" | "right" } {
+  const short = Math.min(stageW, stageH);
+  let nx = coerceTopLeftFromPossibleCenter(x, w, stageW, align ?? "center");
+  let nw = Math.max(8, w);
+  let ny = y;
+  let nh = Math.max(8, h);
+  let nextAlign: "left" | "center" | "right" = align ?? "center";
+
+  const isHeroTitle =
+    nextAlign !== "left" &&
+    nextAlign !== "right" &&
+    (nw >= stageW * 0.65 ||
+      fontSize >= short * 0.048 ||
+      (ny < stageH * 0.28 && fontSize >= short * 0.036) ||
+      (text.length <= 24 && nw >= stageW * 0.5 && ny < stageH * 0.35));
+
+  if (isHeroTitle) {
+    nx = 0;
+    nw = stageW;
+    nextAlign = "center";
+  } else if (nextAlign === "center") {
+    const centerX = nx + nw / 2;
+    // Intended page-centered block → force mathematical center.
+    if (Math.abs(centerX - stageW / 2) < stageW * 0.18 || nw >= stageW * 0.45) {
+      nx = (stageW - nw) / 2;
+    }
+  }
+
+  const clamped = clampBoxPx(nx, ny, nw, nh, stageW, stageH);
+  return { ...clamped, align: nextAlign };
+}
+
+function rectContainsPoint(
+  rect: PixelRect,
+  px: number,
+  py: number,
+  pad = 0
+): boolean {
+  return (
+    px >= rect.x - pad &&
+    px <= rect.x + rect.w + pad &&
+    py >= rect.y - pad &&
+    py <= rect.y + rect.h + pad
+  );
+}
+
+function findBestPlateForText(
+  text: PixelText,
+  plates: PixelRect[]
+): number {
+  const cx = text.x + text.w / 2;
+  const cy = text.y + text.h / 2;
+  let best = -1;
+  let bestArea = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < plates.length; i++) {
+    const plate = plates[i]!;
+    const pad = Math.min(plate.w, plate.h) * 0.08;
+    if (!rectContainsPoint(plate, cx, cy, pad)) continue;
+    // Prefer the smallest containing plate (badge over full-bleed panel).
+    const area = plate.w * plate.h;
+    if (area < bestArea) {
+      bestArea = area;
+      best = i;
+    }
+  }
+  return best;
 }
 
 function parseRgba(fill: string | undefined): {
@@ -519,6 +712,8 @@ function makePlateLayer(opts: {
 /**
  * Map Gemini layout → Screen-26 layers (HTML overlay + export-safe).
  * Plates/circles/lines → TextLayer showBox; icons → emoji deco; text → TextLayer.
+ * Text that belongs inside a rect/circle is merged onto that plate (same box, align center)
+ * so background and copy never drift apart. Hero titles use full canvas width + center.
  */
 export function mapLayoutPlanToCanvasLayers(
   plan: PrintLayoutPlan,
@@ -530,228 +725,312 @@ export function mapLayoutPlanToCanvasLayers(
   const decoLayers: PrintDecoLayer[] = [];
   let decoStack = 0;
 
-  // Soft max to avoid runaway payloads
   const elements = plan.elements.slice(0, 40);
+  const usePixels = layoutPlanUsesPixels(elements, stageW, stageH);
 
-  for (const el of elements) {
+  const plates: PixelRect[] = [];
+  const texts: PixelText[] = [];
+  const lines: PrintLayoutElementLine[] = [];
+  const icons: PrintLayoutElementIcon[] = [];
+
+  elements.forEach((el, sourceIndex) => {
     if (el.type === "rect" || el.type === "box") {
-      const x = toNormalized(el.x, stageW);
-      const y = toNormalized(el.y, stageH);
-      const w = Math.max(0.02, toNormalized(el.width, stageW));
-      const h = Math.max(0.015, toNormalized(el.height, stageH));
-      textLayers.push(
-        makePlateLayer({
-          id: el.id,
-          x,
-          y,
-          w,
-          h,
-          fill: el.fill,
-          stroke: el.stroke,
-          cornerRadiusPx: el.cornerRadius,
-          stageW,
-          stageH,
-        })
+      const box = clampBoxPx(
+        toStagePixels(el.x, stageW, usePixels),
+        toStagePixels(el.y, stageH, usePixels),
+        Math.max(8, toStagePixels(el.width, stageW, usePixels)),
+        Math.max(8, toStagePixels(el.height, stageH, usePixels)),
+        stageW,
+        stageH
       );
-      continue;
+      plates.push({
+        ...box,
+        fill: el.fill,
+        stroke: el.stroke,
+        cornerRadius: el.cornerRadius,
+        id: el.id,
+        sourceIndex,
+      });
+      return;
     }
 
     if (el.type === "circle") {
-      const rPx =
+      const rRaw =
         typeof el.radius === "number" && el.radius > 0
           ? el.radius
-          : Math.max(
-              Number(el.width) || 0,
-              Number(el.height) || 0
-            ) / 2 ||
+          : Math.max(Number(el.width) || 0, Number(el.height) || 0) / 2 ||
             short * 0.04;
-      // Gemini uses center x,y for circles; convert to top-left bounding box.
-      const looksLikePixels = Math.abs(el.x) > 1 || Math.abs(el.y) > 1 || rPx > 1;
-      let cx = el.x;
-      let cy = el.y;
-      let r = rPx;
-      if (!looksLikePixels) {
-        cx = el.x * stageW;
-        cy = el.y * stageH;
-        r = rPx <= 1 ? rPx * Math.min(stageW, stageH) : rPx;
-      }
-      const size = Math.max(8, r * 2);
-      const x = toNormalized(cx - r, stageW);
-      const y = toNormalized(cy - r, stageH);
-      const w = Math.max(0.02, toNormalized(size, stageW));
-      const h = Math.max(0.02, toNormalized(size, stageH));
-      // Force square-ish circle plate
-      const side = Math.min(w, h);
-      textLayers.push(
-        makePlateLayer({
-          id: el.id,
-          x,
-          y,
-          w: side,
-          h: side,
-          fill: el.fill || "rgba(230,126,34,0.95)",
-          stroke: el.stroke,
-          circle: true,
-          stageW,
-          stageH,
-        })
-      );
-      continue;
+      const cx = toStagePixels(el.x, stageW, usePixels);
+      const cy = toStagePixels(el.y, stageH, usePixels);
+      const r = usePixels
+        ? rRaw
+        : rRaw <= 1
+          ? rRaw * short
+          : rRaw;
+      const size = Math.max(16, r * 2);
+      const box = clampBoxPx(cx - r, cy - r, size, size, stageW, stageH);
+      const side = Math.min(box.w, box.h);
+      plates.push({
+        x: box.x,
+        y: box.y,
+        w: side,
+        h: side,
+        fill: el.fill || "rgba(230,126,34,0.95)",
+        stroke: el.stroke,
+        circle: true,
+        id: el.id,
+        sourceIndex,
+      });
+      return;
     }
 
     if (el.type === "line") {
-      let x1 = el.x;
-      let y1 = el.y;
-      let x2 = el.x2;
-      let y2 = el.y2;
-      const looksLikePixels =
-        Math.abs(x1) > 1 ||
-        Math.abs(y1) > 1 ||
-        (typeof el.width === "number" && el.width > 1);
-      if (!looksLikePixels) {
-        x1 = el.x * stageW;
-        y1 = el.y * stageH;
-        if (typeof x2 === "number") x2 = x2 * stageW;
-        if (typeof y2 === "number") y2 = y2 * stageH;
-      }
-      let left: number;
-      let top: number;
-      let widthPx: number;
-      let heightPx: number;
-      if (
-        typeof x2 === "number" &&
-        typeof y2 === "number" &&
-        Number.isFinite(x2) &&
-        Number.isFinite(y2)
-      ) {
-        left = Math.min(x1, x2);
-        top = Math.min(y1, y2);
-        widthPx = Math.max(4, Math.abs(x2 - x1));
-        heightPx = Math.max(
-          el.strokeWidth || 3,
-          Math.abs(y2 - y1) || el.strokeWidth || 3
-        );
-      } else {
-        left = x1;
-        top = y1;
-        widthPx =
-          typeof el.width === "number" && el.width > 0
-            ? looksLikePixels
-              ? el.width
-              : el.width * stageW
-            : stageW * 0.7;
-        heightPx = Math.max(
-          2,
-          typeof el.height === "number" && el.height > 0
-            ? looksLikePixels
-              ? el.height
-              : el.height * stageH
-            : el.strokeWidth || 3
-        );
-      }
-      textLayers.push(
-        makePlateLayer({
-          id: el.id,
-          x: toNormalized(left, stageW),
-          y: toNormalized(top, stageH),
-          w: Math.max(0.02, toNormalized(widthPx, stageW)),
-          h: Math.max(0.004, toNormalized(heightPx, stageH)),
-          fill: el.stroke || el.fill || "rgba(255,255,255,0.85)",
-          cornerRadiusPx: 2,
-          stageW,
-          stageH,
-        })
-      );
-      continue;
+      lines.push(el);
+      return;
     }
 
     if (el.type === "icon") {
-      const symbol = resolveIconSymbol(el);
-      const sizePx =
-        typeof el.size === "number" && el.size > 0
-          ? el.size
-          : typeof el.width === "number" && el.width > 0
-            ? el.width
-            : short * 0.05;
-      const looksLikePixels = Math.abs(el.x) > 1 || sizePx > 1;
-      const left = looksLikePixels ? el.x : el.x * stageW;
-      const top = looksLikePixels ? el.y : el.y * stageH;
-      const size = looksLikePixels
-        ? sizePx
-        : sizePx <= 1
-          ? sizePx * short
-          : sizePx;
-      const w = Math.max(1, stageW);
-      const h = Math.max(1, stageH);
-      decoLayers.push({
-        id: el.id || newLayerId("icon", String(decoStack++)),
-        symbol,
-        rotation: 0,
-        x: clamp01(left / w),
-        y: clamp01(top / h),
-        width: Math.max(0.02, size / w),
-        height: Math.max(0.02, size / h),
-      });
-      continue;
+      icons.push(el);
+      return;
     }
 
     if (el.type === "text") {
-      const x = toNormalized(el.x, stageW);
-      const y = toNormalized(el.y, stageH);
-      const w = Math.max(
-        0.08,
-        toNormalized(
-          typeof el.width === "number" && el.width > 0 ? el.width : stageW * 0.8,
-          stageW
-        )
-      );
       const fontSize =
         typeof el.fontSize === "number" && el.fontSize > 0
-          ? el.fontSize
+          ? usePixels
+            ? el.fontSize
+            : el.fontSize <= 1
+              ? el.fontSize * short
+              : el.fontSize
           : Math.round(short * 0.045);
-      const h = Math.max(
-        0.035,
-        toNormalized(
-          typeof el.height === "number" && el.height > 0
-            ? el.height
-            : fontSize * 1.45,
-          stageH
-        )
-      );
-      const bg = el.backgroundFill ? parseRgba(el.backgroundFill) : null;
-      const opacity =
-        typeof el.backgroundOpacity === "number"
-          ? Math.max(0, Math.min(1, el.backgroundOpacity))
-          : bg?.opacity ?? 0.85;
-      const minSide = Math.min(w * stageW, h * stageH) || 1;
-      const radiusPx = el.cornerRadius ?? 8;
+      const rawW =
+        typeof el.width === "number" && el.width > 0
+          ? toStagePixels(el.width, stageW, usePixels)
+          : stageW * 0.8;
+      const rawH =
+        typeof el.height === "number" && el.height > 0
+          ? toStagePixels(el.height, stageH, usePixels)
+          : fontSize * 1.45;
+      const rawX = toStagePixels(el.x, stageW, usePixels);
+      const rawY = toStagePixels(el.y, stageH, usePixels);
+      texts.push({
+        el,
+        x: rawX,
+        y: rawY,
+        w: rawW,
+        h: rawH,
+        fontSize,
+        sourceIndex,
+      });
+    }
+  });
 
-      textLayers.push(
-        createLayer({
-          id: el.id || newLayerId("text"),
-          text: el.text,
-          pos: inferPos(y, h),
-          layoutLocked: true,
-          boxManual: true,
-          manualX: x,
-          manualY: y,
-          boxW: w,
-          boxH: h,
-          maxWidth: w,
-          showBox: Boolean(bg),
-          showBoxBorder: false,
-          boxColor: bg?.hex ?? "#000000",
-          boxOpacity: bg ? opacity : 0,
-          boxRadius: Math.max(0, Math.min(0.5, radiusPx / minSide)),
-          color: nearestTextColor(el.fill) as TextLayer["color"],
-          fontSize,
-          fontWeight: parseFontWeight(el.fontWeight),
-          align: el.align ?? "center",
-          lineHeight: 1.25,
-          fontPreset: "pretendard",
-        })
+  const plateUsed = new Set<number>();
+  const textUsed = new Set<number>();
+
+  // Merge text into containing plates (same width + center align — no split drift).
+  texts.forEach((text, ti) => {
+    const plateIdx = findBestPlateForText(text, plates);
+    if (plateIdx < 0) return;
+    const plate = plates[plateIdx]!;
+    const firstOnPlate = !plateUsed.has(plateIdx);
+    plateUsed.add(plateIdx);
+    textUsed.add(ti);
+
+    const fill = parseRgba(plate.fill);
+    const minSide = Math.min(plate.w, plate.h) || 1;
+    const radiusFrac = plate.circle
+      ? 0.5
+      : Math.max(
+          0,
+          Math.min(0.5, (plate.cornerRadius ?? 8) / minSide)
+        );
+
+    // Keep every in-plate text on the plate's exact width; only the first draws the fill.
+    textLayers.push(
+      createLayer({
+        id: text.el.id || (firstOnPlate ? plate.id : undefined) || newLayerId("card"),
+        text: text.el.text,
+        pos: inferPos(plate.y / stageH, plate.h / stageH),
+        layoutLocked: true,
+        boxManual: true,
+        manualX: plate.x / stageW,
+        manualY: firstOnPlate
+          ? plate.y / stageH
+          : (text.y + Math.max(0, (text.h - text.fontSize) / 2)) / stageH,
+        boxW: plate.w / stageW,
+        boxH: firstOnPlate
+          ? plate.h / stageH
+          : Math.max(text.h, text.fontSize * 1.35) / stageH,
+        maxWidth: plate.w / stageW,
+        showBox: firstOnPlate,
+        showBoxBorder: firstOnPlate && Boolean(plate.stroke),
+        boxBorderColor: plate.stroke
+          ? parseRgba(plate.stroke).hex
+          : undefined,
+        boxColor: fill.hex,
+        boxOpacity: firstOnPlate ? fill.opacity : 0,
+        boxRadius: radiusFrac,
+        color: nearestTextColor(text.el.fill) as TextLayer["color"],
+        fontSize: text.fontSize,
+        fontWeight: parseFontWeight(text.el.fontWeight),
+        align: "center",
+        lineHeight: 1.25,
+        fontPreset: "pretendard",
+      })
+    );
+  });
+
+  // Remaining plates (empty decorative shapes).
+  plates.forEach((plate, pi) => {
+    if (plateUsed.has(pi)) return;
+    textLayers.push(
+      makePlateLayer({
+        id: plate.id,
+        x: plate.x / stageW,
+        y: plate.y / stageH,
+        w: plate.w / stageW,
+        h: plate.h / stageH,
+        fill: plate.fill,
+        stroke: plate.stroke,
+        cornerRadiusPx: plate.cornerRadius,
+        circle: plate.circle,
+        stageW,
+        stageH,
+      })
+    );
+  });
+
+  // Lines stay as thin plates.
+  for (const el of lines) {
+    let x1 = toStagePixels(el.x, stageW, usePixels);
+    let y1 = toStagePixels(el.y, stageH, usePixels);
+    let x2 =
+      typeof el.x2 === "number"
+        ? toStagePixels(el.x2, stageW, usePixels)
+        : undefined;
+    let y2 =
+      typeof el.y2 === "number"
+        ? toStagePixels(el.y2, stageH, usePixels)
+        : undefined;
+    let left: number;
+    let top: number;
+    let widthPx: number;
+    let heightPx: number;
+    if (
+      typeof x2 === "number" &&
+      typeof y2 === "number" &&
+      Number.isFinite(x2) &&
+      Number.isFinite(y2)
+    ) {
+      left = Math.min(x1, x2);
+      top = Math.min(y1, y2);
+      widthPx = Math.max(4, Math.abs(x2 - x1));
+      heightPx = Math.max(
+        el.strokeWidth || 3,
+        Math.abs(y2 - y1) || el.strokeWidth || 3
+      );
+    } else {
+      left = x1;
+      top = y1;
+      widthPx =
+        typeof el.width === "number" && el.width > 0
+          ? toStagePixels(el.width, stageW, usePixels)
+          : stageW * 0.7;
+      heightPx = Math.max(
+        2,
+        typeof el.height === "number" && el.height > 0
+          ? toStagePixels(el.height, stageH, usePixels)
+          : el.strokeWidth || 3
       );
     }
+    const box = clampBoxPx(left, top, widthPx, heightPx, stageW, stageH);
+    textLayers.push(
+      makePlateLayer({
+        id: el.id,
+        x: box.x / stageW,
+        y: box.y / stageH,
+        w: box.w / stageW,
+        h: box.h / stageH,
+        fill: el.stroke || el.fill || "rgba(255,255,255,0.85)",
+        cornerRadiusPx: 2,
+        stageW,
+        stageH,
+      })
+    );
+  }
+
+  // Standalone text — hero full-bleed center or mathematical center snap.
+  texts.forEach((text, ti) => {
+    if (textUsed.has(ti)) return;
+    const normalized = normalizeStandaloneTextBox(
+      text.x,
+      text.y,
+      text.w,
+      text.h,
+      text.fontSize,
+      text.el.align,
+      stageW,
+      stageH,
+      text.el.text
+    );
+    const bg = text.el.backgroundFill
+      ? parseRgba(text.el.backgroundFill)
+      : null;
+    const opacity =
+      typeof text.el.backgroundOpacity === "number"
+        ? Math.max(0, Math.min(1, text.el.backgroundOpacity))
+        : bg?.opacity ?? 0.85;
+    const minSide = Math.min(normalized.w, normalized.h) || 1;
+    const radiusPx = text.el.cornerRadius ?? 8;
+
+    textLayers.push(
+      createLayer({
+        id: text.el.id || newLayerId("text"),
+        text: text.el.text,
+        pos: inferPos(normalized.y / stageH, normalized.h / stageH),
+        layoutLocked: true,
+        boxManual: true,
+        manualX: normalized.x / stageW,
+        manualY: normalized.y / stageH,
+        boxW: normalized.w / stageW,
+        boxH: normalized.h / stageH,
+        maxWidth: normalized.w / stageW,
+        showBox: Boolean(bg),
+        showBoxBorder: false,
+        boxColor: bg?.hex ?? "#000000",
+        boxOpacity: bg ? opacity : 0,
+        boxRadius: Math.max(0, Math.min(0.5, radiusPx / minSide)),
+        color: nearestTextColor(text.el.fill) as TextLayer["color"],
+        fontSize: text.fontSize,
+        fontWeight: parseFontWeight(text.el.fontWeight),
+        align: normalized.align,
+        lineHeight: 1.25,
+        fontPreset: "pretendard",
+      })
+    );
+  });
+
+  for (const el of icons) {
+    const symbol = resolveIconSymbol(el);
+    const sizePx =
+      typeof el.size === "number" && el.size > 0
+        ? toStagePixels(el.size, short, usePixels)
+        : typeof el.width === "number" && el.width > 0
+          ? toStagePixels(el.width, stageW, usePixels)
+          : short * 0.05;
+    const left = toStagePixels(el.x, stageW, usePixels);
+    const top = toStagePixels(el.y, stageH, usePixels);
+    const size = Math.max(12, sizePx);
+    decoLayers.push({
+      id: el.id || newLayerId("icon", String(decoStack++)),
+      symbol,
+      rotation: 0,
+      x: clamp01(left / stageW),
+      y: clamp01(top / stageH),
+      width: Math.max(0.02, size / stageW),
+      height: Math.max(0.02, size / stageH),
+    });
   }
 
   return { textLayers, decoLayers };
@@ -771,8 +1050,10 @@ export function buildLayoutUserPrompt(req: GenerateLayoutRequest): string {
     typeof req.pageIndex === "number" && typeof req.pageCount === "number"
       ? `page ${req.pageIndex + 1} of ${req.pageCount}`
       : "page 1";
+  const W = Math.round(req.canvasWidth);
+  const H = Math.round(req.canvasHeight);
   return [
-    `Canvas size (pixels): ${Math.round(req.canvasWidth)} x ${Math.round(req.canvasHeight)}`,
+    `Canvas size (pixels): ${W} x ${H}`,
     `규격(size): ${req.formatLabel}`,
     `스타일(style): ${req.styleLabel}`,
     `용도(purpose): ${req.useLabel}`,
@@ -783,6 +1064,9 @@ export function buildLayoutUserPrompt(req: GenerateLayoutRequest): string {
     `Face: ${pageHint}`,
     `Design a finished Canva-quality ATOMIC layout for this single page.`,
     `Choose element count and structure dynamically for this purpose — do not use a fixed template.`,
-    `Coordinates must be in PIXELS for this canvas size.`,
+    `COORDINATES: every x,y,width,height,fontSize MUST be PIXELS for ${W}x${H} only (top-left origin).`,
+    `Centered element formula: x = (${W} - elementWidth) / 2. Never put the center point into x.`,
+    `Main title / hero headline: x=0, width=${W}, align="center".`,
+    `Text inside a rect: same x and width as the rect, align="center".`,
   ].join("\n");
 }
