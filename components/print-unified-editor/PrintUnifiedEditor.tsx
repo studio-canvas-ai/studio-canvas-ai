@@ -97,7 +97,7 @@ import {
   emptyVisualStyleSelection,
   resolveVisualStylePreset,
 } from "@/lib/ai/visualStylePresets";
-import { mapLayoutElementsToTextLayers } from "@/lib/ai/printLayoutEngine";
+import { mapLayoutPlanToCanvasLayers } from "@/lib/ai/printLayoutEngine";
 import { requestGenerateLayout } from "@/lib/ai/requestGenerateLayout";
 
 const AiTemplateStudio = dynamic(
@@ -952,8 +952,9 @@ export default function PrintUnifiedEditor() {
           ? `${s.customSize.width}×${s.customSize.height}${s.customSize.unit}`
           : format.label;
 
-      // 1) Gemini Magic Layout (bg_prompt + copy + boxes). Soft-fail → legacy path.
-      let layoutLayers: TextLayer[] | null = null;
+      // 1) Gemini Magic Layout (dynamic atoms: text/rect/circle/line/icon). Soft-fail → legacy.
+      let layoutText: TextLayer[] | null = null;
+      let layoutDeco: PrintDecoLayer[] | null = null;
       let directEnglishPrompt: string | undefined;
       try {
         const plan = await requestGenerateLayout({
@@ -969,7 +970,9 @@ export default function PrintUnifiedEditor() {
           pageCount: s.pageCount,
         });
         directEnglishPrompt = plan.bg_prompt;
-        layoutLayers = mapLayoutElementsToTextLayers(plan, stage.w, stage.h);
+        const mapped = mapLayoutPlanToCanvasLayers(plan, stage.w, stage.h);
+        layoutText = mapped.textLayers;
+        layoutDeco = mapped.decoLayers;
       } catch (layoutErr) {
         console.warn(
           "[unified-editor] Magic layout failed — falling back to background-only",
@@ -1001,6 +1004,7 @@ export default function PrintUnifiedEditor() {
         s.textLayersByPage,
         s.pageCount
       );
+      const decoPages = resizeDecoPages(s.decoLayersByPage, s.pageCount);
       const existingOnTarget = textPages[pageIndex] ?? [];
       // Case A: page 1 already has real copy — only swap background, keep work.
       const keepExistingWork =
@@ -1009,13 +1013,21 @@ export default function PrintUnifiedEditor() {
         !isBlankUnifiedTextPage(existingOnTarget);
 
       let nextTextPages = textPages;
+      let nextDecoPages = decoPages;
       let layerCopy: ReturnType<typeof copyPageOneWorkOntoTarget> | null = null;
 
-      if (layoutLayers && layoutLayers.length > 0 && !keepExistingWork) {
+      if (
+        layoutText &&
+        layoutText.length > 0 &&
+        !keepExistingWork
+      ) {
         nextTextPages = textPages.map((page, i) =>
-          i === pageIndex ? layoutLayers! : page
+          i === pageIndex ? layoutText! : page
         );
-      } else if (!layoutLayers && cloneFromPageOne) {
+        nextDecoPages = decoPages.map((page, i) =>
+          i === pageIndex ? layoutDeco ?? [] : page
+        );
+      } else if (!layoutText && cloneFromPageOne) {
         // Legacy fallback when layout API fails on page-1 spawn.
         layerCopy = copyPageOneWorkOntoTarget(s, pageIndex);
       }
@@ -1028,10 +1040,10 @@ export default function PrintUnifiedEditor() {
           s.pageCount
         ),
         textLayersByPage: layerCopy?.textLayersByPage ?? nextTextPages,
+        decoLayersByPage: layerCopy?.decoLayersByPage ?? nextDecoPages,
         ...(layerCopy
           ? {
               photoLayersByPage: layerCopy.photoLayersByPage,
-              decoLayersByPage: layerCopy.decoLayersByPage,
               contentOffsetByPage: layerCopy.contentOffsetByPage,
             }
           : {}),
