@@ -181,6 +181,14 @@ export type TextLayer = {
   manualY?: number;
   /** True when the user drag-resized the box; cleared on typography slider sync. */
   boxManual?: boolean;
+  /** Optional text drop-shadow (Magic Layout contrast safety / Gemini). */
+  textShadowColor?: string;
+  textShadowBlur?: number;
+  textShadowOffsetX?: number;
+  textShadowOffsetY?: number;
+  /** Optional glyph outline for contrast on busy backgrounds. */
+  textStroke?: string;
+  textStrokeWidth?: number;
 };
 
 export const COLOR_PRESETS: Record<

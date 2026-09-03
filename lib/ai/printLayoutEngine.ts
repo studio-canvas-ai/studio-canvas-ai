@@ -8,7 +8,7 @@
  * NEVER map icons to smartphone emoji.
  */
 
-import { createLayer, type ColorPreset, type TextLayer } from "@/lib/thumbnailStyles";
+import { createLayer, type TextLayer } from "@/lib/thumbnailStyles";
 import {
   createLucideDecoLayer,
   createShapeDecoLayer,
@@ -16,6 +16,10 @@ import {
 } from "@/lib/printWizardDecoLayers";
 import { isEmojiGlyph, normalizeLucideIconName } from "@/lib/printWizardLucide";
 import type { PrintDecoLayer } from "@/lib/printWizardTypes";
+import {
+  inferBackgroundTone,
+  resolveContrastTextAppearance,
+} from "@/lib/ai/textContrastSafety";
 
 export type PrintLayoutElementText = {
   id?: string;
@@ -33,6 +37,12 @@ export type PrintLayoutElementText = {
   backgroundFill?: string;
   backgroundOpacity?: number;
   cornerRadius?: number;
+  shadowColor?: string;
+  shadowBlur?: number;
+  shadowOffsetX?: number;
+  shadowOffsetY?: number;
+  stroke?: string;
+  strokeWidth?: number;
 };
 
 export type PrintLayoutElementRect = {
@@ -145,7 +155,7 @@ Return ONE JSON object only (no markdown fences, no commentary):
 }
 
 Element types (use freely, mix as needed):
-- "text": { id, type, text, x, y, width, height?, fontSize, fontWeight, fill, align, fontFamily?, backgroundFill?, backgroundOpacity?, cornerRadius? }
+- "text": { id, type, text, x, y, width, height?, fontSize, fontWeight, fill, align, fontFamily?, backgroundFill?, backgroundOpacity?, cornerRadius?, shadowColor?, shadowBlur?, shadowOffsetX?, shadowOffsetY?, stroke?, strokeWidth? }
 - "rect": { id, type, x, y, width, height, fill, stroke?, strokeWidth?, cornerRadius? }
 - "circle": { id, type, x, y, radius, fill, stroke?, strokeWidth? }  // x,y = CENTER of circle
 - "line": { id, type, x, y, width, height?, stroke?, strokeWidth?, fill? }  // thin bar (prefer horizontal)
@@ -167,6 +177,16 @@ COORDINATE SYSTEM (critical — wrong coords cause rightward drift):
 5. Full-bleed / main titles (hero headline near the top): ALWAYS use x = 0, width = canvasWidth, align = "center".
 6. Text that sits on a rect/card: use THE SAME x and width as that rect, align = "center", and y/height so the text is vertically centered inside the rect. Prefer backgroundFill on the text itself instead of a separate empty rect when they form one badge/card.
 7. Circle: x,y are CENTER; radius in pixels. Label text for a circle badge should share the circle's horizontal center (text.x = circle.x - text.width/2) with align "center".
+
+CONTRAST / READABILITY (absolute — never bury type in the photo):
+1. Analyze background/style/bg_prompt tone BEFORE choosing text fill:
+   - LIGHT scenes (shoji/창호지, sunlight/햇살, ivory, pastel, sand, bright walls, hanok paper): main text fill MUST be deep ink #1A1A1A, charcoal #2B2B2B, or deep brown #2C1810. NEVER solo white (#FFFFFF) on light grounds.
+   - DARK scenes (night sky, deep wood, neon, dense forest): text fill white #FFFFFF or bright gold #F1C40F.
+2. If you intentionally use light type on a light/complex photo (lattice, branches, busy texture):
+   a. Include shadowColor:"rgba(0,0,0,0.7)", shadowBlur:10, shadowOffsetY:2 on the text object, AND/OR
+   b. Place a translucent backdrop rect under the text (fill "rgba(0,0,0,0.45)" or "rgba(255,255,255,0.85)").
+3. Prefer backdrop plates behind hero titles on patterned photos. Contrast ratio must keep titles instantly readable.
+4. Optional text stroke/strokeWidth (1–2px dark) is allowed for extra separation.
 
 DYNAMIC LAYOUT:
 1. Do NOT hardcode counts. Infer structure from 용도 + 분야 + prompt.
@@ -413,15 +433,6 @@ function parseRgba(fill: string | undefined): {
   return { hex: "#000000", opacity: 0.55 };
 }
 
-function nearestTextColor(fill: string | undefined): ColorPreset | string {
-  const { hex } = parseRgba(fill);
-  const h = hex.toUpperCase();
-  if (h === "#FFFFFF" || h === "#FFF") return "white";
-  if (h === "#000000" || h === "#000") return "inkBlack";
-  if (h === "#FACC15" || h === "#F59E0B") return "yellow";
-  return hex;
-}
-
 function parseFontWeight(w: string | number | undefined): number {
   if (typeof w === "number" && Number.isFinite(w)) {
     return Math.max(300, Math.min(900, Math.round(w)));
@@ -524,6 +535,21 @@ export function parsePrintLayoutPlan(raw: unknown): PrintLayoutPlan | null {
             : undefined,
         cornerRadius:
           typeof el.cornerRadius === "number" ? el.cornerRadius : undefined,
+        shadowColor:
+          typeof el.shadowColor === "string" ? el.shadowColor : undefined,
+        shadowBlur:
+          typeof el.shadowBlur === "number" ? el.shadowBlur : undefined,
+        shadowOffsetX:
+          typeof el.shadowOffsetX === "number" ? el.shadowOffsetX : undefined,
+        shadowOffsetY:
+          typeof el.shadowOffsetY === "number"
+            ? el.shadowOffsetY
+            : typeof el.shadowOffset === "number"
+              ? el.shadowOffset
+              : undefined,
+        stroke: typeof el.stroke === "string" ? el.stroke : undefined,
+        strokeWidth:
+          typeof el.strokeWidth === "number" ? el.strokeWidth : undefined,
       });
       continue;
     }
@@ -713,7 +739,14 @@ function makePlateLayer(opts: {
 export function mapLayoutPlanToCanvasLayers(
   plan: PrintLayoutPlan,
   stageW: number,
-  stageH: number
+  stageH: number,
+  toneHints?: {
+    styleLabel?: string;
+    useLabel?: string;
+    backgroundFieldLabel?: string;
+    categoryLabel?: string;
+    prompt?: string;
+  }
 ): MappedLayoutLayers {
   const short = Math.min(stageW, stageH) || 1080;
   const textLayers: TextLayer[] = [];
@@ -722,12 +755,36 @@ export function mapLayoutPlanToCanvasLayers(
 
   const elements = plan.elements.slice(0, 40);
   const usePixels = layoutPlanUsesPixels(elements, stageW, stageH);
+  const sceneTone = inferBackgroundTone(
+    plan.bg_prompt,
+    toneHints?.styleLabel,
+    toneHints?.useLabel,
+    toneHints?.backgroundFieldLabel,
+    toneHints?.categoryLabel,
+    toneHints?.prompt
+  );
 
   const plates: PixelRect[] = [];
   const texts: PixelText[] = [];
   const lines: PrintLayoutElementLine[] = [];
   const icons: PrintLayoutElementIcon[] = [];
   const shapes: PrintLayoutElementShape[] = [];
+
+  const appearanceForText = (
+    el: PrintLayoutElementText,
+    localBackdropHex?: string
+  ) =>
+    resolveContrastTextAppearance({
+      fill: el.fill,
+      sceneTone,
+      localBackdropHex,
+      shadowColor: el.shadowColor,
+      shadowBlur: el.shadowBlur,
+      shadowOffsetX: el.shadowOffsetX,
+      shadowOffsetY: el.shadowOffsetY,
+      stroke: el.stroke,
+      strokeWidth: el.strokeWidth,
+    });
 
   elements.forEach((el, sourceIndex) => {
     if (el.type === "rect" || el.type === "box") {
@@ -848,6 +905,7 @@ export function mapLayoutPlanToCanvasLayers(
         );
 
     // Keep every in-plate text on the plate's exact width; only the first draws the fill.
+    const contrast = appearanceForText(text.el, fill.hex);
     textLayers.push(
       createLayer({
         id: text.el.id || (firstOnPlate ? plate.id : undefined) || newLayerId("card"),
@@ -872,12 +930,18 @@ export function mapLayoutPlanToCanvasLayers(
         boxColor: fill.hex,
         boxOpacity: firstOnPlate ? fill.opacity : 0,
         boxRadius: radiusFrac,
-        color: nearestTextColor(text.el.fill) as TextLayer["color"],
+        color: contrast.color as TextLayer["color"],
         fontSize: text.fontSize,
         fontWeight: parseFontWeight(text.el.fontWeight),
         align: "center",
         lineHeight: 1.25,
         fontPreset: "pretendard",
+        textShadowColor: contrast.textShadowColor,
+        textShadowBlur: contrast.textShadowBlur,
+        textShadowOffsetX: contrast.textShadowOffsetX,
+        textShadowOffsetY: contrast.textShadowOffsetY,
+        textStroke: contrast.textStroke,
+        textStrokeWidth: contrast.textStrokeWidth,
       })
     );
   });
@@ -985,6 +1049,7 @@ export function mapLayoutPlanToCanvasLayers(
     const minSide = Math.min(normalized.w, normalized.h) || 1;
     const radiusPx = text.el.cornerRadius ?? 8;
 
+    const contrast = appearanceForText(text.el, bg?.hex);
     textLayers.push(
       createLayer({
         id: text.el.id || newLayerId("text"),
@@ -1002,12 +1067,18 @@ export function mapLayoutPlanToCanvasLayers(
         boxColor: bg?.hex ?? "#000000",
         boxOpacity: bg ? opacity : 0,
         boxRadius: Math.max(0, Math.min(0.5, radiusPx / minSide)),
-        color: nearestTextColor(text.el.fill) as TextLayer["color"],
+        color: contrast.color as TextLayer["color"],
         fontSize: text.fontSize,
         fontWeight: parseFontWeight(text.el.fontWeight),
         align: normalized.align,
         lineHeight: 1.25,
         fontPreset: "pretendard",
+        textShadowColor: contrast.textShadowColor,
+        textShadowBlur: contrast.textShadowBlur,
+        textShadowOffsetX: contrast.textShadowOffsetX,
+        textShadowOffsetY: contrast.textShadowOffsetY,
+        textStroke: contrast.textStroke,
+        textStrokeWidth: contrast.textStrokeWidth,
       })
     );
   });
@@ -1100,5 +1171,7 @@ export function buildLayoutUserPrompt(req: GenerateLayoutRequest): string {
     `Text inside a rect: same x and width as the rect, align="center".`,
     `ICONS: Lucide kebab-case vectors only — zero emoji. Never default to calendar/map-pin/gift/trophy.`,
     `Prefer 2–6 decorative shapes (ribbon/frame/pill/stamp/line) + 0–4 unique theme icons.`,
+    `CONTRAST: If background/theme is bright (shoji, sunlight, ivory, pastel), text fill must be #1A1A1A/#2B2B2B — never solo white.`,
+    `If using light type on complex/light photo, add shadowColor+shadowBlur or a translucent backdrop rect.`,
   ].join("\n");
 }

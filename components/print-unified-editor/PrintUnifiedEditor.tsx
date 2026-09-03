@@ -919,7 +919,13 @@ export default function PrintUnifiedEditor() {
         pageIndex,
         pageCount: s.pageCount,
       });
-      const mapped = mapLayoutPlanToCanvasLayers(plan, stage.w, stage.h);
+      const mapped = mapLayoutPlanToCanvasLayers(plan, stage.w, stage.h, {
+        styleLabel: stylePreset?.labelKo || "모던",
+        useLabel: use.label,
+        backgroundFieldLabel: field?.label || field?.keyword || "일반",
+        categoryLabel: fieldCategory?.label,
+        prompt,
+      });
       if (!mapped.textLayers.length && !mapped.decoLayers.length) {
         throw new Error(
           "레이아웃 요소가 비어 있습니다. 옵션/프롬프트를 확인한 뒤 다시 생성해 주세요."

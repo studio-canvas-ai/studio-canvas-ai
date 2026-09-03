@@ -1,5 +1,5 @@
 /**
- * Plain print-wizard text drawing — fill only, no per-char stroke or badge boxes.
+ * Plain print-wizard text drawing — fill + contrast shadow/stroke safety.
  */
 
 import {
@@ -16,6 +16,10 @@ import {
   type TextLayer,
 } from "@/lib/thumbnailStyles";
 import { hexToRgba } from "@/lib/shortsCaptions";
+import {
+  isLightFillHex,
+  resolveDrawTextShadow,
+} from "@/lib/ai/textContrastSafety";
 
 const PLACEHOLDER_PREFIX_RE = /^\s*(상단문구:|중간문구:|하단문구:)\s*/;
 
@@ -187,6 +191,8 @@ export function drawPrintLayerInBox(
   ctx.textBaseline = "top";
   ctx.shadowBlur = 0;
   ctx.shadowColor = "transparent";
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
 
   const opacity = Math.max(0.15, Math.min(1, layer.boxOpacity ?? 0.55));
   if (layer.showBox) {
@@ -222,6 +228,42 @@ export function drawPrintLayerInBox(
     return;
   }
 
+  const shadow = resolveDrawTextShadow({
+    fillHex: fill,
+    textShadowColor: layer.textShadowColor,
+    textShadowBlur: layer.textShadowBlur,
+    textShadowOffsetX: layer.textShadowOffsetX,
+    textShadowOffsetY: layer.textShadowOffsetY,
+  });
+  if (shadow) {
+    ctx.shadowColor = shadow.color;
+    ctx.shadowBlur = shadow.blur * Math.max(0.5, scale);
+    ctx.shadowOffsetX = shadow.offsetX * Math.max(0.5, scale);
+    ctx.shadowOffsetY = shadow.offsetY * Math.max(0.5, scale);
+  }
+
+  const strokeColor =
+    layer.textStroke ||
+    (isLightFillHex(fill) ? "rgba(0,0,0,0.35)" : undefined);
+  const strokeWidth =
+    typeof layer.textStrokeWidth === "number" && layer.textStrokeWidth > 0
+      ? layer.textStrokeWidth * Math.max(0.5, scale)
+      : strokeColor && isLightFillHex(fill)
+        ? 1.25 * Math.max(0.5, scale)
+        : 0;
+
+  const paintGlyph = (ch: string, x: number, y: number) => {
+    if (strokeColor && strokeWidth > 0) {
+      ctx.lineWidth = strokeWidth;
+      ctx.strokeStyle = strokeColor;
+      ctx.lineJoin = "round";
+      ctx.miterLimit = 2;
+      ctx.strokeText(ch, x, y);
+    }
+    ctx.fillStyle = fill;
+    ctx.fillText(ch, x, y);
+  };
+
   ctx.fillStyle = fill;
 
   const innerW = Math.max(8, boxW - padX * 2);
@@ -252,11 +294,11 @@ export function drawPrintLayerInBox(
         const wrapped = wrapParagraph(ctx, entry.label, labelMax, 0);
         ctx.font = numFont;
         ctx.textAlign = "right";
-        ctx.fillText(`${entry.num}.`, startX + numColW, y);
+        paintGlyph(`${entry.num}.`, startX + numColW, y);
         ctx.font = labelFont;
         ctx.textAlign = "left";
         for (let wi = 0; wi < wrapped.length; wi++) {
-          ctx.fillText(wrapped[wi]!, startX + numColW + gap, y);
+          paintGlyph(wrapped[wi]!, startX + numColW + gap, y);
           y += lineHeightPx;
         }
       }
@@ -282,11 +324,11 @@ export function drawPrintLayerInBox(
     if (letterSpacing > 0) {
       let cursorX = x;
       for (const ch of sample) {
-        ctx.fillText(ch, cursorX, y);
+        paintGlyph(ch, cursorX, y);
         cursorX += ctx.measureText(ch).width + letterSpacing;
       }
     } else {
-      ctx.fillText(line, x, y);
+      paintGlyph(line, x, y);
     }
     y += lineHeightPx;
   }
