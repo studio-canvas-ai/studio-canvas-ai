@@ -6,7 +6,11 @@ import {
   DECO_CATALOG_BY_ID,
   type DecoCatalogItem,
 } from "@/lib/printWizardDecoCatalog";
-import type { PrintDecoLayer } from "@/lib/printWizardTypes";
+import { normalizeLucideIconName, isEmojiGlyph } from "@/lib/printWizardLucide";
+import type {
+  PrintDecoLayer,
+  PrintDecoShapeType,
+} from "@/lib/printWizardTypes";
 
 export type PrintDecoBox = {
   x: number;
@@ -19,12 +23,75 @@ const STACK_OFFSET_PX = 22;
 const DECO_MIN_PX = 12;
 const SYMBOL_SIZE_FRAC = 0.08;
 
+const SHAPE_TYPES = new Set<PrintDecoShapeType>([
+  "rect",
+  "circle",
+  "pill",
+  "frame",
+  "line",
+  "ribbon",
+  "stamp",
+]);
+
 function newDecoId(): string {
   return `deco_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export function isSymbolLayer(layer: PrintDecoLayer): boolean {
   return typeof layer.symbol === "string" && layer.symbol.length > 0;
+}
+
+export function isLucideLayer(layer: PrintDecoLayer): boolean {
+  return typeof layer.lucideIcon === "string" && layer.lucideIcon.length > 0;
+}
+
+export function isShapeLayer(layer: PrintDecoLayer): boolean {
+  return (
+    typeof layer.shapeType === "string" &&
+    SHAPE_TYPES.has(layer.shapeType as PrintDecoShapeType)
+  );
+}
+
+export function isRenderableDecoLayer(layer: PrintDecoLayer): boolean {
+  return (
+    isSymbolLayer(layer) ||
+    isLucideLayer(layer) ||
+    isShapeLayer(layer) ||
+    Boolean(layer.decoId && DECO_CATALOG_BY_ID[layer.decoId])
+  );
+}
+
+export function parseDecoShapeType(
+  raw: unknown
+): PrintDecoShapeType | undefined {
+  const s = String(raw || "")
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, "-");
+  const aliases: Record<string, PrintDecoShapeType> = {
+    rect: "rect",
+    box: "rect",
+    rectangle: "rect",
+    circle: "circle",
+    stamp: "stamp",
+    "stamp-circle": "stamp",
+    stamp_circle: "stamp",
+    pill: "pill",
+    "accent-pill": "pill",
+    accent_pill: "pill",
+    capsule: "pill",
+    frame: "frame",
+    "border-frame": "frame",
+    border_frame: "frame",
+    line: "line",
+    "divider-line": "line",
+    divider_line: "line",
+    divider: "line",
+    ribbon: "ribbon",
+    "badge-ribbon": "ribbon",
+    badge_ribbon: "ribbon",
+  };
+  return aliases[s] || (SHAPE_TYPES.has(s as PrintDecoShapeType) ? (s as PrintDecoShapeType) : undefined);
 }
 
 /** Deco boxes may hang off the canvas frame; keep a sliver grabbable. */
@@ -143,6 +210,83 @@ export function createSymbolLayer(
   };
 }
 
+export function createLucideDecoLayer(opts: {
+  lucideIcon: string;
+  stageW: number;
+  stageH: number;
+  x: number;
+  y: number;
+  size: number;
+  color?: string;
+  id?: string;
+}): PrintDecoLayer | null {
+  const name = normalizeLucideIconName(opts.lucideIcon);
+  if (!name || isEmojiGlyph(opts.lucideIcon)) return null;
+  const w = Math.max(1, opts.stageW);
+  const h = Math.max(1, opts.stageH);
+  const size = Math.max(DECO_MIN_PX, opts.size);
+  const box = clampDecoBoxToStage(
+    { x: opts.x, y: opts.y, width: size, height: size },
+    w,
+    h
+  );
+  return {
+    id: opts.id || newDecoId(),
+    lucideIcon: name,
+    fill: opts.color,
+    stroke: opts.color,
+    rotation: 0,
+    x: box.x / w,
+    y: box.y / h,
+    width: box.width / w,
+    height: box.height / h,
+  };
+}
+
+export function createShapeDecoLayer(opts: {
+  shapeType: PrintDecoShapeType;
+  stageW: number;
+  stageH: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fill?: string;
+  stroke?: string;
+  strokeWidth?: number;
+  cornerRadius?: number;
+  id?: string;
+}): PrintDecoLayer {
+  const w = Math.max(1, opts.stageW);
+  const h = Math.max(1, opts.stageH);
+  const box = clampDecoBoxToStage(
+    {
+      x: opts.x,
+      y: opts.y,
+      width: Math.max(DECO_MIN_PX, opts.width),
+      height: Math.max(
+        opts.shapeType === "line" ? 4 : DECO_MIN_PX,
+        opts.height
+      ),
+    },
+    w,
+    h
+  );
+  return {
+    id: opts.id || newDecoId(),
+    shapeType: opts.shapeType,
+    fill: opts.fill,
+    stroke: opts.stroke,
+    strokeWidth: opts.strokeWidth,
+    cornerRadius: opts.cornerRadius,
+    rotation: 0,
+    x: box.x / w,
+    y: box.y / h,
+    width: box.width / w,
+    height: box.height / h,
+  };
+}
+
 export function createDecoLayer(
   decoId: string,
   stageW: number,
@@ -178,6 +322,61 @@ export function resizeDecoPages(
   return out;
 }
 
+function sanitizeOneDeco(obj: Record<string, unknown>): PrintDecoLayer | null {
+  const decoId = typeof obj.decoId === "string" ? obj.decoId : "";
+  const symbol = typeof obj.symbol === "string" ? obj.symbol.trim() : "";
+  const lucideIcon = normalizeLucideIconName(
+    typeof obj.lucideIcon === "string"
+      ? obj.lucideIcon
+      : typeof obj.iconName === "string"
+        ? obj.iconName
+        : ""
+  );
+  const shapeType = parseDecoShapeType(obj.shapeType);
+  const hasDeco = Boolean(decoId && DECO_CATALOG_BY_ID[decoId]);
+  const hasSymbol = symbol.length > 0;
+  const hasLucide = lucideIcon.length > 0 && !isEmojiGlyph(lucideIcon);
+  const hasShape = Boolean(shapeType);
+  const kinds = [hasDeco, hasSymbol, hasLucide, hasShape].filter(Boolean).length;
+  if (kinds !== 1) return null;
+
+  const x = Number(obj.x);
+  const y = Number(obj.y);
+  const width = Number(obj.width);
+  const height = Number(obj.height);
+  const rotation = Number(obj.rotation);
+  if (
+    !Number.isFinite(x) ||
+    !Number.isFinite(y) ||
+    !Number.isFinite(width) ||
+    !Number.isFinite(height)
+  ) {
+    return null;
+  }
+
+  const fill = typeof obj.fill === "string" ? obj.fill : undefined;
+  const stroke = typeof obj.stroke === "string" ? obj.stroke : undefined;
+  const strokeWidth = Number(obj.strokeWidth);
+  const cornerRadius = Number(obj.cornerRadius);
+
+  return {
+    id: typeof obj.id === "string" && obj.id.trim() ? obj.id : newDecoId(),
+    ...(hasDeco ? { decoId } : {}),
+    ...(hasSymbol ? { symbol } : {}),
+    ...(hasLucide ? { lucideIcon } : {}),
+    ...(hasShape ? { shapeType } : {}),
+    ...(fill ? { fill } : {}),
+    ...(stroke ? { stroke } : {}),
+    ...(Number.isFinite(strokeWidth) ? { strokeWidth } : {}),
+    ...(Number.isFinite(cornerRadius) ? { cornerRadius } : {}),
+    ...(Number.isFinite(rotation) ? { rotation } : {}),
+    x: Math.min(2.5, Math.max(-1.5, x)),
+    y: Math.min(2.5, Math.max(-1.5, y)),
+    width: Math.min(4, Math.max(0.02, width)),
+    height: Math.min(4, Math.max(0.02, height)),
+  };
+}
+
 export function sanitizeDecoLayersByPage(
   raw: unknown
 ): PrintDecoLayer[][] | undefined {
@@ -191,38 +390,8 @@ export function sanitizeDecoLayersByPage(
     const layers: PrintDecoLayer[] = [];
     for (const item of page) {
       if (!item || typeof item !== "object") continue;
-      const obj = item as Record<string, unknown>;
-      const decoId = typeof obj.decoId === "string" ? obj.decoId : "";
-      const symbol = typeof obj.symbol === "string" ? obj.symbol.trim() : "";
-      const hasDeco = Boolean(decoId && DECO_CATALOG_BY_ID[decoId]);
-      const hasSymbol = symbol.length > 0;
-      if (!hasDeco && !hasSymbol) continue;
-      if (hasDeco && hasSymbol) continue;
-      const x = Number(obj.x);
-      const y = Number(obj.y);
-      const width = Number(obj.width);
-      const height = Number(obj.height);
-      const rotation = Number(obj.rotation);
-      if (
-        !Number.isFinite(x) ||
-        !Number.isFinite(y) ||
-        !Number.isFinite(width) ||
-        !Number.isFinite(height)
-      ) {
-        continue;
-      }
-      layers.push({
-        id:
-          typeof obj.id === "string" && obj.id.trim()
-            ? obj.id
-            : newDecoId(),
-        ...(hasDeco ? { decoId } : { symbol }),
-        ...(Number.isFinite(rotation) ? { rotation } : {}),
-        x: Math.min(2.5, Math.max(-1.5, x)),
-        y: Math.min(2.5, Math.max(-1.5, y)),
-        width: Math.min(4, Math.max(0.02, width)),
-        height: Math.min(4, Math.max(0.02, height)),
-      });
+      const layer = sanitizeOneDeco(item as Record<string, unknown>);
+      if (layer) layers.push(layer);
     }
     pages.push(layers);
   }
@@ -230,6 +399,13 @@ export function sanitizeDecoLayersByPage(
 }
 
 export function catalogItemForLayer(layer: PrintDecoLayer): DecoCatalogItem | null {
-  if (isSymbolLayer(layer) || !layer.decoId) return null;
+  if (
+    isSymbolLayer(layer) ||
+    isLucideLayer(layer) ||
+    isShapeLayer(layer) ||
+    !layer.decoId
+  ) {
+    return null;
+  }
   return DECO_CATALOG_BY_ID[layer.decoId] ?? null;
 }

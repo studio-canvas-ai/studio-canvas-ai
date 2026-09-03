@@ -2,12 +2,19 @@
  * Screen-26 Magic Layout Engine — Gemini JSON → TextLayer + PrintDecoLayer.
  * Coordinates: pixels (canvas W×H) or normalized 0–1 (auto-detected).
  *
- * Element types: text | rect | circle | line | icon | box (legacy alias of rect).
- * Screen-26 uses HTML overlays (not Konva); plates/circles/lines map to TextLayer
- * showBox geometry; icons map to emoji PrintDecoLayer for edit + export parity.
+ * Element types: text | rect | circle | line | icon | shape | box (legacy rect).
+ * Screen-26 uses HTML overlays; plates map to TextLayer showBox; icons → Lucide
+ * SVG deco layers; decorative shapes → vector deco (ribbon/frame/pill/stamp…).
+ * NEVER map icons to smartphone emoji.
  */
 
 import { createLayer, type ColorPreset, type TextLayer } from "@/lib/thumbnailStyles";
+import {
+  createLucideDecoLayer,
+  createShapeDecoLayer,
+  parseDecoShapeType,
+} from "@/lib/printWizardDecoLayers";
+import { isEmojiGlyph, normalizeLucideIconName } from "@/lib/printWizardLucide";
 import type { PrintDecoLayer } from "@/lib/printWizardTypes";
 
 export type PrintLayoutElementText = {
@@ -73,15 +80,29 @@ export type PrintLayoutElementLine = {
 export type PrintLayoutElementIcon = {
   id?: string;
   type: "icon";
-  iconName?: string;
-  /** Direct emoji if provided */
-  text?: string;
+  /** Lucide kebab-case name (any icon from the full library). */
+  iconName: string;
   x: number;
   y: number;
   size?: number;
   width?: number;
   height?: number;
   fill?: string;
+  color?: string;
+};
+
+export type PrintLayoutElementShape = {
+  id?: string;
+  type: "shape";
+  shapeType: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fill?: string;
+  stroke?: string;
+  strokeWidth?: number;
+  cornerRadius?: number;
 };
 
 export type PrintLayoutElement =
@@ -89,7 +110,8 @@ export type PrintLayoutElement =
   | PrintLayoutElementRect
   | PrintLayoutElementCircle
   | PrintLayoutElementLine
-  | PrintLayoutElementIcon;
+  | PrintLayoutElementIcon
+  | PrintLayoutElementShape;
 
 export type PrintLayoutPlan = {
   bg_prompt: string;
@@ -114,60 +136,6 @@ export type MappedLayoutLayers = {
   decoLayers: PrintDecoLayer[];
 };
 
-/** Lucide / keyword → emoji (export-safe icon deco). */
-const ICON_EMOJI: Record<string, string> = {
-  camera: "📷",
-  calendar: "📅",
-  clock: "🕐",
-  time: "🕐",
-  location: "📍",
-  map: "🗺️",
-  "map-pin": "📍",
-  pin: "📍",
-  phone: "📞",
-  call: "📞",
-  mail: "✉️",
-  email: "✉️",
-  star: "⭐",
-  heart: "❤️",
-  check: "✅",
-  gift: "🎁",
-  food: "🍽️",
-  restaurant: "🍽️",
-  coffee: "☕",
-  music: "🎵",
-  ticket: "🎫",
-  tag: "🏷️",
-  percent: "％",
-  sale: "🏷️",
-  users: "👥",
-  user: "👤",
-  home: "🏠",
-  building: "🏢",
-  tree: "🌳",
-  flower: "🌸",
-  sun: "☀️",
-  moon: "🌙",
-  sparkles: "✨",
-  fire: "🔥",
-  trophy: "🏆",
-  medal: "🏅",
-  party: "🎉",
-  megaphone: "📢",
-  info: "ℹ️",
-  warning: "⚠️",
-  car: "🚗",
-  bus: "🚌",
-  train: "🚆",
-  plane: "✈️",
-  walk: "🚶",
-  shopping: "🛍️",
-  cart: "🛒",
-  book: "📖",
-  pen: "✏️",
-  palette: "🎨",
-};
-
 export const PRINT_LAYOUT_SYSTEM_INSTRUCTION = `You are an elite Canva Magic Studio–level graphic designer and Korean copywriter for print (flyer, poster, menu, event, coupon, brochure).
 
 Return ONE JSON object only (no markdown fences, no commentary):
@@ -181,7 +149,15 @@ Element types (use freely, mix as needed):
 - "rect": { id, type, x, y, width, height, fill, stroke?, strokeWidth?, cornerRadius? }
 - "circle": { id, type, x, y, radius, fill, stroke?, strokeWidth? }  // x,y = CENTER of circle
 - "line": { id, type, x, y, width, height?, stroke?, strokeWidth?, fill? }  // thin bar (prefer horizontal)
-- "icon": { id, type, iconName, x, y, size, fill? }  // iconName = lucide-like keyword (camera, calendar, map-pin, phone, star, gift, food, music, ticket, …) OR a single emoji
+- "icon": { id, type, iconName, x, y, size, color? }  // Lucide kebab-case ONLY — NEVER emoji
+- "shape": { id, type, shapeType, x, y, width, height, fill?, stroke?, strokeWidth?, cornerRadius? }
+  // shapeType: rect | circle | pill | frame | line | ribbon | stamp (aliases: badge_ribbon, border_frame, divider_line, accent_pill, stamp_circle)
+
+ICON RULES (critical):
+1. iconName = any Lucide Icons name from the full 1000+ library, chosen for THIS theme only.
+2. NEVER use smartphone emoji (📅📍🎁🏆✨🎉…). NEVER default to calendar + map-pin + gift + trophy on every design.
+3. Max 0–4 unique icons. Prefer decorative shapes (ribbon/frame/pill/stamp/line) for visual richness.
+4. Theme cues (examples only): autumn→leaf/tree-pine/mountain/wind; festival→music/ticket/mic/drama; heritage→landmark/scroll/feather/crown; retail→shopping-bag/utensils/tag.
 
 COORDINATE SYSTEM (critical — wrong coords cause rightward drift):
 1. All x,y,width,height,fontSize,radius,size MUST be PIXELS for the exact canvasWidth×canvasHeight from the user message. Never invent another resolution (no 1920×1080 when canvas is 1080×1920). Never use 0–1 normalized fractions.
@@ -492,29 +468,6 @@ function extractJsonObject(text: string): unknown | null {
   }
 }
 
-function resolveIconSymbol(el: PrintLayoutElementIcon): string {
-  const direct = (el.text || "").trim();
-  if (direct && /[\p{Emoji_Presentation}\p{Extended_Pictographic}]/u.test(direct)) {
-    return direct;
-  }
-  if (direct.length === 1 || direct.length === 2) return direct;
-  const key = String(el.iconName || direct || "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "-");
-  if (!key) return "✨";
-  if (ICON_EMOJI[key]) return ICON_EMOJI[key]!;
-  // Partial match
-  for (const [k, emoji] of Object.entries(ICON_EMOJI)) {
-    if (key.includes(k) || k.includes(key)) return emoji;
-  }
-  // Already an emoji string in iconName
-  if (/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/u.test(el.iconName || "")) {
-    return (el.iconName || "✨").trim();
-  }
-  return "✨";
-}
-
 export function parsePrintLayoutPlan(raw: unknown): PrintLayoutPlan | null {
   if (!raw || typeof raw !== "object") return null;
   const obj = raw as Record<string, unknown>;
@@ -636,17 +589,60 @@ export function parsePrintLayoutPlan(raw: unknown): PrintLayoutPlan | null {
     }
 
     if (type === "icon") {
+      const rawName =
+        typeof el.iconName === "string"
+          ? el.iconName
+          : typeof el.name === "string"
+            ? el.name
+            : typeof el.text === "string"
+              ? el.text
+              : "";
+      if (!rawName || isEmojiGlyph(rawName)) continue;
+      const iconName = normalizeLucideIconName(rawName);
+      if (!iconName) continue;
       elements.push({
         id,
         type: "icon",
-        iconName: typeof el.iconName === "string" ? el.iconName : undefined,
-        text: typeof el.text === "string" ? el.text : undefined,
+        iconName,
         x,
         y,
         size: typeof el.size === "number" ? el.size : undefined,
         width: Number(el.width) || undefined,
         height: Number(el.height) || undefined,
+        fill:
+          typeof el.fill === "string"
+            ? el.fill
+            : typeof el.color === "string"
+              ? el.color
+              : undefined,
+        color: typeof el.color === "string" ? el.color : undefined,
+      });
+      continue;
+    }
+
+    if (type === "shape") {
+      const shapeType =
+        parseDecoShapeType(el.shapeType) ||
+        parseDecoShapeType(el.shape) ||
+        parseDecoShapeType(el.kind);
+      if (!shapeType) continue;
+      const width = Number(el.width);
+      const height = Number(el.height ?? el.h);
+      if (!Number.isFinite(width) || !Number.isFinite(height)) continue;
+      elements.push({
+        id,
+        type: "shape",
+        shapeType,
+        x,
+        y,
+        width,
+        height,
         fill: typeof el.fill === "string" ? el.fill : undefined,
+        stroke: typeof el.stroke === "string" ? el.stroke : undefined,
+        strokeWidth:
+          typeof el.strokeWidth === "number" ? el.strokeWidth : undefined,
+        cornerRadius:
+          typeof el.cornerRadius === "number" ? el.cornerRadius : undefined,
       });
     }
   }
@@ -711,9 +707,8 @@ function makePlateLayer(opts: {
 
 /**
  * Map Gemini layout → Screen-26 layers (HTML overlay + export-safe).
- * Plates/circles/lines → TextLayer showBox; icons → emoji deco; text → TextLayer.
- * Text that belongs inside a rect/circle is merged onto that plate (same box, align center)
- * so background and copy never drift apart. Hero titles use full canvas width + center.
+ * Plates/circles/lines → TextLayer showBox; icons → Lucide SVG deco;
+ * decorative shapes → vector deco; text → TextLayer (merged into plates when nested).
  */
 export function mapLayoutPlanToCanvasLayers(
   plan: PrintLayoutPlan,
@@ -732,6 +727,7 @@ export function mapLayoutPlanToCanvasLayers(
   const texts: PixelText[] = [];
   const lines: PrintLayoutElementLine[] = [];
   const icons: PrintLayoutElementIcon[] = [];
+  const shapes: PrintLayoutElementShape[] = [];
 
   elements.forEach((el, sourceIndex) => {
     if (el.type === "rect" || el.type === "box") {
@@ -791,6 +787,11 @@ export function mapLayoutPlanToCanvasLayers(
 
     if (el.type === "icon") {
       icons.push(el);
+      return;
+    }
+
+    if (el.type === "shape") {
+      shapes.push(el);
       return;
     }
 
@@ -1012,25 +1013,54 @@ export function mapLayoutPlanToCanvasLayers(
   });
 
   for (const el of icons) {
-    const symbol = resolveIconSymbol(el);
     const sizePx =
       typeof el.size === "number" && el.size > 0
         ? toStagePixels(el.size, short, usePixels)
         : typeof el.width === "number" && el.width > 0
           ? toStagePixels(el.width, stageW, usePixels)
-          : short * 0.05;
+          : short * 0.045;
     const left = toStagePixels(el.x, stageW, usePixels);
     const top = toStagePixels(el.y, stageH, usePixels);
-    const size = Math.max(12, sizePx);
-    decoLayers.push({
+    const size = Math.max(14, Math.min(short * 0.12, sizePx));
+    const color = el.color || el.fill || "#1f2937";
+    const layer = createLucideDecoLayer({
       id: el.id || newLayerId("icon", String(decoStack++)),
-      symbol,
-      rotation: 0,
-      x: clamp01(left / stageW),
-      y: clamp01(top / stageH),
-      width: Math.max(0.02, size / stageW),
-      height: Math.max(0.02, size / stageH),
+      lucideIcon: el.iconName,
+      stageW,
+      stageH,
+      x: left,
+      y: top,
+      size,
+      color,
     });
+    if (layer) decoLayers.push(layer);
+  }
+
+  for (const el of shapes) {
+    const shapeType = parseDecoShapeType(el.shapeType);
+    if (!shapeType) continue;
+    decoLayers.push(
+      createShapeDecoLayer({
+        id: el.id || newLayerId("shape", String(decoStack++)),
+        shapeType,
+        stageW,
+        stageH,
+        x: toStagePixels(el.x, stageW, usePixels),
+        y: toStagePixels(el.y, stageH, usePixels),
+        width: Math.max(
+          8,
+          toStagePixels(el.width, stageW, usePixels)
+        ),
+        height: Math.max(
+          shapeType === "line" ? 4 : 8,
+          toStagePixels(el.height, stageH, usePixels)
+        ),
+        fill: el.fill,
+        stroke: el.stroke,
+        strokeWidth: el.strokeWidth,
+        cornerRadius: el.cornerRadius,
+      })
+    );
   }
 
   return { textLayers, decoLayers };
@@ -1068,5 +1098,7 @@ export function buildLayoutUserPrompt(req: GenerateLayoutRequest): string {
     `Centered element formula: x = (${W} - elementWidth) / 2. Never put the center point into x.`,
     `Main title / hero headline: x=0, width=${W}, align="center".`,
     `Text inside a rect: same x and width as the rect, align="center".`,
+    `ICONS: Lucide kebab-case vectors only — zero emoji. Never default to calendar/map-pin/gift/trophy.`,
+    `Prefer 2–6 decorative shapes (ribbon/frame/pill/stamp/line) + 0–4 unique theme icons.`,
   ].join("\n");
 }

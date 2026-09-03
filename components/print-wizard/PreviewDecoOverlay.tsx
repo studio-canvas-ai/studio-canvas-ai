@@ -9,16 +9,21 @@ import {
 } from "react";
 import { RotateCw, Trash2 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
-import DecoShapeSvg from "@/components/print-wizard/DecoShapeSvg";
 import {
   boxToDeco,
   catalogItemForLayer,
   clampDecoBoxToStage,
   decoToBox,
+  isLucideLayer,
+  isRenderableDecoLayer,
+  isShapeLayer,
   isSymbolLayer,
   type PrintDecoBox,
 } from "@/lib/printWizardDecoLayers";
 import type { PrintDecoLayer } from "@/lib/printWizardTypes";
+import LucideVectorIcon from "@/components/print-wizard/LucideVectorIcon";
+import DecoVectorShape from "@/components/print-wizard/DecoVectorShape";
+import DecoShapeSvg from "@/components/print-wizard/DecoShapeSvg";
 
 type ResizeHandle = "nw" | "ne" | "se" | "sw" | "n" | "e" | "s" | "w";
 type ResizeMode = "free" | "aspect" | "line-x" | "line-y";
@@ -227,7 +232,16 @@ function applyResize(
 }
 
 function resolveResizeMode(layer: PrintDecoLayer): ResizeMode {
-  if (isSymbolLayer(layer)) return "aspect";
+  if (isSymbolLayer(layer) || isLucideLayer(layer)) return "aspect";
+  if (isShapeLayer(layer)) {
+    if (layer.shapeType === "line") {
+      return (layer.height ?? 0) < (layer.width ?? 0) * 0.35 ? "line-x" : "line-y";
+    }
+    if (layer.shapeType === "circle" || layer.shapeType === "stamp") {
+      return "aspect";
+    }
+    return "free";
+  }
   const catalog = catalogItemForLayer(layer);
   return catalog?.resizeMode ?? "free";
 }
@@ -519,6 +533,8 @@ export default function PreviewDecoOverlay({
       {layers.map((layer) => {
         const catalog = catalogItemForLayer(layer);
         const symbol = isSymbolLayer(layer) ? layer.symbol : null;
+        const lucide = isLucideLayer(layer) ? layer.lucideIcon : null;
+        const shapeType = isShapeLayer(layer) ? layer.shapeType : null;
         const measured = decoToBox(layer, size.w, size.h);
         const box = liveBox?.id === layer.id ? liveBox.box : measured;
         const rotation =
@@ -538,7 +554,9 @@ export default function PreviewDecoOverlay({
           Math.min(box.width, box.height) * 0.72
         );
 
-        if (!catalog && !symbol) return null;
+        if (!isRenderableDecoLayer(layer)) return null;
+
+        const iconColor = layer.fill || layer.stroke || "currentColor";
 
         return (
           <div
@@ -569,8 +587,24 @@ export default function PreviewDecoOverlay({
                 transformOrigin: "center center",
               }}
             >
-              <div className="pointer-events-none h-full w-full text-black/90">
-                {symbol ? (
+              <div className="pointer-events-none flex h-full w-full items-center justify-center text-black/90">
+                {lucide ? (
+                  <LucideVectorIcon
+                    name={lucide}
+                    color={iconColor}
+                    className="h-[82%] w-[82%]"
+                    strokeWidth={2.25}
+                  />
+                ) : shapeType ? (
+                  <DecoVectorShape
+                    shapeType={shapeType}
+                    fill={layer.fill}
+                    stroke={layer.stroke || layer.fill || "#1f2937"}
+                    strokeWidth={layer.strokeWidth ?? 2}
+                    cornerRadius={layer.cornerRadius}
+                    className="h-full w-full"
+                  />
+                ) : symbol ? (
                   <span
                     className="font-emoji flex h-full w-full items-center justify-center leading-none drop-shadow-[0_1px_2px_rgba(255,255,255,0.65)]"
                     style={{ fontSize: symbolSize }}

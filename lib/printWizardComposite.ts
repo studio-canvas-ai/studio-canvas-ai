@@ -3,7 +3,11 @@
  */
 
 import { pageBackgroundUrl } from "@/lib/printWizardBg";
-import { decoToBox, isSymbolLayer } from "@/lib/printWizardDecoLayers";
+import {
+  decoToBox,
+  isRenderableDecoLayer,
+} from "@/lib/printWizardDecoLayers";
+import { drawDecoLayerOnCanvas } from "@/lib/printWizardCompositeDeco";
 import { photoToBox } from "@/lib/printWizardPhotoLayers";
 import { drawPrintLayerInBox } from "@/lib/printWizardTextDraw";
 import {
@@ -145,17 +149,13 @@ export async function compositePrintWizardPageBlob(opts: {
 
   const decoLayers = opts.state.decoLayersByPage?.[pageIndex] ?? [];
   for (const layer of decoLayers) {
-    if (!isSymbolLayer(layer) || !layer.symbol) continue;
+    if (!isRenderableDecoLayer(layer)) continue;
+    // Catalog SVG deco still exports via symbol/catalog path below when present.
+    if (layer.decoId && !layer.symbol && !layer.lucideIcon && !layer.shapeType) {
+      continue;
+    }
     const box = decoToBox(layer, stageW, stageH);
-    const size = Math.max(12, Math.min(box.width, box.height));
-    ctx.save();
-    ctx.translate(box.x + box.width / 2, box.y + box.height / 2);
-    ctx.rotate(((layer.rotation ?? 0) * Math.PI) / 180);
-    ctx.font = `${Math.round(size)}px "Apple Color Emoji","Segoe UI Emoji",sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(layer.symbol, 0, 0);
-    ctx.restore();
+    await drawDecoLayerOnCanvas(ctx, layer, box);
   }
 
   const mime = opts.quality === "high" ? "image/png" : "image/jpeg";
@@ -193,6 +193,6 @@ export function printWizardHasExportableFrame(
         Boolean(l?.showBox) ||
         Boolean(String(l?.text || "").replace(/\u200B/g, "").trim())
     ) ||
-    decos.some((l) => Boolean(l?.symbol || l?.decoId))
+    decos.some((l) => isRenderableDecoLayer(l))
   );
 }

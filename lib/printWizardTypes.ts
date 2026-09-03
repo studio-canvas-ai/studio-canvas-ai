@@ -827,12 +827,31 @@ export const PRINT_CUSTOM_SIZE_MAX_INCH =
 
 export type PrintWizardStep = 1 | 2;
 
+export type PrintDecoShapeType =
+  | "rect"
+  | "circle"
+  | "pill"
+  | "frame"
+  | "line"
+  | "ribbon"
+  | "stamp";
+
 export type PrintDecoLayer = {
   id: string;
-  /** Deco catalog item id (mutually exclusive with `symbol`). */
+  /** Deco catalog item id (mutually exclusive with symbol / lucide / shape). */
   decoId?: string;
-  /** Emoji or special character (mutually exclusive with `decoId`). */
+  /** Manual emoji or special character from the symbol picker. */
   symbol?: string;
+  /** Lucide kebab-case icon name — rendered as crisp SVG vector (Magic Layout). */
+  lucideIcon?: string;
+  /** Decorative vector shape (ribbon, frame, pill, stamp, …). */
+  shapeType?: PrintDecoShapeType;
+  /** Fill for shapes / stroke color for Lucide icons. */
+  fill?: string;
+  stroke?: string;
+  strokeWidth?: number;
+  /** Pixel corner radius hint (mapped relative to box). */
+  cornerRadius?: number;
   /** Clockwise rotation in degrees. */
   rotation?: number;
   /** Normalized stage fractions (0–1). */
