@@ -60,67 +60,77 @@ export async function POST(req: Request) {
     }
 
     const body = (await req.json().catch(() => null)) as Body | null;
-    const prompt =
-      typeof body?.prompt === "string" ? body.prompt.trim() : "";
-    const canvasWidth = Number(body?.canvasWidth);
-    const canvasHeight = Number(body?.canvasHeight);
+    const formatLabel =
+      typeof body?.formatLabel === "string" && body.formatLabel.trim()
+        ? body.formatLabel.trim()
+        : "A4";
+    const styleLabel =
+      typeof body?.styleLabel === "string" && body.styleLabel.trim()
+        ? body.styleLabel.trim()
+        : "모던";
+    const useLabel =
+      typeof body?.useLabel === "string" && body.useLabel.trim()
+        ? body.useLabel.trim()
+        : "전단지";
+    const backgroundFieldLabel =
+      typeof body?.backgroundFieldLabel === "string" &&
+      body.backgroundFieldLabel.trim()
+        ? body.backgroundFieldLabel.trim()
+        : "일반";
 
+    let prompt =
+      typeof body?.prompt === "string" ? body.prompt.trim() : "";
     if (!prompt) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "prompt_required",
-          message: "Provide a prompt / theme for the layout.",
-        },
-        { status: 400 }
-      );
+      // Mobile clients may omit prompt when IME/state desyncs — fall back to labels.
+      prompt = [formatLabel, useLabel, backgroundFieldLabel, styleLabel]
+        .filter(Boolean)
+        .join(" · ");
     }
 
+    let canvasWidth = Number(body?.canvasWidth);
+    let canvasHeight = Number(body?.canvasHeight);
     if (
       !Number.isFinite(canvasWidth) ||
       !Number.isFinite(canvasHeight) ||
       canvasWidth < 64 ||
       canvasHeight < 64
     ) {
+      // Default A4-ish reference stage (matches PRINT_TEXT_REF_WIDTH portrait).
+      canvasWidth = 1080;
+      canvasHeight = 1528;
+    }
+
+    if (!prompt) {
       return NextResponse.json(
         {
           ok: false,
-          error: "canvas_size_required",
-          message: "Provide valid canvasWidth and canvasHeight.",
+          error: "prompt_required",
+          message: "프롬프트 또는 규격/용도/분야 정보가 필요합니다.",
         },
         { status: 400 }
       );
     }
 
     const layoutReq: GenerateLayoutRequest = {
-      formatLabel:
-        typeof body?.formatLabel === "string" && body.formatLabel.trim()
-          ? body.formatLabel.trim()
-          : "print",
-      styleLabel:
-        typeof body?.styleLabel === "string" && body.styleLabel.trim()
-          ? body.styleLabel.trim()
-          : "modern",
-      useLabel:
-        typeof body?.useLabel === "string" && body.useLabel.trim()
-          ? body.useLabel.trim()
-          : "flyer",
-      backgroundFieldLabel:
-        typeof body?.backgroundFieldLabel === "string" &&
-        body.backgroundFieldLabel.trim()
-          ? body.backgroundFieldLabel.trim()
-          : "general",
+      formatLabel,
+      styleLabel,
+      useLabel,
+      backgroundFieldLabel,
       categoryLabel:
         typeof body?.categoryLabel === "string"
-          ? body.categoryLabel.trim()
+          ? body.categoryLabel.trim() || undefined
           : undefined,
       prompt,
       canvasWidth,
       canvasHeight,
       pageIndex:
-        typeof body?.pageIndex === "number" ? body.pageIndex : undefined,
+        typeof body?.pageIndex === "number" && Number.isFinite(body.pageIndex)
+          ? Math.max(0, Math.floor(body.pageIndex))
+          : undefined,
       pageCount:
-        typeof body?.pageCount === "number" ? body.pageCount : undefined,
+        typeof body?.pageCount === "number" && Number.isFinite(body.pageCount)
+          ? Math.max(1, Math.min(10, Math.floor(body.pageCount)))
+          : undefined,
     };
 
     const userPrompt = buildLayoutUserPrompt(layoutReq);

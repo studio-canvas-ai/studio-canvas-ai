@@ -60,29 +60,52 @@ export async function requestAiBackground(
     });
   }
 
-  const res = await fetch("/api/ai-background", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    cache: "no-store",
-    body: JSON.stringify({
-      prompt,
-      keyword: prompt,
-      ...(params.directEnglishPrompt?.trim()
-        ? { directEnglishPrompt: params.directEnglishPrompt.trim() }
-        : {}),
-      ...(params.aspectRatio ? { aspectRatio: params.aspectRatio } : {}),
-      ...(typeof params.pageIndex === "number"
-        ? { pageIndex: params.pageIndex }
-        : {}),
-      ...(typeof params.pageCount === "number"
-        ? { pageCount: params.pageCount }
-        : {}),
-      ...(params.imageStyleId
-        ? { imageStyleId: params.imageStyleId }
-        : {}),
-      ...(params.moodStyleId ? { moodStyleId: params.moodStyleId } : {}),
-    }),
-  });
+  const timeoutMs = 110_000;
+  const signal =
+    typeof AbortSignal !== "undefined" &&
+    typeof AbortSignal.timeout === "function"
+      ? AbortSignal.timeout(timeoutMs)
+      : undefined;
+
+  let res: Response;
+  try {
+    res = await fetch("/api/ai-background", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      cache: "no-store",
+      body: JSON.stringify({
+        prompt,
+        keyword: prompt,
+        ...(params.directEnglishPrompt?.trim()
+          ? { directEnglishPrompt: params.directEnglishPrompt.trim() }
+          : {}),
+        ...(params.aspectRatio ? { aspectRatio: params.aspectRatio } : {}),
+        ...(typeof params.pageIndex === "number"
+          ? { pageIndex: params.pageIndex }
+          : {}),
+        ...(typeof params.pageCount === "number"
+          ? { pageCount: params.pageCount }
+          : {}),
+        ...(params.imageStyleId
+          ? { imageStyleId: params.imageStyleId }
+          : {}),
+        ...(params.moodStyleId ? { moodStyleId: params.moodStyleId } : {}),
+      }),
+      ...(signal ? { signal } : {}),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new AiBackgroundError(
+        "AI 배경 생성 시간이 초과되었습니다. 네트워크 상태를 확인한 뒤 다시 시도해 주세요.",
+        { status: 408, code: "timeout" }
+      );
+    }
+    throw new AiBackgroundError(
+      "네트워크 연결이 불안정합니다. Wi-Fi/데이터를 확인한 뒤 다시 시도해 주세요.",
+      { status: 0, code: "network" }
+    );
+  }
 
   const data = (await res.json().catch(() => null)) as {
     ok?: boolean;

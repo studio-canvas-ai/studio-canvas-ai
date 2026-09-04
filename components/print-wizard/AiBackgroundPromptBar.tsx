@@ -90,10 +90,26 @@ export default function AiBackgroundPromptBar({
   const canSend = !generating && canGenerate;
   const showNeedOptionsHint = !isPhoto && !canGenerate && !generating;
 
+  /** Flush mobile IME / uncommitted textarea into React state, then generate. */
+  const flushAndGenerate = () => {
+    if (!canSend) return;
+    const live = textareaRef.current?.value;
+    if (typeof live === "string" && live !== value) {
+      onChange(live);
+    }
+    if (typeof document !== "undefined") {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement) active.blur();
+    }
+    window.setTimeout(() => {
+      onGenerate();
+    }, 80);
+  };
+
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key !== "Enter" || e.shiftKey) return;
     e.preventDefault();
-    if (canSend) onGenerate();
+    flushAndGenerate();
   };
 
   const toolBtn = (active: boolean) =>
@@ -231,8 +247,13 @@ export default function AiBackgroundPromptBar({
         <div className="relative p-2.5 sm:p-3">
           <textarea
             ref={textareaRef}
+            data-ai-bg-prompt="1"
             value={value}
             onChange={(e) => onChange(e.target.value)}
+            onBlur={(e) => {
+              const live = e.currentTarget.value;
+              if (live !== value) onChange(live);
+            }}
             onKeyDown={onKeyDown}
             aria-label={title}
             rows={3}
@@ -297,7 +318,7 @@ export default function AiBackgroundPromptBar({
         <button
           type="button"
           disabled={!canSend}
-          onClick={onGenerate}
+          onClick={flushAndGenerate}
           aria-describedby={
             showNeedOptionsHint ? "ai-bg-need-options-hint" : undefined
           }

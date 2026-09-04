@@ -870,6 +870,23 @@ export default function PrintUnifiedEditor() {
 
   const onGenerateBackground = useCallback(async () => {
     if (generating) return;
+
+    // Mobile: commit IME composition + re-read any live prompt textarea.
+    if (typeof document !== "undefined") {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement) active.blur();
+      const livePrompt = document.querySelector(
+        "textarea[data-ai-bg-prompt]"
+      ) as HTMLTextAreaElement | null;
+      if (livePrompt?.value != null) {
+        const live = livePrompt.value;
+        if (live !== stateRef.current.bgKeyword) {
+          stateRef.current = { ...stateRef.current, bgKeyword: live };
+        }
+      }
+      await new Promise((r) => setTimeout(r, 50));
+    }
+
     const s = stateRef.current;
     const target = resolveBackgroundGenerationTarget(
       s,
@@ -882,46 +899,47 @@ export default function PrintUnifiedEditor() {
       return;
     }
     const { pageIndex } = target;
+    const format = formatById(s.formatId || "a4");
+    const use = useById(s.useId || "flyer");
+    const field = fieldById(s.bgPresetId);
+    const fieldCategory = FIELD_CATEGORIES.find((group) =>
+      group.items.some((item) => item.id === s.bgPresetId)
+    );
+    const stylePreset = resolveVisualStylePreset(s.visualStyle?.imageStyleId);
     const userTheme =
       s.bgKeyword.trim() ||
-      fieldById(s.bgPresetId)?.keyword?.trim() ||
+      field?.keyword?.trim() ||
       s.mainPrompt.trim();
-    if (!userTheme && !buildPagePrintAiContext(s, pageIndex).trim()) return;
+    const pageContext = buildPagePrintAiContext(s, pageIndex).trim();
+    const prompt = userTheme || pageContext || "elegant print design";
 
     setGenerating(true);
     try {
-      const format = formatById(s.formatId);
-      const use = useById(s.useId);
-      const field = fieldById(s.bgPresetId);
-      const fieldCategory = FIELD_CATEGORIES.find((group) =>
-        group.items.some((item) => item.id === s.bgPresetId)
+      const aspect = resolvePrintAspect(s.formatId || "a4", s.customSize);
+      const stage = referencePrintStageSize(
+        Number.isFinite(aspect) && aspect > 0 ? aspect : 210 / 297
       );
-      const stylePreset = resolveVisualStylePreset(s.visualStyle.imageStyleId);
-      const aspect = resolvePrintAspect(s.formatId, s.customSize);
-      const stage = referencePrintStageSize(aspect);
       const formatLabel =
         s.formatId === "free" && s.customSize
           ? `${s.customSize.width}×${s.customSize.height}${s.customSize.unit}`
-          : format.label;
-      const prompt =
-        userTheme || buildPagePrintAiContext(s, pageIndex);
+          : format.label || "A4";
 
       // 1) Gemini Magic Layout — required (no soft-fail to background-only).
       const plan = await requestGenerateLayout({
         formatLabel,
         styleLabel: stylePreset?.labelKo || "모던",
-        useLabel: use.label,
+        useLabel: use.label || "전단지",
         backgroundFieldLabel: field?.label || field?.keyword || "일반",
         categoryLabel: fieldCategory?.label,
         prompt,
         canvasWidth: stage.w,
         canvasHeight: stage.h,
         pageIndex,
-        pageCount: s.pageCount,
+        pageCount: s.pageCount || 1,
       });
       const mapped = mapLayoutPlanToCanvasLayers(plan, stage.w, stage.h, {
         styleLabel: stylePreset?.labelKo || "모던",
-        useLabel: use.label,
+        useLabel: use.label || "전단지",
         backgroundFieldLabel: field?.label || field?.keyword || "일반",
         categoryLabel: fieldCategory?.label,
         prompt,
@@ -938,11 +956,11 @@ export default function PrintUnifiedEditor() {
         directEnglishPrompt: plan.bg_prompt,
         aspect,
         pageIndex,
-        pageCount: s.pageCount,
+        pageCount: s.pageCount || 1,
         formatLabel,
-        useLabel: use.label,
-        imageStyleId: s.visualStyle.imageStyleId,
-        moodStyleId: s.visualStyle.moodStyleId,
+        useLabel: use.label || "전단지",
+        imageStyleId: s.visualStyle?.imageStyleId,
+        moodStyleId: s.visualStyle?.moodStyleId,
       });
 
       // 3) Atomic inject: background + all layout layers on the target page.
