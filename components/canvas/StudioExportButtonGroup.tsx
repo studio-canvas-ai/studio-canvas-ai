@@ -68,7 +68,7 @@ export default function StudioExportButtonGroup({
   const highParts = splitQuotaLabel(highLabel);
 
   const downloadClass = unified
-    ? "inline-flex w-full min-w-0 flex-col items-center justify-center rounded-xl border px-2.5 py-1.5 leading-[1.2] shadow-[0_8px_24px_rgba(15,23,42,0.35)] disabled:opacity-50"
+    ? "inline-flex w-full min-w-0 flex-col items-center justify-center rounded-xl border px-1 py-1.5 leading-[1.2] shadow-[0_8px_24px_rgba(15,23,42,0.35)] disabled:opacity-50"
     : compact
       ? "inline-flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[11px] font-semibold text-white disabled:opacity-50"
       : "inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-lg disabled:opacity-50";
@@ -98,13 +98,13 @@ export default function StudioExportButtonGroup({
       ? "min-w-0 text-center text-[10px] font-semibold leading-tight [word-break:keep-all]"
       : "min-w-0 text-center text-[12px] font-semibold leading-tight [word-break:keep-all] sm:text-sm";
   const downloadTitleClass = unified
-    ? "mb-0.5 inline-flex max-w-full items-center justify-center gap-1 text-[13px] font-bold leading-[1.2] tracking-tight text-white [word-break:keep-all]"
+    ? "mb-0.5 inline-flex max-w-full items-center justify-center gap-1 whitespace-nowrap text-[13px] font-bold leading-[1.2] tracking-tight text-white"
     : "";
   const downloadCreditClass = unified
-    ? "mb-0.5 shrink-0 text-[12px] font-bold leading-[1.2] tabular-nums text-white/95"
+    ? "mb-0.5 shrink-0 whitespace-nowrap text-[12px] font-bold leading-[1.2] tabular-nums text-white"
     : "";
   const downloadGuideClass = unified
-    ? "max-w-[11.5rem] text-[11px] font-bold leading-[1.2] text-[#FFE600] [text-shadow:0_1px_2px_rgba(0,0,0,0.5)] [word-break:keep-all]"
+    ? "whitespace-nowrap text-[9.5px] font-normal leading-[1.2] text-black"
     : "";
   const downloadQuotaClass = unified
     ? "shrink-0 text-[11px] font-bold sm:text-[12px]"
