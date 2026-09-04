@@ -68,7 +68,7 @@ export default function StudioExportButtonGroup({
   const highParts = splitQuotaLabel(highLabel);
 
   const downloadClass = unified
-    ? "inline-flex min-h-[5.25rem] w-full min-w-0 flex-col items-center justify-center rounded-xl border px-1.5 py-2.5 shadow-[0_8px_24px_rgba(15,23,42,0.35)] disabled:opacity-50 sm:min-h-[5.5rem] sm:px-2 sm:py-3"
+    ? "inline-flex w-full min-w-0 flex-col items-center justify-center rounded-xl border px-2.5 py-1.5 leading-[1.2] shadow-[0_8px_24px_rgba(15,23,42,0.35)] disabled:opacity-50"
     : compact
       ? "inline-flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[11px] font-semibold text-white disabled:opacity-50"
       : "inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-lg disabled:opacity-50";
@@ -93,18 +93,18 @@ export default function StudioExportButtonGroup({
       ? "px-0.5 text-center text-[10px] leading-snug text-slate-400"
       : "text-center text-xs leading-snug text-white/45";
   const labelClass = unified
-    ? "inline-flex min-w-0 max-w-full flex-col items-center gap-1 text-center"
+    ? "inline-flex min-w-0 max-w-full flex-col items-center text-center leading-[1.2]"
     : compact
       ? "min-w-0 text-center text-[10px] font-semibold leading-tight [word-break:keep-all]"
       : "min-w-0 text-center text-[12px] font-semibold leading-tight [word-break:keep-all] sm:text-sm";
   const downloadTitleClass = unified
-    ? "inline-flex max-w-full items-center justify-center gap-1 text-[11px] font-extrabold leading-snug tracking-tight text-white [word-break:keep-all] sm:text-[12px]"
+    ? "mb-0.5 inline-flex max-w-full items-center justify-center gap-1 text-[13px] font-bold leading-[1.2] tracking-tight text-white [word-break:keep-all]"
     : "";
   const downloadCreditClass = unified
-    ? "shrink-0 text-[10px] font-bold leading-snug tabular-nums text-white/95 sm:text-[11px]"
+    ? "mb-0.5 shrink-0 text-[12px] font-bold leading-[1.2] tabular-nums text-white/95"
     : "";
   const downloadGuideClass = unified
-    ? "max-w-[11.5rem] text-[9px] font-medium leading-snug text-white/80 [word-break:keep-all] sm:text-[10px]"
+    ? "max-w-[11.5rem] text-[11px] font-bold leading-[1.2] text-[#FFE600] [text-shadow:0_1px_2px_rgba(0,0,0,0.5)] [word-break:keep-all]"
     : "";
   const downloadQuotaClass = unified
     ? "shrink-0 text-[11px] font-bold sm:text-[12px]"
