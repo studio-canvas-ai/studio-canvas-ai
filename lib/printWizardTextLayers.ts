@@ -21,14 +21,39 @@ export const PRINT_TEXT_REF_WIDTH = 1080;
 /** Design size matching Template Studio (“완성하기”) body type. */
 const PAGE_TEXT_SIZE = 105;
 
+/** Reject layout/measure commits against collapsed pre-layout hosts (mobile). */
+export function isReliablePrintStageSize(stageW: number, stageH: number): boolean {
+  return (
+    Number.isFinite(stageW) &&
+    Number.isFinite(stageH) &&
+    stageW >= 48 &&
+    stageH >= 48
+  );
+}
+
 export function clampOffset(v: number): number {
   return Math.max(-OFFSET_CLAMP, Math.min(OFFSET_CLAMP, v));
 }
 
-/** Uniform scale so text fits both portrait (A4) and landscape (16:9) canvases. */
+/**
+ * Uniform scale: design fontSize (1080 short-edge ref) → display-stage CSS px.
+ * Apply ONCE at paint/measure time. Do NOT also multiply by CSS zoom/viewScale —
+ * zoom belongs on an ancestor `transform: scale()` only.
+ */
 export function canvasTextScale(stageW: number, stageH: number): number {
+  if (!isReliablePrintStageSize(stageW, stageH)) {
+    // Avoid sesame-seed metrics while the host is still 0×0 / 1×1.
+    return 1;
+  }
   const short = Math.max(1, Math.min(stageW, stageH));
   return short / PRINT_TEXT_REF_WIDTH;
+}
+
+/** Minimum readable display px (scales gently with stage; floor for mobile). */
+export function minReadableDisplayFontPx(stageW: number, stageH: number): number {
+  if (!isReliablePrintStageSize(stageW, stageH)) return 11;
+  const short = Math.min(stageW, stageH);
+  return Math.max(11, Math.round(short * 0.02));
 }
 
 /** Design-space fontSize (1080 short-edge ref) → stage pixel size. */
@@ -37,7 +62,8 @@ export function designFontSizeToStage(
   stageW: number,
   stageH: number
 ): number {
-  return Math.max(10, Math.round(fontSize * canvasTextScale(stageW, stageH)));
+  const raw = Math.round((fontSize || 48) * canvasTextScale(stageW, stageH));
+  return Math.max(minReadableDisplayFontPx(stageW, stageH), raw);
 }
 
 /** Stage pixel fontSize → design-space fontSize for store / serialization. */
@@ -189,7 +215,7 @@ export function measureLayerContentSize(
 ): { width: number; height: number } {
   const ignoreStoredBox = options?.ignoreStoredBox === true;
   const scale = canvasTextScale(stageW, stageH);
-  const fontSize = Math.max(8, Math.round((layer.fontSize || 48) * scale));
+  const fontSize = designFontSizeToStage(layer.fontSize || 48, stageW, stageH);
   const lineHeightMul = layer.lineHeight ?? 1.25;
   const letterSpacing = (layer.letterSpacing ?? 0) * scale;
   const rawText = (layer.text || "").length ? layer.text : "가";

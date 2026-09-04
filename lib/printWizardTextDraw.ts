@@ -21,6 +21,8 @@ import {
   resolveDrawTextShadow,
 } from "@/lib/ai/textContrastSafety";
 
+const MIN_DISPLAY_FONT_PX = 11;
+
 const PLACEHOLDER_PREFIX_RE = /^\s*(상단문구:|중간문구:|하단문구:)\s*/;
 
 function stripLayerPlaceholderPrefix(text: string): string {
@@ -65,7 +67,11 @@ export function layerEditTextPadding(
   paddingBottom: number;
   paddingLeft: number;
 } {
-  const fontSize = Math.max(8, Math.round((layer.fontSize || 48) * scale));
+  // `scale` = canvasTextScale(stage) once — never also multiply by CSS zoom.
+  const fontSize = Math.max(
+    MIN_DISPLAY_FONT_PX,
+    Math.round((layer.fontSize || 48) * Math.max(0.001, scale))
+  );
   const { padX, padY } = layerGlyphPad(fontSize);
   const align = layer.align || "center";
   const text = displayTextForLayer(layer);
@@ -80,7 +86,7 @@ export function layerEditTextPadding(
       formFieldFromLayerId(layer.id) === "date" ||
       formFieldFromLayerId(layer.id) === "programs"
         ? 0
-        : (layer.letterSpacing ?? 0) * scale;
+        : (layer.letterSpacing ?? 0) * Math.max(0.001, scale);
     const innerW = Math.max(8, boxW - padX * 2);
 
     let lineCount = Math.max(1, text.split("\n").length);
@@ -173,7 +179,11 @@ export function drawPrintLayerInBox(
   const text = displayTextForLayer(layer);
   const paintableText = text.replace(/\u200B/g, "").trim();
 
-  const fontSize = Math.max(8, Math.round((layer.fontSize || 48) * scale));
+  // `scale` must be canvasTextScale(stage) only — CSS zoom is ancestor transform.
+  const fontSize = Math.max(
+    MIN_DISPLAY_FONT_PX,
+    Math.round((layer.fontSize || 48) * Math.max(0.001, scale))
+  );
   const fontWeight = layer.fontWeight ?? 700;
   const fontPreset = layer.fontPreset || "pretendard";
   const lineHeightMul = layer.lineHeight ?? 1.25;

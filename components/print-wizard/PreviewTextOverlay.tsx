@@ -23,8 +23,11 @@ import {
   boxToLayerPatch,
   canvasTextScale,
   clampBoxAllowOverflow,
+  designFontSizeToStage,
+  isReliablePrintStageSize,
   layerToBox,
   layerZone,
+  minReadableDisplayFontPx,
   PAGE_ZONE_LABELS,
   removeTextLayer,
   stripLayerPlaceholderPrefix,
@@ -58,6 +61,7 @@ export type PreviewTextOverlayProps = {
   /**
    * CSS transform scale on an ancestor stage world.
    * Pointer deltas are divided by this so drag/resize stay 1:1 with the cursor.
+   * NEVER multiply into fontSize / box layout (that causes double-scaling).
    */
   viewScale?: number;
 };
@@ -103,27 +107,61 @@ function LayerTextCanvas({
   width,
   height,
   scale,
+  fontsEpoch,
 }: {
   layer: TextLayer;
   width: number;
   height: number;
   scale: number;
+  /** Bumps when document.fonts.ready / load settles — forces redraw. */
+  fontsEpoch: number;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || width < 1 || height < 1) return;
-    const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
-    canvas.width = Math.max(1, Math.round(width * dpr));
-    canvas.height = Math.max(1, Math.round(height * dpr));
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, width, height);
-    drawPrintLayerInBox(ctx, layer, width, height, scale);
+    let cancelled = false;
+
+    const paint = () => {
+      if (cancelled) return;
+      const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+      canvas.width = Math.max(1, Math.round(width * dpr));
+      canvas.height = Math.max(1, Math.round(height * dpr));
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, width, height);
+      drawPrintLayerInBox(ctx, layer, width, height, scale);
+    };
+
+    const run = async () => {
+      if (typeof document !== "undefined" && document.fonts?.ready) {
+        try {
+          await document.fonts.ready;
+          const displayPx = Math.max(
+            11,
+            Math.round((layer.fontSize || 48) * Math.max(0.001, scale))
+          );
+          const family = fontForText(layer.fontPreset || "pretendard", layer.text);
+          const weight = layer.fontWeight ?? 700;
+          await document.fonts.load(
+            `${weight} ${displayPx}px ${family}`,
+            (layer.text || "가A").slice(0, 24)
+          );
+        } catch {
+          /* proceed with fallback metrics */
+        }
+      }
+      paint();
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
   }, [
     layer,
     layer.fontWeight,
@@ -142,6 +180,7 @@ function LayerTextCanvas({
     width,
     height,
     scale,
+    fontsEpoch,
   ]);
 
   return (
@@ -232,6 +271,8 @@ export default function PreviewTextOverlay({
     box: { x: number; y: number; width: number; height: number };
   } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [fontsEpoch, setFontsEpoch] = useState(0);
+  const [fontsReady, setFontsReady] = useState(false);
 
   layersRef.current = layers;
   onLayersChangeRef.current = onLayersChange;
@@ -246,6 +287,54 @@ export default function PreviewTextOverlay({
     setDragging(false);
     setLiveBox(null);
     setSnapGuides({ vertical: [], horizontal: [] });
+    // Re-measure stage after page switch (mobile layout can lag one frame).
+    const el = hostRef.current;
+    if (el) {
+      setSize({
+        w: Math.max(1, el.offsetWidth || 1),
+        h: Math.max(1, el.offsetHeight || 1),
+      });
+    }
+  }, [pageIndex]);
+
+  // Font loading gateway — wait before first paint / after page switch.
+  useEffect(() => {
+    let cancelled = false;
+    setFontsReady(false);
+    const run = async () => {
+      if (typeof document !== "undefined" && document.fonts?.ready) {
+        try {
+          await Promise.race([
+            document.fonts.ready,
+            new Promise((r) => setTimeout(r, 2500)),
+          ]);
+          const families = new Set<string>();
+          for (const layer of layersRef.current) {
+            families.add(
+              fontForText(layer.fontPreset || "pretendard", layer.text || "가A")
+            );
+          }
+          await Promise.race([
+            Promise.allSettled(
+              [...families].map((family) =>
+                document.fonts.load(`700 48px ${family}`, "가A Aa")
+              )
+            ),
+            new Promise((r) => setTimeout(r, 1500)),
+          ]);
+        } catch {
+          /* draw with fallbacks */
+        }
+      }
+      if (!cancelled) {
+        setFontsReady(true);
+        setFontsEpoch((n) => n + 1);
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
   }, [pageIndex]);
 
   useEffect(() => {
@@ -292,6 +381,7 @@ export default function PreviewTextOverlay({
   }, [size, snapGuides, dragging]);
 
   const scale = canvasTextScale(size.w, size.h);
+  const stageReliable = isReliablePrintStageSize(size.w, size.h);
   const snapPx = Math.max(SNAP_THRESHOLD_PX, Math.min(size.w, size.h) * 0.025);
 
   const getBoxes = useCallback(() => {
@@ -313,6 +403,8 @@ export default function PreviewTextOverlay({
       stageW: number,
       stageH: number
     ) => {
+      // Never bake sesame-seed geometry from a collapsed mobile host.
+      if (!isReliablePrintStageSize(stageW, stageH)) return;
       const w = Math.max(1, stageW);
       const h = Math.max(1, stageH);
       const base = layersRef.current;
@@ -494,7 +586,15 @@ export default function PreviewTextOverlay({
   };
 
   useEffect(() => {
-    if (!backgroundSrc || !size.w || !size.h || !layers.length || interactive) return;
+    if (
+      !backgroundSrc ||
+      !fontsReady ||
+      !isReliablePrintStageSize(size.w, size.h) ||
+      !layers.length ||
+      interactive
+    ) {
+      return;
+    }
     let cancelled = false;
     const image = new Image();
     image.crossOrigin = "anonymous";
@@ -542,15 +642,22 @@ export default function PreviewTextOverlay({
     return () => {
       cancelled = true;
     };
-  }, [backgroundSrc, interactive, size.h, size.w]);
+  }, [backgroundSrc, interactive, size.h, size.w, fontsReady]);
 
   if (!layers.length) return null;
+
+  const showPaintedLayers = fontsReady && stageReliable;
 
   return (
     <div
       ref={hostRef}
       className="pointer-events-none absolute inset-0 z-[2] overflow-visible"
-      style={{ transformOrigin: "top left" }}
+      style={{
+        transformOrigin: "top left",
+        // Hide until fonts + reliable stage — avoids empty/tiny first paint on mobile.
+        opacity: showPaintedLayers ? 1 : 0,
+      }}
+      aria-hidden={!showPaintedLayers}
     >
       <canvas
         ref={guideRef}
@@ -599,10 +706,18 @@ export default function PreviewTextOverlay({
           !isEditing;
         const showOutline = showSelectionChrome || showIdleGuide;
         const showControls = showSelectionChrome;
-        const fontSize = Math.max(
-          8,
-          Math.round((layer.fontSize || 48) * scale)
+        const fontSize = designFontSizeToStage(
+          layer.fontSize || 48,
+          size.w,
+          size.h
         );
+        const minBox = Math.max(24, minReadableDisplayFontPx(size.w, size.h) * 2);
+        const safeBox = {
+          x: box.x,
+          y: box.y,
+          width: Math.max(minBox, box.width),
+          height: Math.max(minBox * 0.45, box.height),
+        };
         const fontFamily = fontForText(
           layer.fontPreset || "pretendard",
           layer.text
@@ -636,10 +751,10 @@ export default function PreviewTextOverlay({
                 : ""
             } ${isActive ? "z-[6]" : ""}`}
             style={{
-              left: box.x,
-              top: box.y,
-              width: box.width,
-              height: box.height,
+              left: safeBox.x,
+              top: safeBox.y,
+              width: safeBox.width,
+              height: safeBox.height,
             }}
             onMouseEnter={() => setHoverId(layer.id)}
             onMouseLeave={() =>
@@ -775,8 +890,8 @@ export default function PreviewTextOverlay({
                     // Match drawPrintLayerInBox glyph origin (pad + vertical center).
                     ...layerEditTextPadding(
                       layer,
-                      box.width,
-                      box.height,
+                      safeBox.width,
+                      safeBox.height,
                       scale
                     ),
                   }}
@@ -785,9 +900,10 @@ export default function PreviewTextOverlay({
                 <>
                   <LayerTextCanvas
                     layer={layer}
-                    width={box.width}
-                    height={box.height}
+                    width={safeBox.width}
+                    height={safeBox.height}
                     scale={scale}
+                    fontsEpoch={fontsEpoch}
                   />
                   {showEmptyGuideBoxes &&
                   !hideGuideLabels &&

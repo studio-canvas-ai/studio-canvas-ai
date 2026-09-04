@@ -1093,7 +1093,7 @@ export function mapLayoutPlanToCanvasLayers(
         showBoxBorder: false,
         boxOpacity: 0,
         color: contrast.color as TextLayer["color"],
-        fontSize: seed.fontSize,
+        fontSize: Math.max(28, seed.fontSize),
         fontWeight: parseFontWeight(el.fontWeight),
         align: normalized.align,
         lineHeight: 1.25,
