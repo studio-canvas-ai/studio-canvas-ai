@@ -709,15 +709,34 @@ export default function PreviewTextOverlay({
         const fontSize = designFontSizeToStage(
           layer.fontSize || 48,
           size.w,
-          size.h
+          size.h,
+          layer.pos
         );
-        const minBox = Math.max(24, minReadableDisplayFontPx(size.w, size.h) * 2);
+        const plain = String(layer.text || "")
+          .replace(/\u200B/g, "")
+          .trim();
+        const isNarrowLabel =
+          plain.length <= 6 &&
+          /^(일시|장소|입장|시간|날짜|위치|요금|비용|대상|주최|문의)/.test(
+            plain
+          );
+        const minBox = Math.max(
+          24,
+          minReadableDisplayFontPx(size.w, size.h) * 2
+        );
+        const minW = isNarrowLabel
+          ? minBox
+          : Math.max(minBox, size.w * 0.3);
         const safeBox = {
           x: box.x,
           y: box.y,
-          width: Math.max(minBox, box.width),
+          width: Math.max(minW, box.width),
           height: Math.max(minBox * 0.45, box.height),
         };
+        // If width was expanded, keep centered / left origin stable.
+        if (safeBox.width > box.width && layer.align === "center") {
+          safeBox.x = box.x + (box.width - safeBox.width) / 2;
+        }
         const fontFamily = fontForText(
           layer.fontPreset || "pretendard",
           layer.text

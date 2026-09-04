@@ -115,19 +115,26 @@ export function expandInfoGridSeeds(
       continue;
     }
 
-    const pad = Math.max(12, seed.w * 0.06);
-    const labelColW = Math.min(Math.max(72, seed.w * 0.22), 140);
-    const gap = Math.max(16, seed.w * 0.04);
-    const labelX = seed.x + pad;
+    // Guard against fractional-width seeds that survived as ~0–2px.
+    const blockW = Math.max(seed.w, stageW * 0.55);
+    const blockX =
+      seed.w < stageW * 0.2
+        ? Math.max(0, (stageW - blockW) / 2)
+        : seed.x;
+    const pad = Math.max(12, blockW * 0.06);
+    const labelColW = Math.min(Math.max(88, blockW * 0.22), 160);
+    const gap = Math.max(16, blockW * 0.04);
+    const labelX = blockX + pad;
     const valueX = labelX + labelColW + gap;
-    const valueW = Math.max(48, seed.x + seed.w - pad - valueX);
-    const rowH = Math.max(seed.fontSize * 1.35, ROW_GAP_PX * 0.85);
+    const valueW = Math.max(stageW * 0.3, blockX + blockW - pad - valueX);
+    const fontSize = Math.max(28, seed.fontSize);
+    const rowH = Math.max(fontSize * 1.35, ROW_GAP_PX * 0.85);
     const startY =
       seed.y + Math.max(8, (seed.h - rows.length * ROW_GAP_PX) / 2);
 
     rows.forEach((row, i) => {
       const y = startY + i * ROW_GAP_PX;
-      const fs = Math.max(14, Math.min(seed.fontSize, 28));
+      const fs = fontSize;
       out.push({
         el: cloneEl(seed.el, {
           id: seed.el.id

@@ -68,9 +68,16 @@ export function layerEditTextPadding(
   paddingLeft: number;
 } {
   // `scale` = canvasTextScale(stage) once — never also multiply by CSS zoom.
+  const rawDesign = layer.fontSize || 48;
+  const designFs =
+    rawDesign > 0 && rawDesign <= 1.5 ? rawDesign * 1080 : rawDesign;
+  const safeDesign =
+    designFs < 14
+      ? 32
+      : Math.max(layer.pos === "top" ? 40 : 28, designFs);
   const fontSize = Math.max(
     MIN_DISPLAY_FONT_PX,
-    Math.round((layer.fontSize || 48) * Math.max(0.001, scale))
+    Math.round(safeDesign * Math.max(0.001, scale))
   );
   const { padX, padY } = layerGlyphPad(fontSize);
   const align = layer.align || "center";
@@ -180,9 +187,17 @@ export function drawPrintLayerInBox(
   const paintableText = text.replace(/\u200B/g, "").trim();
 
   // `scale` must be canvasTextScale(stage) only — CSS zoom is ancestor transform.
+  // Repair normalized fractions (0.02) left in layer.fontSize by mixed AI units.
+  const rawDesign = layer.fontSize || 48;
+  const designFs =
+    rawDesign > 0 && rawDesign <= 1.5 ? rawDesign * 1080 : rawDesign;
+  const safeDesign =
+    designFs < 14
+      ? 32
+      : Math.max(layer.pos === "top" ? 40 : 28, designFs);
   const fontSize = Math.max(
     MIN_DISPLAY_FONT_PX,
-    Math.round((layer.fontSize || 48) * Math.max(0.001, scale))
+    Math.round(safeDesign * Math.max(0.001, scale))
   );
   const fontWeight = layer.fontWeight ?? 700;
   const fontPreset = layer.fontPreset || "pretendard";

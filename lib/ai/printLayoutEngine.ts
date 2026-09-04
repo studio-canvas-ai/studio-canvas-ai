@@ -252,14 +252,124 @@ export function layoutPlanUsesPixels(
   return false;
 }
 
+/**
+ * Per-value unit coerce: Gemini often mixes pixel titles with fractional
+ * body/info width/fontSize. Global usePixels would leave 0.02 as 0.02px (sesame).
+ * Values in (0, 1.5] are treated as fractions of axisSize.
+ */
+export function coerceLayoutLength(
+  value: number,
+  axisSize: number,
+  usePixelsHint: boolean
+): number {
+  if (!Number.isFinite(value) || !Number.isFinite(axisSize) || axisSize <= 0) {
+    return 0;
+  }
+  const v = Math.abs(value);
+  // Always treat unit-interval magnitudes as normalized — even if siblings are px.
+  if (v > 0 && v <= 1.5) {
+    return value * axisSize;
+  }
+  if (usePixelsHint) return value;
+  return value * axisSize;
+}
+
 export function toStagePixels(
   value: number,
   axisSize: number,
   usePixels: boolean
 ): number {
-  if (!Number.isFinite(value)) return 0;
-  if (usePixels) return value;
-  return value * axisSize;
+  return coerceLayoutLength(value, axisSize, usePixels);
+}
+
+export type LayoutTextRole = "title" | "body" | "info" | "caption";
+
+export function inferLayoutTextRole(
+  text: string,
+  fontSizePx: number,
+  y: number,
+  h: number,
+  w: number,
+  stageW: number,
+  stageH: number,
+  id?: string
+): LayoutTextRole {
+  const idLower = (id || "").toLowerCase();
+  if (
+    idLower.includes("info") ||
+    idLower.includes("label") ||
+    idLower.includes("value") ||
+    idLower.includes("일시") ||
+    idLower.includes("장소")
+  ) {
+    return "info";
+  }
+  const short = Math.min(stageW, stageH);
+  const midY = y + h / 2;
+  if (
+    midY < stageH * 0.32 &&
+    (fontSizePx >= short * 0.04 || w >= stageW * 0.55 || text.length <= 28)
+  ) {
+    return "title";
+  }
+  if (fontSizePx > 0 && fontSizePx < short * 0.022 && midY > stageH * 0.55) {
+    return "caption";
+  }
+  if (midY > stageH * 0.55 || text.length > 40) return "body";
+  return "body";
+}
+
+/** Design-space (1080-ref) minimums after coerce — before display scale. */
+export function minDesignFontForRole(role: LayoutTextRole, short: number): number {
+  switch (role) {
+    case "title":
+      return Math.max(48, Math.round(short * 0.055));
+    case "body":
+      return Math.max(32, Math.round(short * 0.032));
+    case "info":
+      return Math.max(28, Math.round(short * 0.028));
+    case "caption":
+      return Math.max(22, Math.round(short * 0.022));
+    default:
+      return 28;
+  }
+}
+
+export function sanitizeLayoutFontSize(
+  raw: number | undefined,
+  short: number,
+  usePixelsHint: boolean,
+  role: LayoutTextRole
+): number {
+  let px =
+    typeof raw === "number" && raw > 0
+      ? coerceLayoutLength(raw, short, usePixelsHint)
+      : Math.round(short * 0.04);
+  // Sub-readable after coerce (or leftover fraction mishap).
+  if (px < 14) {
+    px = Math.max(px, minDesignFontForRole(role, short));
+  }
+  const floor = minDesignFontForRole(role, short);
+  const ceil = Math.round(short * 0.14);
+  return Math.max(floor, Math.min(ceil, Math.round(px)));
+}
+
+/** Ensure body/title boxes are not needle-thin (vertical glyph stack). */
+export function sanitizeTextBoxWidth(
+  width: number,
+  role: LayoutTextRole,
+  stageW: number,
+  isInfoLabel: boolean
+): number {
+  const w = Math.max(8, width);
+  if (isInfoLabel) {
+    return Math.max(64, Math.min(w, stageW * 0.28));
+  }
+  if (role === "info") {
+    return Math.max(stageW * 0.28, w);
+  }
+  // Title / body / caption: at least 30% canvas width.
+  return Math.max(stageW * 0.3, w);
 }
 
 type PixelRect = {
@@ -868,30 +978,52 @@ export function mapLayoutPlanToCanvasLayers(
     }
 
     if (el.type === "text") {
-      const fontSize =
+      const rawFs =
         typeof el.fontSize === "number" && el.fontSize > 0
-          ? usePixels
-            ? el.fontSize
-            : el.fontSize <= 1
-              ? el.fontSize * short
-              : el.fontSize
-          : Math.round(short * 0.045);
-      const rawW =
+          ? el.fontSize
+          : undefined;
+      let rawW =
         typeof el.width === "number" && el.width > 0
-          ? toStagePixels(el.width, stageW, usePixels)
+          ? coerceLayoutLength(el.width, stageW, usePixels)
           : stageW * 0.8;
-      const rawH =
+      let rawH =
         typeof el.height === "number" && el.height > 0
-          ? toStagePixels(el.height, stageH, usePixels)
-          : fontSize * 1.45;
-      const rawX = toStagePixels(el.x, stageW, usePixels);
-      const rawY = toStagePixels(el.y, stageH, usePixels);
+          ? coerceLayoutLength(el.height, stageH, usePixels)
+          : 0;
+      const rawX = coerceLayoutLength(el.x, stageW, usePixels);
+      const rawY = coerceLayoutLength(el.y, stageH, usePixels);
+      const roleGuess = inferLayoutTextRole(
+        el.text || "",
+        typeof rawFs === "number"
+          ? coerceLayoutLength(rawFs, short, usePixels)
+          : short * 0.04,
+        rawY,
+        rawH || short * 0.05,
+        rawW,
+        stageW,
+        stageH,
+        el.id
+      );
+      const fontSize = sanitizeLayoutFontSize(
+        rawFs,
+        short,
+        usePixels,
+        roleGuess
+      );
+      if (!(rawH > 0)) rawH = fontSize * 1.45;
+      const isInfoLabel =
+        Boolean(el.id?.includes("-label-")) ||
+        (String(el.text || "").trim().length <= 6 &&
+          /^(일시|장소|입장|시간|날짜|위치|요금)/.test(
+            String(el.text || "").trim()
+          ));
+      rawW = sanitizeTextBoxWidth(rawW, roleGuess, stageW, isInfoLabel);
       texts.push({
         el,
         x: rawX,
         y: rawY,
         w: rawW,
-        h: rawH,
+        h: Math.max(fontSize * 1.25, rawH),
         fontSize,
         sourceIndex,
       });
@@ -1020,20 +1152,56 @@ export function mapLayoutPlanToCanvasLayers(
       seed.el.id?.includes("info-") ||
       seed.el.id?.includes("-label-") ||
       seed.el.id?.includes("-value-");
+    const isInfoLabel =
+      Boolean(seed.el.id?.includes("-label-")) ||
+      (String(el.text || "").trim().length <= 6 &&
+        /^(일시|장소|입장|시간|날짜|위치|요금)/.test(
+          String(el.text || "").trim()
+        ));
+    const role = inferLayoutTextRole(
+      el.text || "",
+      seed.fontSize,
+      seed.y,
+      seed.h,
+      seed.w,
+      stageW,
+      stageH,
+      el.id
+    );
+    const fontSize = sanitizeLayoutFontSize(
+      seed.fontSize,
+      short,
+      true,
+      isInfoAtom ? "info" : role
+    );
+    let boxW = sanitizeTextBoxWidth(
+      seed.w,
+      isInfoAtom ? "info" : role,
+      stageW,
+      isInfoLabel
+    );
+    let boxH = Math.max(fontSize * 1.35, seed.h);
+    let boxX = seed.x;
+    // Keep right edge when widening left-aligned info/body boxes.
+    if (boxW > seed.w && (el.align === "left" || isInfoAtom)) {
+      boxX = Math.max(0, Math.min(seed.x, stageW - boxW));
+    } else if (boxW > seed.w && el.align === "center") {
+      boxX = (stageW - boxW) / 2;
+    }
     const normalized = isInfoAtom
       ? {
-          x: seed.x,
+          x: boxX,
           y: seed.y,
-          w: seed.w,
-          h: seed.h,
+          w: boxW,
+          h: boxH,
           align: (el.align || "left") as "left" | "center" | "right",
         }
       : normalizeStandaloneTextBox(
-          seed.x,
+          boxX,
           seed.y,
-          seed.w,
-          seed.h,
-          seed.fontSize,
+          boxW,
+          boxH,
+          fontSize,
           el.align,
           stageW,
           stageH,
@@ -1062,10 +1230,10 @@ export function mapLayoutPlanToCanvasLayers(
       const st = parseDecoShapeType(shape.shapeType);
       if (st === "line" || st === "frame") continue;
       backdrops.push({
-        x: toStagePixels(shape.x, stageW, usePixels),
-        y: toStagePixels(shape.y, stageH, usePixels),
-        w: Math.max(8, toStagePixels(shape.width, stageW, usePixels)),
-        h: Math.max(8, toStagePixels(shape.height, stageH, usePixels)),
+        x: coerceLayoutLength(shape.x, stageW, usePixels),
+        y: coerceLayoutLength(shape.y, stageH, usePixels),
+        w: Math.max(8, coerceLayoutLength(shape.width, stageW, usePixels)),
+        h: Math.max(8, coerceLayoutLength(shape.height, stageH, usePixels)),
         hex: parsed.hex,
         opacity: parsed.opacity,
       });
@@ -1077,6 +1245,7 @@ export function mapLayoutPlanToCanvasLayers(
       under?.opacity
     );
     // color stays an independent TextLayer field — user can recolor anytime.
+    // Size is fontSize-only (no scaleX/scaleY); box fractions are layout bounds.
     textLayers.push(
       createLayer({
         id: el.id || newLayerId("text"),
@@ -1093,7 +1262,7 @@ export function mapLayoutPlanToCanvasLayers(
         showBoxBorder: false,
         boxOpacity: 0,
         color: contrast.color as TextLayer["color"],
-        fontSize: Math.max(28, seed.fontSize),
+        fontSize,
         fontWeight: parseFontWeight(el.fontWeight),
         align: normalized.align,
         lineHeight: 1.25,

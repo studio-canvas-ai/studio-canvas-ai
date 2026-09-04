@@ -56,13 +56,31 @@ export function minReadableDisplayFontPx(stageW: number, stageH: number): number
   return Math.max(11, Math.round(short * 0.02));
 }
 
+/**
+ * Repair stored design fontSize when AI left a normalized fraction (0.02)
+ * or an unreadable sub-14px value in the layer model.
+ */
+export function sanitizeStoredDesignFontSize(
+  fontSize: number | undefined,
+  pos?: TextLayer["pos"]
+): number {
+  const raw = typeof fontSize === "number" && fontSize > 0 ? fontSize : 48;
+  const asPx =
+    raw <= 1.5 ? raw * PRINT_TEXT_REF_WIDTH : raw;
+  const floor = pos === "top" ? 44 : pos === "bottom" ? 28 : 32;
+  if (asPx < 14) return Math.max(floor, 32);
+  return Math.max(floor, Math.round(asPx));
+}
+
 /** Design-space fontSize (1080 short-edge ref) → stage pixel size. */
 export function designFontSizeToStage(
   fontSize: number,
   stageW: number,
-  stageH: number
+  stageH: number,
+  pos?: TextLayer["pos"]
 ): number {
-  const raw = Math.round((fontSize || 48) * canvasTextScale(stageW, stageH));
+  const design = sanitizeStoredDesignFontSize(fontSize, pos);
+  const raw = Math.round(design * canvasTextScale(stageW, stageH));
   return Math.max(minReadableDisplayFontPx(stageW, stageH), raw);
 }
 
@@ -215,7 +233,12 @@ export function measureLayerContentSize(
 ): { width: number; height: number } {
   const ignoreStoredBox = options?.ignoreStoredBox === true;
   const scale = canvasTextScale(stageW, stageH);
-  const fontSize = designFontSizeToStage(layer.fontSize || 48, stageW, stageH);
+  const fontSize = designFontSizeToStage(
+    layer.fontSize || 48,
+    stageW,
+    stageH,
+    layer.pos
+  );
   const lineHeightMul = layer.lineHeight ?? 1.25;
   const letterSpacing = (layer.letterSpacing ?? 0) * scale;
   const rawText = (layer.text || "").length ? layer.text : "가";
