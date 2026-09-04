@@ -104,7 +104,7 @@ export default function StudioExportButtonGroup({
     ? "mb-0.5 shrink-0 whitespace-nowrap text-[12px] font-bold leading-[1.2] tabular-nums text-white"
     : "";
   const downloadGuideClass = unified
-    ? "whitespace-nowrap text-[9.5px] font-normal leading-[1.2] text-black"
+    ? "whitespace-nowrap text-[9.5px] font-normal leading-[1.2]"
     : "";
   const downloadQuotaClass = unified
     ? "shrink-0 text-[11px] font-bold sm:text-[12px]"
@@ -130,7 +130,8 @@ export default function StudioExportButtonGroup({
   const renderThreeLineLabel = (
     title: string,
     credit: string,
-    guide: string
+    guide: string,
+    guideColorClass: string
   ) => (
     <span className={labelClass}>
       <span className={downloadTitleClass}>
@@ -138,7 +139,7 @@ export default function StudioExportButtonGroup({
         <span>{title}</span>
       </span>
       <span className={downloadCreditClass}>{credit}</span>
-      <span className={downloadGuideClass}>{guide}</span>
+      <span className={`${downloadGuideClass} ${guideColorClass}`}>{guide}</span>
     </span>
   );
 
@@ -180,7 +181,8 @@ export default function StudioExportButtonGroup({
             {renderThreeLineLabel(
               "일반화질 다운로드",
               "(1 크레딧)",
-              "일반인쇄, 모바일, 카톡공유등"
+              "일반인쇄, 모바일, 카톡공유등",
+              "text-black"
             )}
           </button>
           <button
@@ -192,7 +194,8 @@ export default function StudioExportButtonGroup({
             {renderThreeLineLabel(
               "고화질 다운로드",
               "(2 크레딧)",
-              "포스터등 고화질인쇄, 웹게시등"
+              "포스터등 고화질인쇄, 웹게시등",
+              "text-[#FFF59D]"
             )}
           </button>
           <button
@@ -204,7 +207,8 @@ export default function StudioExportButtonGroup({
             {renderThreeLineLabel(
               "초고해상도 다운로드",
               "(5 크레딧)",
-              "최고급원본인쇄, 대형출력"
+              "최고급원본인쇄, 대형출력",
+              "text-[#00E676]"
             )}
           </button>
         </div>
