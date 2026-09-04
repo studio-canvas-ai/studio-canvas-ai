@@ -68,7 +68,7 @@ export default function StudioExportButtonGroup({
   const highParts = splitQuotaLabel(highLabel);
 
   const downloadClass = unified
-    ? "inline-flex w-full min-w-0 flex-col items-center justify-center rounded-xl border px-1 py-1.5 leading-[1.2] shadow-[0_8px_24px_rgba(15,23,42,0.35)] disabled:opacity-50"
+    ? "inline-flex w-full min-w-0 flex-col items-center justify-center rounded-xl border px-1 py-1 leading-[1.15] shadow-[0_8px_24px_rgba(15,23,42,0.35)] disabled:opacity-50"
     : compact
       ? "inline-flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[11px] font-semibold text-white disabled:opacity-50"
       : "inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-lg disabled:opacity-50";
@@ -98,13 +98,13 @@ export default function StudioExportButtonGroup({
       ? "min-w-0 text-center text-[10px] font-semibold leading-tight [word-break:keep-all]"
       : "min-w-0 text-center text-[12px] font-semibold leading-tight [word-break:keep-all] sm:text-sm";
   const downloadTitleClass = unified
-    ? "mb-0.5 inline-flex max-w-full items-center justify-center gap-1 whitespace-nowrap text-[13px] font-bold leading-[1.2] tracking-tight text-white"
+    ? "mb-px inline-flex max-w-full items-center justify-center gap-1 whitespace-nowrap text-[13px] font-bold leading-[1.15] tracking-tight text-white"
     : "";
   const downloadCreditClass = unified
-    ? "mb-0.5 shrink-0 whitespace-nowrap text-[12px] font-bold leading-[1.2] tabular-nums text-white"
+    ? "mb-px shrink-0 whitespace-nowrap text-[12px] font-bold leading-[1.15] tabular-nums text-white"
     : "";
   const downloadGuideClass = unified
-    ? "whitespace-nowrap text-[9.5px] font-normal leading-[1.2]"
+    ? "whitespace-nowrap text-[11px] font-normal leading-[1.15] tracking-tight"
     : "";
   const downloadQuotaClass = unified
     ? "shrink-0 text-[11px] font-bold sm:text-[12px]"
@@ -208,7 +208,7 @@ export default function StudioExportButtonGroup({
               "초고해상도 다운로드",
               "(5 크레딧)",
               "최고급원본인쇄, 대형출력",
-              "text-[#00E676]"
+              "text-[#0A2647]"
             )}
           </button>
         </div>
