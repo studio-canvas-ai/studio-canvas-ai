@@ -68,7 +68,7 @@ export default function StudioExportButtonGroup({
   const highParts = splitQuotaLabel(highLabel);
 
   const downloadClass = unified
-    ? "inline-flex min-h-[2.85rem] w-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl border px-1.5 py-2 shadow-[0_8px_24px_rgba(15,23,42,0.35)] disabled:opacity-50"
+    ? "inline-flex min-h-[5.25rem] w-full min-w-0 flex-col items-center justify-center rounded-xl border px-1.5 py-2.5 shadow-[0_8px_24px_rgba(15,23,42,0.35)] disabled:opacity-50 sm:min-h-[5.5rem] sm:px-2 sm:py-3"
     : compact
       ? "inline-flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[11px] font-semibold text-white disabled:opacity-50"
       : "inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-lg disabled:opacity-50";
@@ -93,19 +93,25 @@ export default function StudioExportButtonGroup({
       ? "px-0.5 text-center text-[10px] leading-snug text-slate-400"
       : "text-center text-xs leading-snug text-white/45";
   const labelClass = unified
-    ? "inline-flex min-w-0 max-w-full flex-col items-center gap-0.5 text-center leading-tight"
+    ? "inline-flex min-w-0 max-w-full flex-col items-center gap-1 text-center"
     : compact
       ? "min-w-0 text-center text-[10px] font-semibold leading-tight [word-break:keep-all]"
       : "min-w-0 text-center text-[12px] font-semibold leading-tight [word-break:keep-all] sm:text-sm";
   const downloadTitleClass = unified
-    ? "max-w-full text-[12px] font-extrabold leading-tight tracking-tight text-black [word-break:keep-all] sm:text-[13px]"
+    ? "inline-flex max-w-full items-center justify-center gap-1 text-[11px] font-extrabold leading-snug tracking-tight text-white [word-break:keep-all] sm:text-[12px]"
     : "";
   const downloadCreditClass = unified
-    ? "shrink-0 text-[11px] font-bold tabular-nums text-white sm:text-[12px]"
+    ? "shrink-0 text-[10px] font-bold leading-snug tabular-nums text-white/95 sm:text-[11px]"
+    : "";
+  const downloadGuideClass = unified
+    ? "max-w-[11.5rem] text-[9px] font-medium leading-snug text-white/80 [word-break:keep-all] sm:text-[10px]"
     : "";
   const downloadQuotaClass = unified
     ? "shrink-0 text-[11px] font-bold sm:text-[12px]"
     : "";
+  const downloadTitleIconClass = unified
+    ? "h-3.5 w-3.5 shrink-0 text-white"
+    : iconClass;
 
   const renderDownloadLabel = (
     full: string,
@@ -120,11 +126,19 @@ export default function StudioExportButtonGroup({
       full
     );
 
-  /** Screen 26: exactly two lines — black title + white credit. */
-  const renderCreditLabel = (title: string, credit: string) => (
+  /** Screen 26: 3 lines — icon+title / credit / usage guide. */
+  const renderThreeLineLabel = (
+    title: string,
+    credit: string,
+    guide: string
+  ) => (
     <span className={labelClass}>
-      <span className={downloadTitleClass}>{title}</span>
+      <span className={downloadTitleClass}>
+        <Download className={downloadTitleIconClass} aria-hidden />
+        <span>{title}</span>
+      </span>
       <span className={downloadCreditClass}>{credit}</span>
+      <span className={downloadGuideClass}>{guide}</span>
     </span>
   );
 
@@ -163,8 +177,11 @@ export default function StudioExportButtonGroup({
             disabled={busy || !canDownloadStandard}
             className={`${downloadClass} flex-1 border-white/20 bg-gradient-to-r from-teal-500 via-emerald-500 to-emerald-400`}
           >
-            <Download className={`${iconClass} text-white`} aria-hidden />
-            {renderCreditLabel("일반화질 다운로드", "(1 크레딧)")}
+            {renderThreeLineLabel(
+              "일반화질 다운로드",
+              "(1 크레딧)",
+              "일반인쇄, 모바일, 카톡공유등"
+            )}
           </button>
           <button
             type="button"
@@ -172,8 +189,11 @@ export default function StudioExportButtonGroup({
             disabled={busy || !canDownloadHigh}
             className={`${downloadClass} flex-1 border-white/20 bg-gradient-to-r from-violet-600 via-indigo-500 to-sky-500`}
           >
-            <Download className={`${iconClass} text-white`} aria-hidden />
-            {renderCreditLabel("고화질 다운로드", "(2 크레딧)")}
+            {renderThreeLineLabel(
+              "고화질 다운로드",
+              "(2 크레딧)",
+              "포스터등 고화질인쇄, 웹게시등"
+            )}
           </button>
           <button
             type="button"
@@ -181,8 +201,11 @@ export default function StudioExportButtonGroup({
             disabled={busy || !onDownloadUltra || !canDownloadUltra}
             className={`${downloadClass} flex-1 border-amber-300/80 bg-gradient-to-r from-amber-600 via-orange-500 to-rose-500 ring-1 ring-amber-200/70`}
           >
-            <Download className={`${iconClass} text-white`} aria-hidden />
-            {renderCreditLabel("초고해상도 다운로드", "(5 크레딧)")}
+            {renderThreeLineLabel(
+              "초고해상도 다운로드",
+              "(5 크레딧)",
+              "최고급원본인쇄, 대형출력"
+            )}
           </button>
         </div>
       ) : (
