@@ -131,17 +131,32 @@ export default function StudioExportButtonGroup({
     title: string,
     credit: string,
     guide: string,
-    guideColorClass: string
-  ) => (
-    <span className={labelClass}>
-      <span className={downloadTitleClass}>
-        <Download className={downloadTitleIconClass} aria-hidden />
-        <span>{title}</span>
+    guideColorClass: string,
+    tone: "light" | "dark" = "light"
+  ) => {
+    const titleTone =
+      tone === "dark"
+        ? "mb-px inline-flex max-w-full items-center justify-center gap-1 whitespace-nowrap text-[13px] font-bold leading-[1.15] tracking-tight text-black"
+        : downloadTitleClass;
+    const creditTone =
+      tone === "dark"
+        ? "mb-px shrink-0 whitespace-nowrap text-[12px] font-bold leading-[1.15] tabular-nums text-black"
+        : downloadCreditClass;
+    const iconTone =
+      tone === "dark"
+        ? "h-3.5 w-3.5 shrink-0 text-black"
+        : downloadTitleIconClass;
+    return (
+      <span className={labelClass}>
+        <span className={titleTone}>
+          <Download className={iconTone} aria-hidden />
+          <span>{title}</span>
+        </span>
+        <span className={creditTone}>{credit}</span>
+        <span className={`${downloadGuideClass} ${guideColorClass}`}>{guide}</span>
       </span>
-      <span className={downloadCreditClass}>{credit}</span>
-      <span className={`${downloadGuideClass} ${guideColorClass}`}>{guide}</span>
-    </span>
-  );
+    );
+  };
 
   return (
     <div
@@ -202,13 +217,14 @@ export default function StudioExportButtonGroup({
             type="button"
             onClick={onDownloadUltra}
             disabled={busy || !onDownloadUltra || !canDownloadUltra}
-            className={`${downloadClass} flex-1 border-amber-300/80 bg-gradient-to-r from-amber-600 via-orange-500 to-rose-500 ring-1 ring-amber-200/70`}
+            className={`${downloadClass} flex-1 !shadow-none border-amber-300 bg-[#FFF9C4] hover:bg-[#FFFDE7]`}
           >
             {renderThreeLineLabel(
               "초고해상도 다운로드",
               "(5 크레딧)",
               "최고급원본인쇄, 대형출력",
-              "text-[#0A2647]"
+              "text-black",
+              "dark"
             )}
           </button>
         </div>
