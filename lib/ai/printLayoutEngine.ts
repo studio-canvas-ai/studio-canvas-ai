@@ -18,6 +18,7 @@ import { isEmojiGlyph, normalizeLucideIconName } from "@/lib/printWizardLucide";
 import type { PrintDecoLayer } from "@/lib/printWizardTypes";
 import {
   inferBackgroundTone,
+  parseFillColor,
   resolveContrastTextAppearance,
 } from "@/lib/ai/textContrastSafety";
 import { expandInfoGridSeeds } from "@/lib/ai/layoutInfoGrid";
@@ -184,14 +185,15 @@ COORDINATE SYSTEM (critical — wrong coords cause rightward drift):
 8. Circle: x,y are CENTER; radius in pixels. Label text for a circle badge is a SEPARATE text node (not inside the circle object).
 
 CONTRAST / READABILITY (absolute — never bury type in the photo):
-1. Analyze background/style/bg_prompt tone BEFORE choosing text fill:
-   - LIGHT scenes (shoji/창호지, sunlight/햇살, ivory, pastel, sand, bright walls, hanok paper): main text fill MUST be deep ink #1A1A1A, charcoal #2B2B2B, or deep brown #2C1810. NEVER solo white (#FFFFFF) on light grounds.
-   - DARK scenes (night sky, deep wood, neon, dense forest): text fill white #FFFFFF or bright gold #F1C40F.
-2. If you intentionally use light type on a light/complex photo (lattice, branches, busy texture):
-   a. Include shadowColor:"rgba(0,0,0,0.7)", shadowBlur:10, shadowOffsetY:2 on the text object, AND/OR
-   b. Place a translucent backdrop rect under the text (fill "rgba(0,0,0,0.45)" or "rgba(255,255,255,0.85)").
-3. Prefer backdrop plates behind hero titles on patterned photos. Contrast ratio must keep titles instantly readable.
-4. Optional text stroke/strokeWidth (1–2px dark) is allowed for extra separation.
+1. BOX-LOCAL FIRST: For every text that sits on a rect/shape/circle, compute that box fill luminance and set text.fill accordingly:
+   - Dark boxes (deep green, black, navy, charcoal, rgba dark panels): text.fill MUST be light — #FFFFFF, soft ivory #F8F1E3, or pastel yellow #F7E7A1. NEVER dark ink/charcoal on dark boxes.
+   - Light boxes (white, cream, pastel panels): text.fill MUST be dark — #1A1A1A, #2C1810, or #1B365D. NEVER solo white on light boxes.
+2. Scene-level (text on photo with no plate): LIGHT scenes → dark type; DARK scenes → white/gold type.
+3. If you intentionally use light type on a light/complex photo:
+   a. Include shadowColor:"rgba(0,0,0,0.7)", shadowBlur:10, shadowOffsetY:2 on the text, AND/OR
+   b. Place a translucent backdrop rect under the text.
+4. Contrast ratio target ≥ 4.5 between text fill and its immediate box. Optional stroke/strokeWidth (1–2px) allowed.
+5. Text fill is an independent editable property — choose a readable default; users may recolor later in the editor.
 
 DYNAMIC LAYOUT:
 1. Do NOT hardcode counts. Infer structure from 용도 + 분야 + prompt.
@@ -372,7 +374,7 @@ export function normalizeStandaloneTextBox(
 }
 
 function rectContainsPoint(
-  rect: PixelRect,
+  rect: { x: number; y: number; w: number; h: number },
   px: number,
   py: number,
   pad = 0
@@ -755,12 +757,14 @@ export function mapLayoutPlanToCanvasLayers(
 
   const appearanceForText = (
     el: PrintLayoutElementText,
-    localBackdropHex?: string
+    localBackdropHex?: string,
+    localBackdropOpacity?: number
   ) =>
     resolveContrastTextAppearance({
       fill: el.fill,
       sceneTone,
       localBackdropHex,
+      localBackdropOpacity,
       shadowColor: el.shadowColor,
       shadowBlur: el.shadowBlur,
       shadowOffsetX: el.shadowOffsetX,
@@ -768,6 +772,34 @@ export function mapLayoutPlanToCanvasLayers(
       stroke: el.stroke,
       strokeWidth: el.strokeWidth,
     });
+
+  type ContrastBackdrop = {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    hex: string;
+    opacity: number;
+  };
+
+  const findImmediateBackdrop = (
+    cx: number,
+    cy: number,
+    candidates: ContrastBackdrop[]
+  ): ContrastBackdrop | null => {
+    let best: ContrastBackdrop | null = null;
+    let bestArea = Number.POSITIVE_INFINITY;
+    for (const box of candidates) {
+      const pad = Math.min(box.w, box.h) * 0.04;
+      if (!rectContainsPoint(box, cx, cy, pad)) continue;
+      const area = box.w * box.h;
+      if (area < bestArea) {
+        bestArea = area;
+        best = box;
+      }
+    }
+    return best;
+  };
 
   elements.forEach((el, sourceIndex) => {
     if (el.type === "rect" || el.type === "box") {
@@ -1008,18 +1040,43 @@ export function mapLayoutPlanToCanvasLayers(
           el.text
         );
 
-    // Contrast vs nearest plate under the glyph (if any).
+    // Contrast vs the smallest containing plate/shape (box-local luminance wins).
     const cx = normalized.x + normalized.w / 2;
     const cy = normalized.y + normalized.h / 2;
-    let localHex: string | undefined;
+    const backdrops: ContrastBackdrop[] = [];
     for (const plate of plates) {
-      if (rectContainsPoint(plate, cx, cy, 4)) {
-        localHex = parseRgba(plate.fill).hex;
-        break;
-      }
+      const parsed = parseFillColor(plate.fill);
+      if (!parsed) continue;
+      backdrops.push({
+        x: plate.x,
+        y: plate.y,
+        w: plate.w,
+        h: plate.h,
+        hex: parsed.hex,
+        opacity: parsed.opacity,
+      });
     }
-
-    const contrast = appearanceForText(el, localHex);
+    for (const shape of shapes) {
+      const parsed = parseFillColor(shape.fill);
+      if (!parsed) continue;
+      const st = parseDecoShapeType(shape.shapeType);
+      if (st === "line" || st === "frame") continue;
+      backdrops.push({
+        x: toStagePixels(shape.x, stageW, usePixels),
+        y: toStagePixels(shape.y, stageH, usePixels),
+        w: Math.max(8, toStagePixels(shape.width, stageW, usePixels)),
+        h: Math.max(8, toStagePixels(shape.height, stageH, usePixels)),
+        hex: parsed.hex,
+        opacity: parsed.opacity,
+      });
+    }
+    const under = findImmediateBackdrop(cx, cy, backdrops);
+    const contrast = appearanceForText(
+      el,
+      under?.hex,
+      under?.opacity
+    );
+    // color stays an independent TextLayer field — user can recolor anytime.
     textLayers.push(
       createLayer({
         id: el.id || newLayerId("text"),
@@ -1140,7 +1197,7 @@ export function buildLayoutUserPrompt(req: GenerateLayoutRequest): string {
     `INFO GRID: 일시/장소/입장 etc. = two columns (shared labelX + shared valueX), row y step exactly 32px. No multiline blobs.`,
     `ICONS: Lucide kebab-case vectors only — zero emoji. Never default to calendar/map-pin/gift/trophy.`,
     `Prefer 2–6 decorative shapes (ribbon/frame/pill/stamp/line) + 0–4 unique theme icons.`,
-    `CONTRAST: If background/theme is bright (shoji, sunlight, ivory, pastel), text fill must be #1A1A1A/#2B2B2B — never solo white.`,
+    `CONTRAST: Text on a dark box → light fill (#FFF / ivory / pastel yellow). Text on a light box → dark fill (#1A1A1A / brown / navy). Never dark-on-dark.`,
     `If using light type on complex/light photo, add shadowColor+shadowBlur or a translucent backdrop rect.`,
   ].join("\n");
 }
