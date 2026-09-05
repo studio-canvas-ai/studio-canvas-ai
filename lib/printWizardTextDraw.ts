@@ -401,12 +401,25 @@ export function measurePrintLayerContentHeightPx(
   const innerW = Math.max(8, boxW - padX * 2);
 
   let lineCount = Math.max(1, text.split("\n").length);
+  let inkLinePx = lineHeightPx;
   if (typeof document !== "undefined") {
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     if (ctx) {
-      ctx.font = `${fontWeight} ${fontSize}px ${fontForText(fontPreset, text)}`;
+      const family = fontForText(fontPreset, text);
+      ctx.font = `${fontWeight} ${fontSize}px ${family}`;
       lineCount = Math.max(1, wrapMultiline(ctx, text, innerW, letterSpacing).length);
+      const probe = text.slice(0, 24) || "가Hg";
+      const m = ctx.measureText(probe);
+      const ascent =
+        typeof m.actualBoundingBoxAscent === "number"
+          ? m.actualBoundingBoxAscent
+          : fontSize * 0.85;
+      const descent =
+        typeof m.actualBoundingBoxDescent === "number"
+          ? m.actualBoundingBoxDescent
+          : fontSize * 0.28;
+      inkLinePx = Math.max(lineHeightPx, ascent + descent + fontSize * 0.06);
     }
   } else {
     // SSR / no canvas: rough CJK estimate (~0.95em per glyph).
@@ -421,5 +434,8 @@ export function measurePrintLayerContentHeightPx(
     );
   }
 
-  return Math.max(fontSize + padY * 2, lineCount * lineHeightPx + padY * 2);
+  return Math.max(
+    fontSize + padY * 2,
+    lineCount * inkLinePx + padY * 2 + Math.ceil(fontSize * 0.18)
+  );
 }

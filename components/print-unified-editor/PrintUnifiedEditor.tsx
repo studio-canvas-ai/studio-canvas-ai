@@ -646,6 +646,92 @@ export default function PrintUnifiedEditor() {
     showToast("페이지를 삭제하고 뒤 페이지를 앞으로 당겼습니다.", "success");
   }, [activatePage, pageActivated, pageIndex, showToast]);
 
+  const duplicateCurrentPageSlide = useCallback(() => {
+    if (!pageActivated || pageIndex < 0) {
+      showToast("페이지를 먼저 선택해 주세요.", "info");
+      return;
+    }
+    const src = pageIndex;
+    const n = Math.max(1, stateRef.current.pageCount);
+    const insertAt = Math.min(src + 1, n - 1);
+
+    setState((prev) => {
+      const slots = Math.max(1, prev.pageCount);
+
+      const cloneItem = <T,>(item: T): T => {
+        try {
+          return structuredClone(item);
+        } catch {
+          return JSON.parse(JSON.stringify(item)) as T;
+        }
+      };
+
+      const insertAfter = <T,>(
+        arr: T[] | undefined,
+        empty: () => T
+      ): T[] => {
+        const next = Array.from({ length: slots }, (_, i) =>
+          arr?.[i] !== undefined ? cloneItem(arr[i] as T) : empty()
+        );
+        const copy = cloneItem(next[src]!);
+        next.splice(Math.min(src + 1, slots - 1), 0, copy);
+        return next.slice(0, slots);
+      };
+
+      const backgroundUrls = insertAfter<string>(
+        Array.from({ length: slots }, (_, i) =>
+          prev.backgroundUrls?.[i] ??
+          (i === 0 ? prev.backgroundUrl ?? "" : "")
+        ),
+        () => ""
+      );
+      const textLayersByPage = insertAfter(
+        resizeBlankIsolatedPages(prev.textLayersByPage, slots),
+        () => [] as TextLayer[]
+      );
+      const photoLayersByPage = insertAfter(
+        resizePhotoPages(prev.photoLayersByPage, slots),
+        () => []
+      );
+      const decoLayersByPage = insertAfter(
+        resizeDecoPages(prev.decoLayersByPage, slots),
+        () => []
+      );
+      const pageThumbUrls = insertAfter(
+        resizePageThumbUrls(prev.pageThumbUrls, slots),
+        () => ""
+      );
+      const contentOffsetByPage = insertAfter(
+        resizeContentOffsets(prev.contentOffsetByPage, slots),
+        () => ({ ...DEFAULT_CONTENT_OFFSET })
+      );
+      const backgroundPansByPage = insertAfter(
+        resizeBackgroundPans(prev.backgroundPansByPage, slots),
+        () => ({ ...DEFAULT_BG_PAN })
+      );
+
+      const next: PrintWizardState = {
+        ...prev,
+        backgroundUrls,
+        backgroundUrl: backgroundUrls.find((u) => u.trim()) || null,
+        textLayersByPage,
+        photoLayersByPage,
+        decoLayersByPage,
+        pageThumbUrls,
+        contentOffsetByPage,
+        backgroundPansByPage,
+      };
+      saveSession(next);
+      return next;
+    });
+
+    activatePage(insertAt + 1);
+    setActiveTextLayerId(null);
+    setActiveDecoLayerId(null);
+    setActivePhotoLayerId(null);
+    showToast("현재 페이지를 복사해 다음 슬롯에 추가했습니다.", "success");
+  }, [activatePage, pageActivated, pageIndex, showToast]);
+
   const onOpenRecentProject = useCallback(
     (project: StudioCanvasProjectV1) => {
       // Prefer full lookbook wizard maps so pages 1–N stay distributed (Screen 24 parity).
@@ -1371,6 +1457,7 @@ export default function PrintUnifiedEditor() {
             onOpenRecentProject={onOpenRecentProject}
             onSaveCanvas={() => void saveCanvasToSlotAndGallery()}
             saveCanvasBusy={saveCanvasBusy || exportBusy}
+            onDuplicatePage={duplicateCurrentPageSlide}
             onClearCanvasImage={deleteCurrentPageSlide}
             recentNamespace="screen_008"
           />

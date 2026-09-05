@@ -336,13 +336,32 @@ export function measureLayerContentSize(
   const naturalW = Math.min(maxEdge, Math.max(8, contentW + padX * 2));
   const autoW = Math.max(8, Math.min(maxContentW, contentW + padX * 2));
 
+  // Ink-box height: prefer TextMetrics ascent/descent over lineHeight alone
+  // so Hangul bottoms are never clipped by an undersized dashed box.
+  let inkLinePx = fontSize * lineHeightMul;
+  if (ctx) {
+    ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+    const probe = rawText.replace(/\u200B/g, "").trim().slice(0, 24) || "가Hg";
+    const m = ctx.measureText(probe);
+    const ascent =
+      typeof m.actualBoundingBoxAscent === "number" &&
+      Number.isFinite(m.actualBoundingBoxAscent)
+        ? m.actualBoundingBoxAscent
+        : fontSize * 0.85;
+    const descent =
+      typeof m.actualBoundingBoxDescent === "number" &&
+      Number.isFinite(m.actualBoundingBoxDescent)
+        ? m.actualBoundingBoxDescent
+        : fontSize * 0.28;
+    inkLinePx = Math.max(inkLinePx, ascent + descent + fontSize * 0.06);
+  }
+
   return {
     width: boxWPx > 0 ? boxWPx : ignoreStoredBox ? naturalW : autoW,
-    // Extra CJK slack — Hangul ink often exceeds strict line-box metrics.
     height:
-      Math.max(fontSize, fontSize * lineHeightMul * lineCount) +
+      Math.max(fontSize, inkLinePx * lineCount) +
       padY * 2 +
-      Math.ceil(fontSize * 0.1),
+      Math.ceil(fontSize * 0.18),
   };
 }
 

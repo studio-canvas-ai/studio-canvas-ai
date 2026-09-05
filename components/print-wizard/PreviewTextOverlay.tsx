@@ -394,16 +394,35 @@ export default function PreviewTextOverlay({
   const stageReliable = isReliablePrintStageSize(size.w, size.h);
   const snapPx = Math.max(SNAP_THRESHOLD_PX, Math.min(size.w, size.h) * 0.025);
 
-  // After fonts settle, persist grow-only boxH so dashed selection matches glyphs.
+  // After fonts settle (+ remount), force grow-only boxH until glyphs fit.
   useEffect(() => {
     if (!fontsReady || !stageReliable) return;
     if (pointerActive || dragging || editingId) return;
-    const { layers: fitted, changed } = syncContentLayerBoxHeights(
-      layersRef.current,
-      size.w,
-      size.h
-    );
-    if (changed) onLayersChangeRef.current(fitted);
+
+    let cancelled = false;
+    let passes = 0;
+
+    const runFit = () => {
+      if (cancelled || passes >= 3) return;
+      passes += 1;
+      const { layers: fitted, changed } = syncContentLayerBoxHeights(
+        layersRef.current,
+        size.w,
+        size.h
+      );
+      if (changed) onLayersChangeRef.current(fitted);
+      // Second/third pass after layout paint (fonts + wrap settle).
+      if (passes < 3) {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(runFit);
+        });
+      }
+    };
+
+    runFit();
+    return () => {
+      cancelled = true;
+    };
   }, [
     fontsReady,
     fontsEpoch,
@@ -411,6 +430,7 @@ export default function PreviewTextOverlay({
     size.w,
     size.h,
     layers,
+    pageIndex,
     pointerActive,
     dragging,
     editingId,
