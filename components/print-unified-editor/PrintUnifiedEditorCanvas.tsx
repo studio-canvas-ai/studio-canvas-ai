@@ -315,57 +315,60 @@ export default function PrintUnifiedEditorCanvas({
       </header>
 
       <div className="relative flex min-h-0 flex-1 flex-col rounded-xl border border-slate-200/90 bg-slate-100 p-1.5 shadow-inner sm:gap-2 sm:p-2">
-        {pageActivated && onSaveCanvas ? (
-          <div className="absolute left-3 top-3 z-30">
-            <button
-              type="button"
-              onClick={onSaveCanvas}
-              disabled={
-                exportBusy || generating || saveCanvasBusy || !pageActivated
-              }
-              title="현재 페이지 저장"
-              aria-label="현재 페이지 저장"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 bg-white/95 text-slate-700 shadow-md backdrop-blur-sm transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 disabled:pointer-events-none disabled:opacity-35"
-            >
-              <Save className="h-4 w-4" aria-hidden />
-            </button>
+        {/* Canvas header line — left: +, right: trash (symmetric page controls) */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between px-3 pt-3">
+          <div className="pointer-events-auto flex items-center gap-1.5">
+            {pageActivated && onDuplicatePage ? (
+              <button
+                type="button"
+                onClick={onDuplicatePage}
+                disabled={exportBusy || generating}
+                title="현재 페이지 복사·추가"
+                aria-label="현재 페이지 복사·추가"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 bg-white/95 text-slate-700 shadow-md backdrop-blur-sm transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 disabled:pointer-events-none disabled:opacity-35"
+              >
+                <Plus className="h-4 w-4" aria-hidden strokeWidth={2.5} />
+              </button>
+            ) : null}
+            {pageActivated && onSaveCanvas ? (
+              <button
+                type="button"
+                onClick={onSaveCanvas}
+                disabled={
+                  exportBusy || generating || saveCanvasBusy || !pageActivated
+                }
+                title="현재 페이지 저장"
+                aria-label="현재 페이지 저장"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 bg-white/95 text-slate-700 shadow-md backdrop-blur-sm transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 disabled:pointer-events-none disabled:opacity-35"
+              >
+                <Save className="h-4 w-4" aria-hidden />
+              </button>
+            ) : null}
           </div>
-        ) : null}
-        <div className="absolute right-3 top-3 z-30 flex items-stretch overflow-hidden rounded-lg border border-slate-300/90 bg-white/95 shadow-md backdrop-blur-sm">
-          <button
-            type="button"
-            onClick={() => openTemplateWarehouse()}
-            disabled={exportBusy || generating}
-            title="템플릿 창고"
-            aria-label="템플릿 창고"
-            className="inline-flex h-8 shrink-0 items-center border-r border-slate-200 px-2.5 text-[10px] font-semibold leading-none text-sky-900 transition hover:bg-sky-50 disabled:pointer-events-none disabled:opacity-35"
-          >
-            템플릿 창고
-          </button>
-          {pageActivated && onDuplicatePage ? (
+          <div className="pointer-events-auto flex items-center gap-1.5">
             <button
               type="button"
-              onClick={onDuplicatePage}
+              onClick={() => openTemplateWarehouse()}
               disabled={exportBusy || generating}
-              title="현재 페이지 복사·추가"
-              aria-label="현재 페이지 복사·추가"
-              className="inline-flex h-8 w-8 items-center justify-center border-r border-slate-200 text-slate-700 transition hover:bg-emerald-50 hover:text-emerald-700 disabled:pointer-events-none disabled:opacity-35"
+              title="템플릿 창고"
+              aria-label="템플릿 창고"
+              className="inline-flex h-8 shrink-0 items-center rounded-lg border border-sky-300 bg-sky-50/95 px-2.5 text-[10px] font-semibold leading-none text-sky-900 shadow-md backdrop-blur-sm transition hover:border-sky-400 hover:bg-sky-100 disabled:pointer-events-none disabled:opacity-35"
             >
-              <Plus className="h-4 w-4" aria-hidden strokeWidth={2.5} />
+              템플릿 창고
             </button>
-          ) : null}
-          {pageActivated && onClearCanvasImage ? (
-            <button
-              type="button"
-              onClick={onClearCanvasImage}
-              disabled={exportBusy || generating}
-              title="현재 페이지 삭제"
-              aria-label="현재 페이지 삭제"
-              className="inline-flex h-8 w-8 items-center justify-center text-slate-700 transition hover:bg-red-50 hover:text-red-700 disabled:pointer-events-none disabled:opacity-35"
-            >
-              <Trash2 className="h-4 w-4" aria-hidden />
-            </button>
-          ) : null}
+            {pageActivated && onClearCanvasImage ? (
+              <button
+                type="button"
+                onClick={onClearCanvasImage}
+                disabled={exportBusy || generating}
+                title="현재 페이지 삭제"
+                aria-label="현재 페이지 삭제"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 bg-white/95 text-slate-700 shadow-md backdrop-blur-sm transition hover:border-red-300 hover:bg-red-50 hover:text-red-700 disabled:pointer-events-none disabled:opacity-35"
+              >
+                <Trash2 className="h-4 w-4" aria-hidden />
+              </button>
+            ) : null}
+          </div>
         </div>
         <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
           {pageActivated ? (
