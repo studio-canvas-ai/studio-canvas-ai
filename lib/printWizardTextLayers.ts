@@ -338,8 +338,11 @@ export function measureLayerContentSize(
 
   return {
     width: boxWPx > 0 ? boxWPx : ignoreStoredBox ? naturalW : autoW,
+    // Extra CJK slack — Hangul ink often exceeds strict line-box metrics.
     height:
-      Math.max(fontSize, fontSize * lineHeightMul * lineCount) + padY * 2,
+      Math.max(fontSize, fontSize * lineHeightMul * lineCount) +
+      padY * 2 +
+      Math.ceil(fontSize * 0.1),
   };
 }
 
@@ -371,8 +374,13 @@ export function layerToBox(
     width = Math.max(8, layer.boxW! * stageW);
     const storedHPx =
       layer.boxH && layer.boxH > 0 ? Math.max(8, layer.boxH * stageH) : 0;
-    // Respect the user-resized height exactly (do not force natural glyph height).
-    height = storedHPx > 0 ? storedHPx : natural.height;
+    if (layer.showBox) {
+      // Pure plates: keep authored height.
+      height = storedHPx > 0 ? storedHPx : natural.height;
+    } else {
+      // Grow-only vs stored: never clip Hangul — box hugs measured wrap height.
+      height = Math.max(storedHPx || 0, measured.height);
+    }
   } else if (layer.layoutLocked) {
     width = natural.width;
     height = natural.height;
@@ -402,6 +410,46 @@ export function layerToBox(
   const x = layerAnchorX(layer, stageW, stageH, width) + (layer.offsetX || 0) * stageW;
   const y = posY + (layer.offsetY || 0) * stageH;
   return clampBoxToStage({ x, y, width, height }, stageW, stageH);
+}
+
+/**
+ * Persist grow-only boxH so preview selection chrome and export match glyphs.
+ * Call after fonts settle / Magic Layout inject.
+ */
+export function syncContentLayerBoxHeights(
+  layers: TextLayer[],
+  stageW: number,
+  stageH: number
+): { layers: TextLayer[]; changed: boolean } {
+  if (!layers.length || stageW < 8 || stageH < 8) {
+    return { layers, changed: false };
+  }
+  let changed = false;
+  const next = layers.map((layer) => {
+    if (layer.showBox) return layer;
+    const plain = String(layer.text || "")
+      .replace(/\u200B/g, "")
+      .trim();
+    if (!plain) return layer;
+    const measured = measureLayerContentSize(layer, stageW, stageH);
+    const storedH =
+      layer.boxH && layer.boxH > 0 ? layer.boxH * stageH : 0;
+    if (measured.height <= storedH + 0.75) return layer;
+    changed = true;
+    const widthPx =
+      layer.boxW && layer.boxW > 0
+        ? Math.max(8, layer.boxW * stageW)
+        : measured.width;
+    return {
+      ...layer,
+      layoutLocked: true,
+      boxManual: true,
+      boxW: widthPx / stageW,
+      boxH: measured.height / stageH,
+      maxWidth: widthPx / stageW,
+    };
+  });
+  return { layers: changed ? next : layers, changed };
 }
 
 /** Persist typography-synced boxW/boxH/manualX after slider changes (expand + shrink). */

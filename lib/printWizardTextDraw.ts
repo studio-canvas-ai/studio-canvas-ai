@@ -335,8 +335,10 @@ export function drawPrintLayerInBox(
   ctx.font = `${fontWeight} ${fontSize}px ${fontForText(fontPreset, paintableText)}`;
   const lines = wrapMultiline(ctx, paintableText, innerW, letterSpacing);
   const blockH = lines.length * lineHeightPx;
+  // Top-align when the box is shorter than the glyph block (avoids centered clip).
+  // Prefer growing the box in layerToBox; this is a paint-time safety net.
   let y = padY;
-  if (align === "center") {
+  if (align === "center" && boxH >= blockH + padY * 2 - 0.5) {
     y = Math.max(padY, (boxH - blockH) / 2);
   }
 

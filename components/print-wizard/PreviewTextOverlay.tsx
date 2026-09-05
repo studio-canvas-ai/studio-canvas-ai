@@ -27,10 +27,12 @@ import {
   isReliablePrintStageSize,
   layerToBox,
   layerZone,
+  measureLayerContentSize,
   minReadableDisplayFontPx,
   PAGE_ZONE_LABELS,
   removeTextLayer,
   stripLayerPlaceholderPrefix,
+  syncContentLayerBoxHeights,
 } from "@/lib/printWizardTextLayers";
 import { drawPrintLayerInBox, layerEditTextPadding } from "@/lib/printWizardTextDraw";
 import { colorPresetFill, fontForText, type TextLayer } from "@/lib/thumbnailStyles";
@@ -392,6 +394,28 @@ export default function PreviewTextOverlay({
   const stageReliable = isReliablePrintStageSize(size.w, size.h);
   const snapPx = Math.max(SNAP_THRESHOLD_PX, Math.min(size.w, size.h) * 0.025);
 
+  // After fonts settle, persist grow-only boxH so dashed selection matches glyphs.
+  useEffect(() => {
+    if (!fontsReady || !stageReliable) return;
+    if (pointerActive || dragging || editingId) return;
+    const { layers: fitted, changed } = syncContentLayerBoxHeights(
+      layersRef.current,
+      size.w,
+      size.h
+    );
+    if (changed) onLayersChangeRef.current(fitted);
+  }, [
+    fontsReady,
+    fontsEpoch,
+    stageReliable,
+    size.w,
+    size.h,
+    layers,
+    pointerActive,
+    dragging,
+    editingId,
+  ]);
+
   const getBoxes = useCallback(() => {
     return layersRef.current.map((layer) => ({
       id: layer.id,
@@ -738,11 +762,19 @@ export default function PreviewTextOverlay({
         const minW = isInfoCol
           ? minBox
           : Math.max(minBox, size.w * 0.4);
+        const contentFit = layer.showBox
+          ? { height: box.height }
+          : measureLayerContentSize(layer, size.w, size.h);
         const safeBox = {
           x: box.x,
           y: box.y,
           width: Math.max(minW, box.width),
-          height: Math.max(minBox * 0.45, box.height),
+          // Always ≥ measured glyph block (never minBox*0.45 sesame height).
+          height: Math.max(
+            box.height,
+            contentFit.height,
+            layer.showBox ? 8 : fontSize * 1.35 + 12
+          ),
         };
         // If width was expanded, keep centered / left origin stable.
         if (safeBox.width > box.width && layer.align === "center") {
@@ -775,7 +807,7 @@ export default function PreviewTextOverlay({
           <div
             key={layer.id}
             data-text-layer={layer.id}
-            className={`${layerPointerEvents} absolute z-[5] touch-none select-none ${
+            className={`${layerPointerEvents} absolute z-[5] touch-none select-none overflow-visible ${
               interactive && !isEditing
                 ? "cursor-grab active:cursor-grabbing"
                 : ""
@@ -785,6 +817,7 @@ export default function PreviewTextOverlay({
               top: safeBox.y,
               width: safeBox.width,
               height: safeBox.height,
+              overflow: "visible",
             }}
             onMouseEnter={() => setHoverId(layer.id)}
             onMouseLeave={() =>
@@ -851,7 +884,7 @@ export default function PreviewTextOverlay({
             ) : null}
 
             <div
-              className={`relative h-full w-full rounded-[2px] ${
+              className={`relative h-full w-full overflow-visible rounded-[2px] ${
                 showOutline
                   ? showSelectionChrome
                     ? "bg-violet-500/5 shadow-[0_0_0_1px_#818cf8]"

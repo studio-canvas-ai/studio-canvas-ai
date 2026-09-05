@@ -24,6 +24,7 @@ import {
   type BackgroundTone,
 } from "@/lib/ai/textContrastSafety";
 import { expandInfoGridSeeds } from "@/lib/ai/layoutInfoGrid";
+import { syncContentLayerBoxHeights } from "@/lib/printWizardTextLayers";
 import {
   cappedPlateOpacity,
   expandPlatesUnderContent,
@@ -1487,9 +1488,21 @@ export function mapLayoutPlanToCanvasLayers(
     stageH,
     sceneTone
   );
+  const heightSynced = syncContentLayerBoxHeights(
+    rematched,
+    stageW,
+    stageH
+  ).layers;
+  // Re-pack once heights grew so dashed boxes no longer overlap.
+  const finalLayers = resolveOverlappingTextLayers(
+    heightSynced,
+    stageW,
+    stageH,
+    16
+  );
 
   return {
-    textLayers: rematched,
+    textLayers: finalLayers,
     decoLayers,
   };
 }
