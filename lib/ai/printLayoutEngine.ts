@@ -22,6 +22,11 @@ import {
   resolveContrastTextAppearance,
 } from "@/lib/ai/textContrastSafety";
 import { expandInfoGridSeeds } from "@/lib/ai/layoutInfoGrid";
+import {
+  cappedPlateOpacity,
+  isObscuringDarkOverlay,
+  resolveOverlappingTextLayers,
+} from "@/lib/ai/layoutRenderPolish";
 
 export type PrintLayoutElementText = {
   id?: string;
@@ -201,7 +206,9 @@ DYNAMIC LAYOUT:
 3. Prefer 12–28 elements (min 6). List pure plates/shapes before overlapping text in the array.
 4. Korean copy finished and purpose-fit. High-contrast colors; rgba plates OK.
 5. bg_prompt English only with negative space matching text clusters.
-6. STRICT JSON only.`
+6. STRICT JSON only.
+7. SPACING: Stack text with ≥16px vertical gaps. Never overlap text boxes.
+8. Never place a tall dark vertical panel or wide dark horizontal band across the photo center — keep backdrops small (badges/ribbons) or soft (opacity ≤0.3).`
 
 function clamp01(n: number): number {
   if (!Number.isFinite(n)) return 0;
@@ -325,11 +332,12 @@ export function minDesignFontForRole(role: LayoutTextRole, short: number): numbe
     case "title":
       return Math.max(48, Math.round(short * 0.055));
     case "body":
+      // Canva-like body floor — never below 24 design-px.
       return Math.max(32, Math.round(short * 0.032));
     case "info":
       return Math.max(28, Math.round(short * 0.028));
     case "caption":
-      return Math.max(22, Math.round(short * 0.022));
+      return Math.max(24, Math.round(short * 0.024));
     default:
       return 28;
   }
@@ -816,7 +824,7 @@ function makePlateLayer(opts: {
       ? parseRgba(opts.stroke).hex
       : undefined,
     boxColor: fill.hex,
-    boxOpacity: fill.opacity,
+    boxOpacity: cappedPlateOpacity(opts.fill, fill.opacity),
     boxRadius: radiusFrac,
     color: "white",
     fontSize: 12,
@@ -1068,23 +1076,26 @@ export function mapLayoutPlanToCanvasLayers(
   );
 
   // Pure backdrop plates first (ZWSP showBox only — no copy).
-  plates.forEach((plate) => {
-    textLayers.push(
-      makePlateLayer({
-        id: plate.id,
-        x: plate.x / stageW,
-        y: plate.y / stageH,
-        w: plate.w / stageW,
-        h: plate.h / stageH,
-        fill: plate.fill,
-        stroke: plate.stroke,
-        cornerRadiusPx: plate.cornerRadius,
-        circle: plate.circle,
-        stageW,
-        stageH,
-      })
-    );
-  });
+  // Drop dark center columns / mid bars that smother the photo (Canva open space).
+  plates
+    .filter((plate) => !isObscuringDarkOverlay(plate, stageW, stageH))
+    .forEach((plate) => {
+      textLayers.push(
+        makePlateLayer({
+          id: plate.id,
+          x: plate.x / stageW,
+          y: plate.y / stageH,
+          w: plate.w / stageW,
+          h: plate.h / stageH,
+          fill: plate.fill,
+          stroke: plate.stroke,
+          cornerRadiusPx: plate.cornerRadius,
+          circle: plate.circle,
+          stageW,
+          stageH,
+        })
+      );
+    });
 
   // Lines stay as thin plates.
   for (const el of lines) {
@@ -1304,22 +1315,33 @@ export function mapLayoutPlanToCanvasLayers(
   for (const el of shapes) {
     const shapeType = parseDecoShapeType(el.shapeType);
     if (!shapeType) continue;
+    const sx = toStagePixels(el.x, stageW, usePixels);
+    const sy = toStagePixels(el.y, stageH, usePixels);
+    const sw = Math.max(8, toStagePixels(el.width, stageW, usePixels));
+    const sh = Math.max(
+      shapeType === "line" ? 4 : 8,
+      toStagePixels(el.height, stageH, usePixels)
+    );
+    if (
+      (shapeType === "rect" || shapeType === "frame" || shapeType === "pill") &&
+      isObscuringDarkOverlay(
+        { x: sx, y: sy, w: sw, h: sh, fill: el.fill },
+        stageW,
+        stageH
+      )
+    ) {
+      continue;
+    }
     decoLayers.push(
       createShapeDecoLayer({
         id: el.id || newLayerId("shape", String(decoStack++)),
         shapeType,
         stageW,
         stageH,
-        x: toStagePixels(el.x, stageW, usePixels),
-        y: toStagePixels(el.y, stageH, usePixels),
-        width: Math.max(
-          8,
-          toStagePixels(el.width, stageW, usePixels)
-        ),
-        height: Math.max(
-          shapeType === "line" ? 4 : 8,
-          toStagePixels(el.height, stageH, usePixels)
-        ),
+        x: sx,
+        y: sy,
+        width: sw,
+        height: sh,
         fill: el.fill,
         stroke: el.stroke,
         strokeWidth: el.strokeWidth,
@@ -1328,7 +1350,10 @@ export function mapLayoutPlanToCanvasLayers(
     );
   }
 
-  return { textLayers, decoLayers };
+  return {
+    textLayers: resolveOverlappingTextLayers(textLayers, stageW, stageH, 16),
+    decoLayers,
+  };
 }
 
 /** @deprecated Use mapLayoutPlanToCanvasLayers — kept for callers expecting TextLayer[] only. */
@@ -1368,5 +1393,8 @@ export function buildLayoutUserPrompt(req: GenerateLayoutRequest): string {
     `Prefer 2–6 decorative shapes (ribbon/frame/pill/stamp/line) + 0–4 unique theme icons.`,
     `CONTRAST: Text on a dark box → light fill (#FFF / ivory / pastel yellow). Text on a light box → dark fill (#1A1A1A / brown / navy). Never dark-on-dark.`,
     `If using light type on complex/light photo, add shadowColor+shadowBlur or a translucent backdrop rect.`,
+    `SPACING: ≥16px vertical gap between stacked text boxes; never overlap.`,
+    `No tall dark center column or wide dark mid-band over the photo — keep plates small or soft (opacity ≤0.3).`,
+    `Body/info fontSize ≥24px on this canvas; size via fontSize only (never rely on scale).`,
   ].join("\n");
 }

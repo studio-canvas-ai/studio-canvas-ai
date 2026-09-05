@@ -67,7 +67,7 @@ export function sanitizeStoredDesignFontSize(
   const raw = typeof fontSize === "number" && fontSize > 0 ? fontSize : 48;
   const asPx =
     raw <= 1.5 ? raw * PRINT_TEXT_REF_WIDTH : raw;
-  const floor = pos === "top" ? 44 : pos === "bottom" ? 28 : 32;
+  const floor = pos === "top" ? 44 : 24;
   if (asPx < 14) return Math.max(floor, 32);
   return Math.max(floor, Math.round(asPx));
 }

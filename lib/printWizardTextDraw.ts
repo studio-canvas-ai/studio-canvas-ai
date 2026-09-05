@@ -21,7 +21,7 @@ import {
   resolveDrawTextShadow,
 } from "@/lib/ai/textContrastSafety";
 
-const MIN_DISPLAY_FONT_PX = 11;
+const MIN_DISPLAY_FONT_PX = 12;
 
 const PLACEHOLDER_PREFIX_RE = /^\s*(상단문구:|중간문구:|하단문구:)\s*/;
 
@@ -74,7 +74,7 @@ export function layerEditTextPadding(
   const safeDesign =
     designFs < 14
       ? 32
-      : Math.max(layer.pos === "top" ? 40 : 28, designFs);
+      : Math.max(layer.pos === "top" ? 40 : 24, designFs);
   const fontSize = Math.max(
     MIN_DISPLAY_FONT_PX,
     Math.round(safeDesign * Math.max(0.001, scale))
@@ -194,7 +194,7 @@ export function drawPrintLayerInBox(
   const safeDesign =
     designFs < 14
       ? 32
-      : Math.max(layer.pos === "top" ? 40 : 28, designFs);
+      : Math.max(layer.pos === "top" ? 40 : 24, designFs);
   const fontSize = Math.max(
     MIN_DISPLAY_FONT_PX,
     Math.round(safeDesign * Math.max(0.001, scale))
