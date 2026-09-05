@@ -26,6 +26,7 @@ import {
   cappedPlateOpacity,
   isObscuringDarkOverlay,
   resolveOverlappingTextLayers,
+  snapTextLayersToSectionBands,
 } from "@/lib/ai/layoutRenderPolish";
 
 export type PrintLayoutElementText = {
@@ -200,15 +201,28 @@ CONTRAST / READABILITY (absolute — never bury type in the photo):
 4. Contrast ratio target ≥ 4.5 between text fill and its immediate box. Optional stroke/strokeWidth (1–2px) allowed.
 5. Text fill is an independent editable property — choose a readable default; users may recolor later in the editor.
 
+SECTION GRID (Canva premium — mandatory):
+1. Divide the canvas height into THREE bands and place copy only inside its band:
+   - TOP (~0–32%): main title (+ optional short subtitle). Full-bleed title preferred.
+   - MIDDLE (~32–68%): info block (일시/장소/입장 grid, key facts). Leave open negative space around it.
+   - BOTTOM (~68–100%): guide / CTA / fine-print lines.
+2. Never stack unrelated copy into the same band without ≥16px vertical gaps.
+
+TYPOGRAPHY HIERARCHY (pixel fontSize on THIS canvas — absolute):
+1. Main title: fontSize ≥ 48, fontWeight bold/800, high visual weight.
+2. Subtitle: fontSize 28–36 (never below 28).
+3. Body / description / info values: fontSize ≥ 20. NEVER emit fontSize ≤ 16 (no sesame type).
+4. Size via fontSize only — never rely on scale transforms.
+
 DYNAMIC LAYOUT:
 1. Do NOT hardcode counts. Infer structure from 용도 + 분야 + prompt.
-2. ATOMIZE: every editable string is its own text node (title, "축제안내", each info label, each info value, captions). Users must move/delete each text alone.
+2. ATOMIZE: every editable string is its own text node (title, subtitle, each info label, each info value, captions). Users must move/delete each text alone.
 3. Prefer 12–28 elements (min 6). List pure plates/shapes before overlapping text in the array.
 4. Korean copy finished and purpose-fit. High-contrast colors; rgba plates OK.
 5. bg_prompt English only with negative space matching text clusters.
 6. STRICT JSON only.
 7. SPACING: Stack text with ≥16px vertical gaps. Never overlap text boxes.
-8. Never place a tall dark vertical panel or wide dark horizontal band across the photo center — keep backdrops small (badges/ribbons) or soft (opacity ≤0.3).`
+8. OVERLAY BAN: Never invent a tall dark vertical center strip or a wide semi-transparent dark rectangle that covers the photo mid-area. Decorative plates must be small (badge/ribbon/stamp) or soft (opacity ≤ 0.28).`
 
 function clamp01(n: number): number {
   if (!Number.isFinite(n)) return 0;
@@ -289,7 +303,7 @@ export function toStagePixels(
   return coerceLayoutLength(value, axisSize, usePixels);
 }
 
-export type LayoutTextRole = "title" | "body" | "info" | "caption";
+export type LayoutTextRole = "title" | "subtitle" | "body" | "info" | "caption";
 
 export function inferLayoutTextRole(
   text: string,
@@ -311,15 +325,30 @@ export function inferLayoutTextRole(
   ) {
     return "info";
   }
+  if (
+    idLower.includes("subtitle") ||
+    idLower.includes("sub-title") ||
+    idLower.includes("부제")
+  ) {
+    return "subtitle";
+  }
   const short = Math.min(stageW, stageH);
   const midY = y + h / 2;
   if (
     midY < stageH * 0.32 &&
-    (fontSizePx >= short * 0.04 || w >= stageW * 0.55 || text.length <= 28)
+    (fontSizePx >= short * 0.045 || w >= stageW * 0.55 || text.length <= 28)
   ) {
     return "title";
   }
-  if (fontSizePx > 0 && fontSizePx < short * 0.022 && midY > stageH * 0.55) {
+  if (
+    midY < stageH * 0.42 &&
+    text.length <= 48 &&
+    fontSizePx >= short * 0.024 &&
+    fontSizePx < short * 0.048
+  ) {
+    return "subtitle";
+  }
+  if (midY > stageH * 0.68 || (fontSizePx > 0 && fontSizePx < short * 0.022)) {
     return "caption";
   }
   if (midY > stageH * 0.55 || text.length > 40) return "body";
@@ -331,15 +360,16 @@ export function minDesignFontForRole(role: LayoutTextRole, short: number): numbe
   switch (role) {
     case "title":
       return Math.max(48, Math.round(short * 0.055));
+    case "subtitle":
+      return Math.max(28, Math.min(36, Math.round(short * 0.032)));
     case "body":
-      // Canva-like body floor — never below 24 design-px.
-      return Math.max(32, Math.round(short * 0.032));
+      return Math.max(20, Math.round(short * 0.022));
     case "info":
-      return Math.max(28, Math.round(short * 0.028));
+      return Math.max(20, Math.round(short * 0.022));
     case "caption":
-      return Math.max(24, Math.round(short * 0.024));
+      return Math.max(20, Math.round(short * 0.02));
     default:
-      return 28;
+      return 20;
   }
 }
 
@@ -353,12 +383,15 @@ export function sanitizeLayoutFontSize(
     typeof raw === "number" && raw > 0
       ? coerceLayoutLength(raw, short, usePixelsHint)
       : Math.round(short * 0.04);
-  // Sub-readable after coerce (or leftover fraction mishap).
-  if (px < 14) {
-    px = Math.max(px, minDesignFontForRole(role, short));
+  // Absolute ban on sesame type (≤16), then role floors.
+  if (px <= 16) {
+    px = minDesignFontForRole(role, short);
   }
   const floor = minDesignFontForRole(role, short);
-  const ceil = Math.round(short * 0.14);
+  const ceil =
+    role === "subtitle"
+      ? Math.max(floor, 36)
+      : Math.round(short * 0.14);
   return Math.max(floor, Math.min(ceil, Math.round(px)));
 }
 
@@ -371,13 +404,13 @@ export function sanitizeTextBoxWidth(
 ): number {
   const w = Math.max(8, width);
   if (isInfoLabel) {
-    return Math.max(64, Math.min(w, stageW * 0.28));
+    return Math.max(72, Math.min(w, stageW * 0.28));
   }
   if (role === "info") {
-    return Math.max(stageW * 0.28, w);
+    return Math.max(stageW * 0.4, w);
   }
-  // Title / body / caption: at least 30% canvas width.
-  return Math.max(stageW * 0.3, w);
+  // Title / subtitle / body / caption: ≥40% canvas width.
+  return Math.max(stageW * 0.4, w);
 }
 
 type PixelRect = {
@@ -1350,8 +1383,15 @@ export function mapLayoutPlanToCanvasLayers(
     );
   }
 
+  const polished = resolveOverlappingTextLayers(
+    snapTextLayersToSectionBands(textLayers, stageW, stageH),
+    stageW,
+    stageH,
+    16
+  );
+
   return {
-    textLayers: resolveOverlappingTextLayers(textLayers, stageW, stageH, 16),
+    textLayers: polished,
     decoLayers,
   };
 }
@@ -1394,7 +1434,9 @@ export function buildLayoutUserPrompt(req: GenerateLayoutRequest): string {
     `CONTRAST: Text on a dark box → light fill (#FFF / ivory / pastel yellow). Text on a light box → dark fill (#1A1A1A / brown / navy). Never dark-on-dark.`,
     `If using light type on complex/light photo, add shadowColor+shadowBlur or a translucent backdrop rect.`,
     `SPACING: ≥16px vertical gap between stacked text boxes; never overlap.`,
-    `No tall dark center column or wide dark mid-band over the photo — keep plates small or soft (opacity ≤0.3).`,
-    `Body/info fontSize ≥24px on this canvas; size via fontSize only (never rely on scale).`,
+    `SECTION BANDS: top=title/subtitle, middle=info grid, bottom=guide/CTA.`,
+    `TYPE SCALE: title≥48, subtitle 28–36, body/info≥20 — never fontSize≤16.`,
+    `No tall dark center column or wide dark mid-band over the photo — keep plates small or soft (opacity ≤0.28).`,
+    `Text box width ≥40% of canvas (except short info labels). Size via fontSize only (scale=1).`,
   ].join("\n");
 }

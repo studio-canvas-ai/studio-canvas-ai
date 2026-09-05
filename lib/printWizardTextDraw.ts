@@ -72,9 +72,9 @@ export function layerEditTextPadding(
   const designFs =
     rawDesign > 0 && rawDesign <= 1.5 ? rawDesign * 1080 : rawDesign;
   const safeDesign =
-    designFs < 14
-      ? 32
-      : Math.max(layer.pos === "top" ? 40 : 24, designFs);
+    designFs <= 16
+      ? 20
+      : Math.max(layer.pos === "top" ? 48 : 20, designFs);
   const fontSize = Math.max(
     MIN_DISPLAY_FONT_PX,
     Math.round(safeDesign * Math.max(0.001, scale))
@@ -192,9 +192,9 @@ export function drawPrintLayerInBox(
   const designFs =
     rawDesign > 0 && rawDesign <= 1.5 ? rawDesign * 1080 : rawDesign;
   const safeDesign =
-    designFs < 14
-      ? 32
-      : Math.max(layer.pos === "top" ? 40 : 24, designFs);
+    designFs <= 16
+      ? 20
+      : Math.max(layer.pos === "top" ? 48 : 20, designFs);
   const fontSize = Math.max(
     MIN_DISPLAY_FONT_PX,
     Math.round(safeDesign * Math.max(0.001, scale))

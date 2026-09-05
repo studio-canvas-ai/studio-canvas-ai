@@ -126,7 +126,7 @@ export function expandInfoGridSeeds(
     const gap = Math.max(16, blockW * 0.04);
     const labelX = blockX + pad;
     const valueX = labelX + labelColW + gap;
-    const valueW = Math.max(stageW * 0.3, blockX + blockW - pad - valueX);
+    const valueW = Math.max(stageW * 0.4, blockX + blockW - pad - valueX);
     const fontSize = Math.max(28, seed.fontSize);
     const rowH = Math.max(fontSize * 1.35, ROW_GAP_PX * 0.85);
     const startY =

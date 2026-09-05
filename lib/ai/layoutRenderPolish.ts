@@ -36,7 +36,7 @@ export function resolveOverlappingTextLayers(
     if (!isContentTextLayer(layer)) return;
     const x = (layer.manualX ?? 0) * stageW;
     const y = (layer.manualY ?? 0) * stageH;
-    const w = Math.max(8, (layer.boxW ?? 0.3) * stageW);
+    const w = Math.max(8, (layer.boxW ?? 0.4) * stageW);
     const h = Math.max(8, (layer.boxH ?? 0.04) * stageH);
     items.push({ index, x, y, w, h });
   });
@@ -150,5 +150,64 @@ export function cappedPlateOpacity(
   const parsed = parseFillColor(fill);
   if (!parsed) return Math.min(1, Math.max(0, opacity));
   if (hexLuminance(parsed.hex) > 0.45) return Math.min(1, Math.max(0, opacity));
-  return Math.min(0.32, Math.max(0, opacity));
+  return Math.min(0.28, Math.max(0, opacity));
+}
+
+/**
+ * Soft-snap content text into Canva bands (top / mid / bottom) without
+ * collapsing side-by-side info columns.
+ */
+export function snapTextLayersToSectionBands(
+  layers: TextLayer[],
+  stageW: number,
+  stageH: number
+): TextLayer[] {
+  if (!layers.length || stageH < 8) return layers;
+  const topEnd = stageH * 0.32;
+  const midEnd = stageH * 0.68;
+  const next = layers.map((layer) => ({ ...layer }));
+
+  next.forEach((layer) => {
+    if (!isContentTextLayer(layer)) return;
+    const y = (layer.manualY ?? 0) * stageH;
+    const h = Math.max(8, (layer.boxH ?? 0.04) * stageH);
+    const mid = y + h / 2;
+    const fs = layer.fontSize || 24;
+    const plain = plainText(layer);
+    const looksTitle =
+      fs >= 44 ||
+      mid < topEnd ||
+      (plain.length <= 36 && mid < stageH * 0.4 && fs >= 36);
+    const looksBottom =
+      mid > midEnd ||
+      /guide|cta|caption|안내|문의|티켓/.test(layer.id || "");
+    const looksInfo =
+      !looksTitle &&
+      !looksBottom &&
+      (/info|label|value|일시|장소|입장/.test(layer.id || "") ||
+        (mid >= topEnd && mid <= midEnd));
+    let bandTop = 0;
+    let bandBottom = stageH;
+    if (looksTitle) {
+      bandTop = stageH * 0.04;
+      bandBottom = topEnd;
+    } else if (looksBottom) {
+      bandTop = midEnd + 8;
+      bandBottom = stageH * 0.96;
+    } else if (looksInfo) {
+      bandTop = topEnd + 8;
+      bandBottom = midEnd;
+    } else {
+      bandTop = midEnd + 8;
+      bandBottom = stageH * 0.96;
+    }
+    let ny = y;
+    if (ny < bandTop) ny = bandTop;
+    if (ny + h > bandBottom) ny = Math.max(bandTop, bandBottom - h);
+    layer.manualY = ny / stageH;
+    layer.boxManual = true;
+    layer.layoutLocked = true;
+    void stageW;
+  });
+  return next;
 }

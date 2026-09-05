@@ -125,16 +125,24 @@ function LayerTextCanvas({
 
     const paint = () => {
       if (cancelled) return;
+      // Always paint at device pixels (scale 1:1 CSS → bitmap via DPR).
+      // Never bake CSS zoom into fontSize — ancestor transform handles view zoom.
       const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
-      canvas.width = Math.max(1, Math.round(width * dpr));
-      canvas.height = Math.max(1, Math.round(height * dpr));
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${height}px`;
+      const cssW = Math.max(1, Math.round(width));
+      const cssH = Math.max(1, Math.round(height));
+      canvas.width = Math.max(1, Math.round(cssW * dpr));
+      canvas.height = Math.max(1, Math.round(cssH * dpr));
+      canvas.style.width = `${cssW}px`;
+      canvas.style.height = `${cssH}px`;
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, width, height);
-      drawPrintLayerInBox(ctx, layer, width, height, scale);
+      ctx.imageSmoothingEnabled = true;
+      if ("imageSmoothingQuality" in ctx) {
+        ctx.imageSmoothingQuality = "high";
+      }
+      ctx.clearRect(0, 0, cssW, cssH);
+      drawPrintLayerInBox(ctx, layer, cssW, cssH, scale);
     };
 
     const run = async () => {
@@ -726,7 +734,7 @@ export default function PreviewTextOverlay({
         );
         const minW = isNarrowLabel
           ? minBox
-          : Math.max(minBox, size.w * 0.3);
+          : Math.max(minBox, size.w * 0.4);
         const safeBox = {
           x: box.x,
           y: box.y,
