@@ -360,3 +360,64 @@ export function drawPrintLayerInBox(
 
   ctx.restore();
 }
+
+/**
+ * Measure wrapped content height for a text layer at a given CSS box width.
+ * Used by Magic Layout fitting so boxH matches real CJK wrap (not Gemini guess).
+ */
+export function measurePrintLayerContentHeightPx(
+  layer: TextLayer,
+  boxW: number,
+  scale: number
+): number {
+  const text = displayTextForLayer(layer).replace(/\u200B/g, "").trim();
+  if (!text || boxW < 4) {
+    return Math.max(8, (layer.boxH ?? 0.04) * 100);
+  }
+
+  const rawDesign = layer.fontSize || 48;
+  const designFs =
+    rawDesign > 0 && rawDesign <= 1.5 ? rawDesign * 1080 : rawDesign;
+  const safeDesign =
+    designFs <= 16
+      ? 20
+      : Math.max(layer.pos === "top" ? 48 : 20, designFs);
+  const fontSize = Math.max(
+    MIN_DISPLAY_FONT_PX,
+    Math.round(safeDesign * Math.max(0.001, scale))
+  );
+  const fontWeight = layer.fontWeight ?? 700;
+  const fontPreset = layer.fontPreset || "pretendard";
+  const lineHeightMul = layer.lineHeight ?? 1.25;
+  const lineHeightPx = fontSize * lineHeightMul;
+  const { padX, padY } = layerGlyphPad(fontSize);
+  const letterSpacing =
+    formFieldFromLayerId(layer.id) === "date" ||
+    formFieldFromLayerId(layer.id) === "programs"
+      ? 0
+      : (layer.letterSpacing ?? 0) * Math.max(0.001, scale);
+  const innerW = Math.max(8, boxW - padX * 2);
+
+  let lineCount = Math.max(1, text.split("\n").length);
+  if (typeof document !== "undefined") {
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.font = `${fontWeight} ${fontSize}px ${fontForText(fontPreset, text)}`;
+      lineCount = Math.max(1, wrapMultiline(ctx, text, innerW, letterSpacing).length);
+    }
+  } else {
+    // SSR / no canvas: rough CJK estimate (~0.95em per glyph).
+    const avgGlyph = fontSize * 0.95;
+    const perLine = Math.max(1, Math.floor(innerW / avgGlyph));
+    lineCount = Math.max(
+      1,
+      text.split("\n").reduce((sum, para) => {
+        const len = Math.max(1, [...para].length);
+        return sum + Math.ceil(len / perLine);
+      }, 0)
+    );
+  }
+
+  return Math.max(fontSize + padY * 2, lineCount * lineHeightPx + padY * 2);
+}

@@ -213,7 +213,7 @@ export function resolveContrastTextAppearance(opts: {
 
   const backdropUsable =
     Boolean(opts.localBackdropHex) &&
-    (opts.localBackdropOpacity == null || opts.localBackdropOpacity >= 0.35);
+    (opts.localBackdropOpacity == null || opts.localBackdropOpacity >= 0.22);
 
   let color: string;
   if (backdropUsable && opts.localBackdropHex) {

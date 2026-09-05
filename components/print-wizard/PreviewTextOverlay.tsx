@@ -728,11 +728,14 @@ export default function PreviewTextOverlay({
           /^(일시|장소|입장|시간|날짜|위치|요금|비용|대상|주최|문의)/.test(
             plain
           );
+        const isInfoCol =
+          /info|label|value|일시|장소|입장/.test(layer.id || "") ||
+          isNarrowLabel;
         const minBox = Math.max(
           24,
           minReadableDisplayFontPx(size.w, size.h) * 2
         );
-        const minW = isNarrowLabel
+        const minW = isInfoCol
           ? minBox
           : Math.max(minBox, size.w * 0.4);
         const safeBox = {

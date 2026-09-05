@@ -18,13 +18,17 @@ import { isEmojiGlyph, normalizeLucideIconName } from "@/lib/printWizardLucide";
 import type { PrintDecoLayer } from "@/lib/printWizardTypes";
 import {
   inferBackgroundTone,
+  isLightFillHex,
   parseFillColor,
   resolveContrastTextAppearance,
+  type BackgroundTone,
 } from "@/lib/ai/textContrastSafety";
 import { expandInfoGridSeeds } from "@/lib/ai/layoutInfoGrid";
 import {
   cappedPlateOpacity,
+  expandPlatesUnderContent,
   isObscuringDarkOverlay,
+  refitContentTextBoxes,
   resolveOverlappingTextLayers,
   snapTextLayersToSectionBands,
 } from "@/lib/ai/layoutRenderPolish";
@@ -407,7 +411,8 @@ export function sanitizeTextBoxWidth(
     return Math.max(72, Math.min(w, stageW * 0.28));
   }
   if (role === "info") {
-    return Math.max(stageW * 0.4, w);
+    // Keep 2-column grids: do not force 40% (that collapses label|value side-by-side).
+    return Math.max(stageW * 0.18, Math.min(w, stageW * 0.58));
   }
   // Title / subtitle / body / caption: ≥40% canvas width.
   return Math.max(stageW * 0.4, w);
@@ -864,6 +869,93 @@ function makePlateLayer(opts: {
     fontWeight: 400,
     align: "center",
     fontPreset: "pretendard",
+  });
+}
+
+/**
+ * After Y polish, re-apply box-local contrast so text that sits on a light
+ * panel never stays white/ghosted.
+ */
+function rematchContentContrastOnPlates(
+  layers: TextLayer[],
+  stageW: number,
+  stageH: number,
+  sceneTone: BackgroundTone
+): TextLayer[] {
+  const plates = layers
+    .filter((l) => l.showBox)
+    .map((l) => ({
+      x: (l.manualX ?? 0) * stageW,
+      y: (l.manualY ?? 0) * stageH,
+      w: Math.max(8, (l.boxW ?? 0.2) * stageW),
+      h: Math.max(8, (l.boxH ?? 0.1) * stageH),
+      hex: l.boxColor || "#FFFFFF",
+      opacity: Math.max(0, Math.min(1, l.boxOpacity ?? 0.8)),
+    }));
+
+  return layers.map((layer) => {
+    if (layer.showBox) return layer;
+    const plain = String(layer.text || "")
+      .replace(/\u200B/g, "")
+      .trim();
+    if (!plain) return layer;
+
+    const cx = ((layer.manualX ?? 0) + (layer.boxW ?? 0.2) / 2) * stageW;
+    const cy = ((layer.manualY ?? 0) + (layer.boxH ?? 0.04) / 2) * stageH;
+    let best: (typeof plates)[number] | null = null;
+    let bestArea = Number.POSITIVE_INFINITY;
+    for (const p of plates) {
+      if (cx < p.x || cx > p.x + p.w || cy < p.y || cy > p.y + p.h) continue;
+      if (p.opacity < 0.22) continue;
+      const area = p.w * p.h;
+      if (area < bestArea) {
+        bestArea = area;
+        best = p;
+      }
+    }
+
+    const appearance = resolveContrastTextAppearance({
+      fill:
+        typeof layer.color === "string" && layer.color.startsWith("#")
+          ? layer.color
+          : layer.color === "white"
+            ? "#FFFFFF"
+            : undefined,
+      sceneTone,
+      localBackdropHex: best?.hex,
+      localBackdropOpacity: best?.opacity,
+      shadowColor: layer.textShadowColor,
+      shadowBlur: layer.textShadowBlur,
+      shadowOffsetX: layer.textShadowOffsetX,
+      shadowOffsetY: layer.textShadowOffsetY,
+      stroke: layer.textStroke,
+      strokeWidth: layer.textStrokeWidth,
+    });
+
+    // Extra hard rule: light opaque panel → never keep light ink.
+    let color = appearance.color as TextLayer["color"];
+    if (best && isLightFillHex(best.hex) && best.opacity >= 0.5) {
+      const fillStr =
+        color === "white"
+          ? "#FFFFFF"
+          : typeof color === "string"
+            ? color
+            : "#FFFFFF";
+      if (isLightFillHex(fillStr)) {
+        color = "#1A1A1A" as TextLayer["color"];
+      }
+    }
+
+    return {
+      ...layer,
+      color,
+      textShadowColor: appearance.textShadowColor,
+      textShadowBlur: appearance.textShadowBlur,
+      textShadowOffsetX: appearance.textShadowOffsetX,
+      textShadowOffsetY: appearance.textShadowOffsetY,
+      textStroke: appearance.textStroke,
+      textStrokeWidth: appearance.textStrokeWidth,
+    };
   });
 }
 
@@ -1383,15 +1475,21 @@ export function mapLayoutPlanToCanvasLayers(
     );
   }
 
-  const polished = resolveOverlappingTextLayers(
-    snapTextLayersToSectionBands(textLayers, stageW, stageH),
+  // Fit pass: measure wrap → snap bands → pack overlaps → grow light plates.
+  // Order matters: heights must be real before Y collision math.
+  const fitted = refitContentTextBoxes(textLayers, stageW, stageH);
+  const banded = snapTextLayersToSectionBands(fitted, stageW, stageH);
+  const packed = resolveOverlappingTextLayers(banded, stageW, stageH, 16);
+  const withPlates = expandPlatesUnderContent(packed, stageW, stageH);
+  const rematched = rematchContentContrastOnPlates(
+    withPlates,
     stageW,
     stageH,
-    16
+    sceneTone
   );
 
   return {
-    textLayers: polished,
+    textLayers: rematched,
     decoLayers,
   };
 }
