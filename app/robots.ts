@@ -6,7 +6,14 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: "*",
       allow: "/",
-      disallow: ["/admin", "/api/", "/print-smart-form", "/print-smart-form/"],
+      disallow: [
+        "/admin",
+        "/api/",
+        "/print-smart-form",
+        "/print-smart-form/",
+        "/ai-photo-generator",
+        "/ai-photo-generator/",
+      ],
     },
     sitemap: `${PRODUCTION_SITE_URL}/sitemap.xml`,
     host: PRODUCTION_SITE_URL,

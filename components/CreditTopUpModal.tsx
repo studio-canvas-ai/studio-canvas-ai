@@ -6,27 +6,22 @@ import { useI18n } from "@/components/I18nProvider";
 import { useCredits } from "@/components/CreditsProvider";
 import { CREDIT_PACKS, creditPackAmount } from "@/lib/data";
 import { formatUsd } from "@/lib/currency";
-import { isDomesticMarket, readGeoCountryFromDocument } from "@/lib/market";
+import { isDomesticMarket } from "@/lib/market";
 
 export default function CreditTopUpModal() {
   const { t, locale } = useI18n();
   const { showTopUpModal, setShowTopUpModal, planId, refreshAccount } = useCredits();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [geoCountry, setGeoCountry] = useState<string | null>(null);
   const isSubscriber = planId !== "free";
 
   useEffect(() => {
-    setGeoCountry(readGeoCountryFromDocument());
-  }, []);
-
-  useEffect(() => {
-    if (showTopUpModal && isDomesticMarket(locale, geoCountry)) {
+    if (showTopUpModal && isDomesticMarket(locale)) {
       setShowTopUpModal(false);
     }
-  }, [showTopUpModal, locale, geoCountry, setShowTopUpModal]);
+  }, [showTopUpModal, locale, setShowTopUpModal]);
 
-  if (!showTopUpModal || isDomesticMarket(locale, geoCountry)) return null;
+  if (!showTopUpModal || isDomesticMarket(locale)) return null;
 
   const purchase = async (packId: (typeof CREDIT_PACKS)[number]["id"]) => {
     setBusy(true);

@@ -14,7 +14,6 @@ import {
   CREDIT_PACKS,
   type BillingInterval,
   FREE_CREDITS,
-  getPlanOffer,
   RETOUCH_FREE_PER_CYCLE,
   pricingPlanIds,
 } from "@/lib/data";
@@ -34,6 +33,72 @@ import {
   readPendingCheckout,
   savePendingCheckout,
 } from "@/lib/pendingCheckout";
+import { isGuestCheckoutAllowedClient } from "@/lib/checkoutPolicy";
+import {
+  hasUnlimitedCredits,
+} from "@/lib/unlimitedAccount";
+import { shouldApplyBrandWatermark } from "@/lib/watermarkPolicy";
+import { stashAuthErrorForModal } from "@/lib/supabase/oauthErrors";
+import { bridgeSupabaseAccessToken } from "@/lib/supabase/emailAuth";
+import { buildTermsConsentUrl, safePostConsentPath } from "@/lib/termsConsent";
+import { clearAuthStorageOnly } from "@/lib/auth/clearAuthStorage";
+import { SESSION_LOCK_STORAGE_KEY } from "@/lib/auth/sessionLockShared";
+import type { PlanUsageSnapshot } from "@/lib/planQuotas";
+
+const PLAN_USAGE_CACHE_KEY = "sca_plan_usage_v2";
+
+type CachedPlanUsagePayload = PlanUsageSnapshot & {
+  quotaPeriodStart?: number;
+  userId?: string;
+};
+
+function readCachedPlanUsage(userId?: string | null): PlanUsageSnapshot | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(PLAN_USAGE_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as CachedPlanUsagePayload;
+    if (userId && parsed.userId && parsed.userId !== userId) return null;
+    if (
+      typeof parsed?.fhdRemaining !== "number" ||
+      typeof parsed?.uhd4kRemaining !== "number"
+    ) {
+      return null;
+    }
+    return {
+      fhdRemaining: parsed.fhdRemaining,
+      fhdLimit: parsed.fhdLimit ?? 0,
+      uhd4kRemaining: parsed.uhd4kRemaining,
+      uhd4kLimit: parsed.uhd4kLimit ?? 0,
+      galleryLimit: parsed.galleryLimit ?? 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedPlanUsage(
+  usage: PlanUsageSnapshot | null,
+  opts?: { quotaPeriodStart?: number; userId?: string | null }
+) {
+  if (typeof window === "undefined") return;
+  try {
+    if (!usage) {
+      localStorage.removeItem(PLAN_USAGE_CACHE_KEY);
+      return;
+    }
+    const payload: CachedPlanUsagePayload = {
+      ...usage,
+      ...(typeof opts?.quotaPeriodStart === "number"
+        ? { quotaPeriodStart: opts.quotaPeriodStart }
+        : {}),
+      ...(opts?.userId ? { userId: opts.userId } : {}),
+    };
+    localStorage.setItem(PLAN_USAGE_CACHE_KEY, JSON.stringify(payload));
+  } catch {
+    /* ignore quota */
+  }
+}
 
 export type { PlanId } from "@/lib/faceProfiles";
 
@@ -53,11 +118,27 @@ type PromoWalletView = {
   codeSuffix: string;
 };
 
+export type AuthUserProfile = {
+  id: string | null;
+  email: string | null;
+  name: string | null;
+  image: string | null;
+};
+
 type CreditsContextValue = {
   credits: number;
   maxCredits: number;
+  /** Designated admin/test accounts: infinite bypass disabled (999 + refill at 0). */
+  unlimitedCredits: boolean;
+  /** Label for navbar / badges (`∞` only if unlimitedCredits is true). */
+  creditsLabel: string;
   isFreePlan: boolean;
+  /** True for ADMIN_EMAILS / designated unlimited accounts. */
+  isAdmin: boolean;
+  /** On-screen + download brand watermark for free non-admin users only. */
+  applyBrandWatermark: boolean;
   isAuthenticated: boolean;
+  authUser: AuthUserProfile | null;
   planId: PlanId;
   billingInterval: BillingInterval;
   showAuthModal: boolean;
@@ -79,10 +160,18 @@ type CreditsContextValue = {
   setShowPromoModal: (open: boolean) => void;
   openAuthModal: (opts?: { clearPending?: boolean }) => void;
   consumeCredit: (amount?: number) => boolean;
+  /** Apply authoritative balance from API (generate / download / me). */
+  applyServerCredits: (balance: number) => void;
+  planUsage: PlanUsageSnapshot | null;
+  consumeDownloadQuota: (
+    kind: "fhd" | "uhd4k",
+    opts?: { amount?: number; action?: string }
+  ) => Promise<{ ok: boolean; remaining: number; usage: PlanUsageSnapshot | null }>;
   topUpCredits: (amount?: number) => void;
   purchaseCreditPack: (packId: (typeof CREDIT_PACKS)[number]["id"]) => Promise<void>;
   grantFreeCredits: () => void;
   refreshAccount: () => Promise<void>;
+  signOutUser: () => Promise<void>;
   requestSubscribe: (
     plan: (typeof pricingPlanIds)[number],
     interval?: BillingInterval
@@ -93,12 +182,19 @@ type CreditsContextValue = {
   getPortraitRetouch: (portraitId: string) => PortraitRetouchState | null;
   requestRetouch: (
     portraitId: string,
-    mode?: "retouch" | "regenerate"
+    mode?: "retouch" | "regenerate",
+    opts?: { skipCredit?: boolean }
   ) => RetouchAttemptResult;
   dailyRetouchCount: number;
 };
 
 const CreditsContext = createContext<CreditsContextValue | null>(null);
+
+function clearBrowserAuthResidue() {
+  // Auth/session keys only. Never Storage.clear() — studio vaults and recent
+  // files must survive logout in the same browser.
+  clearAuthStorageOnly();
+}
 
 function todayKey() {
   try {
@@ -129,6 +225,8 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
   const [billingInterval, setBillingInterval] =
     useState<BillingInterval>("monthly");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authUser, setAuthUser] = useState<AuthUserProfile | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showCreditModal, setShowCreditModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -143,6 +241,18 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
     useState<BillingInterval>("annual");
   const [socialProviders, setSocialProviders] = useState<SocialProviderId[]>([]);
   const [socialProvidersLoaded, setSocialProvidersLoaded] = useState(false);
+  const [planUsage, setPlanUsageState] = useState<PlanUsageSnapshot | null>(null);
+  const quotaPeriodStartRef = useRef<number | null>(null);
+  const setPlanUsage = useCallback(
+    (usage: PlanUsageSnapshot | null, userId?: string | null) => {
+      setPlanUsageState(usage);
+      writeCachedPlanUsage(usage, {
+        quotaPeriodStart: quotaPeriodStartRef.current ?? undefined,
+        userId: userId ?? authUser?.id ?? undefined,
+      });
+    },
+    [authUser?.id]
+  );
   const [portraits, setPortraits] = useState<Record<string, PortraitRetouchState>>({});
   const [dailyRetouchCount, setDailyRetouchCount] = useState(0);
   const [dailyKey, setDailyKey] = useState(todayKey);
@@ -150,26 +260,24 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
   const pendingResumeDone = useRef(false);
 
   const isFreePlan = planId === "free";
+  const unlimitedCredits = hasUnlimitedCredits(authUser?.email);
+  // Navbar badge: durable credit pool (fhdRemaining), not legacy wallet (always 0).
+  const poolRemaining =
+    typeof planUsage?.fhdRemaining === "number" ? planUsage.fhdRemaining : null;
+  const creditsLabel = unlimitedCredits
+    ? "∞"
+    : poolRemaining != null
+      ? poolRemaining.toLocaleString("ko-KR")
+      : "—";
+  const applyBrandWatermark = shouldApplyBrandWatermark(
+    planId,
+    authUser?.email,
+    isAdmin
+  );
 
   useEffect(() => {
-    const meta = getAccountMeta();
-    if (meta.hadPaidPlan || meta.lastLoginAt) setIsAuthenticated(true);
-    if (meta.planId && meta.planId !== "free") {
-      setPlanId(meta.planId);
-      if (meta.planId === "enterprise") setBillingInterval("annual");
-      const creditCount =
-        meta.planId === "enterprise"
-          ? getPlanOffer("enterprise", "annual").credits
-          : getPlanOffer(
-              meta.planId,
-              meta.planId === "standard" ? "monthly" : "monthly"
-            ).credits;
-      setCredits(creditCount);
-      setMaxCredits(creditCount);
-      setIsAuthenticated(true);
-    } else if (meta.planId === "free") {
-      setPlanId("free");
-    }
+    const cached = readCachedPlanUsage();
+    if (cached) setPlanUsageState(cached);
     const stored = readPendingCheckout();
     if (stored) {
       setPendingPlanId(stored.planId);
@@ -177,6 +285,23 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
     }
     void refreshServerState();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Surface OAuth failures from /auth/callback → /generate?authError=… (any path works)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const url = new URL(window.location.href);
+      const authError = url.searchParams.get("authError");
+      if (!authError) return;
+      stashAuthErrorForModal(authError);
+      setShowAuthModal(true);
+      url.searchParams.delete("authError");
+      const clean = `${url.pathname}${url.searchParams.toString() ? `?${url.searchParams}` : ""}${url.hash}`;
+      window.history.replaceState({}, "", clean);
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   // Warm client FX cache from server (non-blocking; never breaks UI).
@@ -202,16 +327,27 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
 
   const refreshServerState = useCallback(async () => {
     try {
-      const res = await fetch("/api/account/me");
+      const res = await fetch("/api/account/me", {
+        cache: "no-store",
+        credentials: "same-origin",
+      });
       if (!res.ok) throw new Error("account unavailable");
       const data = (await res.json()) as {
         authenticated?: boolean;
+        pendingTermsConsent?: boolean;
         providers?: SocialProviderId[];
         user?: {
+          id?: string;
+          email?: string | null;
+          name?: string | null;
+          image?: string | null;
           credits: number;
           maxCredits: number;
           planId: PlanId;
           billingInterval?: BillingInterval | null;
+          currentPeriodStart?: number | null;
+          isAdmin?: boolean;
+          usage?: PlanUsageSnapshot | null;
         } | null;
       };
       if (Array.isArray(data.providers)) {
@@ -220,10 +356,24 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
       }
       if (data.authenticated && data.user) {
         setIsAuthenticated(true);
-        setCredits(data.user.credits);
-        setMaxCredits(data.user.maxCredits);
+        setAuthUser({
+          id: data.user.id ?? null,
+          email: data.user.email ?? null,
+          name: data.user.name ?? null,
+          image: data.user.image ?? null,
+        });
+        setIsAdmin(Boolean(data.user.isAdmin));
+        setCredits(0);
+        setMaxCredits(0);
         setPlanId(data.user.planId);
         setBillingInterval(data.user.billingInterval ?? "monthly");
+        quotaPeriodStartRef.current =
+          typeof data.user.currentPeriodStart === "number"
+            ? data.user.currentPeriodStart
+            : null;
+        if (data.user.usage) {
+          setPlanUsage(data.user.usage, data.user.id ?? null);
+        }
         patchAccountMeta({
           lastLoginAt: Date.now(),
           planId: data.user.planId,
@@ -241,6 +391,16 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
         }
         return;
       }
+
+      if (data.pendingTermsConsent) {
+        // Keep Supabase-driven UI auth; app member not finalized yet.
+        setSocialProvidersLoaded(true);
+        return;
+      }
+
+      // No NextAuth member session — leave Supabase listener as source of truth
+      // unless it already cleared auth.
+      setSocialProvidersLoaded(true);
     } catch {
       setSocialProvidersLoaded(true);
       /* try anonymous promo wallet */
@@ -265,6 +425,172 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
 
   const refreshAccount = refreshServerState;
 
+  const signOutUser = useCallback(async () => {
+    try {
+      const { isSupabaseConfigured } = await import("@/lib/supabase/config");
+      if (isSupabaseConfigured()) {
+        const { createSupabaseBrowserClient } = await import(
+          "@/lib/supabase/client"
+        );
+        const supabase = createSupabaseBrowserClient();
+        await supabase.auth.signOut();
+      }
+    } catch {
+      /* still clear app session */
+    }
+
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+    } catch {
+      /* ignore */
+    }
+
+    try {
+      const { signOut } = await import("next-auth/react");
+      await signOut({ redirect: false });
+    } catch {
+      /* ignore */
+    }
+
+    clearBrowserAuthResidue();
+    try {
+      localStorage.removeItem(SESSION_LOCK_STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
+    setIsAuthenticated(false);
+    setAuthUser(null);
+    setIsAdmin(false);
+    setCredits(FREE_CREDITS);
+    setMaxCredits(FREE_CREDITS);
+    setPlanUsage(null);
+    quotaPeriodStartRef.current = null;
+    setPlanId("free");
+    setBillingInterval("monthly");
+    setPromoWallet(null);
+    setPendingPlanId(null);
+    setPendingBillingInterval("annual");
+    setSocialProviders([]);
+    setSocialProvidersLoaded(false);
+    setShowPaymentModal(false);
+    setShowCreditModal(false);
+    setShowTopUpModal(false);
+    setShowReturnModal(false);
+    setShowPromoModal(false);
+    setShowAuthModal(false);
+    setPortraits({});
+    setDailyRetouchCount(0);
+    recentRetouchTs.current = [];
+    pendingResumeDone.current = false;
+    patchAccountMeta({ planId: "free", lastLoginAt: 0 });
+  }, []);
+
+  // Supabase session → header auth UI (survives cold local DB / post-consent reload).
+  useEffect(() => {
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
+
+    void (async () => {
+      try {
+        const { isSupabaseConfigured } = await import("@/lib/supabase/config");
+        if (!isSupabaseConfigured()) {
+          void refreshServerState();
+          return;
+        }
+        const { createSupabaseBrowserClient } = await import(
+          "@/lib/supabase/client"
+        );
+        const supabase = createSupabaseBrowserClient();
+
+        const applySupabaseUser = (
+          sbUser: {
+            id: string;
+            email?: string | null;
+            user_metadata?: Record<string, unknown> | null;
+          } | null,
+          accessToken?: string | null
+        ) => {
+          if (cancelled || !sbUser) return;
+
+          const meta = sbUser.user_metadata ?? {};
+          const image =
+            (typeof meta.avatar_url === "string" && meta.avatar_url) ||
+            (typeof meta.picture === "string" && meta.picture) ||
+            null;
+          const name =
+            (typeof meta.full_name === "string" && meta.full_name) ||
+            (typeof meta.name === "string" && meta.name) ||
+            null;
+          setIsAuthenticated(true);
+          setAuthUser((prev) => ({
+            id: sbUser.id,
+            email: sbUser.email ?? prev?.email ?? null,
+            name: name ?? prev?.name ?? null,
+            image: image ?? prev?.image ?? null,
+          }));
+          const cachedUsage = readCachedPlanUsage(sbUser.id);
+          if (cachedUsage) setPlanUsageState(cachedUsage);
+          setShowAuthModal(false);
+
+          void refreshServerState();
+
+          const token = accessToken?.trim();
+          if (token) {
+            void bridgeSupabaseAccessToken(token).then((bridge) => {
+              if (cancelled || !bridge.ok) return;
+              if (bridge.needsTermsConsent && typeof window !== "undefined") {
+                window.location.assign(
+                  buildTermsConsentUrl(
+                    safePostConsentPath(window.location.pathname)
+                  )
+                );
+                return;
+              }
+              void refreshServerState();
+            });
+          }
+        };
+
+        const { data: initial } = await supabase.auth.getSession();
+        if (cancelled) return;
+        if (initial.session?.user) {
+          applySupabaseUser(
+            initial.session.user,
+            initial.session.access_token
+          );
+        } else {
+          await refreshServerState();
+        }
+
+        const {
+          data: { subscription },
+        } = supabase.auth.onAuthStateChange((event, session) => {
+          if (cancelled) return;
+          if (event === "SIGNED_OUT") {
+            setIsAuthenticated(false);
+            setAuthUser(null);
+            setIsAdmin(false);
+            return;
+          }
+          if (session?.user) {
+            applySupabaseUser(session.user, session.access_token);
+          }
+        });
+        unsubscribe = () => subscription.unsubscribe();
+      } catch {
+        if (!cancelled) void refreshServerState();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, [refreshServerState]);
+
   const ensureDailyCounter = useCallback(() => {
     const key = todayKey();
     if (key !== dailyKey) {
@@ -285,6 +611,54 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
       return true;
     },
     [credits]
+  );
+
+  const applyServerCredits = useCallback((balance: number) => {
+    if (!Number.isFinite(balance)) return;
+    const next = Math.round(Math.max(0, balance) * 10) / 10;
+    setCredits(next);
+    setMaxCredits((m) => Math.max(m, next));
+  }, []);
+
+  const consumeDownloadQuota = useCallback(
+    async (
+      kind: "fhd" | "uhd4k",
+      opts?: { amount?: number; action?: string }
+    ) => {
+      try {
+        const res = await fetch("/api/quota/download", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({
+            kind,
+            ...(typeof opts?.amount === "number" ? { amount: opts.amount } : {}),
+            ...(opts?.action ? { action: opts.action } : {}),
+          }),
+        });
+        const data = (await res.json()) as {
+          ok?: boolean;
+          remaining?: number;
+          usage?: PlanUsageSnapshot | null;
+        };
+        if (data.usage) setPlanUsage(data.usage);
+        if (!res.ok || !data.ok) {
+          return {
+            ok: false,
+            remaining: data.remaining ?? 0,
+            usage: data.usage ?? planUsage,
+          };
+        }
+        return {
+          ok: true,
+          remaining: data.remaining ?? 0,
+          usage: data.usage ?? planUsage,
+        };
+      } catch {
+        return { ok: false, remaining: 0, usage: planUsage };
+      }
+    },
+    [planUsage]
   );
 
   const topUpCredits = useCallback((amount = 50) => {
@@ -328,7 +702,9 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
       setPendingPlanId(plan);
       setPendingBillingInterval(interval);
       savePendingCheckout({ planId: plan, interval });
-      if (!isAuthenticated) {
+      // TEMP KCP review: guest checkout via isGuestCheckoutAllowedClient().
+      // Restore member-only: set ALLOW_GUEST_CHECKOUT=false (see lib/checkoutPolicy.ts).
+      if (!isAuthenticated && !isGuestCheckoutAllowedClient()) {
         setShowAuthModal(true);
         return;
       }
@@ -387,17 +763,23 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
   const requestRetouch = useCallback(
     (
       portraitId: string,
-      mode: "retouch" | "regenerate" = "retouch"
+      mode: "retouch" | "regenerate" = "retouch",
+      opts?: { skipCredit?: boolean }
     ): RetouchAttemptResult => {
       const currentDaily = ensureDailyCounter();
       const existing = portraits[portraitId];
       const createdAt = existing?.createdAt ?? Date.now();
+      const spendCredits = hasUnlimitedCredits(authUser?.email)
+        ? Number.POSITIVE_INFINITY
+        : credits;
 
       const result = evaluateRetouchRequest({
         state: existing ?? null,
         portraitId,
         createdAt,
-        credits,
+        // When billing already happened (generate API / spend API), only update
+        // retouch bookkeeping — do not re-check or re-deduct wallet balance.
+        credits: opts?.skipCredit ? Number.POSITIVE_INFINITY : spendCredits,
         dailyRetouchCount: currentDaily,
         recentTimestamps: recentRetouchTs.current,
         mode,
@@ -414,22 +796,31 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
         return result;
       }
 
-      if (result.cost > 0) {
+      if (
+        result.cost > 0 &&
+        !opts?.skipCredit &&
+        !hasUnlimitedCredits(authUser?.email)
+      ) {
         setCredits((c) => Math.max(0, Math.round((c - result.cost) * 10) / 10));
       }
       setPortraits((prev) => ({ ...prev, [portraitId]: result.state }));
       setDailyRetouchCount((n) => n + 1);
       return result;
     },
-    [credits, ensureDailyCounter, portraits]
+    [authUser?.email, credits, ensureDailyCounter, portraits]
   );
 
   const value = useMemo(
     () => ({
       credits,
       maxCredits,
+      unlimitedCredits,
+      creditsLabel,
       isFreePlan,
+      isAdmin,
+      applyBrandWatermark,
       isAuthenticated,
+      authUser,
       planId,
       billingInterval,
       showAuthModal,
@@ -451,10 +842,14 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
       setShowPromoModal,
       openAuthModal,
       consumeCredit,
+      applyServerCredits,
+      planUsage,
+      consumeDownloadQuota,
       topUpCredits,
       purchaseCreditPack,
       grantFreeCredits,
       refreshAccount,
+      signOutUser,
       requestSubscribe,
       completePayment,
       cancelSubscription,
@@ -466,8 +861,13 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
     [
       credits,
       maxCredits,
+      unlimitedCredits,
+      creditsLabel,
       isFreePlan,
+      isAdmin,
+      applyBrandWatermark,
       isAuthenticated,
+      authUser,
       planId,
       billingInterval,
       showAuthModal,
@@ -483,10 +883,14 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
       socialProvidersLoaded,
       openAuthModal,
       consumeCredit,
+      applyServerCredits,
+      planUsage,
+      consumeDownloadQuota,
       topUpCredits,
       purchaseCreditPack,
       grantFreeCredits,
       refreshAccount,
+      signOutUser,
       requestSubscribe,
       completePayment,
       cancelSubscription,

@@ -1,0 +1,23 @@
+# Vercel upload exclusions (keeps deploy pack lean and avoids broken Drive temps)
+.tmp.driveupload
+.tmp.driveupload/**
+.data
+.data/**
+.tmp
+.tmp/**
+.temp
+.temp/**
+tmp-imgcheck
+tmp-imgcheck/**
+.next
+.next/**
+node_modules
+node_modules/**
+.git
+.git/**
+Full_Source_Code.txt
+Full_Source_Code_v*.txt
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local

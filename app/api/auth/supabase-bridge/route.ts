@@ -39,6 +39,7 @@ export async function POST(request: NextRequest) {
     const response = NextResponse.json({
       ok: true,
       user: session.user,
+      needsTermsConsent: session.needsTermsConsent,
     });
     response.cookies.set(session.cookieName, session.token, session.cookieOptions);
     return response;

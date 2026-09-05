@@ -22,10 +22,17 @@ export default function Step2Layout({
 }: Step2LayoutProps) {
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-[#0B0F19]">
-      <div className="relative mx-auto grid h-full w-full max-w-[1600px] min-h-0 flex-1 grid-cols-1 gap-3 px-4 py-3 sm:gap-4 sm:px-5 sm:py-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(240px,0.78fr)_minmax(280px,0.95fr)] lg:overflow-hidden lg:pb-4">
+      <div className="relative mx-auto grid h-full w-full max-w-[1760px] min-h-0 flex-1 grid-cols-1 gap-3 px-3 py-2.5 sm:gap-3.5 sm:px-4 sm:py-3 lg:grid-cols-[minmax(0,4.6fr)_minmax(0,2.7fr)_minmax(0,2.7fr)] lg:overflow-hidden lg:pb-3">
         <div className="min-h-0 lg:h-full lg:overflow-hidden">{preview}</div>
-        <div className="min-h-0 lg:h-full lg:overflow-hidden">{specs}</div>
-        <div className="min-h-0 lg:h-full lg:overflow-hidden">{form}</div>
+        <div className="relative min-h-0 lg:h-full lg:overflow-hidden">
+          {specs}
+        </div>
+        <div
+          data-wizard-form
+          className="relative z-[500] min-h-0 pointer-events-auto lg:h-full lg:overflow-visible"
+        >
+          {form}
+        </div>
       </div>
     </div>
   );

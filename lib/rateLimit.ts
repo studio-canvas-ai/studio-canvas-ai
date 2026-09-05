@@ -7,6 +7,8 @@ type Bucket = { count: number; resetAt: number };
 
 const buckets = new Map<string, Bucket>();
 
+const MINUTE_MS = 60 * 1000;
+
 export type RateLimitResult = {
   ok: boolean;
   remaining: number;
@@ -49,26 +51,53 @@ export function clientIp(req: Request): string {
   return req.headers.get("x-real-ip") || "unknown";
 }
 
-/** Download API: 30 / 10 min per IP, 60 / 10 min per account */
+/**
+ * Download APIs (storage original, general-photo download):
+ * default 30 req / 1 min per IP, 60 / 1 min per account.
+ */
 export function checkDownloadRateLimit(req: Request, userId?: string | null) {
   const ip = clientIp(req);
+  const windowMs = Number(process.env.RATE_LIMIT_DOWNLOAD_WINDOW_MS || MINUTE_MS);
   const ipHit = rateLimit({
     key: `dl:ip:${ip}`,
     limit: Number(process.env.RATE_LIMIT_DOWNLOAD_IP || 30),
-    windowMs: 10 * 60 * 1000,
+    windowMs,
   });
   if (!ipHit.ok) return ipHit;
   if (userId) {
     return rateLimit({
       key: `dl:user:${userId}`,
       limit: Number(process.env.RATE_LIMIT_DOWNLOAD_USER || 60),
-      windowMs: 10 * 60 * 1000,
+      windowMs,
     });
   }
   return ipHit;
 }
 
-/** Generate API: 20 / 10 min per IP, 40 / day soft account window */
+/**
+ * Upload APIs (storage upload, general-photo upload):
+ * default 30 req / 1 min per IP, 60 / 1 min per account.
+ */
+export function checkUploadRateLimit(req: Request, userId?: string | null) {
+  const ip = clientIp(req);
+  const windowMs = Number(process.env.RATE_LIMIT_UPLOAD_WINDOW_MS || MINUTE_MS);
+  const ipHit = rateLimit({
+    key: `up:ip:${ip}`,
+    limit: Number(process.env.RATE_LIMIT_UPLOAD_IP || 30),
+    windowMs,
+  });
+  if (!ipHit.ok) return ipHit;
+  if (userId) {
+    return rateLimit({
+      key: `up:user:${userId}`,
+      limit: Number(process.env.RATE_LIMIT_UPLOAD_USER || 60),
+      windowMs,
+    });
+  }
+  return ipHit;
+}
+
+/** Generate API: 20 / 10 min per IP, 50 / day soft account window */
 export function checkGenerateRateLimit(req: Request, userId?: string | null) {
   const ip = clientIp(req);
   const ipHit = rateLimit({

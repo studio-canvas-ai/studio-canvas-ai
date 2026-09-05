@@ -1,13 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  buildTermsConsentUrl,
+  safePostConsentPath,
+} from "@/lib/termsConsent";
+import AuthBridgeLoading from "./AuthBridgeLoading";
+import { getBridgeCopy } from "./bridgeCopy";
+import { APP_HOME_PATH, appPathWithAuthError } from "@/lib/appRoutes";
 
 const FETCH_TIMEOUT_MS = 8_000;
+/** Keep retries tight — callback already exchanged the code; only cover cookie race. */
+const SESSION_ATTEMPTS = 3;
+const SESSION_RETRY_MS = 80;
 
 function readNextPath(): string {
   try {
     const raw = new URLSearchParams(window.location.search).get("next");
-    if (raw && raw.startsWith("/") && !raw.startsWith("//")) return raw;
+    if (raw) return safePostConsentPath(raw);
   } catch {
     /* ignore */
   }
@@ -15,11 +25,11 @@ function readNextPath(): string {
     const key = "sca_auth_next";
     const stored = sessionStorage.getItem(key);
     sessionStorage.removeItem(key);
-    if (stored && stored.startsWith("/") && !stored.startsWith("//")) return stored;
+    if (stored) return safePostConsentPath(stored);
   } catch {
     /* ignore */
   }
-  return "/generate";
+  return APP_HOME_PATH;
 }
 
 function markDone() {
@@ -32,16 +42,22 @@ function markDone() {
 
 function failRedirect(detail: string) {
   markDone();
-  window.location.replace(
-    `/generate?authError=${encodeURIComponent(detail || "auth_bridge_failed")}`
-  );
+  window.location.replace(appPathWithAuthError(detail || "auth_bridge_failed"));
 }
 
+async function wait(ms: number) {
+  await new Promise((r) => setTimeout(r, ms));
+}
+
+/** Kick off Supabase client chunk as soon as this module evaluates. */
+const supabaseClientPromise = import("@/lib/supabase/client");
+
 /**
- * Client-only bridge logic. Supabase is dynamically imported so a bad/hung
+ * Client-only bridge logic. Supabase stays dynamically imported so a hung
  * module graph cannot block the inline escape script in page.tsx.
  */
 export default function BridgeClient() {
+  const copy = useMemo(() => getBridgeCopy(), []);
   const [errorText, setErrorText] = useState<string | null>(null);
 
   useEffect(() => {
@@ -49,24 +65,26 @@ export default function BridgeClient() {
 
     void (async () => {
       try {
-        const { createSupabaseBrowserClient } = await import(
-          "@/lib/supabase/client"
-        );
+        const { createSupabaseBrowserClient } = await supabaseClientPromise;
         const supabase = createSupabaseBrowserClient();
 
-        const { data, error } = await supabase.auth.getSession();
-        let accessToken = data.session?.access_token ?? null;
+        let accessToken: string | null = null;
+        let lastSessionError: string | null = null;
 
-        if (!accessToken) {
-          await new Promise((r) => setTimeout(r, 200));
-          const retry = await supabase.auth.getSession();
-          accessToken = retry.data.session?.access_token ?? null;
+        // Facebook (and some mobile browsers) may write cookies a tick late.
+        for (let i = 0; i < SESSION_ATTEMPTS; i++) {
+          if (cancelled) return;
+          const { data, error } = await supabase.auth.getSession();
+          accessToken = data.session?.access_token ?? null;
+          if (accessToken) break;
+          lastSessionError = error?.message ?? null;
+          if (i < SESSION_ATTEMPTS - 1) await wait(SESSION_RETRY_MS * (i + 1));
         }
 
         if (!accessToken) {
           throw new Error(
-            error?.message ||
-              "No Supabase access token after OAuth (cookies missing?)"
+            lastSessionError ||
+              "No Supabase access token after OAuth (cookies missing? Check www vs apex origin)."
           );
         }
 
@@ -99,6 +117,7 @@ export default function BridgeClient() {
         const bridgeJson = (await bridgeRes.json().catch(() => ({}))) as {
           ok?: boolean;
           error?: string;
+          needsTermsConsent?: boolean;
         };
 
         if (!bridgeRes.ok || !bridgeJson.ok) {
@@ -110,7 +129,12 @@ export default function BridgeClient() {
 
         if (cancelled) return;
         markDone();
-        window.location.replace(readNextPath());
+        const next = readNextPath();
+        if (bridgeJson.needsTermsConsent) {
+          window.location.replace(buildTermsConsentUrl(next));
+          return;
+        }
+        window.location.replace(next);
       } catch (err) {
         if (cancelled) return;
         const detail =
@@ -126,26 +150,14 @@ export default function BridgeClient() {
     };
   }, []);
 
-  if (!errorText) {
-    return (
-      <p className="text-sm text-white/70" id="sca-bridge-status">
-        Signing you in…
-      </p>
-    );
-  }
-
   return (
-    <>
-      <p className="text-sm font-semibold text-red-400">Sign-in failed</p>
-      <p className="max-w-md break-words text-sm text-red-300">{errorText}</p>
-      <p className="text-xs text-white/50">Redirecting…</p>
-      <button
-        type="button"
-        className="mt-2 rounded-lg border border-red-400/40 px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/10"
-        onClick={() => failRedirect(errorText)}
-      >
-        Continue
-      </button>
-    </>
+    <AuthBridgeLoading
+      message={copy.loading}
+      errorText={errorText}
+      errorTitle={copy.failed}
+      redirectingLabel={copy.redirecting}
+      continueLabel={copy.continue}
+      onContinue={errorText ? () => failRedirect(errorText) : undefined}
+    />
   );
 }

@@ -3,7 +3,7 @@ import { purgeExpiredOriginals } from "@/lib/storageManifest";
 
 export const runtime = "nodejs";
 
-/** Daily cron: delete expired originals from R2 (#75). */
+/** Daily cron (03:00 UTC): purge idle HD originals past 24h originalExpiresAt. */
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
   const auth = req.headers.get("authorization");

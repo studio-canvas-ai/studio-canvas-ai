@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseAnonKey, getSupabaseUrl, isSupabaseConfigured } from "@/lib/supabase/config";
+import { getSupabaseAuthStorageKey } from "@/lib/supabase/authStorage";
 
 /**
  * Refresh Supabase auth cookies on the response so PKCE sessions stay valid.
@@ -14,8 +15,18 @@ export async function refreshSupabaseSession(
 
   const url = getSupabaseUrl()!;
   const key = getSupabaseAnonKey()!;
+  const storageKey = getSupabaseAuthStorageKey();
 
   const supabase = createServerClient(url, key, {
+    ...(storageKey
+      ? {
+          cookieOptions: {
+            name: storageKey,
+            path: "/",
+            sameSite: "lax" as const,
+          },
+        }
+      : {}),
     cookies: {
       getAll() {
         return request.cookies.getAll();

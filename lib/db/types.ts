@@ -12,7 +12,8 @@ export type AuthProviderId =
   | "facebook"
   | "instagram"
   | "credentials"
-  | "google-mock";
+  | "google-mock"
+  | "guest";
 
 export type PaymentProviderId = "toss" | "portone" | "stripe" | "demo";
 
@@ -34,6 +35,8 @@ export type UserRecord = {
   subscriptionStatus?: "active" | "past_due" | "cancelled";
   subscriptionLifecycle?: SubscriptionLifecycle;
   cancelAtPeriodEnd?: boolean;
+  /** Recurring renewal at period end (monthly KCP / test QA accounts). */
+  autoRenew?: boolean;
   cancelReason?: string;
   scheduledCancelAt?: number;
   stripeCustomerId?: string;
@@ -47,6 +50,69 @@ export type UserRecord = {
   updatedAt: number;
   /** True after first signup bonus was granted */
   signupBonusGranted: boolean;
+  /** Lifetime general-photo downloads (free-tier quota). */
+  generalPhotoDownloadCount?: number;
+  /** Remaining FHD downloads this billing period. */
+  fhdRemaining?: number;
+  /** Remaining 4K downloads this billing period. */
+  uhd4kRemaining?: number;
+  /** Billing window the remaining quotas belong to. */
+  quotaPeriodStart?: number;
+  /**
+   * 1 = legacy FHD/4K counters; 2 = unified credit pool in fhdRemaining
+   * (pricing catalog). Missing/undefined treated as 1.
+   */
+  quotaSchemaVersion?: number;
+  /** One-time wipe of leftover credit-wallet balances. */
+  legacyCreditsWiped?: boolean;
+};
+
+export type GeneralPhotoRecord = {
+  id: string;
+  userId: string;
+  name?: string;
+  imageUrl: string;
+  storageKey?: string;
+  createdAt: number;
+};
+
+export type GalleryWorkRecord = {
+  id: string;
+  userId: string;
+  imageUrl: string;
+  thumbnailUrl?: string;
+  originalKey?: string;
+  storageId?: string;
+  createdAt: number;
+  styleId?: string;
+  profileId?: string;
+  profileName?: string;
+  /** Training selfies used to create this work — for dual-reference on re-edit. */
+  selfieUrls?: string[];
+  expiresAt?: number | null;
+  planAtCreation?: string;
+};
+
+/** Lightweight sealed `.sca` project stash (FIFO max 10 per user — no full PNG). */
+export type ScaProjectRecord = {
+  id: string;
+  userId: string;
+  label: string;
+  mode: "utility" | "agent";
+  /** Sealed `.sca` text (SCAENC1 envelope). */
+  sealedContent: string;
+  createdAt: number;
+  thumbSrc?: string | null;
+};
+
+export type FaceProfileRecord = {
+  id: string;
+  userId: string;
+  name: string;
+  slot: number;
+  photoUrls: string[];
+  createdAt: number;
+  updatedAt: number;
 };
 
 export type CreditLedgerEntry = {
@@ -65,7 +131,10 @@ export type CreditLedgerEntry = {
     | "admin_adjust"
     | "refund"
     | "payment_refund"
-    | "system_error_restore";
+    | "system_error_restore"
+    | "general_photo_download"
+    | "download"
+    | "shorts_stt";
   meta?: Record<string, string | number | boolean | null>;
   createdAt: number;
 };
@@ -140,11 +209,24 @@ export type PromotionBatch = {
 export type PromotionHistoryEntry = {
   id: string;
   promotionId: string;
-  type: "issued" | "activated" | "generate" | "regenerate" | "expired";
+  type: "issued" | "activated" | "generate" | "regenerate" | "expired" | "refund";
   delta: number;
   balanceAfter: number;
   createdAt: number;
   meta?: Record<string, string | number | boolean | null>;
+};
+
+export type SupportTicketStatus = "open" | "in_progress" | "resolved";
+
+export type SupportTicket = {
+  id: string;
+  email: string;
+  subject: string;
+  body: string;
+  status: SupportTicketStatus;
+  createdAt: number;
+  updatedAt: number;
+  adminNote?: string;
 };
 
 export type DbSnapshot = {
@@ -157,4 +239,14 @@ export type DbSnapshot = {
   promotionCodes: Record<string, PromotionCode>;
   promotionBatches: Record<string, PromotionBatch>;
   promotionHistory: PromotionHistoryEntry[];
+  /** userId → general photos (R2-backed; memory mirror for local/dev) */
+  generalPhotos: Record<string, GeneralPhotoRecord[]>;
+  /** userId → finished works gallery (R2 manifest + CDN URLs) */
+  galleryWorks: Record<string, GalleryWorkRecord[]>;
+  /** userId → recent sealed `.sca` projects (FIFO max 10) */
+  scaProjects: Record<string, ScaProjectRecord[]>;
+  /** userId → AI training face/object model profiles */
+  faceProfiles: Record<string, FaceProfileRecord[]>;
+  /** 1:1 CS tickets (local/dev fallback when R2 is unset) */
+  supportTickets: SupportTicket[];
 };

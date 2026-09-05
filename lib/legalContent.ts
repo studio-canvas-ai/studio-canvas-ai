@@ -1,7 +1,14 @@
+export type LegalCallout = {
+  label: string;
+  text: string;
+};
+
 export type LegalSection = {
   title: string;
   paragraphs?: string[];
   bullets?: string[];
+  /** Highlighted legal notice cards (dark-mode callouts). */
+  callouts?: LegalCallout[];
 };
 
 export type LegalDocument = {
@@ -15,8 +22,8 @@ const COMPANY_BLOCK_KR = [
   "대표자: 홍옥연",
   "사업자등록번호: 416-54-00891",
   "사업장 주소: 경상북도 상주시 북상주로 70-6, 가동 302호 (화산동, 동경타운)",
-  "고객센터: 010-7778-1146",
-  "이메일: scd77777@naver.com",
+  "고객센터: 070-4207-1876",
+  "이메일: studiocanvas.cs@gmail.com",
 ];
 
 const COMPANY_BLOCK_EN = [
@@ -24,11 +31,20 @@ const COMPANY_BLOCK_EN = [
   "CEO: Hong Ok-yeon",
   "Business Registration No.: 416-54-00891",
   "Address: #302, Building A, 70-6 Buksangju-ro, Sangju-si, Gyeongsangbuk-do, Republic of Korea",
-  "Support: 010-7778-1146",
-  "Email: scd77777@naver.com",
+  "Support: 070-4207-1876",
+  "Email: studiocanvas.cs@gmail.com",
 ];
 
-const UPDATED_AT = "2026-07-31";
+const UPDATED_AT = "2026-08-27";
+/** Privacy policy revision date (KR/EN privacy documents). */
+const PRIVACY_UPDATED_AT = "2026-08-08";
+
+/** Official content-license clause (KR) — user-created / published works. */
+export const CONTENT_LICENSE_CLAUSE_KR =
+  "유저가 플랫폼 내에서 제작·공개한 콘텐츠에 대하여, 스튜디오캔버스AI는 서비스 운영, 마케팅, 공공 템플릿 제공 및 큐레이션을 위한 비독점적, 무상, 지역 제한 없는 이용허락(라이선스) 및 2차적저작물 작성권을 가집니다.";
+
+export const CONTENT_LICENSE_CLAUSE_EN =
+  "For content that users create or publish on the platform, Studio Canvas AI is granted a non-exclusive, royalty-free, worldwide license (including the right to create derivative works) to use such content for service operation, marketing, public template offerings, and curation.";
 
 export const TERMS_KR: LegalDocument = {
   title: "이용약관",
@@ -77,35 +93,46 @@ export const TERMS_KR: LegalDocument = {
       title: "제6조 (환불 및 청약철회) — 중요",
       paragraphs: [
         "환불 및 청약철회는 「전자상거래 등에서의 소비자보호에 관한 법률」 등 관련 법령과 아래 기준에 따라 적용됩니다. 월간 요금제의 자동 갱신으로 발생한 각 결제 회차, 3개월·연간 이용권 및 크레딧 단품 결제에도 동일하게 적용됩니다.",
-        "조건을 충족하는 경우 서비스는 결제 PG(국내: Toss/NHN KCP 등, 해외: Stripe)를 통해 담당자 개입 없이 자동 환불을 처리할 수 있습니다.",
+        "조건을 충족하는 경우 서비스는 결제 PG를 통해 담당자 개입 없이 자동 환불을 처리할 수 있습니다.",
       ],
       bullets: [
         "[자동 청약철회] 결제 완료일로부터 7일 이내이고, 해당 결제로 지급된 크레딧을 단 1회도 사용하지 않은 경우: 전액 자동 환불이 승인·처리됩니다.",
-        "[환불 제한] 이미 1회 이상 화보 생성·재생성 등으로 크레딧을 소모하였거나, 결제일로부터 7일이 경과한 경우: 디지털 콘텐츠 제공이 개시된 경우에 해당하여 법령이 허용하는 범위 내에서 청약철회가 제한되며, 원칙적으로 자동 환불이 불가(거절·반려)합니다.",
+        "[환불 제한] 이미 1회 이상 화보 생성·재생성 등으로 크레딧을 소모하였거나, 결제일로부터 7일이 경과한 경우: 디지털 콘텐츠 제공이 개시된 경우에 해당하여 법령이 허용하는 범위 내에서 청약철회가 제한되며, 원칙적으로 자동 환불이 불가합니다.",
         "[시스템 오류 예외] 시스템 장애로 크레딧만 차감되고 결과물이 생성되지 않은 경우 등에는 기간·사용 여부와 관계없이 관리자 확인 후 크레딧 복구 또는 예외 환불을 처리할 수 있습니다.",
         "환불 완료 시 결제 상태는 환불 완료로 변경되고, 해당 결제로 부여된 크레딧·이용 권한은 회수·동기화됩니다.",
-        "자동 환불이 거절된 경우 또는 예외 심사가 필요한 경우 고객센터(010-7778-1146) 또는 이메일(scd77777@naver.com)로 접수해 주세요.",
+        "자동 환불이 거절된 경우 또는 예외 심사가 필요한 경우 1:1 고객센터 또는 이메일(studiocanvas.cs@gmail.com)로 접수해 주세요.",
       ],
     },
     {
-      title: "제7조 (AI 생성물 및 저작권)",
+      title: "제7조 (AI 생성물, 지식재산권 및 이용자 책임)",
+      paragraphs: [
+        "본 조는 서비스 내 업로드·제작·공개 콘텐츠의 권리 귀속과 이용허락(라이선스)에 관한 기준을 정합니다.",
+      ],
       bullets: [
-        "이용자가 업로드한 사진의 권리는 이용자에게 있습니다.",
+        "이용자가 서비스 내에 업로드한 원본 사진 및 콘텐츠의 권리는 원칙적으로 이용자에게 있으며, 이용자는 이에 대한 적법한 권리(저작권, 초상권 등)를 보유하거나 이용 허락을 받았음을 보증합니다.",
         "서비스가 생성한 결과물의 이용 범위는 이용자가 가입한 요금제 및 관련 안내에 따릅니다.",
-        "타인의 사진을 무단으로 도용하거나, 딥페이크·불법·음란물 등 법령에 위반되는 콘텐츠를 생성하는 경우, 회사는 사전 통보 없이 계정을 정지·해지할 수 있으며, 이에 따른 법적 책임은 이용자 본인에게 있습니다.",
+        "이용자가 타인의 사진, 저작물, 초상권, 상표권 등을 무단으로 도용하거나 허락 없이 업로드하여 에디터로 편집·가공하고, 이를 다운로드(PNG/SCA)하거나 대외적으로 유통·배포하는 행위는 엄격히 금지됩니다.",
+        "딥페이크, 불법 촬영물, 음란물, 명예훼손, 기타 관계 법령에 위반되는 콘텐츠를 생성·유통하는 경우, 회사는 사전 통보 없이 계정을 즉시 정지·해지할 수 있으며, 이로 인해 발생하는 모든 민·형사상의 법적 책임은 전적으로 이용자 본인에게 있습니다.",
+      ],
+      callouts: [
+        {
+          label: "콘텐츠의 권리 및 이용허락",
+          text: CONTENT_LICENSE_CLAUSE_KR,
+        },
       ],
     },
     {
       title: "제8조 (서비스 이용 제한)",
       paragraphs: [
-        "회사는 약관 위반, 부정 이용, 시스템 남용, 결제 부정 등이 확인될 경우 서비스 이용을 제한하거나 계정을 정지할 수 있습니다.",
+        "회사는 약관 위반, 부정 이용, 타인의 권리 침해 신고 접수, 시스템 남용, 결제 부정 등이 확인될 경우 서비스 이용을 제한하거나 계정을 정지할 수 있습니다.",
       ],
     },
     {
-      title: "제9조 (면책)",
+      title: "제9조 (면책 및 손해배상)",
       paragraphs: [
-        "회사는 천재지변, 통신 장애, 외부 AI 인프라 장애 등 불가항력으로 인한 서비스 중단에 대해 법령이 허용하는 범위 내에서 책임을 제한할 수 있습니다.",
-        "이용자가 업로드한 콘텐츠 및 생성 결과물의 사용으로 인해 발생하는 제3자 분쟁에 대한 책임은 원칙적으로 이용자에게 있습니다.",
+        "회사는 천재지변, 통신 장애, 외부 AI 인프라 장애 등 불가항력으로 인한 서비스 중단에 대해 법령이 허용하는 범위 내에서 책임을 제한합니다.",
+        "이용자가 서비스에 업로드한 콘텐츠, 이를 편집·다운로드하여 유통한 결과물의 사용으로 인해 제3자와 발생한 저작권 분쟁, 초상권 분쟁 등 모든 법적 분쟁에 대한 책임은 전적으로 이용자에게 있습니다.",
+        "이용자의 약관 위반 또는 저작권 침해 행위로 인하여 회사에 손해가 발생한 경우, 해당 이용자는 회사가 입은 모든 손해(법률 비용, 소송 비용 및 대외 배상금 포함)를 배상하여야 합니다.",
       ],
     },
     {
@@ -117,7 +144,7 @@ export const TERMS_KR: LegalDocument = {
     {
       title: "제11조 (문의)",
       paragraphs: [
-        "약관 및 서비스 관련 문의는 고객센터(010-7778-1146) 또는 이메일(scd77777@naver.com)로 연락해 주세요.",
+        "약관 및 서비스 관련 문의는 1:1 고객센터 또는 이메일(studiocanvas.cs@gmail.com)로 연락해 주세요.",
       ],
     },
   ],
@@ -125,65 +152,68 @@ export const TERMS_KR: LegalDocument = {
 
 export const PRIVACY_KR: LegalDocument = {
   title: "개인정보처리방침",
-  updatedAt: UPDATED_AT,
+  updatedAt: PRIVACY_UPDATED_AT,
   sections: [
     {
       title: "1. 개인정보의 수집 항목",
       paragraphs: ["회사는 서비스 제공을 위해 다음 정보를 수집·처리할 수 있습니다."],
       bullets: [
         "이메일 주소",
-        "소셜 로그인 식별자(카카오, 구글, 네이버 등)",
-        "결제 기록",
-        "업로드된 사진 파일",
-        "생성된 화보 이미지 데이터",
+        "소셜 로그인 식별자(카카오, 구글, 네이버, 페이스북, 인스타그램, 마이크로소프트 등)",
+        "결제 기록 및 주문 정보",
+        "업로드된 사진 파일 및 AI 학습용 프로필 데이터",
+        "생성된 화보 이미지 데이터 및 갤러리 메타데이터",
       ],
     },
     {
       title: "2. 개인정보의 이용 목적",
       bullets: [
-        "회원 가입·로그인 및 회원 관리",
-        "AI 화보 이미지 생성 서비스 제공",
-        "고객센터(CS) 응대",
-        "결제 정산 및 환불·크레딧 복구 처리",
+        "회원 가입·로그인 및 회원 관리, 약관 동의 확인",
+        "AI 화보 이미지 생성, 썸네일 편집 및 갤러리 보관 서비스 제공",
+        "고객센터(CS) 응대 및 민원 처리",
+        "결제 정산, 구독 관리 및 환불·크레딧 복구 처리",
       ],
     },
     {
       title: "3. 보유 및 파기",
       bullets: [
-        "원본 사진은 AI 생성 완료 후, 시스템 보관 기간이 경과하면 지체 없이 파기합니다.",
-        "회원 탈퇴 시 관련 개인정보는 즉시 파기합니다. 다만, 관련 법령에 따라 보관이 필요한 결제·거래 기록은 법정 기간 동안 보관합니다.",
-        "생성 결과물의 보관 기간은 이용 중인 요금제 및 서비스 정책에 따릅니다.",
+        "원본 사진 및 생성 결과물은 이용 중인 요금제 및 서비스 정책(보관 기간)에 따라 보관되며, 기간 경과 시 지체 없이 파기합니다.",
+        "회원 탈퇴 시 관련 개인정보는 즉시 파기합니다. 다만, 전자상거래 등에서의 소비자보호에 관한 법률 등 관련 법령에 따라 보관이 필요한 결제·거래 기록은 법정 기간 동안 안전하게 보관됩니다.",
       ],
     },
     {
-      title: "4. 제3자 제공 및 처리 위탁",
+      title: "4. 제3자 제공 및 처리 위탁 (국외 이전 포함)",
       paragraphs: [
-        "회사는 서비스 제공에 필요한 범위에서 아래 유형의 인프라·파트너에 최소한의 데이터를 시스템적으로 처리할 수 있습니다.",
+        "회사는 서비스 제공 및 시스템 운영을 위해 아래와 같이 개인정보 처리를 위탁하며, 서비스 인프라 특성상 데이터가 국외 서버로 이전되어 처리될 수 있습니다.",
       ],
       bullets: [
-        "결제대행(PG)사: 결제·정산 처리",
-        "AI 서비스 인프라: Replicate, Fal.ai 등 — 이미지 생성 처리",
-        "호스팅·CDN: Vercel, Cloudflare — 서비스 운영 및 파일 저장/전송",
+        "이전되는 항목: 이메일 주소, 소셜 로그인 식별자, 결제·주문 관련 정보(해당 시), 업로드 사진·AI 프로필 데이터, 생성 화보 이미지 및 갤러리 메타데이터 등 서비스 제공에 필요한 범위의 정보",
+        "이전받는 자 (수탁사) · Supabase Inc. (인증 및 데이터베이스) / 이전 국가: 미국, 유럽(아일랜드 등) / 이전 일시: 회원가입 및 로그인 시 실시간",
+        "이전받는 자 (수탁사) · Vercel Inc. (웹 호스팅 및 서버 인프라) / 이전 국가: 미국 및 글로벌 CDN / 이전 일시: 서비스 이용 시",
+        "이전받는 자 (수탁사) · Cloudflare, Inc. (파일 저장소 및 CDN/보안) / 이전 국가: 미국 및 글로벌 / 이전 일시: 이미지 업로드/다운로드 시",
+        "이전받는 자 (수탁사) · Replicate, Inc. / Fal AI (AI 모델 추론 인프라) / 이전 국가: 미국 / 이전 일시: 화보 생성 요청 시",
+        "이전 목적: 시스템 인프라 구축, 데이터 안전 보관, 회원 인증 및 AI 이미지 생성 처리",
+        "보유 및 이용 기간: 위탁 계약 기간 동안 또는 각 이전 목적 달성 시까지. 회원 탈퇴·보관 기간 경과 시 지체 없이 파기하며, 관련 법령상 보관 의무가 있는 경우 해당 법정 기간 동안 안전하게 보관합니다.",
       ],
     },
     {
       title: "5. 이용자의 권리",
       paragraphs: [
-        "이용자는 개인정보 열람·정정·삭제·처리 정지를 요청할 수 있으며, 회원 탈퇴를 통해 수집·이용 동의를 철회할 수 있습니다. 요청은 고객센터 또는 이메일(scd77777@naver.com)로 접수합니다.",
+        "이용자는 개인정보 열람·정정·삭제·처리 정지를 요청할 수 있으며, 회원 탈퇴를 통해 수집·이용 동의를 철회할 수 있습니다. 요청은 고객센터 또는 이메일(studiocanvas.cs@gmail.com)로 접수합니다.",
       ],
     },
     {
       title: "6. 안전성 확보 조치",
       paragraphs: [
-        "회사는 개인정보 보호를 위해 접근 통제, 전송 구간 암호화, 권한 최소화 등 합리적 보호조치를 시행합니다.",
+        "회사는 개인정보 보호를 위해 접근 통제, 전송 구간 암호화(HTTPS/TLS), 데이터베이스 권한 최소화 등 기술적·관리적 보호조치를 시행합니다.",
       ],
     },
     {
       title: "7. 개인정보 보호 책임 및 문의",
-      bullets: COMPANY_BLOCK_KR,
       paragraphs: [
-        "개인정보 관련 문의는 위 연락처로 접수해 주시면 신속히 안내드리겠습니다.",
+        "개인정보 관련 문의는 아래 연락처로 접수해 주시면 신속히 안내드리겠습니다.",
       ],
+      bullets: COMPANY_BLOCK_KR,
     },
   ],
 };
@@ -207,6 +237,8 @@ function buildInternationalTerms(input: {
   refundBullets: string[];
   aiTitle: string;
   aiBullets: string[];
+  contentLicenseLabel?: string;
+  contentLicenseText?: string;
   restrictTitle: string;
   restrict: string;
   contactTitle: string;
@@ -245,6 +277,15 @@ function buildInternationalTerms(input: {
       {
         title: input.aiTitle,
         bullets: input.aiBullets,
+        callouts:
+          input.contentLicenseLabel && input.contentLicenseText
+            ? [
+                {
+                  label: input.contentLicenseLabel,
+                  text: input.contentLicenseText,
+                },
+              ]
+            : undefined,
       },
       {
         title: input.restrictTitle,
@@ -292,18 +333,20 @@ export const TERMS_EN: LegalDocument = buildInternationalTerms({
     "[Refund limits] If any credits have been used for generation/regeneration, or more than 7 days have passed since payment: withdrawal is limited once digital content supply has begun, and automatic refunds are generally denied.",
     "[System-error exception] If credits are deducted due to a system failure without a generated result, support/admin may restore credits or approve an exception refund regardless of the 7-day window or usage.",
     "When a refund completes, the payment status is updated and credits/entitlements from that payment are clawed back in sync.",
-    "If automatic refund is denied or an exception review is needed: 010-7778-1146 or scd77777@naver.com.",
+    "If automatic refund is denied or an exception review is needed: 070-4207-1876 or studiocanvas.cs@gmail.com.",
   ],
   aiTitle: "7. AI Outputs & Copyright",
   aiBullets: [
     "Rights to photos uploaded by the user remain with the user.",
     "Unauthorized use of others’ photos, deepfakes, or illegal/obscene content may result in immediate account suspension without prior notice. Legal liability rests with the user.",
   ],
+  contentLicenseLabel: "Content Rights & License",
+  contentLicenseText: CONTENT_LICENSE_CLAUSE_EN,
   restrictTitle: "8. Service Restrictions",
   restrict:
     "The Company may restrict use or suspend accounts if terms violations, abuse, or fraudulent payments are confirmed.",
   contactTitle: "9. Contact",
-  contact: "Questions: 010-7778-1146 or scd77777@naver.com.",
+  contact: "Questions: 070-4207-1876 or studiocanvas.cs@gmail.com.",
 });
 
 export const TERMS_JA: LegalDocument = buildInternationalTerms({
@@ -340,7 +383,7 @@ export const TERMS_JA: LegalDocument = buildInternationalTerms({
     "【返金制限】生成・再生成等でクレジットを1回以上使用した場合、または決済から7日を経過した場合：デジタルコンテンツ提供開始後は撤回が制限され、原則として自動返金は拒否されます。",
     "【システム障害の例外】障害により画像が生成されずクレジットのみ減った場合等は、期間・使用の有無にかかわらず管理者確認後にクレジット復元または例外返金が可能です。",
     "返金完了時、決済状態は返金済みに更新され、当該決済のクレジット・権限は回収・同期されます。",
-    "自動返金が拒否された場合や例外審査が必要な場合：010-7778-1146 または scd77777@naver.com。",
+    "自動返金が拒否された場合や例外審査が必要な場合：070-4207-1876 または studiocanvas.cs@gmail.com。",
   ],
   aiTitle: "7. AI生成物と著作権",
   aiBullets: [
@@ -351,7 +394,7 @@ export const TERMS_JA: LegalDocument = buildInternationalTerms({
   restrict:
     "規約違反、不正利用、不正決済等が確認された場合、当社は利用制限またはアカウント停止を行うことがあります。",
   contactTitle: "9. お問い合わせ",
-  contact: "お問い合わせ：010-7778-1146 または scd77777@naver.com。",
+  contact: "お問い合わせ：070-4207-1876 または studiocanvas.cs@gmail.com。",
 });
 
 export const TERMS_ZH: LegalDocument = buildInternationalTerms({
@@ -388,7 +431,7 @@ export const TERMS_ZH: LegalDocument = buildInternationalTerms({
     "【退款限制】若已因生成/再生成等使用过积分，或支付已超过 7 日：在数字内容已开始提供的情形下撤回受限，原则上自动退款将被拒绝。",
     "【系统故障例外】因系统故障仅扣积分但未生成结果时，经管理员核实后可不受期限/使用限制恢复积分或例外退款。",
     "退款完成后，支付状态更新为已退款，并同步收回该次支付赋予的积分与权益。",
-    "自动退款被拒或需例外审核时：010-7778-1146 或 scd77777@naver.com。",
+    "自动退款被拒或需例外审核时：070-4207-1876 或 studiocanvas.cs@gmail.com。",
   ],
   aiTitle: "7. AI 成果与版权",
   aiBullets: [
@@ -398,7 +441,7 @@ export const TERMS_ZH: LegalDocument = buildInternationalTerms({
   restrictTitle: "8. 使用限制",
   restrict: "如确认存在违约、滥用或欺诈支付，公司可限制使用或停用账户。",
   contactTitle: "9. 联系方式",
-  contact: "咨询：010-7778-1146 或 scd77777@naver.com。",
+  contact: "咨询：070-4207-1876 或 studiocanvas.cs@gmail.com。",
 });
 
 export const TERMS_ES: LegalDocument = buildInternationalTerms({
@@ -435,7 +478,7 @@ export const TERMS_ES: LegalDocument = buildInternationalTerms({
     "[Límites] Si se han usado créditos o han pasado más de 7 días: el desistimiento se limita cuando el contenido digital ya se ha suministrado; el reembolso automático se deniega en general.",
     "[Excepción por error del sistema] Si solo se descontaron créditos por fallo sin resultado, soporte/admin puede restaurar créditos o aprobar un reembolso excepcional sin importar plazo o uso.",
     "Al completar el reembolso, el estado del pago se actualiza y se recuperan créditos/derechos de ese pago.",
-    "Si el automático se deniega o hace falta revisión: 010-7778-1146 o scd77777@naver.com.",
+    "Si el automático se deniega o hace falta revisión: 070-4207-1876 o studiocanvas.cs@gmail.com.",
   ],
   aiTitle: "7. Resultados de IA y derechos",
   aiBullets: [
@@ -446,7 +489,7 @@ export const TERMS_ES: LegalDocument = buildInternationalTerms({
   restrict:
     "La Empresa puede restringir el uso o suspender cuentas ante incumplimientos, abusos o pagos fraudulentos.",
   contactTitle: "9. Contacto",
-  contact: "Consultas: 010-7778-1146 o scd77777@naver.com.",
+  contact: "Consultas: 070-4207-1876 o studiocanvas.cs@gmail.com.",
 });
 
 export const TERMS_FR: LegalDocument = buildInternationalTerms({
@@ -483,7 +526,7 @@ export const TERMS_FR: LegalDocument = buildInternationalTerms({
     "[Limites] Si des crédits ont été utilisés ou si plus de 7 jours se sont écoulés : la rétractation est limitée une fois le contenu numérique fourni ; le remboursement automatique est en principe refusé.",
     "[Exception erreur système] En cas d’échec système (crédits débités sans résultat), le support/admin peut restaurer les crédits ou approuver un remboursement exceptionnel indépendamment du délai ou de l’usage.",
     "À la fin du remboursement, le statut de paiement est mis à jour et les crédits/droits de ce paiement sont repris.",
-    "Si le remboursement automatique est refusé : 010-7778-1146 ou scd77777@naver.com.",
+    "Si le remboursement automatique est refusé : 070-4207-1876 ou studiocanvas.cs@gmail.com.",
   ],
   aiTitle: "7. Résultats IA et droits",
   aiBullets: [
@@ -494,7 +537,7 @@ export const TERMS_FR: LegalDocument = buildInternationalTerms({
   restrict:
     "La Société peut restreindre l’usage ou suspendre des comptes en cas de violation, d’abus ou de paiement frauduleux.",
   contactTitle: "9. Contact",
-  contact: "Questions : 010-7778-1146 ou scd77777@naver.com.",
+  contact: "Questions : 070-4207-1876 ou studiocanvas.cs@gmail.com.",
 });
 
 export const TERMS_DE: LegalDocument = buildInternationalTerms({
@@ -531,7 +574,7 @@ export const TERMS_DE: LegalDocument = buildInternationalTerms({
     "[Beschränkung] Wurden Credits genutzt oder sind mehr als 7 Tage vergangen: Widerruf ist nach Beginn der digitalen Bereitstellung eingeschränkt; automatische Rückerstattung wird grundsätzlich abgelehnt.",
     "[Systemfehler-Ausnahme] Bei Systemausfällen (Credits abgezogen, kein Ergebnis) können Support/Admin Credits wiederherstellen oder eine Ausnahmeerstattung unabhängig von Frist/Nutzung genehmigen.",
     "Nach Abschluss wird der Zahlungsstatus aktualisiert und Credits/Rechte aus dieser Zahlung eingezogen.",
-    "Bei Ablehnung der Automatik: 010-7778-1146 oder scd77777@naver.com.",
+    "Bei Ablehnung der Automatik: 070-4207-1876 oder studiocanvas.cs@gmail.com.",
   ],
   aiTitle: "7. KI-Ergebnisse und Urheberrecht",
   aiBullets: [
@@ -542,7 +585,7 @@ export const TERMS_DE: LegalDocument = buildInternationalTerms({
   restrict:
     "Bei Verstößen, Missbrauch oder betrügerischen Zahlungen kann das Unternehmen die Nutzung einschränken oder Konten sperren.",
   contactTitle: "9. Kontakt",
-  contact: "Fragen: 010-7778-1146 oder scd77777@naver.com.",
+  contact: "Fragen: 070-4207-1876 oder studiocanvas.cs@gmail.com.",
 });
 
 export const TERMS_IT: LegalDocument = buildInternationalTerms({
@@ -579,7 +622,7 @@ export const TERMS_IT: LegalDocument = buildInternationalTerms({
     "[Limiti] Se sono stati usati crediti o sono passati più di 7 giorni: il recesso è limitato una volta avviata la fornitura del contenuto digitale; il rimborso automatico è in genere rifiutato.",
     "[Eccezione errore di sistema] In caso di guasto (crediti scalati senza risultato), supporto/admin può ripristinare i crediti o approvare un rimborso eccezionale indipendentemente da termine o uso.",
     "Al completamento, lo stato del pagamento è aggiornato e crediti/diritti di quel pagamento sono recuperati.",
-    "Se l’automatico è rifiutato: 010-7778-1146 o scd77777@naver.com.",
+    "Se l’automatico è rifiutato: 070-4207-1876 o studiocanvas.cs@gmail.com.",
   ],
   aiTitle: "7. Output IA e diritti",
   aiBullets: [
@@ -590,7 +633,7 @@ export const TERMS_IT: LegalDocument = buildInternationalTerms({
   restrict:
     "La Società può limitare l’uso o sospendere gli account in caso di violazioni, abusi o pagamenti fraudolenti.",
   contactTitle: "9. Contatti",
-  contact: "Domande: 010-7778-1146 o scd77777@naver.com.",
+  contact: "Domande: 070-4207-1876 o studiocanvas.cs@gmail.com.",
 });
 
 export const TERMS_VI: LegalDocument = buildInternationalTerms({
@@ -627,7 +670,7 @@ export const TERMS_VI: LegalDocument = buildInternationalTerms({
     "[Hạn chế] Nếu đã dùng credit hoặc đã quá 7 ngày: việc hủy bị hạn chế khi nội dung số đã bắt đầu cung cấp; hoàn tự động về nguyên tắc bị từ chối.",
     "[Ngoại lệ lỗi hệ thống] Nếu lỗi hệ thống khiến credit bị trừ mà không có kết quả, hỗ trợ/admin có thể khôi phục credit hoặc duyệt hoàn ngoại lệ bất kể thời hạn/sử dụng.",
     "Khi hoàn xong, trạng thái thanh toán được cập nhật và credit/quyền từ khoản đó được thu hồi đồng bộ.",
-    "Nếu hoàn tự động bị từ chối: 010-7778-1146 hoặc scd77777@naver.com.",
+    "Nếu hoàn tự động bị từ chối: 070-4207-1876 hoặc studiocanvas.cs@gmail.com.",
   ],
   aiTitle: "7. Kết quả AI và bản quyền",
   aiBullets: [
@@ -638,7 +681,7 @@ export const TERMS_VI: LegalDocument = buildInternationalTerms({
   restrict:
     "Công ty có thể hạn chế sử dụng hoặc khóa tài khoản nếu xác nhận vi phạm, lạm dụng hoặc thanh toán gian lận.",
   contactTitle: "9. Liên hệ",
-  contact: "Liên hệ: 010-7778-1146 hoặc scd77777@naver.com.",
+  contact: "Liên hệ: 070-4207-1876 hoặc studiocanvas.cs@gmail.com.",
 });
 
 export const TERMS_HI: LegalDocument = buildInternationalTerms({
@@ -675,7 +718,7 @@ export const TERMS_HI: LegalDocument = buildInternationalTerms({
     "[सीमाएँ] यदि क्रेडिट उपयोग हो चुके हैं या 7 दिन बीत चुके हैं: डिजिटल सामग्री की आपूर्ति शुरू होने पर निकासी सीमित; स्वतः रिफंड सामान्यतः अस्वीकृत।",
     "[सिस्टम त्रुटि अपवाद] सिस्टम विफलता से बिना परिणाम क्रेडिट कटने पर सपोर्ट/एडमिन अवधि/उपयोग की परवाह किए बिना क्रेडिट वापस या अपवाद रिफंड कर सकता है।",
     "रिफंड पूर्ण होने पर भुगतान स्थिति अपडेट होती है और उस भुगतान के क्रेडिट/अधिकार वापस लिए जाते हैं।",
-    "स्वतः रिफंड अस्वीकृत हो तो: 010-7778-1146 या scd77777@naver.com।",
+    "स्वतः रिफंड अस्वीकृत हो तो: 070-4207-1876 या studiocanvas.cs@gmail.com।",
   ],
   aiTitle: "7. AI आउटपुट और कॉपीराइट",
   aiBullets: [
@@ -686,47 +729,74 @@ export const TERMS_HI: LegalDocument = buildInternationalTerms({
   restrict:
     "नियम उल्लंघन, दुरुपयोग या धोखाधड़ी भुगतान की पुष्टि होने पर कंपनी उपयोग प्रतिबंधित या खाता निलंबित कर सकती है।",
   contactTitle: "9. संपर्क",
-  contact: "प्रश्न: 010-7778-1146 या scd77777@naver.com।",
+  contact: "प्रश्न: 070-4207-1876 या studiocanvas.cs@gmail.com।",
 });
 
 export const PRIVACY_EN: LegalDocument = {
   title: "Privacy Policy",
-  updatedAt: UPDATED_AT,
+  updatedAt: PRIVACY_UPDATED_AT,
   sections: [
     {
       title: "1. Data We Collect",
+      paragraphs: [
+        "We may collect and process the following information to provide the Service.",
+      ],
       bullets: [
         "Email address",
-        "Social login identifiers",
-        "Payment records",
-        "Uploaded photo files",
-        "Generated lookbook image data",
+        "Social login identifiers (Kakao, Google, Naver, Facebook, Instagram, Microsoft, etc.)",
+        "Payment and order records",
+        "Uploaded photo files and AI face/profile training data",
+        "Generated lookbook images and gallery metadata",
       ],
     },
     {
       title: "2. Purpose of Use",
       bullets: [
-        "Account management",
-        "Providing AI portrait generation",
-        "Customer support",
-        "Payment settlement",
+        "Sign-up, login, account management, and terms consent verification",
+        "AI lookbook generation, thumbnail editing, and gallery storage",
+        "Customer support and complaint handling",
+        "Payment settlement, subscription management, refunds, and credit restoration",
       ],
     },
     {
       title: "3. Retention & Deletion",
       bullets: [
-        "Original photos are deleted without undue delay after the system retention period following generation.",
-        "Upon account deletion, personal data is deleted promptly, except payment records retained for legally required periods.",
+        "Original photos and generated results are retained according to the active plan and service retention policy, then deleted without undue delay when the period expires.",
+        "Upon account deletion, related personal data is deleted promptly. Payment and transaction records required under applicable law (including Korean e-commerce consumer protection rules) are retained securely for the legally required period.",
       ],
     },
     {
-      title: "4. Processors / Infrastructure",
+      title: "4. Processors / Entrusted Processing (Including Cross-Border Transfers)",
       paragraphs: [
-        "Minimum necessary data may be processed by payment providers (PG) and infrastructure partners such as Replicate, Fal.ai, Vercel, and Cloudflare to operate the Service.",
+        "To operate the Service and infrastructure, we entrust processing as described below. Due to the nature of cloud infrastructure, data may be transferred to and processed on servers outside Korea.",
+      ],
+      bullets: [
+        "Data transferred: email, social login identifiers, payment/order information (where applicable), uploaded photos and AI profile data, generated images and gallery metadata, and other information necessary to provide the Service",
+        "Recipient · Supabase Inc. (auth & database) / Countries: United States, Europe (e.g. Ireland) / Timing: in real time at sign-up and login",
+        "Recipient · Vercel Inc. (web hosting & server infrastructure) / Countries: United States and global CDN / Timing: during Service use",
+        "Recipient · Cloudflare, Inc. (object storage, CDN & security) / Countries: United States and global / Timing: on image upload/download",
+        "Recipient · Replicate, Inc. / Fal AI (AI model inference) / Countries: United States / Timing: when a lookbook generation is requested",
+        "Purpose of transfer: infrastructure operation, secure storage, member authentication, and AI image generation",
+        "Retention: for the duration of the processing agreement or until each transfer purpose is achieved; deleted without undue delay after account deletion or retention expiry, except where law requires longer secure retention",
       ],
     },
     {
-      title: "5. Contact",
+      title: "5. Your Rights",
+      paragraphs: [
+        "You may request access, correction, deletion, or suspension of processing, and may withdraw consent by deleting your account. Requests may be submitted via customer support or email (studiocanvas.cs@gmail.com).",
+      ],
+    },
+    {
+      title: "6. Security Measures",
+      paragraphs: [
+        "We implement technical and organizational safeguards including access control, encryption in transit (HTTPS/TLS), and least-privilege database permissions.",
+      ],
+    },
+    {
+      title: "7. Privacy Contact",
+      paragraphs: [
+        "For privacy inquiries, please contact us using the details below. We will respond promptly.",
+      ],
       bullets: COMPANY_BLOCK_EN,
     },
   ],

@@ -19,13 +19,11 @@ export function stripeConfigured(): boolean {
 
 function planLabel(planId: string, interval: BillingInterval): string {
   const name =
-    planId === "enterprise"
-      ? "Enterprise"
+    planId === "enterprise" || planId === "pro"
+      ? "Pro"
       : planId === "standard"
         ? "Standard"
-        : planId === "pro"
-          ? "Pro"
-          : "Starter";
+        : "Starter";
   const cadence =
     interval === "annual" ? "Annual" : interval === "quarterly" ? "3-Month" : "Monthly";
   return `${name} (${cadence})`;

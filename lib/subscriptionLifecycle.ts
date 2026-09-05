@@ -1,6 +1,7 @@
-import { getDb, newId, withDbLock } from "@/lib/db/store";
+import { getDb, withDbLock } from "@/lib/db/store";
 import type { UserRecord } from "@/lib/db/types";
 import type { SubscriptionLifecycle } from "@/lib/subscriptionState";
+import { applyTestAccountSubscription, isTestAccountEmail } from "@/lib/testAccounts";
 
 /** Schedule cancellation at period end — keeps plan active until currentPeriodEnd. */
 export async function scheduleSubscriptionCancel(input: {
@@ -13,6 +14,7 @@ export async function scheduleSubscriptionCancel(input: {
     const now = Date.now();
     user.subscriptionLifecycle = "CANCELED_PENDING";
     user.cancelAtPeriodEnd = true;
+    user.autoRenew = false;
     user.cancelReason = input.reason;
     user.scheduledCancelAt = user.currentPeriodEnd ?? now;
     user.subscriptionStatus = "active";
@@ -29,6 +31,7 @@ export async function resumeSubscription(userId: string): Promise<UserRecord | n
     const now = Date.now();
     user.subscriptionLifecycle = "ACTIVE";
     user.cancelAtPeriodEnd = false;
+    user.autoRenew = true;
     delete user.cancelReason;
     delete user.scheduledCancelAt;
     user.subscriptionStatus = "active";
@@ -52,6 +55,7 @@ export async function expireSubscription(userId: string): Promise<UserRecord | n
     user.subscriptionLifecycle = "EXPIRED";
     user.subscriptionStatus = "cancelled";
     user.cancelAtPeriodEnd = false;
+    user.autoRenew = false;
     user.cancelledAt = now;
     user.currentPeriodEnd = now;
     delete user.cancelReason;
@@ -73,6 +77,13 @@ export async function processSubscriptionExpiries(now = Date.now()) {
   let expired = 0;
   for (const user of Object.values(db.users)) {
     if (user.planId === "free") continue;
+    if (isTestAccountEmail(user.email)) {
+      await withDbLock((db) => {
+        const row = db.users[user.id];
+        if (row) applyTestAccountSubscription(row, now);
+      });
+      continue;
+    }
     const lifecycle = user.subscriptionLifecycle ?? "ACTIVE";
     const periodEnded = user.currentPeriodEnd != null && user.currentPeriodEnd <= now;
     if (!periodEnded) continue;

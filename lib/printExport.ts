@@ -3,11 +3,29 @@ export const A_SERIES_RATIO = 1 / Math.SQRT2; // ≈ 0.7071 (W/H)
 
 /** Print sizes at 300 DPI (portrait) */
 export const PRINT_300DPI = {
+  a2: { width: 4961, height: 7016 }, // 420×594 mm
+  a3: { width: 3508, height: 4961 }, // 297×420 mm
   a4: { width: 2480, height: 3508 }, // 210×297 mm
   a5: { width: 1748, height: 2480 }, // 148×210 mm
 } as const;
 
 export type PrintPaper = keyof typeof PRINT_300DPI;
+export type PrintTarget = PrintPaper | { width: number; height: number; name: string };
+
+function resolvePrintTarget(target: PrintTarget) {
+  if (typeof target === "string") {
+    return {
+      width: PRINT_300DPI[target].width,
+      height: PRINT_300DPI[target].height,
+      name: target,
+    };
+  }
+  return {
+    width: Math.max(1, Math.round(target.width)),
+    height: Math.max(1, Math.round(target.height)),
+    name: target.name,
+  };
+}
 
 function triggerBlobDownload(blob: Blob, filename: string) {
   const objectUrl = URL.createObjectURL(blob);
@@ -35,13 +53,29 @@ function coverCrop(
   return { sx: 0, sy: (srcH - sh) / 2, sw: srcW, sh };
 }
 
+function resolveCanvasImageUrl(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed) return trimmed;
+  if (
+    trimmed.startsWith("data:") ||
+    trimmed.startsWith("blob:") ||
+    trimmed.startsWith("/")
+  ) {
+    return trimmed;
+  }
+  if (trimmed.startsWith("https://") || trimmed.startsWith("http://")) {
+    return `/api/media/fetch?src=${encodeURIComponent(trimmed)}`;
+  }
+  return trimmed;
+}
+
 function loadImage(imageUrl: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error("Image load failed"));
-    img.src = imageUrl;
+    img.src = resolveCanvasImageUrl(imageUrl);
   });
 }
 
@@ -185,9 +219,9 @@ export async function downloadPrintPdf(
 export async function downloadCanvasPrint(
   source: HTMLCanvasElement,
   format: "png" | "pdf",
-  paper: PrintPaper = "a4"
+  target: PrintTarget = "a4"
 ): Promise<void> {
-  const { width, height } = PRINT_300DPI[paper];
+  const { width, height, name } = resolvePrintTarget(target);
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -196,10 +230,10 @@ export async function downloadCanvasPrint(
   ctx.drawImage(source, 0, 0, width, height);
   if (format === "png") {
     const blob = await canvasToPngBlob(canvas);
-    triggerBlobDownload(blob, `studio-canvas-thumb-print-${paper}-300dpi-${Date.now()}.png`);
+    triggerBlobDownload(blob, `studio-canvas-thumb-print-${name}-300dpi-${Date.now()}.png`);
     return;
   }
   const jpeg = await canvasToJpegBytes(canvas, 0.92);
   const pdf = buildPdfWithJpeg(jpeg, width, height);
-  triggerBlobDownload(pdf, `studio-canvas-thumb-print-${paper}-300dpi-${Date.now()}.pdf`);
+  triggerBlobDownload(pdf, `studio-canvas-thumb-print-${name}-300dpi-${Date.now()}.pdf`);
 }

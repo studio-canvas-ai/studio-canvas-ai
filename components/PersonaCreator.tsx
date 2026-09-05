@@ -1,6 +1,14 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect, Suspense } from "react";
+import {
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+  useLayoutEffect,
+  Suspense,
+  type ReactNode,
+} from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -15,17 +23,15 @@ import {
   AlertCircle,
   Sparkles,
   Wand2,
-  Download,
-  Share2,
   ChevronDown,
+  ChevronUp,
   ArrowUpRight,
   RefreshCw,
-  Images,
 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
+import { fillCanvas } from "@/lib/i18n";
 import { useCredits } from "@/components/CreditsProvider";
-import BrandWatermark from "@/components/BrandWatermark";
-import ThumbnailEditor from "@/components/ThumbnailEditor";
+import ResultWorkspace from "@/components/ResultWorkspace";
 import {
   subjectTypeOptions,
   ageOptions,
@@ -36,24 +42,59 @@ import {
   PROMPT_MAX_LENGTH,
   HERO_AFTER_IMAGE,
   MIN_SELFIE_UPLOADS,
-  REGENERATE_CREDIT_COST,
+  MAX_SELFIE_UPLOADS,
+  CONCEPT_POSE_HINTS,
   BACKGROUND_TAG_IDS,
   BACKGROUND_MODE_IDS,
   type BackgroundModeId,
 } from "@/lib/data";
 import {
-  pushGalleryHistory,
+  pushGalleryHistoryAndSync,
   listGalleryHistory,
   listFaceProfiles,
+  getFaceProfile,
+  fetchFaceProfilesFromServer,
+  fetchGalleryHistoryFromServer,
+  upsertFaceProfile,
   getAccountMeta,
   type FaceProfile,
 } from "@/lib/faceProfiles";
+import { fetchGeneralPhoto } from "@/lib/generalPhotos";
 import { uploadGalleryAsset } from "@/lib/galleryUpload";
 import { retentionContextFromAccount } from "@/lib/retentionPolicy";
-import { buildFaceConsistencyPayload } from "@/lib/faceConsistency";
+import { buildFaceConsistencyPayload, validateRegenerateDualReference } from "@/lib/faceConsistency";
+import { resolveSelfieSourcesForGenerate } from "@/lib/resolveSelfieSources";
+import {
+  BackgroundFusionError,
+  runBackgroundFusionGenerate,
+} from "@/lib/backgroundFusionGenerate";
+import { resolvePortraitGenerationPrompt } from "@/lib/ai/fusionPrompt";
 import { apiFetchJson } from "@/lib/apiFetch";
 import { processUploadFiles } from "@/lib/processUpload";
-import { downloadImageFile, type AspectRatioKey, type ExportPreset } from "@/lib/downloadImage";
+import { toProviderImageUrls } from "@/lib/toProviderImageUrl";
+import { prepareGenerateImageUrls } from "@/lib/prepareGenerateImages";
+import {
+  ASPECT_RATIO_CLASS,
+  DEFAULT_IMAGE_PAN,
+  downloadImageFile,
+  normalizeImagePan,
+  resolveCanvasImageUrl,
+  type AspectRatioKey,
+  type DownloadQuality,
+  type ExportPreset,
+  type ImagePan,
+} from "@/lib/downloadImage";
+import { KAKAO_REGISTERED_ORIGIN, shareImageViaKakao } from "@/lib/kakaoShare";
+import { isShareAbortError, shareWithFallback } from "@/lib/webShare";
+import { readTrainSelection } from "@/lib/trainSelection";
+import {
+  clearResultSession,
+  readResultSession,
+  saveResultSession,
+  toDisplayImageSrc,
+  type ResultSession,
+} from "@/lib/resultSession";
+import { clearGenerateSessionScratch } from "@/lib/generateSession";
 import { useFeedback } from "@/components/FeedbackProvider";
 
 type SubjectId = (typeof subjectTypeOptions)[number]["id"];
@@ -64,15 +105,56 @@ const PERSONA_DEFAULTS = {
   age: "30s",
 };
 
-const ASPECT_CLASS: Record<AspectRatioKey, string> = {
-  "9:16": "aspect-[9/16]",
-  "16:9": "aspect-video",
-  "1:1": "aspect-square",
-  a4: "aspect-[1/1.41]",
-};
-
 const ACCEPT_ATTR =
   ".jpg,.jpeg,.png,.webp,.heic,.heif,image/jpeg,image/png,image/webp,image/heic,image/heif";
+
+/**
+ * Temporary test bypass while Fal.ai integration is unfinished.
+ * When enabled, training/generation failures still open the result workspace
+ * with mock drafts derived from uploaded photos. Revert this to false later.
+ */
+const FORCE_RESULT_BYPASS_FOR_FAL_TEST = true;
+
+function SoftAccordion({
+  label,
+  children,
+  defaultOpen = false,
+}: {
+  label: string;
+  children: ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-2 py-2 text-left text-sm text-white/50 transition hover:text-white/80"
+      >
+        <span>{label}</span>
+        {open ? <ChevronUp className="h-4 w-4 shrink-0" /> : <ChevronDown className="h-4 w-4 shrink-0" />}
+      </button>
+      {open ? <div className="pb-1">{children}</div> : null}
+    </div>
+  );
+}
+
+/** Append unique photo URLs into existing slots (FIFO cap). */
+function mergePhotoUrls(
+  existing: string[],
+  incoming: string[],
+  max = MAX_SELFIE_UPLOADS
+): string[] {
+  const next = [...existing];
+  for (const url of incoming) {
+    const trimmed = url?.trim();
+    if (!trimmed) continue;
+    if (next.length >= max) break;
+    if (!next.includes(trimmed)) next.push(trimmed);
+  }
+  return next;
+}
 
 export default function PersonaCreator() {
   return (
@@ -88,19 +170,28 @@ function PersonaCreatorInner() {
   const pathname = usePathname();
   const router = useRouter();
   const {
-    credits,
-    maxCredits,
-    isFreePlan,
-    consumeCredit,
-    setShowCreditModal,
+    applyBrandWatermark,
+    applyServerCredits,
     registerPortrait,
     requestRetouch,
     planId,
     refreshAccount,
+    credits,
+    maxCredits,
+    unlimitedCredits,
+    creditsLabel,
   } = useCredits();
   const { confirm, showToast } = useFeedback();
   const stepContentRef = useRef<HTMLDivElement>(null);
   const trainingAbortRef = useRef(false);
+  /** Prevents Strict Mode / query updates from re-hydrating the same gallery jump. */
+  const galleryHydratedKeyRef = useRef<string | null>(null);
+  const autoTrainArmedRef = useRef(false);
+  /** Gallery → thumbnail edit track (no AI /api/generate). */
+  const [directEditMode, setDirectEditMode] = useState(false);
+  /** Face-model vault → Step 4 train path. */
+  const [useTrainCredits, setUseTrainCredits] = useState(false);
+  const [pendingAutoTrain, setPendingAutoTrain] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const [maxStepReached, setMaxStepReached] = useState(1);
   const [subject, setSubject] = useState<SubjectId>(PERSONA_DEFAULTS.subject);
@@ -116,6 +207,8 @@ function PersonaCreatorInner() {
   const [focusedDraft, setFocusedDraft] = useState<0 | 1>(0);
   const [drafts, setDrafts] = useState<string[]>([]);
   const [regenerateBusy, setRegenerateBusy] = useState(false);
+  const [regeneratingSlot, setRegeneratingSlot] = useState<0 | 1 | null>(null);
+  const [draftRevision, setDraftRevision] = useState(0);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -125,8 +218,20 @@ function PersonaCreatorInner() {
   const [resultReady, setResultReady] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  /** Shared aspect used during pre-result generate UI / API payload. */
   const [aspectRatio, setAspectRatio] = useState<AspectRatioKey>("9:16");
+  /** Independent crop settings per 시안 slot (0 = 시안 1, 1 = 시안 2). */
+  const [draftAspectRatios, setDraftAspectRatios] = useState<
+    [AspectRatioKey, AspectRatioKey]
+  >(["9:16", "9:16"]);
+  const [draftImagePans, setDraftImagePans] = useState<[ImagePan, ImagePan]>([
+    { ...DEFAULT_IMAGE_PAN },
+    { ...DEFAULT_IMAGE_PAN },
+  ]);
   const [exportPreset, setExportPreset] = useState<ExportPreset>("original");
+  const [directEditSource, setDirectEditSource] = useState<"photos" | "models" | null>(
+    null
+  );
   const [portraitId, setPortraitId] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [savedProfiles, setSavedProfiles] = useState<FaceProfile[]>([]);
@@ -135,35 +240,547 @@ function PersonaCreatorInner() {
   const [generationError, setGenerationError] = useState<string | null>(null);
   /** After generation: compare (A/B pick) first, then detail (download/edit). */
   const [resultView, setResultView] = useState<ResultView>("compare");
+  const [selectedResultUrl, setSelectedResultUrl] = useState("");
+  const [confirmedImageUrl, setConfirmedImageUrl] = useState("");
+  const [confirmedBlobUrl, setConfirmedBlobUrl] = useState("");
+  const confirmedLockRef = useRef("");
+  const confirmedBlobRef = useRef<string | null>(null);
 
   const isPerson = subject === "male" || subject === "female";
-  const focusedImageUrl = drafts[focusedDraft] ?? HERO_AFTER_IMAGE;
+  /** Direct-edit prefers hydrated profile photos; never fall back to demo hero while loading. */
+  const directEditImageUrl = drafts[0] || uploadedFiles[0] || "";
+  const focusedImageUrl = (() => {
+    const candidates = directEditMode
+      ? [confirmedBlobUrl, confirmedImageUrl, selectedResultUrl, directEditImageUrl, uploadedFiles[0]]
+      : resultView === "detail"
+        ? [
+            confirmedBlobUrl,
+            confirmedImageUrl,
+            selectedResultUrl,
+            drafts[focusedDraft],
+            drafts[0],
+            drafts[1],
+            uploadedFiles[0],
+          ]
+        : [
+            drafts[focusedDraft],
+            selectedResultUrl,
+            drafts[0],
+            drafts[1],
+            uploadedFiles[0],
+          ];
+    const hit = candidates.find((url) => typeof url === "string" && url.trim().length > 8);
+    return hit || "";
+  })();
+  const clearConfirmedImage = useCallback(() => {
+    confirmedLockRef.current = "";
+    setConfirmedImageUrl("");
+    setConfirmedBlobUrl("");
+    if (confirmedBlobRef.current) {
+      URL.revokeObjectURL(confirmedBlobRef.current);
+      confirmedBlobRef.current = null;
+    }
+  }, []);
 
-  const goToResultView = useCallback(
-    (view: ResultView) => {
-      setResultView(view);
-      const params = new URLSearchParams(searchParams.toString());
-      params.set("view", view);
-      const qs = params.toString();
-      router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
+  const snapshotConfirmedImage = useCallback(async (url: string) => {
+    const picked = url.trim();
+    if (!picked) return;
+    confirmedLockRef.current = picked;
+    setConfirmedImageUrl(picked);
+    if (confirmedBlobRef.current) {
+      URL.revokeObjectURL(confirmedBlobRef.current);
+      confirmedBlobRef.current = null;
+    }
+    setConfirmedBlobUrl("");
+    try {
+      const src =
+        picked.startsWith("data:") || picked.startsWith("blob:") || picked.startsWith("/")
+          ? picked
+          : toDisplayImageSrc(picked);
+      const res = await fetch(src, { credentials: "same-origin" });
+      if (!res.ok || confirmedLockRef.current !== picked) return;
+      const blob = await res.blob();
+      if (blob.size < 32 || confirmedLockRef.current !== picked) return;
+      if (confirmedBlobRef.current) URL.revokeObjectURL(confirmedBlobRef.current);
+      const objectUrl = URL.createObjectURL(blob);
+      confirmedBlobRef.current = objectUrl;
+      setConfirmedBlobUrl(objectUrl);
+    } catch {
+      /* keep confirmedImageUrl even if blob snapshot fails */
+    }
+  }, []);
+
+  const replaceQuerySilently = useCallback(
+    (mutate: (params: URLSearchParams) => void) => {
+      if (typeof window === "undefined") return;
+      try {
+        const params = new URLSearchParams(window.location.search);
+        mutate(params);
+        const qs = params.toString();
+        window.history.replaceState(
+          window.history.state,
+          "",
+          `${pathname}${qs ? `?${qs}` : ""}`
+        );
+      } catch {
+        /* ignore */
+      }
     },
-    [pathname, router, searchParams]
+    [pathname]
   );
 
-  // Smart skip: arriving from a "create with this style" card locks the pick and jumps to step 2.
+  useLayoutEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const styleParam = params.get("style")?.trim() || "";
+    const isGalleryJump = Boolean(
+      params.get("photoId") ||
+        params.get("profileId") ||
+        params.get("profile") ||
+        params.get("photoUrl") ||
+        params.get("source") === "selection" ||
+        params.get("autostart") === "train" ||
+        params.get("mode") === "edit" ||
+        params.get("mode") === "thumbnail"
+    );
+    const forceFresh =
+      params.get("fresh") === "1" ||
+      params.get("reset") === "1" ||
+      params.get("new") === "1" ||
+      // Style gallery entry must never restore a stale result session.
+      (Boolean(styleParam) && !isGalleryJump);
+
+    if (forceFresh) {
+      clearGenerateSessionScratch();
+      clearConfirmedImage();
+      setResultReady(false);
+      setResultView("compare");
+      setDrafts([]);
+      setFocusedDraft(0);
+      setSelectedResultUrl("");
+      setUploadedFiles([]);
+      setSelectedProfileId(null);
+      setPortraitId(null);
+      setPrompt("");
+      setDirectEditMode(false);
+      setDirectEditSource(null);
+      setUseTrainCredits(false);
+      setGallerySavedMsg(false);
+      setGenerationError(null);
+      setActionMessage(null);
+      setIsGenerating(false);
+      setIsTraining(false);
+      setRegenerateBusy(false);
+      setRegeneratingSlot(null);
+      setValidationError(null);
+      setSubject(PERSONA_DEFAULTS.subject);
+      setAge(PERSONA_DEFAULTS.age);
+      setBackgroundMode("auto");
+      setBackgroundTags([]);
+      setBackgroundCustom("");
+      setAspectRatio("9:16");
+      setDraftAspectRatios(["9:16", "9:16"]);
+      setDraftImagePans([{ ...DEFAULT_IMAGE_PAN }, { ...DEFAULT_IMAGE_PAN }]);
+      setExportPreset("original");
+      galleryHydratedKeyRef.current = null;
+      autoTrainArmedRef.current = false;
+
+      if (styleParam) {
+        // Concept gallery → lock style and land on subject/age (step 2).
+        setSelectedStyles([styleParam]);
+        setStyleLocked(true);
+        setCurrentStep(2);
+        setMaxStepReached(2);
+      } else {
+        setSelectedStyles([]);
+        setStyleLocked(false);
+        setCurrentStep(1);
+        setMaxStepReached(1);
+      }
+
+      try {
+        const next = new URLSearchParams(params);
+        next.delete("fresh");
+        next.delete("reset");
+        next.delete("new");
+        const qs = next.toString();
+        window.history.replaceState(
+          window.history.state,
+          "",
+          `${pathname}${qs ? `?${qs}` : ""}`
+        );
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+
+    if (params.get("autostart") === "train") return;
+    // Direct-edit jumps must not restore a stale AI result session.
+    const mode = params.get("mode");
+    if (mode === "edit" || mode === "thumbnail") return;
+    if (params.get("photoId") || params.get("profileId") || params.get("profile")) {
+      return;
+    }
+    const session = readResultSession();
+    if (!session?.drafts.length || !session.resultReady) return;
+    setDrafts(session.drafts);
+    setFocusedDraft(session.focusedDraft);
+    setSelectedResultUrl(session.selectedResultUrl);
+    if (session.resultView === "detail" && session.selectedResultUrl) {
+      void snapshotConfirmedImage(session.selectedResultUrl);
+    }
+    setResultReady(true);
+    setResultView(session.resultView);
+    setDirectEditMode(Boolean(session.directEditMode));
+    if (session.directEditMode) {
+      setAspectRatio("original");
+      setDraftAspectRatios(["original", "original"]);
+      setDraftImagePans([{ ...DEFAULT_IMAGE_PAN }, { ...DEFAULT_IMAGE_PAN }]);
+    }
+    setCurrentStep(session.resultView === "detail" ? 5 : 4);
+    setMaxStepReached(session.resultView === "detail" ? 5 : 4);
+    if (session.portraitId) setPortraitId(session.portraitId);
+    if (session.profileId) setSelectedProfileId(session.profileId);
+    if (session.selfieUrls?.length) {
+      setUploadedFiles((prev) =>
+        prev.length > 0 ? prev : session.selfieUrls!.slice(0, MAX_SELFIE_UPLOADS)
+      );
+    }
+  }, [clearConfirmedImage, pathname]);
+
+  // Keep style lock in sync if query still has style (e.g. after stripping fresh=1).
   useEffect(() => {
-    const style = searchParams.get("style");
+    const style = searchParams.get("style")?.trim();
     if (!style) return;
-    setSelectedStyles((prev) => (prev.includes(style) ? prev : [...prev, style]));
+    const isGalleryJump =
+      searchParams.get("photoId") ||
+      searchParams.get("profileId") ||
+      searchParams.get("profile") ||
+      searchParams.get("photoUrl") ||
+      searchParams.get("source") === "selection" ||
+      searchParams.get("mode") === "edit" ||
+      searchParams.get("mode") === "thumbnail";
+    if (isGalleryJump) return;
+
+    setSelectedStyles((prev) => (prev.includes(style) ? prev : [style]));
     setStyleLocked(true);
     setCurrentStep((step) => (step < 2 ? 2 : step));
-    setMaxStepReached((step) => (step < 2 ? 2 : step));
+    setMaxStepReached((step) => Math.max(step, 2));
+  }, [searchParams]);
+
+  // Gallery → skip steps 1–4, land on step 5 with the finished portrait as face model.
+  useEffect(() => {
+    const intent = searchParams.get("intent");
+    if (intent !== "portrait") return;
+    const photoUrlRaw = searchParams.get("photoUrl");
+    const workId = searchParams.get("workId") ?? "";
+    const styleParam = searchParams.get("style")?.trim() || "";
+    if (!photoUrlRaw) return;
+    const hydrateKey = `portrait::${workId}::${photoUrlRaw}`;
+    if (galleryHydratedKeyRef.current === hydrateKey) return;
+
+    void (async () => {
+      let decoded = photoUrlRaw;
+      try {
+        decoded = decodeURIComponent(photoUrlRaw);
+      } catch {
+        /* keep raw */
+      }
+      if (!decoded) return;
+
+      galleryHydratedKeyRef.current = hydrateKey;
+      clearResultSession();
+
+      await fetchFaceProfilesFromServer();
+      let work = workId ? listGalleryHistory().find((w) => w.id === workId) : undefined;
+      if (workId && !work) {
+        const remote = await fetchGalleryHistoryFromServer();
+        work = remote.find((w) => w.id === workId);
+      }
+
+      const profileIdParam =
+        searchParams.get("profileId") ?? searchParams.get("profile");
+      let linkedProfileId = profileIdParam || work?.profileId || null;
+      let selfies = (work?.selfieUrls || []).filter(
+        (u): u is string => typeof u === "string" && u.trim().length > 8
+      );
+
+      if (!selfies.length && linkedProfileId) {
+        const profile = getFaceProfile(linkedProfileId);
+        if (profile?.photoUrls?.length) {
+          selfies = profile.photoUrls.filter(
+            (u): u is string => typeof u === "string" && u.trim().length > 8
+          );
+        }
+      }
+
+      // Draft = finished work; selfies = original training photos only (never the work URL).
+      selfies = selfies.filter((u) => u.trim() !== decoded.trim()).slice(0, 10);
+
+      const styleId = styleParam || work?.styleId || stylePacksMeta[0]?.id;
+      if (styleId) {
+        setSelectedStyles([styleId]);
+        setStyleLocked(Boolean(styleParam || work?.styleId));
+      }
+      if (linkedProfileId) {
+        setSelectedProfileId(linkedProfileId);
+      }
+      setUploadedFiles(selfies);
+      setDrafts([decoded, decoded]);
+      setFocusedDraft(0);
+      setSelectedResultUrl(decoded);
+      setDraftAspectRatios(["9:16", "9:16"]);
+      setDraftImagePans([{ ...DEFAULT_IMAGE_PAN }, { ...DEFAULT_IMAGE_PAN }]);
+      setResultReady(true);
+      setResultView("detail");
+      setDirectEditMode(false);
+      setDirectEditSource(null);
+      setCurrentStep(5);
+      setMaxStepReached(5);
+      setUseTrainCredits(false);
+      setPendingAutoTrain(false);
+      if (workId) {
+        setPortraitId(workId.replace(/-\d+$/, "") || workId);
+      }
+      void snapshotConfirmedImage(decoded);
+      saveResultSession({
+        drafts: [decoded, decoded],
+        focusedDraft: 0,
+        selectedResultUrl: decoded,
+        resultView: "detail",
+        resultReady: true,
+        portraitId: workId || null,
+        directEditMode: false,
+        selfieUrls: selfies,
+        profileId: linkedProfileId,
+      });
+      replaceQuerySilently((params) => {
+        params.delete("intent");
+        params.delete("workId");
+        params.delete("photoUrl");
+        params.delete("profileId");
+        params.delete("profile");
+        params.set("view", "detail");
+      });
+    })();
+  }, [replaceQuerySilently, searchParams, snapshotConfirmedImage]);
+
+  // Gallery jump: profileId / photoId / photoUrl — AI track or direct thumbnail-edit track.
+  useEffect(() => {
+    const photoUrlRaw = searchParams.get("photoUrl");
+    const profileId =
+      searchParams.get("profileId") ?? searchParams.get("profile");
+    const photoId = searchParams.get("photoId");
+    const mode = searchParams.get("mode");
+    const source = searchParams.get("source");
+    const intent = searchParams.get("intent") ?? searchParams.get("autostart");
+    if (intent === "portrait") return;
+    const isDirectEdit = mode === "edit" || mode === "thumbnail";
+    const isTrainIntent = (intent === "train" || source === "selection") && !isDirectEdit;
+    const shouldAutoTrain = isTrainIntent && searchParams.get("autostart") === "train";
+    if (!photoUrlRaw && !profileId && !photoId && source !== "selection") return;
+
+    const hydrateKey = `${profileId ?? ""}::${photoId ?? ""}::${photoUrlRaw ?? ""}::${mode ?? ""}::${source ?? ""}`;
+    if (galleryHydratedKeyRef.current === hydrateKey) return;
+
+    let cancelled = false;
+
+    const readCachedPhotos = (id: string): string[] => {
+      try {
+        const cached = sessionStorage.getItem(`sca_generate_photos_${id}`);
+        if (!cached) return [];
+        const parsed = JSON.parse(cached) as unknown;
+        if (!Array.isArray(parsed)) return [];
+        return parsed.filter((u): u is string => typeof u === "string" && u.length > 0).slice(0, 10);
+      } catch {
+        return [];
+      }
+    };
+
+    void (async () => {
+      let files: string[] = [];
+
+      if (source === "selection") {
+        files = readTrainSelection();
+      }
+
+      if (profileId) {
+        // Hydrate vault from R2 before reading the selected profile.
+        await fetchFaceProfilesFromServer();
+        const profile = getFaceProfile(profileId);
+        if (profile?.photoUrls?.length) {
+          files = profile.photoUrls.slice(0, 10);
+        }
+        if (files.length < 1) {
+          files = readCachedPhotos(profileId);
+        }
+      }
+
+      if (photoId) {
+        const general = await fetchGeneralPhoto(photoId);
+        if (general?.imageUrl) {
+          files = [general.imageUrl, ...files.filter((u) => u !== general.imageUrl)].slice(
+            0,
+            10
+          );
+        }
+        if (files.length < 1) {
+          files = readCachedPhotos(photoId);
+        }
+      }
+
+      if (photoUrlRaw) {
+        let decoded = photoUrlRaw;
+        try {
+          decoded = decodeURIComponent(photoUrlRaw);
+        } catch {
+          /* keep raw */
+        }
+        if (decoded && !decoded.startsWith("local:")) {
+          files = [decoded, ...files.filter((u) => u !== decoded)].slice(0, 10);
+        }
+      }
+
+      if (files.length < 1) return;
+
+      // Prefer durable data:/http URLs, but keep originals if encode fails
+      // so a valid local profile photo still reaches the editor.
+      let durableFiles = files;
+      try {
+        durableFiles = await toProviderImageUrls(files);
+      } catch (err) {
+        console.warn("[PersonaCreator] profile photo durable encode failed", err);
+        durableFiles = files;
+      }
+      if (cancelled || durableFiles.length < 1) return;
+
+      galleryHydratedKeyRef.current = hydrateKey;
+
+      const existingResult = readResultSession();
+
+      if (profileId) {
+        setSelectedProfileId(profileId);
+        const profile = getFaceProfile(profileId);
+        if (profile) {
+          upsertFaceProfile({
+            ...profile,
+            photoUrls: durableFiles,
+            updatedAt: Date.now(),
+          });
+        }
+        try {
+          sessionStorage.setItem(
+            `sca_generate_photos_${profileId}`,
+            JSON.stringify(durableFiles)
+          );
+        } catch {
+          /* quota — profile localStorage remains source of truth */
+        }
+      }
+
+      if (photoId) {
+        try {
+          sessionStorage.setItem(
+            `sca_generate_photos_${photoId}`,
+            JSON.stringify(durableFiles)
+          );
+        } catch {
+          /* quota */
+        }
+      }
+
+      setUploadedFiles(durableFiles);
+      setSavedProfiles(listFaceProfiles());
+      setValidationError(null);
+      setGenerationError(null);
+      setIsTraining(false);
+      setIsGenerating(false);
+      setDirectEditMode(isDirectEdit);
+      setDraftImagePans([{ ...DEFAULT_IMAGE_PAN }, { ...DEFAULT_IMAGE_PAN }]);
+      setCurrentStep(4);
+      setMaxStepReached(4);
+
+      if (isDirectEdit) {
+        setDirectEditSource(photoId ? "photos" : profileId ? "models" : null);
+        setAspectRatio("original");
+        setDraftAspectRatios(["original", "original"]);
+        setDraftImagePans([{ ...DEFAULT_IMAGE_PAN }, { ...DEFAULT_IMAGE_PAN }]);
+        // Standard compare template — 시안 1 only (시안 2 hidden).
+        const original = durableFiles[0];
+        setDrafts([original]);
+        setFocusedDraft(0);
+        setSelectedResultUrl(original);
+        setResultReady(true);
+        setResultView("detail");
+        setSelectedStyles((prev) =>
+          prev.length > 0 ? prev : ([stylePacksMeta[0]?.id].filter(Boolean) as string[])
+        );
+        setUseTrainCredits(false);
+        setPendingAutoTrain(false);
+        setCurrentStep(5);
+        setMaxStepReached(5);
+        void snapshotConfirmedImage(original);
+        saveResultSession({
+          drafts: [original],
+          focusedDraft: 0,
+          selectedResultUrl: original,
+          resultView: "detail",
+          resultReady: true,
+          portraitId: null,
+          directEditMode: true,
+        });
+        return;
+      }
+
+      setDirectEditSource(null);
+
+      if (
+        existingResult?.drafts.length &&
+        existingResult.resultReady &&
+        !shouldAutoTrain
+      ) {
+        setDrafts(existingResult.drafts);
+        setFocusedDraft(existingResult.focusedDraft);
+        setSelectedResultUrl(existingResult.selectedResultUrl);
+        setResultReady(true);
+        setResultView(existingResult.resultView);
+        setUseTrainCredits(false);
+        setPendingAutoTrain(false);
+        setSelectedStyles((prev) =>
+          prev.length > 0 ? prev : ([stylePacksMeta[0]?.id].filter(Boolean) as string[])
+        );
+        setCurrentStep(existingResult.resultView === "detail" ? 5 : 4);
+        setMaxStepReached(existingResult.resultView === "detail" ? 5 : 4);
+        return;
+      }
+
+      setResultReady(false);
+      setResultView("compare");
+      setSelectedStyles((prev) =>
+        prev.length > 0 ? prev : ([stylePacksMeta[0]?.id].filter(Boolean) as string[])
+      );
+      setUseTrainCredits(Boolean(profileId) || isTrainIntent);
+      if (shouldAutoTrain) {
+        setPendingAutoTrain(true);
+        autoTrainArmedRef.current = false;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [searchParams]);
 
   useEffect(() => {
-    if (currentStep === 3) {
-      setSavedProfiles(listFaceProfiles());
-    }
+    if (currentStep !== 3) return;
+    let cancelled = false;
+    void fetchFaceProfilesFromServer().then((list) => {
+      if (!cancelled) setSavedProfiles(list);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [currentStep]);
 
   const steps = [
@@ -171,6 +788,7 @@ function PersonaCreatorInner() {
     { id: 2, title: t.creator.step2Title, icon: User, description: t.creator.step2Desc },
     { id: 3, title: t.creator.step3Title, icon: Upload, description: t.creator.step3Desc },
     { id: 4, title: t.creator.step4Title, icon: Wand2, description: t.creator.step4Desc },
+    { id: 5, title: t.creator.step5Title, icon: Sparkles, description: t.creator.step5Desc },
   ];
 
   const conceptTabs = ["all", ...CONCEPT_GROUP_IDS] as const;
@@ -241,6 +859,41 @@ function PersonaCreatorInner() {
     ];
   })();
 
+  /** Face + style + background fusion prompt for /api/generate (never simple paste). */
+  const buildFusionPromptForApi = useCallback(
+    (opts?: { keywordOverride?: string; additionalPrompt?: string }) => {
+      const styleId = selectedStyles[0];
+      return resolvePortraitGenerationPrompt({
+        styleIds: selectedStyles,
+        background: {
+          mode: backgroundMode,
+          tags: backgroundTags,
+          custom: backgroundCustom,
+          keywordOverride: opts?.keywordOverride,
+        },
+        additionalPrompt: opts?.additionalPrompt ?? prompt,
+        poseHint: styleId ? CONCEPT_POSE_HINTS[styleId] : undefined,
+      });
+    },
+    [selectedStyles, backgroundMode, backgroundTags, backgroundCustom, prompt]
+  );
+
+  const persistResultSession = useCallback(
+    (session: ResultSession) => {
+      saveResultSession({
+        ...session,
+        selfieUrls:
+          session.selfieUrls ??
+          resolveSelfieSourcesForGenerate({
+            uploadedFiles,
+            selectedProfileId,
+          }),
+        profileId: session.profileId ?? selectedProfileId,
+      });
+    },
+    [selectedProfileId, uploadedFiles]
+  );
+
   const goToStep = useCallback((step: number, options?: { scroll?: boolean }) => {
     setCurrentStep(step);
     setMaxStepReached((prev) => (step > prev ? step : prev));
@@ -259,16 +912,37 @@ function PersonaCreatorInner() {
       goToStep(3, { scroll: false });
       return;
     }
-    if (currentStep === 4 && resultReady && resultView === "detail") {
-      goToResultView("compare");
+    if (directEditMode) {
+      router.push("/gallery/my?tab=models");
+      return;
+    }
+    if (currentStep === 5) {
+      if (resultReady && resultView === "detail") {
+        setResultView("compare");
+        goToStep(4, { scroll: false });
+        return;
+      }
+      goToStep(4, { scroll: false });
       return;
     }
     if (currentStep === 4) {
+      if (resultReady && resultView === "compare") {
+        goToStep(3, { scroll: false });
+        return;
+      }
       goToStep(3, { scroll: false });
       return;
     }
     goToStep(Math.max(1, currentStep - 1), { scroll: false });
-  }, [currentStep, goToResultView, goToStep, isTraining, resultReady, resultView]);
+  }, [
+    currentStep,
+    directEditMode,
+    goToStep,
+    isTraining,
+    resultReady,
+    resultView,
+    router,
+  ]);
 
   const mapUploadErrors = useCallback(
     (errors: string[]) => {
@@ -294,33 +968,53 @@ function PersonaCreatorInner() {
   const ingestFiles = useCallback(
     async (fileList: File[]) => {
       if (!fileList.length) return;
+      if (uploadedFiles.length >= MAX_SELFIE_UPLOADS) {
+        setValidationError(
+          fillCanvas(t.creator.uploadLimitFull, { max: MAX_SELFIE_UPLOADS })
+        );
+        return;
+      }
       setIsUploading(true);
       setValidationError(null);
       try {
-        const { ok, errors } = await processUploadFiles(
-          fileList,
-          10 - uploadedFiles.length
-        );
+        const remaining = MAX_SELFIE_UPLOADS - uploadedFiles.length;
+        const { ok, errors } = await processUploadFiles(fileList, remaining);
         if (ok.length) {
-          setUploadedFiles((prev) => [...prev, ...ok.map((f) => f.url)].slice(0, 10));
+          setUploadedFiles((prev) =>
+            mergePhotoUrls(
+              prev,
+              ok.map((f) => f.url),
+              MAX_SELFIE_UPLOADS
+            )
+          );
         }
         if (errors.length) {
           setValidationError(mapUploadErrors(errors));
+        } else if (fileList.length > remaining) {
+          setValidationError(
+            fillCanvas(t.creator.uploadLimitFull, { max: MAX_SELFIE_UPLOADS })
+          );
         }
       } finally {
         setIsUploading(false);
       }
     },
-    [uploadedFiles.length, mapUploadErrors]
+    [uploadedFiles.length, mapUploadErrors, t.creator.uploadLimitFull]
   );
 
   const handleFileDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
       setIsDragOver(false);
+      if (uploadedFiles.length >= MAX_SELFIE_UPLOADS) {
+        setValidationError(
+          fillCanvas(t.creator.uploadLimitFull, { max: MAX_SELFIE_UPLOADS })
+        );
+        return;
+      }
       void ingestFiles(Array.from(e.dataTransfer.files));
     },
-    [ingestFiles]
+    [ingestFiles, uploadedFiles.length, t.creator.uploadLimitFull]
   );
 
   const selectSubject = (id: SubjectId) => {
@@ -377,14 +1071,66 @@ function PersonaCreatorInner() {
   };
 
   const chooseStyleAndContinue = (id: string) => {
+    // Fresh pictorial run from in-wizard style pick — drop stale drafts/photos.
+    clearGenerateSessionScratch();
+    clearConfirmedImage();
+    setDrafts([]);
+    setResultReady(false);
+    setSelectedResultUrl("");
+    setUploadedFiles([]);
     setSelectedStyles([id]);
     setStyleLocked(true);
     setValidationError(null);
     goToStep(2);
   };
 
+  const confirmDraftAndGoToEdit = useCallback(
+    (idx: 0 | 1) => {
+      const url = drafts[idx] || drafts[0] || selectedResultUrl || "";
+      if (!url.trim()) return;
+      setFocusedDraft(idx);
+      setSelectedResultUrl(url);
+      void snapshotConfirmedImage(url);
+      setResultView("detail");
+      setCurrentStep(5);
+      setMaxStepReached((prev) => Math.max(prev, 5));
+      persistResultSession({
+        drafts,
+        focusedDraft: idx,
+        selectedResultUrl: url,
+        resultView: "detail",
+        resultReady: true,
+        portraitId,
+        directEditMode: false,
+      });
+      replaceQuerySilently((params) => {
+        params.set("view", "detail");
+      });
+    },
+    [
+      drafts,
+      persistResultSession,
+      portraitId,
+      replaceQuerySilently,
+      selectedResultUrl,
+      snapshotConfirmedImage,
+    ]
+  );
+
   const focusDraft = (idx: 0 | 1) => {
     setFocusedDraft(idx);
+    setAspectRatio(draftAspectRatios[idx] ?? aspectRatio);
+    const picked = drafts[idx] || selectedResultUrl || drafts[0] || "";
+    if (picked) setSelectedResultUrl(picked);
+    persistResultSession({
+      drafts,
+      focusedDraft: idx,
+      selectedResultUrl: picked,
+      resultView,
+      resultReady,
+      portraitId,
+      directEditMode,
+    });
   };
 
   const toggleBackgroundTag = (tag: string) => {
@@ -393,12 +1139,65 @@ function PersonaCreatorInner() {
     );
   };
 
-  /** Runs portrait generation + gallery save. Returns false if blocked (e.g. no credits). */
-  const runInitialGeneration = useCallback(async (): Promise<boolean> => {
-    if (credits <= 0) {
-      setShowCreditModal(true);
-      return false;
-    }
+  const openMockResultWorkspace = useCallback((): boolean => {
+    const primary =
+      uploadedFiles[0] || uploadedFiles[1] || drafts[0] || selectedResultUrl || "";
+    const secondary =
+      uploadedFiles[1] || uploadedFiles[0] || drafts[1] || primary || "";
+    if (!primary || !secondary) return false;
+
+    const fakePortraitId = portraitId || `mock-${Date.now()}`;
+    setCurrentStep(4);
+    setMaxStepReached((prev) => (prev < 4 ? 4 : prev));
+    setDirectEditMode(false);
+    setIsGenerating(false);
+    setIsTraining(false);
+    setTrainingProgress(100);
+    setGenerationError(null);
+    setActionMessage("Fal.ai 연동 전 테스트용 모의 결과 화면입니다.");
+    setPortraitId(fakePortraitId);
+    setDrafts([primary, secondary]);
+    setFocusedDraft(0);
+    setDraftAspectRatios([aspectRatio, aspectRatio]);
+    setDraftImagePans([{ ...DEFAULT_IMAGE_PAN }, { ...DEFAULT_IMAGE_PAN }]);
+    setSelectedResultUrl(primary);
+    setResultView("compare");
+    setResultReady(true);
+    setCurrentStep(4);
+    setMaxStepReached((prev) => Math.max(prev, 4));
+    setUseTrainCredits(false);
+    saveResultSession({
+      drafts: [primary, secondary],
+      focusedDraft: 0,
+      selectedResultUrl: primary,
+      resultView: "compare",
+      resultReady: true,
+      portraitId: fakePortraitId,
+      directEditMode: false,
+    });
+    replaceQuerySilently((params) => {
+      params.set("view", "detail");
+      params.delete("autostart");
+      params.delete("intent");
+      params.delete("mode");
+    });
+    return true;
+  }, [
+    aspectRatio,
+    drafts,
+    portraitId,
+    replaceQuerySilently,
+    selectedResultUrl,
+    snapshotConfirmedImage,
+    uploadedFiles,
+  ]);
+
+  /** Runs portrait generation + gallery save. */
+  const runInitialGeneration = useCallback(async (opts?: { train?: boolean }): Promise<boolean> => {
+    // Direct thumbnail-edit track never hits the AI generate API.
+    if (directEditMode) return false;
+
+    const trainMode = opts?.train ?? useTrainCredits;
 
     setIsGenerating(true);
     setResultReady(false);
@@ -408,10 +1207,26 @@ function PersonaCreatorInner() {
     setGenerationError(null);
     const base = `portrait-${Date.now()}`;
 
+    let providerSelfies: string[];
+    try {
+      // Compress + Fal CDN upload first — never POST multi-MB data URIs to /api/generate.
+      providerSelfies = await prepareGenerateImageUrls(uploadedFiles);
+    } catch (err) {
+      console.error("[PersonaCreator] selfie encode/upload failed", err);
+      if (FORCE_RESULT_BYPASS_FOR_FAL_TEST && openMockResultWorkspace()) {
+        return true;
+      }
+      setGenerationError(t.creator.generateNetworkError);
+      showToast(t.creator.generateFailed, "error");
+      setIsGenerating(false);
+      return false;
+    }
+
     const facePayload = buildFaceConsistencyPayload({
-      mode: "initial",
-      selfieUrls: uploadedFiles,
-      prompt,
+      mode: trainMode ? "train" : "initial",
+      selfieUrls: providerSelfies,
+      ...buildFusionPromptForApi(),
+      fusionMode: "full_rerender",
       aspectRatio,
       styleIds: selectedStyles,
     });
@@ -424,6 +1239,7 @@ function PersonaCreatorInner() {
         error?: string;
         refunded?: boolean;
         ledgerId?: string | null;
+        creditsAfter?: number;
         message?: string;
       }>("/api/generate", {
         method: "POST",
@@ -433,6 +1249,9 @@ function PersonaCreatorInner() {
 
       if (result.error === "network" || result.status === 0) {
         console.error("[PersonaCreator] generate network failure", result);
+        if (FORCE_RESULT_BYPASS_FOR_FAL_TEST && openMockResultWorkspace()) {
+          return true;
+        }
         setGenerationError(t.creator.generateNetworkError);
         showToast(t.creator.generateFailed, "error");
         setIsGenerating(false);
@@ -441,9 +1260,11 @@ function PersonaCreatorInner() {
 
       const data = result.data;
       if (result.status === 402) {
+        if (FORCE_RESULT_BYPASS_FOR_FAL_TEST && openMockResultWorkspace()) {
+          return true;
+        }
         setGenerationError(t.creator.generateFailed);
         showToast(t.creator.generateFailed, "error");
-        setShowCreditModal(true);
         setIsGenerating(false);
         return false;
       }
@@ -454,39 +1275,86 @@ function PersonaCreatorInner() {
           serverError: data?.error ?? data?.message,
           preview: result.rawPreview,
         });
+        const serverMessage =
+          typeof data?.message === "string" && data.message.trim()
+            ? data.message.trim()
+            : typeof data?.error === "string" && data.error.trim()
+              ? data.error.trim()
+              : null;
         const errMsg = data?.refunded
           ? t.creator.generateFailedRefunded
-          : t.creator.generateFailed;
+          : serverMessage || t.creator.generateFailed;
+        if (FORCE_RESULT_BYPASS_FOR_FAL_TEST && openMockResultWorkspace()) {
+          return true;
+        }
         setGenerationError(errMsg);
-        showToast(t.creator.generateFailed, "error");
-        if (data?.refunded) await refreshAccount();
+        showToast(errMsg, "error");
+        if (typeof data?.creditsAfter === "number") {
+          applyServerCredits(data.creditsAfter);
+        } else if (data?.refunded) {
+          await refreshAccount();
+        }
         setIsGenerating(false);
         return false;
       }
       urls = data.imageUrls;
       serverDebited = Boolean(data.ledgerId);
-      if (serverDebited) await refreshAccount();
+      if (typeof data.creditsAfter === "number") {
+        applyServerCredits(data.creditsAfter);
+      } else if (serverDebited) {
+        await refreshAccount();
+      }
     } catch (err) {
       console.error("[PersonaCreator] generate unexpected error", err);
+      if (FORCE_RESULT_BYPASS_FOR_FAL_TEST && openMockResultWorkspace()) {
+        return true;
+      }
       setGenerationError(t.creator.generateNetworkError);
       showToast(t.creator.generateFailed, "error");
       setIsGenerating(false);
       return false;
     }
 
-    if (!serverDebited && !consumeCredit(1)) {
-      setShowCreditModal(true);
-      setIsGenerating(false);
-      return false;
-    }
+    // Portrait generate modes are free — no local wallet debit.
+    void serverDebited;
 
     registerPortrait(`${base}-0`);
     registerPortrait(`${base}-1`);
     setPortraitId(base);
     const draftA = urls[0];
     const draftB = urls[1] ?? urls[0];
+    setDirectEditMode(false);
     setDrafts([draftA, draftB]);
     setFocusedDraft(0);
+    setDraftAspectRatios([aspectRatio, aspectRatio]);
+    setDraftImagePans([{ ...DEFAULT_IMAGE_PAN }, { ...DEFAULT_IMAGE_PAN }]);
+    setSelectedResultUrl(draftA);
+    setResultView("compare");
+    setResultReady(true);
+    setCurrentStep(4);
+    setMaxStepReached((prev) => Math.max(prev, 4));
+    setUseTrainCredits(false);
+    persistResultSession({
+      drafts: [draftA, draftB],
+      focusedDraft: 0,
+      selectedResultUrl: draftA,
+      resultView: "compare",
+      resultReady: true,
+      portraitId: base,
+      directEditMode: false,
+      selfieUrls: uploadedFiles.slice(0, 10),
+      profileId: selectedProfileId,
+    });
+    replaceQuerySilently((params) => {
+      params.delete("view");
+      params.delete("autostart");
+      params.delete("intent");
+      params.delete("mode");
+    });
+
+    // Release generate lock before gallery upload so step-5 tools (배경 생성) stay usable.
+    setIsGenerating(false);
+
     const styleId = selectedStyles[0];
     const now = Date.now();
     const meta = getAccountMeta();
@@ -497,54 +1365,78 @@ function PersonaCreatorInner() {
       { id: `${base}-1`, url: draftB },
     ];
 
-    for (const draft of draftsToSave) {
+    const durableDrafts = [draftA, draftB];
+    for (let i = 0; i < draftsToSave.length; i++) {
+      const draft = draftsToSave[i];
       const uploaded = await uploadGalleryAsset(draft.url, draft.id, planId);
-      pushGalleryHistory(
+      const durable = uploaded?.imageUrl || uploaded?.thumbnailUrl || draft.url;
+      durableDrafts[i] = durable;
+      await pushGalleryHistoryAndSync(
         {
           id: draft.id,
-          imageUrl: uploaded?.thumbnailUrl ?? draft.url,
+          imageUrl: durable,
           thumbnailUrl: uploaded?.thumbnailUrl,
           originalKey: uploaded?.originalKey,
           storageId: uploaded?.storageId ?? draft.id,
           createdAt: draft.id.endsWith("-0") ? now : now + 1,
           styleId,
+          profileId: selectedProfileId ?? undefined,
+          profileName: selectedProfileId
+            ? getFaceProfile(selectedProfileId)?.name
+            : undefined,
+          selfieUrls: uploadedFiles.slice(0, 10),
         },
         retentionCtx
       );
     }
+    setDrafts([durableDrafts[0], durableDrafts[1]]);
+    setSelectedResultUrl((prev) => {
+      if (confirmedLockRef.current) return prev;
+      const next =
+        prev === draftA
+          ? durableDrafts[0]
+          : prev === draftB
+            ? durableDrafts[1]
+            : prev || durableDrafts[0];
+      persistResultSession({
+        drafts: [durableDrafts[0], durableDrafts[1]],
+        focusedDraft: prev === draftB || prev === durableDrafts[1] ? 1 : 0,
+        selectedResultUrl: next,
+        resultView: "detail",
+        resultReady: true,
+        portraitId: base,
+        directEditMode: false,
+        selfieUrls: uploadedFiles.slice(0, 10),
+        profileId: selectedProfileId,
+      });
+      return next;
+    });
 
-    setIsGenerating(false);
-    setResultReady(true);
-    setResultView("compare");
-    {
-      const params = new URLSearchParams(searchParams.toString());
-      params.set("view", "compare");
-      const qs = params.toString();
-      router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
-    }
     setGallerySavedMsg(true);
     return true;
   }, [
     aspectRatio,
-    consumeCredit,
-    credits,
-    pathname,
+    applyServerCredits,
+    directEditMode,
     planId,
     prompt,
     refreshAccount,
     registerPortrait,
-    router,
-    searchParams,
+    replaceQuerySilently,
     selectedStyles,
-    setShowCreditModal,
     showToast,
     t.creator.generateFailed,
     t.creator.generateFailedRefunded,
     t.creator.generateNetworkError,
     uploadedFiles,
+    useTrainCredits,
+    snapshotConfirmedImage,
+    buildFusionPromptForApi,
+    openMockResultWorkspace,
   ]);
 
-  const handleStartTraining = () => {
+  const handleStartTraining = (opts?: { train?: boolean }) => {
+    if (directEditMode) return;
     if (selectedStyles.length < 1) {
       setValidationError(t.creator.validationStyleMin);
       return;
@@ -553,72 +1445,160 @@ function PersonaCreatorInner() {
       setValidationError(t.creator.validationUploadMin);
       return;
     }
-    if (credits <= 0) {
-      setShowCreditModal(true);
-      return;
-    }
+    const trainMode =
+      opts?.train === true || useTrainCredits || Boolean(selectedProfileId);
+    setUseTrainCredits(trainMode);
     setValidationError(null);
+    clearResultSession();
+    clearConfirmedImage();
     trainingAbortRef.current = false;
-    // Jump to step 4 immediately and show the training overlay so step 1/3
-    // never flash when generation finishes (avoids concept-gallery flicker).
     setCurrentStep(4);
     setMaxStepReached((prev) => (prev < 4 ? 4 : prev));
     setTrainingProgress(0);
     setIsTraining(true);
+    setResultView("compare");
+    setResultReady(false);
+    setSelectedResultUrl("");
+    setDirectEditMode(false);
 
     void (async () => {
-      const startedAt = Date.now();
-      await runInitialGeneration();
-      if (trainingAbortRef.current) return;
-
-      const elapsed = Date.now() - startedAt;
-      const minMs = 2200;
-      if (elapsed < minMs) {
-        await new Promise((r) => setTimeout(r, minMs - elapsed));
+      const progressTimer = window.setInterval(() => {
+        setTrainingProgress((p) => (p >= 90 ? p : Math.min(90, p + 8)));
+      }, 400);
+      try {
+        const ok = await runInitialGeneration({ train: trainMode });
+        if (trainingAbortRef.current) return;
+        setTrainingProgress(100);
+        setCurrentStep(4);
+        setMaxStepReached((prev) => (prev < 4 ? 4 : prev));
+        setResultView("compare");
+        setDirectEditMode(false);
+        if (ok) setResultReady(true);
+      } catch (err) {
+        console.error("[PersonaCreator] handleStartTraining fallback", err);
+        if (FORCE_RESULT_BYPASS_FOR_FAL_TEST) {
+          openMockResultWorkspace();
+        }
+      } finally {
+        window.clearInterval(progressTimer);
+        await new Promise<void>((resolve) => {
+          requestAnimationFrame(() => resolve());
+        });
+        setIsTraining(false);
       }
       if (trainingAbortRef.current) return;
-
-      setTrainingProgress(100);
-      setIsTraining(false);
-      // Already on step 4 — do not call goToStep (avoids scroll jump / remount flicker).
       requestAnimationFrame(() => {
         stepContentRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
       });
     })();
   };
 
+  useEffect(() => {
+    if (!pendingAutoTrain || directEditMode) return;
+    if (uploadedFiles.length < MIN_SELFIE_UPLOADS) return;
+    if (selectedStyles.length < 1) return;
+    if (autoTrainArmedRef.current) return;
+    if (isTraining || isGenerating || resultReady) return;
+    autoTrainArmedRef.current = true;
+    setPendingAutoTrain(false);
+    handleStartTraining({ train: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    pendingAutoTrain,
+    directEditMode,
+    uploadedFiles.length,
+    selectedStyles.length,
+    isTraining,
+    isGenerating,
+    resultReady,
+  ]);
+
   const handleGenerate = () => {
+    if (directEditMode) return;
+    if (selectedStyles.length < 1) {
+      setValidationError(t.creator.validationStyleMin);
+      return;
+    }
+    if (uploadedFiles.length < MIN_SELFIE_UPLOADS) {
+      setValidationError(t.creator.validationUploadMin);
+      return;
+    }
+    setValidationError(null);
     void runInitialGeneration();
   };
 
   const handleRegenerate = () => {
-    if (!portraitId || regenerateBusy) return;
-    if (credits < REGENERATE_CREDIT_COST) {
-      setShowCreditModal(true);
+    if (directEditMode) return;
+    if (regenerateBusy || isGenerating) return;
+    const targetSlot: 0 | 1 = focusedDraft === 1 ? 1 : 0;
+    const sourceDraft =
+      drafts[targetSlot] || selectedResultUrl || confirmedImageUrl || drafts[0] || "";
+    if (!sourceDraft.trim()) {
+      setActionMessage(t.creator.regenerateNeedDraft);
       return;
     }
-    setRegenerateBusy(true);
-    setActionMessage(null);
-    const id = `${portraitId}-${focusedDraft}`;
 
-    const facePayload = buildFaceConsistencyPayload({
-      mode: "regenerate",
-      selfieUrls: uploadedFiles,
-      draftUrl: drafts[focusedDraft],
-      prompt,
-      aspectRatio,
-      styleIds: selectedStyles,
+    const selfieSources = resolveSelfieSourcesForGenerate({
+      uploadedFiles,
+      selectedProfileId,
+      draftFallback: sourceDraft,
     });
+    if (selfieSources.length < 1) {
+      setActionMessage(t.creator.bgFusionNeedSelfies);
+      return;
+    }
+
+    const pid = portraitId || `portrait-${Date.now()}`;
+    if (!portraitId) {
+      setPortraitId(pid);
+      registerPortrait(`${pid}-0`);
+      registerPortrait(`${pid}-1`);
+    }
+
+    setRegenerateBusy(true);
+    setRegeneratingSlot(targetSlot);
+    setActionMessage(null);
+    const id = `${pid}-${targetSlot}`;
 
     void (async () => {
       let nextUrl: string | null = null;
       let serverDebited = false;
       try {
+        const providerSelfies = await prepareGenerateImageUrls(selfieSources);
+        const [providerDraft] = await prepareGenerateImageUrls([sourceDraft], {
+          maxImages: 1,
+        });
+        const dualRef = validateRegenerateDualReference({
+          selfieUrls: providerSelfies,
+          draftUrl: providerDraft,
+          userMessages: {
+            missingSelfies: t.creator.validationUploadMin,
+            missingDraft: t.creator.regenerateNeedDraft,
+          },
+        });
+        if (!dualRef.ok) {
+          setActionMessage(dualRef.message);
+          setRegenerateBusy(false);
+          setRegeneratingSlot(null);
+          return;
+        }
+        const { prompt: fusionPrompt, backgroundScene } = buildFusionPromptForApi();
+        const facePayload = buildFaceConsistencyPayload({
+          mode: "regenerate",
+          selfieUrls: dualRef.selfieUrls,
+          draftUrl: dualRef.draftUrl,
+          prompt: fusionPrompt,
+          backgroundScene,
+          fusionMode: "edit_draft",
+          aspectRatio: draftAspectRatios[targetSlot] ?? aspectRatio,
+          styleIds: selectedStyles,
+        });
         const result = await apiFetchJson<{
           imageUrls?: string[];
           error?: string;
           refunded?: boolean;
           ledgerId?: string | null;
+          creditsAfter?: number;
           message?: string;
         }>("/api/generate", {
           method: "POST",
@@ -630,18 +1610,21 @@ function PersonaCreatorInner() {
           console.error("[PersonaCreator] regenerate network failure", result);
           setActionMessage(t.creator.generateNetworkError);
           setRegenerateBusy(false);
+          setRegeneratingSlot(null);
           return;
         }
 
         const data = result.data;
         if (result.status === 402) {
-          setShowCreditModal(true);
+          setActionMessage(t.creator.generateFailed);
           setRegenerateBusy(false);
+          setRegeneratingSlot(null);
           return;
         }
         if (result.status === 429) {
           setActionMessage(t.creator.retouchThrottle);
           setRegenerateBusy(false);
+          setRegeneratingSlot(null);
           return;
         }
         if (!result.ok || !data?.imageUrls?.length) {
@@ -651,120 +1634,403 @@ function PersonaCreatorInner() {
             serverError: data?.error ?? data?.message,
             preview: result.rawPreview,
           });
+          const serverMessage =
+            typeof data?.message === "string" && data.message.trim()
+              ? data.message.trim()
+              : typeof data?.error === "string" && data.error.trim()
+                ? data.error.trim()
+                : null;
           setActionMessage(
-            data?.refunded ? t.creator.generateFailedRefunded : t.creator.generateFailed
+            data?.refunded
+              ? t.creator.generateFailedRefunded
+              : serverMessage || t.creator.generateFailed
           );
-          if (data?.refunded) await refreshAccount();
+          if (typeof data?.creditsAfter === "number") {
+            applyServerCredits(data.creditsAfter);
+          } else if (data?.refunded) {
+            await refreshAccount();
+          }
           setRegenerateBusy(false);
+          setRegeneratingSlot(null);
           return;
         }
         nextUrl = data.imageUrls[0];
         serverDebited = Boolean(data.ledgerId);
-        if (serverDebited) await refreshAccount();
+        if (typeof data.creditsAfter === "number") {
+          applyServerCredits(data.creditsAfter);
+        } else if (serverDebited) {
+          await refreshAccount();
+        }
       } catch (err) {
         console.error("[PersonaCreator] regenerate unexpected error", err);
         setActionMessage(t.creator.generateNetworkError);
         setRegenerateBusy(false);
+        setRegeneratingSlot(null);
         return;
       }
 
       if (!serverDebited) {
-        const result = requestRetouch(id, "regenerate");
-        if (!result.ok) {
+        // Regenerate is free — keep retouch bookkeeping only.
+        const debitResult = requestRetouch(id, "regenerate", { skipCredit: true });
+        if (!debitResult.ok) {
           setRegenerateBusy(false);
-          if (result.reason === "throttle") setActionMessage(t.creator.retouchThrottle);
-          else if (result.reason === "daily_limit") setActionMessage(t.creator.retouchDailyLimit);
-          else if (result.reason === "insufficient_credits") setShowCreditModal(true);
+          setRegeneratingSlot(null);
+          if (debitResult.reason === "throttle") setActionMessage(t.creator.retouchThrottle);
+          else if (debitResult.reason === "daily_limit") setActionMessage(t.creator.retouchDailyLimit);
           return;
         }
+      } else {
+        // Keep retouch bookkeeping in sync when /api/generate already ran.
+        requestRetouch(id, "regenerate", { skipCredit: true });
       }
 
-      if (nextUrl) {
-        setDrafts((prev) => {
-          const next = [...prev];
-          next[focusedDraft] = nextUrl as string;
-          return next;
-        });
+      if (!nextUrl) {
+        setRegenerateBusy(false);
+        setRegeneratingSlot(null);
+        return;
       }
+
+      const nextDrafts = [drafts[0] || "", drafts[1] || ""];
+      nextDrafts[targetSlot] = nextUrl;
+      setFocusedDraft(targetSlot);
+      setDrafts(nextDrafts);
+      setDraftImagePans((prev) => {
+        const next: [ImagePan, ImagePan] = [
+          { ...prev[0] },
+          { ...prev[1] },
+        ];
+        next[targetSlot] = { ...DEFAULT_IMAGE_PAN };
+        return next;
+      });
+      setSelectedResultUrl(nextUrl);
+      setDraftRevision((n) => n + 1);
+      void snapshotConfirmedImage(nextUrl);
+      saveResultSession({
+        drafts: nextDrafts,
+        focusedDraft: targetSlot,
+        selectedResultUrl: nextUrl,
+        resultView,
+        resultReady: true,
+        portraitId: pid,
+        directEditMode: false,
+      });
+      setActionMessage(t.creator.regenerateDone);
+      showToast(t.creator.regenerateDone, "success");
       setRegenerateBusy(false);
+      setRegeneratingSlot(null);
+
+      try {
+        const uploaded = await uploadGalleryAsset(nextUrl, `${pid}-${targetSlot}`, planId);
+        const durable = uploaded?.imageUrl || uploaded?.thumbnailUrl || nextUrl;
+        const meta = getAccountMeta();
+        const retentionCtx = retentionContextFromAccount(planId, meta);
+        await pushGalleryHistoryAndSync(
+          {
+            id: `${pid}-${targetSlot}`,
+            imageUrl: durable,
+            thumbnailUrl: uploaded?.thumbnailUrl,
+            originalKey: uploaded?.originalKey,
+            storageId: uploaded?.storageId ?? `${pid}-${targetSlot}`,
+            createdAt: Date.now(),
+            styleId: selectedStyles[0],
+            profileId: selectedProfileId ?? undefined,
+            profileName: selectedProfileId
+              ? getFaceProfile(selectedProfileId)?.name
+              : undefined,
+            selfieUrls: resolveSelfieSourcesForGenerate({
+              uploadedFiles,
+              selectedProfileId,
+            }).slice(0, 10),
+          },
+          retentionCtx
+        );
+        if (durable && durable !== nextUrl) {
+          const durableDrafts = [...nextDrafts];
+          durableDrafts[targetSlot] = durable;
+          setDrafts(durableDrafts);
+          setSelectedResultUrl((prev) => (prev === nextUrl ? durable : prev));
+          void snapshotConfirmedImage(durable);
+          saveResultSession({
+            drafts: durableDrafts,
+            focusedDraft: targetSlot,
+            selectedResultUrl: durable,
+            resultView,
+            resultReady: true,
+            portraitId: pid,
+            directEditMode: false,
+          });
+          setDraftRevision((n) => n + 1);
+        }
+      } catch (err) {
+        console.error("[PersonaCreator] regenerate gallery persist failed", err);
+      }
     })();
   };
 
-  const handleDownload = async () => {
+  /** Detail view: AI background keyword → full face+style+scene fusion re-render (not paste). */
+  const handleBackgroundFusion = useCallback(
+    async (keyword: string) => {
+      const trimmed = keyword.trim();
+      if (!trimmed) {
+        throw new Error("키워드를 입력해 주세요.");
+      }
+      if (directEditMode) {
+        throw new Error(t.creator.generateFailed);
+      }
+      if (regenerateBusy) {
+        throw new Error(t.creator.regenerateBusyLabel);
+      }
+
+      const targetSlot: 0 | 1 = focusedDraft === 1 ? 1 : 0;
+      const sourceDraft =
+        drafts[targetSlot] ||
+        selectedResultUrl ||
+        confirmedImageUrl ||
+        drafts[0] ||
+        "";
+      if (!sourceDraft.trim()) {
+        throw new Error(t.creator.regenerateNeedDraft);
+      }
+
+      const selfieSources = resolveSelfieSourcesForGenerate({
+        uploadedFiles,
+        selectedProfileId,
+        excludeUrls: [sourceDraft],
+        draftFallback: sourceDraft,
+      });
+      if (selfieSources.length < 1) {
+        throw new Error(t.creator.bgFusionNeedSelfies);
+      }
+
+      const pid = portraitId || `portrait-${Date.now()}`;
+      if (!portraitId) {
+        setPortraitId(pid);
+        registerPortrait(`${pid}-0`);
+        registerPortrait(`${pid}-1`);
+      }
+
+      setRegenerateBusy(true);
+      setRegeneratingSlot(targetSlot);
+      setActionMessage(null);
+
+      console.info("[PersonaCreator] bg-fusion start", {
+        keyword: trimmed,
+        targetSlot,
+        selfieCount: selfieSources.length,
+        draftPreview: sourceDraft.slice(0, 96),
+        profileId: selectedProfileId,
+      });
+
+      try {
+        const { prompt: fusionPrompt, backgroundScene } = buildFusionPromptForApi({
+          keywordOverride: trimmed,
+        });
+
+        const { imageUrl: nextUrl, creditsAfter, ledgerId } =
+          await runBackgroundFusionGenerate({
+            keyword: trimmed,
+            selfieSources,
+            sourceDraft,
+            aspectRatio: draftAspectRatios[targetSlot] ?? aspectRatio,
+            styleIds: selectedStyles,
+            fusionPrompt,
+            backgroundScene,
+            additionalPrompt: prompt.trim() || undefined,
+            userMessages: {
+              missingSelfies: t.creator.bgFusionNeedSelfies,
+              missingDraft: t.creator.regenerateNeedDraft,
+            },
+          });
+
+        if (typeof creditsAfter === "number") {
+          applyServerCredits(creditsAfter);
+        } else if (ledgerId) {
+          await refreshAccount();
+        }
+
+        const nextDrafts: [string, string] = [drafts[0] || "", drafts[1] || ""];
+        nextDrafts[targetSlot] = nextUrl;
+        setFocusedDraft(targetSlot);
+        setDrafts(nextDrafts);
+        setDraftImagePans((prev) => {
+          const next: [ImagePan, ImagePan] = [{ ...prev[0] }, { ...prev[1] }];
+          next[targetSlot] = { ...DEFAULT_IMAGE_PAN };
+          return next;
+        });
+        setSelectedResultUrl(nextUrl);
+        setDraftRevision((n) => n + 1);
+        void snapshotConfirmedImage(nextUrl);
+        persistResultSession({
+          drafts: nextDrafts,
+          focusedDraft: targetSlot,
+          selectedResultUrl: nextUrl,
+          resultView,
+          resultReady: true,
+          portraitId: pid,
+          directEditMode: false,
+          selfieUrls: selfieSources,
+          profileId: selectedProfileId,
+        });
+        setActionMessage(t.creator.regenerateDone);
+        showToast(t.creator.regenerateDone, "success");
+        console.info("[PersonaCreator] bg-fusion success", {
+          targetSlot,
+          imageHost: (() => {
+            try {
+              return new URL(nextUrl).host;
+            } catch {
+              return "inline";
+            }
+          })(),
+        });
+      } catch (err) {
+        const message =
+          err instanceof BackgroundFusionError
+            ? err.message
+            : err instanceof Error
+              ? err.message
+              : t.creator.generateFailed;
+        console.error("[PersonaCreator] bg-fusion failed", err);
+        setActionMessage(message);
+        showToast(message, "error");
+        if (err instanceof BackgroundFusionError && err.code === "generation_blocked") {
+          setActionMessage(message);
+        }
+        throw err instanceof Error ? err : new Error(message);
+      } finally {
+        setRegenerateBusy(false);
+        setRegeneratingSlot(null);
+      }
+    },
+    [
+      aspectRatio,
+      applyServerCredits,
+      buildFusionPromptForApi,
+      confirmedImageUrl,
+      directEditMode,
+      draftAspectRatios,
+      drafts,
+      focusedDraft,
+      persistResultSession,
+      portraitId,
+      refreshAccount,
+      registerPortrait,
+      regenerateBusy,
+      resultView,
+      selectedResultUrl,
+      selectedProfileId,
+      selectedStyles,
+      showToast,
+      snapshotConfirmedImage,
+      t.creator.bgFusionNeedSelfies,
+      t.creator.generateFailed,
+      t.creator.generateNetworkError,
+      t.creator.regenerateBusyLabel,
+      t.creator.regenerateDone,
+      t.creator.regenerateNeedDraft,
+      uploadedFiles,
+    ]
+  );
+
+  const resolveSelectedImageUrl = () =>
+    selectedResultUrl ||
+    confirmedImageUrl ||
+    drafts[focusedDraft] ||
+    focusedImageUrl ||
+    directEditImageUrl ||
+    "";
+
+  const handleExportDownload = async (preset: DownloadQuality) => {
     if (isDownloading) return;
+    const imageUrl = resolveSelectedImageUrl();
+    if (!imageUrl) {
+      showToast(t.creator.downloadFailed, "error");
+      return;
+    }
+
+    const activeAspect = draftAspectRatios[focusedDraft] ?? aspectRatio;
+    const activePan = draftImagePans[focusedDraft] ?? DEFAULT_IMAGE_PAN;
     setIsDownloading(true);
-    const imageUrl = focusedImageUrl;
+    if (preset !== "hd") setExportPreset(preset);
+
     try {
       await downloadImageFile({
         imageUrl,
         filename:
-          exportPreset === "id-photo"
+          preset === "id-photo"
             ? `studio-canvas-id-photo-${Date.now()}.png`
-            : exportPreset === "print-png"
+            : preset === "print-png"
               ? `studio-canvas-print-a4-300dpi-${Date.now()}.png`
-              : exportPreset === "print-pdf"
+              : preset === "print-pdf"
                 ? `studio-canvas-print-a4-300dpi-${Date.now()}.pdf`
-                : `studio-canvas-hd-${Date.now()}.png`,
-        bakeWatermark: isFreePlan && exportPreset !== "print-png" && exportPreset !== "print-pdf",
-        aspectRatio,
-        exportPreset,
+                : preset === "original"
+                  ? `studio-canvas-original-${Date.now()}.png`
+                  : `studio-canvas-hd-${Date.now()}.png`,
+        bakeWatermark:
+          applyBrandWatermark && preset !== "print-png" && preset !== "print-pdf",
+        aspectRatio: preset === "id-photo" ? "id" : activeAspect,
+        exportPreset: preset,
         printPaper: "a4",
+        imagePan: activePan,
       });
-    } catch {
-      window.open(imageUrl, "_blank", "noopener,noreferrer");
+      // Download success → also register in My Gallery (no separate save click).
+      handleSaveToGallery();
+    } catch (err) {
+      console.error("[PersonaCreator] download failed", err);
+      showToast(t.creator.downloadFailed, "error");
     } finally {
       setIsDownloading(false);
     }
   };
 
-  const handleDownloadDraft = async (draftIdx: 0 | 1) => {
-    const imageUrl = drafts[draftIdx];
-    if (!imageUrl || isDownloading) return;
-    setIsDownloading(true);
-    try {
-      await downloadImageFile({
-        imageUrl,
-        filename: `studio-canvas-draft-${draftIdx === 0 ? "A" : "B"}-${Date.now()}.png`,
-        bakeWatermark: isFreePlan,
-        aspectRatio,
-        exportPreset: "original",
-        printPaper: "a4",
-      });
-    } catch {
-      window.open(imageUrl, "_blank", "noopener,noreferrer");
-    } finally {
-      setIsDownloading(false);
-    }
-  };
-
-  // Drafts are auto-saved on generation, so this only fills the gap for re-runs.
   const handleSaveToGallery = () => {
-    const existing = listGalleryHistory();
-    const missing = drafts.filter((url) => !existing.some((item) => item.imageUrl === url));
-    if (missing.length > 0) {
-      const retentionCtx = retentionContextFromAccount(planId, getAccountMeta());
-      const now = Date.now();
-      missing.forEach((url, idx) => {
-        const id = `${portraitId ?? "draft"}-save-${now}-${idx}`;
-        pushGalleryHistory(
-          {
-            id,
-            imageUrl: url,
-            storageId: id,
-            createdAt: now + idx,
-            styleId: selectedStyles[0],
-          },
-          retentionCtx
-        );
-      });
+    const urls = Array.from(
+      new Set(
+        [resolveSelectedImageUrl(), ...drafts].filter(
+          (url): url is string => typeof url === "string" && url.trim().length > 8
+        )
+      )
+    );
+    if (urls.length < 1) {
+      showToast(t.creator.downloadFailed, "error");
+      return;
     }
+    const existing = listGalleryHistory();
+    const missing = urls.filter((url) => !existing.some((item) => item.imageUrl === url));
+    const retentionCtx = retentionContextFromAccount(planId, getAccountMeta());
+    const now = Date.now();
+    missing.forEach((url, idx) => {
+      const id = `${portraitId ?? "photo"}-save-${now}-${idx}`;
+      void pushGalleryHistoryAndSync(
+        {
+          id,
+          imageUrl: url,
+          storageId: id,
+          createdAt: now + idx,
+          styleId: selectedStyles[0],
+          profileId: selectedProfileId ?? undefined,
+          profileName: selectedProfileId
+            ? getFaceProfile(selectedProfileId)?.name
+            : undefined,
+          selfieUrls: resolveSelfieSourcesForGenerate({
+            uploadedFiles,
+            selectedProfileId,
+          }).slice(0, 10),
+        },
+        retentionCtx
+      );
+    });
     setGallerySavedMsg(true);
+    showToast(t.creator.savedToGallery, "success");
   };
 
   const handleRetryWithAnotherStyle = () => {
+    clearResultSession();
+    clearConfirmedImage();
     setResultReady(false);
     setResultView("compare");
     setDrafts([]);
+    setSelectedResultUrl("");
     setGallerySavedMsg(false);
     setGenerationError(null);
     setStyleLocked(false);
@@ -780,9 +2046,12 @@ function PersonaCreatorInner() {
       tone: "danger",
     });
     if (!approved) return;
+    clearResultSession();
+    clearConfirmedImage();
     setResultReady(false);
     setResultView("compare");
     setDrafts([]);
+    setSelectedResultUrl("");
     setPortraitId(null);
     setGallerySavedMsg(false);
     setActionMessage(null);
@@ -790,47 +2059,98 @@ function PersonaCreatorInner() {
   };
 
   const handleShare = async () => {
-    const imageUrl = focusedImageUrl;
+    const imageUrl = resolveSelectedImageUrl();
+    const pageUrl = typeof window !== "undefined" ? window.location.href : "";
     try {
-      const res = await fetch(imageUrl);
-      const blob = await res.blob();
-      const file = new File([blob], `studio-canvas-${Date.now()}.png`, { type: blob.type });
-      if (navigator.share && navigator.canShare?.({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: "Studio Canvas AI",
-          text: t.thumbnail.shareText,
+      let file: File | null = null;
+      if (imageUrl) {
+        const res = await fetch(resolveCanvasImageUrl(imageUrl), {
+          credentials: "same-origin",
         });
-        return;
+        if (res.ok) {
+          const blob = await res.blob();
+          file = new File([blob], `studio-canvas-${Date.now()}.png`, {
+            type: blob.type || "image/png",
+          });
+        }
       }
-      const kakaoUrl = `https://sharer.kakao.com/talk/friends/picker/link?url=${encodeURIComponent(window.location.href)}`;
-      window.open(kakaoUrl, "_blank", "noopener,noreferrer");
-    } catch {
-      const kakaoUrl = `https://sharer.kakao.com/talk/friends/picker/link?url=${encodeURIComponent(window.location.href)}`;
-      window.open(kakaoUrl, "_blank", "noopener,noreferrer");
+
+      const publicImageUrl = null;
+
+      try {
+        const mode = await shareImageViaKakao({
+          file,
+          publicImageUrl,
+          title: "Studio Canvas AI",
+          description: t.thumbnail.shareText,
+          linkUrl: KAKAO_REGISTERED_ORIGIN,
+          buttonTitle: t.thumbnail.kakaoShareOpen,
+        });
+        if (mode === "kakao") return;
+      } catch (err) {
+        console.warn("[PersonaCreator] Kakao Share failed", err);
+      }
+
+      const result = await shareWithFallback({
+        title: "Studio Canvas AI",
+        text: t.thumbnail.shareText,
+        url: KAKAO_REGISTERED_ORIGIN,
+        file,
+      });
+      if (result === "copied") {
+        showToast(t.creator.shareCopied, "success");
+      }
+    } catch (err) {
+      if (isShareAbortError(err)) return;
+      try {
+        if (pageUrl) {
+          await navigator.clipboard.writeText(pageUrl);
+          showToast(t.creator.shareCopied, "success");
+        }
+      } catch {
+        showToast(t.thumbnail.shareFailed, "error");
+      }
     }
   };
 
   const loadSavedProfile = (profile: FaceProfile) => {
     setSelectedProfileId(profile.id);
-    setUploadedFiles(profile.photoUrls.slice(0, 10));
-    setValidationError(null);
+    const merged = mergePhotoUrls(
+      uploadedFiles,
+      profile.photoUrls,
+      MAX_SELFIE_UPLOADS
+    );
+    const newUnique = profile.photoUrls.filter(
+      (url) => url?.trim() && !uploadedFiles.includes(url.trim())
+    );
+    const added = merged.length - uploadedFiles.length;
+    setUploadedFiles(merged);
+    if (newUnique.length > added) {
+      setValidationError(
+        fillCanvas(t.creator.uploadLimitFull, { max: MAX_SELFIE_UPLOADS })
+      );
+    } else {
+      setValidationError(null);
+    }
     setProfileMenuOpen(false);
   };
 
   const uploadStepTitle = isPerson ? t.creator.uploadTitlePerson : t.creator.uploadTitleObject;
+
+  const standardDetailRaw =
+    selectedResultUrl ||
+    confirmedImageUrl ||
+    drafts[focusedDraft] ||
+    focusedImageUrl ||
+    directEditImageUrl;
 
   return (
     <section id="creator" className="section-padding relative">
       <div className="ambient-glow top-1/2 left-1/2 h-96 w-96 -translate-x-1/2 -translate-y-1/2 bg-glow-purple/10" />
 
       <div className="relative mx-auto max-w-4xl">
-        <div className="mb-12 text-center">
-          <span className="text-sm font-medium tracking-widest text-glow-purple uppercase">
-            {t.creator.eyebrow}
-          </span>
-          <h2 className="font-display mt-3 text-3xl font-bold sm:text-4xl">{t.creator.title}</h2>
-          <p className="mx-auto mt-4 max-w-xl text-white/50">{t.creator.subtitle}</p>
+        <div className="mb-8 text-center">
+          <h2 className="font-display text-2xl font-bold sm:text-3xl">{t.creator.title}</h2>
         </div>
 
         <div className="mb-6 flex items-center justify-center gap-1 overflow-x-auto sm:gap-3">
@@ -873,11 +2193,10 @@ function PersonaCreatorInner() {
                   </div>
                   <div className="hidden max-w-[5rem] text-center sm:block sm:max-w-none">
                     <div
-                      className={`text-xs font-semibold leading-tight ${isActive ? "text-white" : "text-zinc-200"}`}
+                      className={`text-xs font-semibold leading-tight ${isActive ? "text-white" : "text-white/45"}`}
                     >
                       {step.title}
                     </div>
-                    <div className="text-[10px] leading-tight text-white/80">{step.description}</div>
                   </div>
                 </button>
                 {idx < steps.length - 1 && (
@@ -904,7 +2223,7 @@ function PersonaCreatorInner() {
           </div>
         )}
 
-        <div ref={stepContentRef} className="glass-card p-4 sm:p-8">
+        <div ref={stepContentRef} className="overflow-visible rounded-3xl bg-white/[0.03] p-5 pb-12 sm:p-8 sm:pb-14">
           {isTraining && (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <div className="relative mb-6 h-24 w-24">
@@ -925,16 +2244,7 @@ function PersonaCreatorInner() {
           )}
 
           {!isTraining && currentStep === 1 && (
-            <div className="animate-fade-in space-y-6">
-              <div className="text-center">
-                <h3 className="font-display text-xl font-bold sm:text-2xl">
-                  {t.creator.conceptTitle}
-                </h3>
-                <p className="mx-auto mt-2 max-w-lg text-sm text-white/50">
-                  {t.creator.conceptSubtitle}
-                </p>
-              </div>
-
+            <div className="animate-fade-in space-y-8">
               <div className="flex flex-wrap justify-center gap-2">
                 {conceptTabs.map((tab) => (
                   <button
@@ -954,13 +2264,7 @@ function PersonaCreatorInner() {
                 ))}
               </div>
 
-              {conceptGroup !== "all" && (
-                <p className="text-center text-xs leading-relaxed text-glow-emerald/80 sm:text-sm">
-                  ( {t.creator.conceptGroupHints[conceptGroup]} )
-                </p>
-              )}
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 {visiblePacks.map((pack) => {
                   const meta = t.styles.packs[pack.id as keyof typeof t.styles.packs];
                   if (!meta) return null;
@@ -968,10 +2272,8 @@ function PersonaCreatorInner() {
                   return (
                     <div
                       key={pack.id}
-                      className={`group flex flex-col overflow-hidden rounded-2xl border transition-all duration-300 ${
-                        isSelected
-                          ? "border-glow-emerald/50 bg-glow-emerald/10 shadow-glow-sm"
-                          : "border-white/10 bg-white/[0.02] hover:border-white/20"
+                      className={`group flex flex-col overflow-hidden rounded-2xl bg-white/[0.03] transition-all duration-300 ${
+                        isSelected ? "ring-2 ring-glow-purple/60" : "hover:bg-white/[0.05]"
                       }`}
                     >
                       <button
@@ -986,42 +2288,19 @@ function PersonaCreatorInner() {
                           className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                         />
                         <div className={`absolute inset-0 bg-gradient-to-t ${pack.gradient}`} />
-                        <span className="absolute top-3 left-3 rounded-full border border-white/20 bg-black/60 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur-md">
-                          {`${CONCEPT_GROUP_EMOJI[pack.conceptGroup]} ${meta.badge ?? t.creator.conceptGroups[pack.conceptGroup]}`}
-                        </span>
                         {isSelected && (
-                          <span className="absolute top-3 right-3 flex h-7 w-7 items-center justify-center rounded-full bg-glow-emerald text-navy">
+                          <span className="absolute top-3 right-3 flex h-7 w-7 items-center justify-center rounded-full bg-glow-purple text-white">
                             <Check className="h-4 w-4" />
                           </span>
                         )}
                       </button>
 
                       <div className="flex flex-1 flex-col gap-3 p-4">
-                        <div>
-                          <h4 className="text-sm font-semibold text-white">{meta.name}</h4>
-                          <p className="mt-1 text-xs leading-relaxed text-zinc-100 font-medium">
-                            {meta.description}
-                          </p>
-                        </div>
-
-                        <div className="flex flex-wrap gap-1.5">
-                          <span className="rounded-full border border-violet-400/50 bg-violet-950/60 px-2 py-0.5 text-[10px] font-semibold text-violet-200">
-                            {t.creator.compositionTags[pack.composition]}
-                          </span>
-                          {meta.tags.map((tag) => (
-                            <span
-                              key={tag}
-                              className="rounded-full border border-emerald-500/40 bg-emerald-950/50 px-2 py-0.5 text-[10px] font-semibold text-emerald-300"
-                            >
-                              {`#${tag}`}
-                            </span>
-                          ))}
-                        </div>
-
+                        <h4 className="text-sm font-semibold text-white">{meta.name}</h4>
                         <button
                           type="button"
                           onClick={() => chooseStyleAndContinue(pack.id)}
-                          className="btn-primary mt-auto w-full justify-center py-2.5 text-sm font-bold text-white shadow-md"
+                          className="btn-primary mt-auto w-full justify-center py-2.5 text-sm font-bold"
                         >
                           <span className="truncate">{t.creator.makeWithStyle}</span>
                           <ArrowUpRight className="h-4 w-4 shrink-0" />
@@ -1036,14 +2315,8 @@ function PersonaCreatorInner() {
 
           {!isTraining && currentStep === 2 && (
             <div className="animate-fade-in space-y-8">
-              {styleLocked && (
-                <p className="rounded-xl border border-glow-emerald/20 bg-glow-emerald/10 px-4 py-3 text-xs text-emerald-100/90 sm:text-sm">
-                  {t.creator.styleLocked}
-                </p>
-              )}
-
               <div>
-                <h3 className="mb-4 text-sm font-medium tracking-wider text-white/60 uppercase">
+                <h3 className="mb-4 text-sm font-medium tracking-wider text-white/45 uppercase">
                   {t.creator.subject}
                 </h3>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -1052,10 +2325,10 @@ function PersonaCreatorInner() {
                       key={option.id}
                       type="button"
                       onClick={() => selectSubject(option.id)}
-                      className={`rounded-xl border p-4 text-center transition-all duration-300 ${
+                      className={`rounded-2xl p-4 text-center transition-all duration-300 ${
                         subject === option.id
-                          ? "border-glow-purple/50 bg-glow-purple/10 shadow-glow-sm"
-                          : "border-white/10 bg-white/[0.02] hover:border-white/20 hover:bg-white/5"
+                          ? "bg-glow-purple/15 ring-1 ring-glow-purple/40"
+                          : "bg-white/[0.03] hover:bg-white/[0.06]"
                       }`}
                     >
                       <div className="mb-2 text-2xl">{option.icon}</div>
@@ -1069,12 +2342,9 @@ function PersonaCreatorInner() {
 
               {isPerson && (
                 <div className="animate-fade-in">
-                  <h3 className="mb-3 text-sm font-medium tracking-wider text-white/60 uppercase">
+                  <h3 className="mb-3 text-sm font-medium tracking-wider text-white/45 uppercase">
                     {t.creator.age}
                   </h3>
-                  <p className="mb-3 text-xs leading-relaxed text-white/45 sm:text-sm">
-                    {t.creator.ageHint}
-                  </p>
                   <div className="grid grid-cols-4 gap-3">
                     {ageOptions.map((option) => (
                       <button
@@ -1084,10 +2354,10 @@ function PersonaCreatorInner() {
                           setAge(option.id);
                           setValidationError(null);
                         }}
-                        className={`rounded-xl border p-3 text-center transition-all duration-300 sm:p-4 ${
+                        className={`rounded-2xl p-3 text-center transition-all duration-300 sm:p-4 ${
                           age === option.id
-                            ? "border-glow-purple/50 bg-glow-purple/10 shadow-glow-sm"
-                            : "border-white/10 bg-white/[0.02] hover:border-white/20 hover:bg-white/5"
+                            ? "bg-glow-purple/15 ring-1 ring-glow-purple/40"
+                            : "bg-white/[0.03] hover:bg-white/[0.06]"
                         }`}
                       >
                         <div className="mb-1 text-xl sm:mb-2 sm:text-2xl">{option.icon}</div>
@@ -1153,12 +2423,11 @@ function PersonaCreatorInner() {
               </div>
 
               <div
-                className={`relative rounded-xl border-2 border-dashed p-6 text-center transition-all duration-300 sm:p-8 ${
-                  isDragOver
-                    ? "border-glow-purple/50 bg-glow-purple/5"
-                    : "border-white/15 bg-white/[0.02]"
-                }`}
+                className={`relative rounded-2xl p-6 text-center transition-all duration-300 sm:p-8 ${
+                  isDragOver ? "bg-glow-purple/10 ring-1 ring-glow-purple/40" : "bg-white/[0.03]"
+                } ${uploadedFiles.length >= MAX_SELFIE_UPLOADS ? "opacity-60" : ""}`}
                 onDragOver={(e) => {
+                  if (uploadedFiles.length >= MAX_SELFIE_UPLOADS) return;
                   e.preventDefault();
                   setIsDragOver(true);
                 }}
@@ -1167,7 +2436,11 @@ function PersonaCreatorInner() {
               >
                 <ImagePlus className="mx-auto mb-4 h-10 w-10 text-white/30" />
                 <p className="mb-1 text-sm font-medium text-white/70">{uploadStepTitle}</p>
-                <p className="text-xs leading-relaxed text-white/40">{t.creator.uploadHint}</p>
+                <p className="text-xs leading-relaxed text-white/40">
+                  {uploadedFiles.length >= MAX_SELFIE_UPLOADS
+                    ? fillCanvas(t.creator.uploadLimitFull, { max: MAX_SELFIE_UPLOADS })
+                    : t.creator.uploadHint}
+                </p>
                 {isUploading && (
                   <p className="mt-3 text-xs text-glow-purple">{t.creator.uploadProcessing}</p>
                 )}
@@ -1175,8 +2448,8 @@ function PersonaCreatorInner() {
                   type="file"
                   multiple
                   accept={ACCEPT_ATTR}
-                  disabled={isUploading}
-                  className="absolute inset-0 cursor-pointer opacity-0 disabled:cursor-wait"
+                  disabled={isUploading || uploadedFiles.length >= MAX_SELFIE_UPLOADS}
+                  className="absolute inset-0 cursor-pointer opacity-0 disabled:cursor-not-allowed"
                   onChange={(e) => {
                     void ingestFiles(Array.from(e.target.files || []));
                     e.target.value = "";
@@ -1184,15 +2457,14 @@ function PersonaCreatorInner() {
                 />
               </div>
 
-              <p className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs leading-relaxed text-white/55 sm:text-sm">
-                {t.creator.uploadFormatHint}
-              </p>
-
-              {isPerson && (
-                <p className="rounded-xl border border-glow-emerald/20 bg-glow-emerald/10 px-4 py-3 text-xs leading-relaxed text-emerald-100/90 sm:text-sm">
-                  {t.creator.uploadIdentityHint}
-                </p>
-              )}
+              <SoftAccordion label={t.creator.uploadGuide}>
+                <p className="text-xs leading-relaxed text-white/45">{t.creator.uploadFormatHint}</p>
+                {isPerson && (
+                  <p className="mt-2 text-xs leading-relaxed text-white/45">
+                    {t.creator.uploadIdentityHint}
+                  </p>
+                )}
+              </SoftAccordion>
 
               <div className="flex items-center gap-3">
                 <span className="shrink-0 text-xs text-white/50 sm:text-sm">
@@ -1201,7 +2473,9 @@ function PersonaCreatorInner() {
                 <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
                   <div
                     className="h-full rounded-full bg-gradient-to-r from-glow-purple to-glow-emerald transition-all duration-500"
-                    style={{ width: `${(uploadedFiles.length / 10) * 100}%` }}
+                    style={{
+                      width: `${(uploadedFiles.length / MAX_SELFIE_UPLOADS) * 100}%`,
+                    }}
                   />
                 </div>
               </div>
@@ -1210,7 +2484,7 @@ function PersonaCreatorInner() {
                 <div className="grid grid-cols-5 gap-2">
                   {uploadedFiles.map((url, idx) => (
                     <div
-                      key={idx}
+                      key={`${url}-${idx}`}
                       className="group relative aspect-square overflow-hidden rounded-lg"
                     >
                       <img src={url} alt={`${idx + 1}`} className="h-full w-full object-cover" />
@@ -1226,7 +2500,9 @@ function PersonaCreatorInner() {
                       </button>
                     </div>
                   ))}
-                  {Array.from({ length: Math.max(0, 10 - uploadedFiles.length) }).map((_, idx) => (
+                  {Array.from({
+                    length: Math.max(0, MAX_SELFIE_UPLOADS - uploadedFiles.length),
+                  }).map((_, idx) => (
                     <div
                       key={`empty-${idx}`}
                       className="flex aspect-square items-center justify-center rounded-lg border border-dashed border-white/10 bg-white/[0.02]"
@@ -1239,100 +2515,109 @@ function PersonaCreatorInner() {
                 </div>
               )}
 
-              <div className="border-t border-white/[0.06] pt-6">
-                <p className="mb-3 text-sm font-medium tracking-wider text-white/60 uppercase">
-                  {t.creator.bgModeLabel}
+            </div>
+          )}
+
+          {!isTraining && currentStep === 4 && resultReady && resultView === "compare" && !directEditMode && (
+            <div className="animate-fade-in space-y-6 pb-8">
+              <div className="text-center">
+                <h3 className="font-display text-xl font-bold text-white sm:text-2xl">
+                  {t.creator.comparePhaseTitle}
+                </h3>
+                <p className="mx-auto mt-1 max-w-lg text-sm text-white/50">
+                  {t.creator.comparePhaseSubtitle}
                 </p>
-                <div className="mb-3 flex flex-wrap gap-2">
-                  {BACKGROUND_MODE_IDS.map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => setBackgroundMode(mode)}
-                      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                        backgroundMode === mode
-                          ? "border-glow-purple/50 bg-glow-purple/15 font-semibold text-white"
-                          : "border-white/10 text-white/45 hover:border-white/20 hover:text-white/70"
-                      }`}
-                    >
-                      {backgroundMode === mode && (
-                        <Check className="h-3.5 w-3.5 shrink-0 text-glow-purple" />
-                      )}
-                      {mode === "auto"
-                        ? t.creator.bgAuto
-                        : mode === "tags"
-                          ? t.creator.bgTags
-                          : t.creator.bgCustom}
-                    </button>
-                  ))}
-                </div>
-
-                {backgroundMode === "tags" && (
-                  <div className="flex flex-wrap gap-2">
-                    {BACKGROUND_TAG_IDS.map((tag) => (
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {([0, 1] as const).map((idx) => {
+                  const url = drafts[idx] || drafts[0] || "";
+                  if (!url) return null;
+                  return (
+                    <div key={`compare-${idx}`} className="space-y-3">
+                      <div className="relative overflow-hidden rounded-2xl ring-1 ring-white/10">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={url} alt="" className="aspect-[3/4] w-full object-cover" />
+                        <div className="absolute top-2 left-2 rounded-md bg-black/55 px-2 py-1 text-[10px] font-medium text-white">
+                          {idx === 0 ? t.creator.draftA : t.creator.draftB}
+                        </div>
+                      </div>
                       <button
-                        key={tag}
                         type="button"
-                        onClick={() => toggleBackgroundTag(tag)}
-                        className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                          backgroundTags.includes(tag)
-                            ? "border-glow-emerald/50 bg-glow-emerald/10 text-white"
-                            : "border-white/10 text-white/45 hover:border-white/20"
-                        }`}
+                        onClick={() => confirmDraftAndGoToEdit(idx)}
+                        className="btn-primary w-full py-3 text-sm font-bold"
                       >
-                        {t.creator.bgTagsLabels[tag]}
+                        {t.creator.confirmDraftSelect.replace(
+                          "{draft}",
+                          idx === 0 ? t.creator.draftA : t.creator.draftB
+                        )}
                       </button>
-                    ))}
-                  </div>
-                )}
-
-                {backgroundMode === "custom" && (
-                  <input
-                    type="text"
-                    value={backgroundCustom}
-                    onChange={(e) => setBackgroundCustom(e.target.value)}
-                    placeholder={t.creator.bgCustomPlaceholder}
-                    className="w-full rounded-xl border border-white/25 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-300 focus:border-glow-purple/40"
-                  />
-                )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
 
-          {!isTraining && currentStep === 4 && (
-            <div className="animate-fade-in space-y-6">
+          {!isTraining && currentStep === 5 && resultReady && (
+            <ResultWorkspace
+              variant={directEditMode ? "photo" : "ai"}
+              drafts={drafts}
+              focusedDraft={focusedDraft}
+              onFocusDraft={focusDraft}
+              draftAspectRatios={draftAspectRatios}
+              onDraftAspectRatioChange={(idx, key) => {
+                setDraftAspectRatios((prev) => {
+                  const next: [AspectRatioKey, AspectRatioKey] = [prev[0], prev[1]];
+                  next[idx] = key;
+                  return next;
+                });
+                if (idx === focusedDraft) setAspectRatio(key);
+              }}
+              draftImagePans={draftImagePans}
+              onDraftImagePanChange={(idx, pan) => {
+                setDraftImagePans((prev) => {
+                  const next: [ImagePan, ImagePan] = [
+                    { ...prev[0] },
+                    { ...prev[1] },
+                  ];
+                  next[idx] = pan;
+                  return next;
+                });
+              }}
+              selectedRawUrl={standardDetailRaw}
+              draftRevision={draftRevision}
+              regeneratingSlot={regeneratingSlot}
+              isDownloading={isDownloading}
+              isGenerating={isGenerating}
+              regenerateBusy={regenerateBusy}
+              onExportDownload={(preset) => void handleExportDownload(preset)}
+              onDelete={directEditMode ? undefined : () => void handleDeletePortrait()}
+              prompt={prompt}
+              onPromptChange={setPrompt}
+              onRegenerate={handleRegenerate}
+              creditsLabel={creditsLabel}
+              unlimitedCredits={unlimitedCredits}
+              credits={credits}
+              maxCredits={maxCredits}
+              actionMessage={actionMessage}
+              gallerySavedMsg={gallerySavedMsg}
+              showBrandWatermark={applyBrandWatermark}
+              directEditSource={directEditSource}
+              profileId={selectedProfileId}
+              profileName={
+                selectedProfileId ? getFaceProfile(selectedProfileId)?.name ?? null : null
+              }
+              exportPreset={exportPreset}
+              onGenerateBackgroundFusion={handleBackgroundFusion}
+            />
+          )}
+
+          {!isTraining && currentStep === 4 && !resultReady && (
+            <div className="animate-fade-in space-y-6 pb-8">
               <div className="text-center">
                 <h3 className="font-display text-xl font-bold text-white sm:text-2xl">
-                  {resultReady && resultView === "detail"
-                    ? t.creator.detailPhaseTitle
-                    : resultReady
-                      ? t.creator.comparePhaseTitle
-                      : t.creator.resultTitle}
+                  {t.creator.resultTitle}
                 </h3>
-                <p className="mt-1 text-sm text-zinc-200">
-                  {resultReady && resultView === "detail"
-                    ? t.creator.detailPhaseSubtitle
-                    : resultReady
-                      ? t.creator.comparePhaseSubtitle
-                      : t.creator.resultSubtitle}
-                </p>
-              </div>
-
-              <div className="glass-card p-4">
-                <p className="mb-3 text-[11px] font-semibold tracking-wider text-zinc-300 uppercase">
-                  {t.creator.summaryTitle}
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {selectionSummary.map((chip) => (
-                    <span
-                      key={chip.key}
-                      className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-white/25 bg-white/[0.07] px-3 py-1.5 text-xs backdrop-blur-md"
-                    >
-                      <span className="shrink-0 text-zinc-300">{chip.label}</span>
-                      <span className="truncate font-semibold text-white">{chip.value}</span>
-                    </span>
-                  ))}
-                </div>
               </div>
 
               {generationError && (
@@ -1354,18 +2639,29 @@ function PersonaCreatorInner() {
                 </div>
               )}
 
-              {!resultReady && !isGenerating && !generationError && (
-                <div
-                  className={`relative mx-auto flex w-full max-w-sm flex-col items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02] p-6 text-center ${ASPECT_CLASS[aspectRatio]}`}
-                >
-                  <Wand2 className="mb-3 h-8 w-8 text-white/30" />
-                  <p className="text-sm text-white/40">{t.creator.promptPreviewLabel}</p>
+              {!isGenerating && !generationError && (
+                <div className="space-y-4">
+                  <div
+                    className={`relative mx-auto flex w-full max-w-sm flex-col items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02] p-6 text-center ${ASPECT_RATIO_CLASS[aspectRatio]}`}
+                  >
+                    {uploadedFiles[0] ? (
+                      <img
+                        src={uploadedFiles[0]}
+                        alt=""
+                        className="absolute inset-0 h-full w-full object-cover opacity-40"
+                      />
+                    ) : null}
+                    <div className="relative z-10 flex flex-col items-center">
+                      <Wand2 className="mb-3 h-8 w-8 text-white/70" />
+                      <p className="text-sm text-white/70">{t.creator.promptPreviewLabel}</p>
+                    </div>
+                  </div>
                 </div>
               )}
 
               {isGenerating && (
                 <div
-                  className={`relative mx-auto flex w-full max-w-sm items-center justify-center overflow-hidden rounded-2xl border border-white/10 ${ASPECT_CLASS[aspectRatio]}`}
+                  className={`relative mx-auto flex w-full max-w-sm items-center justify-center overflow-hidden rounded-2xl border border-white/10 ${ASPECT_RATIO_CLASS[aspectRatio]}`}
                 >
                   <img
                     src={HERO_AFTER_IMAGE}
@@ -1378,303 +2674,73 @@ function PersonaCreatorInner() {
                 </div>
               )}
 
-              {/* /compare — pick a draft before download/detail */}
-              {resultReady && resultView === "compare" && (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    {drafts.map((url, idx) => {
-                      const draftIdx = idx as 0 | 1;
-                      const isFocused = focusedDraft === draftIdx;
-                      return (
-                        <div key={`${url}-${idx}`} className="flex min-w-0 flex-col gap-2">
-                          <button
-                            type="button"
-                            onClick={() => focusDraft(draftIdx)}
-                            title={t.creator.focusDraft}
-                            className={`relative overflow-hidden rounded-2xl border-2 transition-all duration-300 ${ASPECT_CLASS[aspectRatio]} ${
-                              isFocused
-                                ? "border-glow-purple shadow-[0_0_24px_rgba(139,92,246,0.35)]"
-                                : "border-white/10 hover:border-white/25"
-                            }`}
-                          >
-                            <img
-                              src={url}
-                              alt=""
-                              className="h-full w-full object-cover object-[30%_35%]"
-                            />
-                            <div className="absolute top-2 left-2 rounded-md bg-black/55 px-2 py-1 text-[10px] font-medium text-white">
-                              {draftIdx === 0 ? t.creator.draftA : t.creator.draftB}
-                            </div>
-                            {isFocused && (
-                              <>
-                                <div className="absolute top-2 right-2 rounded-md bg-glow-purple/90 px-2 py-1 text-[10px] font-semibold text-white">
-                                  [{t.creator.draftSelected}]
-                                </div>
-                                <BrandWatermark visible={isFreePlan} />
-                              </>
-                            )}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void handleDownloadDraft(draftIdx)}
-                            disabled={isDownloading}
-                            className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-emerald-600 px-2 py-2.5 text-xs font-bold text-white shadow-[0_4px_16px_rgba(139,92,246,0.35)] transition hover:brightness-110 disabled:opacity-50 sm:gap-2 sm:text-sm"
-                          >
-                            <Download className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />
-                            <span className="truncate">
-                              {isDownloading ? "..." : t.creator.draftDownload}
-                            </span>
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {gallerySavedMsg && (
-                    <p className="text-center text-xs text-glow-emerald">{t.creator.savedToGallery}</p>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => goToResultView("detail")}
-                    className="btn-primary flex w-full items-center justify-center gap-2 py-3 text-sm font-bold"
-                  >
-                    <Check className="h-4 w-4 shrink-0" />
-                    <span>
-                      {t.creator.confirmDraftSelect.replace(
-                        "{draft}",
-                        focusedDraft === 0 ? t.creator.draftA : t.creator.draftB
-                      )}
-                    </span>
-                  </button>
-
-                  <div>
-                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                      <label className="text-sm font-medium text-white/70">{t.creator.promptLabel}</label>
-                      <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-[11px] text-amber-200">
-                        {t.creator.creditBadge
-                          .replace("{current}", String(credits))
-                          .replace("{max}", String(maxCredits))}
-                      </span>
-                    </div>
-                    <textarea
-                      value={prompt}
-                      maxLength={PROMPT_MAX_LENGTH}
-                      onChange={(e) => setPrompt(e.target.value.slice(0, PROMPT_MAX_LENGTH))}
-                      placeholder={t.creator.promptPlaceholder}
-                      rows={3}
-                      className="w-full resize-none rounded-xl border border-white/25 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-300 focus:border-glow-purple/40"
-                    />
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleRegenerate}
-                    disabled={isGenerating || regenerateBusy}
-                    className="btn-primary flex w-full items-center justify-center gap-2 py-3.5 text-sm font-bold shadow-[0_0_28px_rgba(139,92,246,0.4)] disabled:opacity-50"
-                  >
-                    <Wand2
-                      className={`h-4 w-4 shrink-0 ${regenerateBusy || isGenerating ? "animate-pulse" : ""}`}
-                    />
-                    <span>
-                      {credits >= REGENERATE_CREDIT_COST
-                        ? t.creator.regenerateWithCredit
-                        : t.creator.regenerateNeedCredit}
-                    </span>
-                  </button>
-                  {actionMessage && (
-                    <p className="text-center text-xs text-glow-emerald">{actionMessage}</p>
-                  )}
-                </div>
-              )}
-
-              {/* /detail — download & edit only after draft confirmed */}
-              {resultReady && resultView === "detail" && (
-                <div className="space-y-4">
-                  <div
-                    className={`relative mx-auto w-full max-w-sm overflow-hidden rounded-2xl border border-glow-purple/40 shadow-[0_0_24px_rgba(139,92,246,0.25)] ${ASPECT_CLASS[aspectRatio]}`}
-                  >
-                    <img
-                      src={focusedImageUrl}
-                      alt=""
-                      className="h-full w-full object-cover object-[30%_35%]"
-                    />
-                    <div className="absolute top-2 left-2 rounded-md bg-black/55 px-2 py-1 text-[10px] font-medium text-white">
-                      {focusedDraft === 0 ? t.creator.draftA : t.creator.draftB}
-                    </div>
-                    <BrandWatermark visible={isFreePlan} />
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-2 rounded-xl border border-white/10 bg-white/[0.03] p-3">
-                    <button
-                      type="button"
-                      onClick={() => void handleDownload()}
-                      disabled={isDownloading}
-                      className="btn-primary flex items-center justify-center gap-2 py-2.5 text-sm font-bold disabled:opacity-50"
-                    >
-                      <Download className="h-4 w-4 shrink-0" />
-                      <span>{isDownloading ? "..." : t.creator.actionDownloadHd}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleSaveToGallery}
-                      className="btn-secondary flex items-center justify-center gap-2 py-2.5 text-sm"
-                    >
-                      <Images className="h-4 w-4 shrink-0" />
-                      <span>{t.creator.actionSaveGallery}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleRetryWithAnotherStyle}
-                      className="btn-secondary flex items-center justify-center gap-2 py-2.5 text-sm"
-                    >
-                      <RefreshCw className="h-4 w-4 shrink-0" />
-                      <span>{t.creator.actionRetryStyle}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleShare()}
-                      className="btn-secondary flex items-center justify-center gap-2 py-2.5 text-xs"
-                    >
-                      <Share2 className="h-4 w-4 shrink-0" />
-                      <span>{t.creator.resultShare}</span>
-                    </button>
-                  </div>
-                  <p className="text-center">
-                    <Link
-                      href="/gallery/my"
-                      className="text-xs text-white/80 underline underline-offset-2 hover:text-white"
-                    >
-                      {t.creator.viewMyGallery}
-                    </Link>
-                  </p>
-
-                  <div className="space-y-4 border-t border-white/[0.06] pt-4">
-                    <div className="flex flex-wrap gap-2">
-                      {(
-                        [
-                          ["original", t.creator.exportOriginal],
-                          ["id-photo", t.creator.exportIdPhoto],
-                          ["print-png", t.creator.exportPrintPng],
-                          ["print-pdf", t.creator.exportPrintPdf],
-                        ] as const
-                      ).map(([key, label]) => (
-                        <button
-                          key={key}
-                          type="button"
-                          disabled={isDownloading}
-                          onClick={() => {
-                            setExportPreset(key);
-                            void (async () => {
-                              if (isDownloading) return;
-                              setIsDownloading(true);
-                              const imageUrl = focusedImageUrl;
-                              try {
-                                await downloadImageFile({
-                                  imageUrl,
-                                  filename:
-                                    key === "id-photo"
-                                      ? `studio-canvas-id-photo-${Date.now()}.png`
-                                      : key === "print-png"
-                                        ? `studio-canvas-print-a4-300dpi-${Date.now()}.png`
-                                        : key === "print-pdf"
-                                          ? `studio-canvas-print-a4-300dpi-${Date.now()}.pdf`
-                                          : `studio-canvas-hd-${Date.now()}.png`,
-                                  bakeWatermark:
-                                    isFreePlan && key !== "print-png" && key !== "print-pdf",
-                                  aspectRatio,
-                                  exportPreset: key,
-                                  printPaper: "a4",
-                                });
-                              } catch {
-                                window.open(imageUrl, "_blank", "noopener,noreferrer");
-                              } finally {
-                                setIsDownloading(false);
-                              }
-                            })();
-                          }}
-                          className={`rounded-full border px-3 py-1.5 text-xs transition-colors disabled:opacity-50 ${
-                            exportPreset === key
-                              ? "border-glow-purple/50 bg-glow-purple/15 text-white"
-                              : "border-white/10 text-white/45 hover:border-white/20"
-                          }`}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => void handleDeletePortrait()}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-400/30 bg-red-500/10 py-3 text-sm text-red-200 transition hover:bg-red-500/20"
-                    >
-                      <span>{t.creator.deletePortrait}</span>
-                    </button>
-
-                    <ThumbnailEditor imageUrl={focusedImageUrl} aspectRatio={aspectRatio} />
-                  </div>
-                </div>
-              )}
-
-              {!resultReady && (
+              {!isGenerating && (
                 <>
-                  <div>
-                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                      <label className="text-sm font-medium text-white/70">{t.creator.promptLabel}</label>
-                      <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-[11px] text-amber-200">
-                        {t.creator.creditBadge
-                          .replace("{current}", String(credits))
-                          .replace("{max}", String(maxCredits))}
-                      </span>
+                  <SoftAccordion label={t.creator.moreOptions}>
+                    <div className="space-y-4">
+                      <div>
+                        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                          <label className="text-sm font-medium text-white/70">{t.creator.promptLabel}</label>
+                        </div>
+                        <textarea
+                          value={prompt}
+                          maxLength={PROMPT_MAX_LENGTH}
+                          onChange={(e) => setPrompt(e.target.value.slice(0, PROMPT_MAX_LENGTH))}
+                          placeholder={t.creator.promptPlaceholder}
+                          rows={3}
+                          className="w-full resize-none rounded-xl bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-300 focus:ring-1 focus:ring-glow-purple/40"
+                        />
+                      </div>
+                      <div>
+                        <p className="mb-2 text-sm font-medium text-white/70">{t.creator.aspectRatioLabel}</p>
+                        <div className="flex flex-wrap gap-2">
+                          {(
+                            [
+                              ["9:16", t.creator.aspect916],
+                              ["16:9", t.creator.aspect169],
+                              ["id", t.creator.aspectId],
+                              ["a4", t.creator.aspectA4],
+                            ] as const
+                          ).map(([key, label]) => (
+                            <button
+                              key={key}
+                              type="button"
+                              onClick={() => setAspectRatio(key)}
+                              className={`rounded-full px-3 py-1.5 text-xs transition-colors ${
+                                aspectRatio === key
+                                  ? "bg-glow-purple/15 text-white"
+                                  : "bg-white/[0.04] text-white/45 hover:text-white/70"
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
-                    <textarea
-                      value={prompt}
-                      maxLength={PROMPT_MAX_LENGTH}
-                      onChange={(e) => setPrompt(e.target.value.slice(0, PROMPT_MAX_LENGTH))}
-                      placeholder={t.creator.promptPlaceholder}
-                      rows={3}
-                      className="w-full resize-none rounded-xl border border-white/25 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-300 focus:border-glow-purple/40"
-                    />
-                    <div className="mt-1 text-right text-[11px] text-white/30">
-                      {prompt.length}/{PROMPT_MAX_LENGTH}
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="mb-2 text-sm font-medium text-white/70">{t.creator.aspectRatioLabel}</p>
-                    <div className="flex flex-wrap gap-2">
-                      {(
-                        [
-                          ["9:16", t.creator.aspect916],
-                          ["16:9", t.creator.aspect169],
-                          ["1:1", t.creator.aspect11],
-                          ["a4", t.creator.aspectA4],
-                        ] as const
-                      ).map(([key, label]) => (
-                        <button
-                          key={key}
-                          type="button"
-                          onClick={() => setAspectRatio(key)}
-                          className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                            aspectRatio === key
-                              ? "border-glow-purple/50 bg-glow-purple/15 text-white"
-                              : "border-white/10 text-white/45 hover:border-white/20 hover:text-white/70"
-                          }`}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  </SoftAccordion>
 
                   <button
                     type="button"
-                    onClick={handleGenerate}
-                    disabled={isGenerating || regenerateBusy}
-                    className="btn-primary w-full py-3 text-sm disabled:opacity-50"
+                    onClick={() =>
+                      useTrainCredits || selectedProfileId
+                        ? handleStartTraining({ train: true })
+                        : handleGenerate()
+                    }
+                    disabled={
+                      isGenerating ||
+                      regenerateBusy ||
+                      uploadedFiles.length < MIN_SELFIE_UPLOADS ||
+                      selectedStyles.length < 1
+                    }
+                    className="btn-primary w-full py-3.5 text-sm font-bold disabled:opacity-50"
                   >
                     <Wand2 className={`h-4 w-4 shrink-0 ${regenerateBusy || isGenerating ? "animate-pulse" : ""}`} />
-                    <span>{t.creator.generatePortrait}</span>
+                    <span>
+                      {useTrainCredits || selectedProfileId
+                        ? t.profiles.train
+                        : t.creator.generatePortrait}
+                    </span>
                   </button>
 
                   {actionMessage && (
@@ -1696,13 +2762,12 @@ function PersonaCreatorInner() {
           )}
 
           {!isTraining && currentStep < 4 && (
-            <div className="mt-8 flex items-center justify-between gap-3 border-t border-white/[0.06] pt-6">
+            <div className="mt-10 flex items-center justify-between gap-3 pt-2">
               <button
                 type="button"
                 onClick={() => goToStep(Math.max(1, currentStep - 1))}
-                className={`btn-secondary min-w-0 px-4 py-2.5 text-sm ${currentStep === 1 ? "invisible" : ""}`}
+                className={`min-w-0 px-3 py-2 text-sm text-white/45 hover:text-white ${currentStep === 1 ? "invisible" : ""}`}
               >
-                <ChevronLeft className="h-4 w-4 shrink-0" />
                 <span className="truncate">{t.creator.prev}</span>
               </button>
 
@@ -1710,7 +2775,7 @@ function PersonaCreatorInner() {
                 <button
                   type="button"
                   onClick={handleNext}
-                  className="btn-primary min-w-0 px-4 py-2.5 text-sm"
+                  className="btn-primary min-w-0 px-6 py-3 text-sm font-bold"
                 >
                   <span className="truncate">{t.creator.next}</span>
                   <ChevronRight className="h-4 w-4 shrink-0" />
@@ -1718,17 +2783,17 @@ function PersonaCreatorInner() {
               ) : (
                 <button
                   type="button"
-                  onClick={handleStartTraining}
-                  className="btn-primary min-w-0 px-4 py-2.5 text-sm"
+                  onClick={() => goToStep(4)}
+                  className="btn-primary min-w-0 px-6 py-3 text-sm font-bold"
                 >
-                  <span className="truncate">{t.creator.startTraining}</span>
+                  <span className="truncate">{t.creator.next}</span>
                   <ChevronRight className="h-4 w-4 shrink-0" />
                 </button>
               )}
             </div>
           )}
 
-          {!isTraining && currentStep === 4 && (
+          {!isTraining && currentStep === 4 && !directEditMode && !resultReady && !isGenerating && (
             <div className="mt-6 flex justify-start border-t border-white/[0.06] pt-6">
               <button
                 type="button"
@@ -1738,6 +2803,42 @@ function PersonaCreatorInner() {
                 <ChevronLeft className="h-4 w-4 shrink-0" />
                 <span className="truncate">{t.creator.prev}</span>
               </button>
+            </div>
+          )}
+
+          {!isTraining && currentStep === 4 && !directEditMode && (resultReady || isGenerating) && (
+            <div className="mt-6 flex justify-start border-t border-white/[0.06] pt-6">
+              <button
+                type="button"
+                onClick={handleBackStep}
+                className="btn-secondary min-w-0 px-4 py-2.5 text-sm"
+              >
+                <ChevronLeft className="h-4 w-4 shrink-0" />
+                <span className="truncate">{t.creator.prev}</span>
+              </button>
+            </div>
+          )}
+
+          {!isTraining && currentStep === 5 && (
+            <div className="mt-6 flex justify-start border-t border-white/[0.06] pt-6">
+              {directEditMode ? (
+                <Link
+                  href="/gallery/my?tab=models"
+                  className="btn-secondary inline-flex min-w-0 items-center gap-2 px-4 py-2.5 text-sm"
+                >
+                  <ChevronLeft className="h-4 w-4 shrink-0" />
+                  <span className="truncate">{t.creator.viewMyGallery}</span>
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleBackStep}
+                  className="btn-secondary min-w-0 px-4 py-2.5 text-sm"
+                >
+                  <ChevronLeft className="h-4 w-4 shrink-0" />
+                  <span className="truncate">{t.creator.prev}</span>
+                </button>
+              )}
             </div>
           )}
         </div>

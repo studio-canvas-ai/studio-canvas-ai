@@ -1,7 +1,16 @@
 import type { Provider } from "@supabase/supabase-js";
 import type { AuthProviderId } from "@/lib/db/types";
-import { isSupabaseConfigured, getSupabaseConfigError } from "@/lib/supabase/config";
+import {
+  isSupabaseConfigured,
+  getSupabaseConfigError,
+  getAuthSiteOrigin,
+  getSupabaseAuthCallbackUrl,
+  CANONICAL_SUPABASE_AUTH_CALLBACK_URL,
+  SUPABASE_AUTH_SITE_ORIGINS,
+} from "@/lib/supabase/config";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { formatOAuthError } from "@/lib/supabase/oauthErrors";
+import { APP_HOME_PATH } from "@/lib/appRoutes";
 
 export type SocialOAuthId =
   | "google"
@@ -15,15 +24,17 @@ const AUTH_NEXT_KEY = "sca_auth_next";
 
 /**
  * Map our UI provider ids → Supabase Auth OAuth provider names.
- * Microsoft is configured as Custom OAuth (`custom:microsoft`) in the dashboard.
- * Instagram / Naver are also custom providers.
+ * Meta (Facebook + Instagram) uses the built-in `facebook` provider.
+ * Microsoft / Naver use Custom OAuth in the dashboard.
+ * Kakao uses the built-in `kakao` provider (not `custom:kakao`).
  */
 const TO_SUPABASE: Record<SocialOAuthId, Provider | `custom:${string}`> = {
   google: "google",
   facebook: "facebook",
+  // Instagram Login is served by Meta via the same Facebook OAuth app/provider.
+  instagram: "facebook",
   kakao: "kakao",
   microsoft: "custom:microsoft",
-  instagram: "custom:instagram",
   naver: "custom:naver",
 };
 
@@ -33,6 +44,7 @@ export function mapSupabaseProviderToAuthId(
 ): AuthProviderId {
   const p = (supabaseProvider || "").toLowerCase();
   if (p.includes("naver")) return "naver";
+  if (p.includes("kakao")) return "kakao";
   if (p.includes("instagram")) return "instagram";
   if (p === "azure" || p.includes("microsoft")) return "microsoft";
   switch (p) {
@@ -40,8 +52,8 @@ export function mapSupabaseProviderToAuthId(
       return "google";
     case "facebook":
       return "facebook";
-    case "kakao":
-      return "kakao";
+    case "email":
+      return "credentials";
     case "custom:microsoft":
     case "microsoft":
     case "azure":
@@ -60,6 +72,7 @@ export function mapSupabaseProviderToAuthId(
 type MetaBag = Record<string, unknown>;
 
 function str(v: unknown): string | null {
+  if (typeof v === "number" && Number.isFinite(v)) return String(v);
   if (typeof v !== "string") return null;
   const t = v.trim();
   return t.length ? t : null;
@@ -76,10 +89,36 @@ function pickIdentity(
   );
 }
 
+/** Safe in-app path for post-login redirect (blocks open redirects). */
+export function safeAuthNextPath(
+  nextPath: string,
+  fallback: string = APP_HOME_PATH
+): string {
+  if (nextPath.startsWith("/") && !nextPath.startsWith("//")) return nextPath;
+  return fallback;
+}
+
+/**
+ * App callback URL for Supabase `redirectTo`.
+ * Always uses the current browser origin so localhost / www / vercel.app
+ * each round-trip on the same host (PKCE cookies stay valid).
+ * Must match Supabase Redirect URL allow-list:
+ *   ${origin}/**  for each of SUPABASE_AUTH_SITE_ORIGINS
+ */
+export function buildAuthCallbackRedirectTo(nextPath: string = APP_HOME_PATH): string {
+  const origin =
+    typeof window !== "undefined"
+      ? window.location.origin.replace(/\/$/, "")
+      : getAuthSiteOrigin();
+  const url = new URL("/auth/callback", origin);
+  url.searchParams.set("next", safeAuthNextPath(nextPath));
+  return url.toString();
+}
+
 /**
  * Normalize Supabase Auth user → app fields.
- * Custom Naver / Kakao claims often land in user_metadata / identities[].identity_data
- * (sub, email, name, picture) rather than only top-level user.email.
+ * Custom Naver / Kakao / Facebook claims often land in user_metadata /
+ * identities[].identity_data rather than only top-level user.email.
  */
 export function extractSupabaseOAuthProfile(user: {
   id: string;
@@ -98,10 +137,14 @@ export function extractSupabaseOAuthProfile(user: {
   image: string | null;
   naverSub: string | null;
   kakaoSub: string | null;
+  facebookSub: string | null;
 } {
   const meta = (user.user_metadata ?? {}) as MetaBag;
   const appProvider = str(user.app_metadata?.provider)?.toLowerCase() || "";
   const identity =
+    (appProvider.includes("facebook")
+      ? pickIdentity(user.identities, "facebook")
+      : null) ||
     (appProvider.includes("kakao")
       ? pickIdentity(user.identities, "kakao")
       : null) ||
@@ -123,14 +166,24 @@ export function extractSupabaseOAuthProfile(user: {
 
   const providerSub =
     str(meta.sub) ||
+    str(meta.provider_id) ||
     str(idData.sub) ||
     str(idData.id) ||
-    str(meta.provider_id) ||
+    str(idData.user_id) ||
     str(kakaoAccount.id) ||
     null;
 
+  // Treat built-in + custom:kakao the same for synthetic email / profile fields.
+  const isKakao =
+    provider === "kakao" ||
+    appProvider.includes("kakao") ||
+    String(identity?.provider || "")
+      .toLowerCase()
+      .includes("kakao");
+
   const naverSub = provider === "naver" ? providerSub : null;
-  const kakaoSub = provider === "kakao" ? providerSub : null;
+  const kakaoSub = isKakao ? providerSub : null;
+  const facebookSub = provider === "facebook" ? providerSub : null;
 
   const email =
     str(user.email) ||
@@ -140,8 +193,12 @@ export function extractSupabaseOAuthProfile(user: {
     // Stable synthetic address when provider email consent was not granted.
     (provider === "naver" && naverSub ? `${naverSub}@users.naver.id` : null) ||
     (provider === "naver" ? `${user.id}@users.naver.id` : null) ||
-    (provider === "kakao" && kakaoSub ? `${kakaoSub}@users.kakao.id` : null) ||
-    (provider === "kakao" ? `${user.id}@users.kakao.id` : null);
+    (isKakao && kakaoSub ? `${kakaoSub}@users.kakao.id` : null) ||
+    (isKakao ? `${user.id}@users.kakao.id` : null) ||
+    (provider === "facebook" && facebookSub
+      ? `${facebookSub}@users.facebook.id`
+      : null) ||
+    (provider === "facebook" ? `${user.id}@users.facebook.id` : null);
 
   const name =
     str(meta.full_name) ||
@@ -175,6 +232,7 @@ export function extractSupabaseOAuthProfile(user: {
     image,
     naverSub,
     kakaoSub,
+    facebookSub,
   };
 }
 
@@ -190,15 +248,24 @@ export const SUPABASE_SOCIAL_PROVIDERS: SocialOAuthId[] = [
 
 export function saveAuthNextPath(nextPath: string): void {
   try {
-    const safe =
-      nextPath.startsWith("/") && !nextPath.startsWith("//") ? nextPath : "/generate";
+    const safe = safeAuthNextPath(nextPath);
     sessionStorage.setItem(AUTH_NEXT_KEY, safe);
   } catch {
     /* ignore */
   }
 }
 
-export function consumeAuthNextPath(fallback = "/generate"): string {
+export function peekAuthNextPath(fallback: string = APP_HOME_PATH): string {
+  try {
+    const raw = sessionStorage.getItem(AUTH_NEXT_KEY);
+    if (raw && raw.startsWith("/") && !raw.startsWith("//")) return raw;
+  } catch {
+    /* ignore */
+  }
+  return fallback;
+}
+
+export function consumeAuthNextPath(fallback: string = APP_HOME_PATH): string {
   try {
     const raw = sessionStorage.getItem(AUTH_NEXT_KEY);
     sessionStorage.removeItem(AUTH_NEXT_KEY);
@@ -210,17 +277,100 @@ export function consumeAuthNextPath(fallback = "/generate"): string {
 }
 
 /**
- * Start Supabase OAuth.
- * - API host comes only from NEXT_PUBLIC_SUPABASE_URL (never hardcoded).
- * - redirectTo is the app origin (e.g. https://www.studio-canvas-ai.com).
- *   Google itself must redirect to:
- *   https://<project-ref>.supabase.co/auth/v1/callback
- *   (configured in Google Cloud + Supabase Google provider — not in this call).
+ * Meta unified OAuth (Facebook Login) via Supabase.
+ * Instagram UI entry points also call this — Meta handles both through `provider: 'facebook'`.
+ *
+ * Meta Valid OAuth Redirect URI (provider → Supabase, not the site):
+ *   CANONICAL_SUPABASE_AUTH_CALLBACK_URL (…/auth/v1/callback)
+ * App redirectTo (Supabase → site): /auth/callback?next=…
+ * App ID: 1527934262363418
+ *
+ * Do NOT pass `scopes: "email"` unless Meta Use cases already includes email.
+ * Missing email → synthetic `@users.facebook.id` in extractSupabaseOAuthProfile.
+ */
+export async function signInWithFacebook(
+  nextPath: string = APP_HOME_PATH
+): Promise<{ data: unknown; error: Error | null }> {
+  try {
+    if (!isSupabaseConfigured()) {
+      const err = new Error(
+        getSupabaseConfigError() ||
+          "Supabase is not configured (check NEXT_PUBLIC_SUPABASE_URL / ANON_KEY)."
+      );
+      console.error("Meta/Facebook login error:", err.message);
+      return { data: null, error: err };
+    }
+
+    const next = safeAuthNextPath(nextPath);
+    saveAuthNextPath(next);
+
+    const { ensureSupabaseAuthStorageReady } = await import(
+      "@/lib/supabase/authStorage"
+    );
+    ensureSupabaseAuthStorageReady();
+
+    const supabase = createSupabaseBrowserClient();
+    const redirectTo = buildAuthCallbackRedirectTo(next);
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "facebook",
+      options: {
+        redirectTo,
+        skipBrowserRedirect: false,
+      },
+    });
+
+    if (error) {
+      console.error("Meta/Facebook login error:", error.message);
+      return {
+        data,
+        error: new Error(
+          error.message ||
+            "Meta sign-in failed. Check Facebook provider settings in Supabase and Meta."
+        ),
+      };
+    }
+
+    return { data, error: null };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("Meta/Facebook login error:", message);
+    return { data: null, error: new Error(message) };
+  }
+}
+
+/** Alias: Instagram button uses the same Meta Facebook OAuth provider. */
+export const signInWithInstagram = signInWithFacebook;
+
+/**
+ * Start Supabase OAuth for a UI social id.
+ * Instagram is routed to Meta `facebook` (see TO_SUPABASE).
  */
 export async function signInWithSupabaseOAuth(
   provider: SocialOAuthId,
   nextPath: string
 ): Promise<{ error: Error | null }> {
+  if (provider === "facebook" || provider === "instagram") {
+    const { error } = await signInWithFacebook(nextPath);
+    return { error };
+  }
+  if (provider === "kakao") {
+    const { error } = await signInWithKakao(nextPath);
+    return { error };
+  }
+  if (provider === "naver") {
+    const { error } = await signInWithNaver(nextPath);
+    return { error };
+  }
+  if (provider === "microsoft") {
+    const { error } = await signInWithMicrosoft(nextPath);
+    return { error };
+  }
+  if (provider === "google") {
+    const { error } = await signInWithGoogle(nextPath);
+    return { error };
+  }
+
   if (!isSupabaseConfigured()) {
     return {
       error: new Error(
@@ -233,35 +383,109 @@ export async function signInWithSupabaseOAuth(
   saveAuthNextPath(nextPath);
 
   const supabase = createSupabaseBrowserClient();
-  // Prefer live browser origin so www vs apex matches the page the user opened.
-  const redirectTo = window.location.origin;
-
-  const options: {
-    redirectTo: string;
-    queryParams?: Record<string, string>;
-  } = { redirectTo };
-
-  if (provider === "google") {
-    options.queryParams = { access_type: "offline", prompt: "consent" };
-  }
-
   const { error } = await supabase.auth.signInWithOAuth({
     provider: TO_SUPABASE[provider] as Provider,
-    options,
+    options: { redirectTo: buildAuthCallbackRedirectTo(nextPath) },
   });
 
   return { error: error ? new Error(error.message) : null };
 }
 
 /**
+ * Supabase built-in Google OAuth (primary login — not NextAuth).
+ *
+ * Dashboard checklist:
+ *   1) Google Cloud → Authorized redirect URI =
+ *        getSupabaseAuthCallbackUrl()  e.g. https://<ref>.supabase.co/auth/v1/callback
+ *   2) Google Cloud → JS origins = SUPABASE_AUTH_SITE_ORIGINS
+ *   3) Supabase → Providers → Google = Client ID + Secret
+ *   4) Supabase → Redirect URLs include each origin/**
+ *
+ * App flow: signInWithOAuth → /auth/callback?code → /auth/bridge → app session
+ */
+export async function signInWithGoogle(
+  nextPath: string = APP_HOME_PATH
+): Promise<{ data: unknown; error: Error | null }> {
+  try {
+    if (!isSupabaseConfigured()) {
+      const err = new Error(
+        getSupabaseConfigError() ||
+          "Supabase is not configured (check NEXT_PUBLIC_SUPABASE_URL / ANON_KEY)."
+      );
+      console.error("Google login error:", err.message);
+      return { data: null, error: err };
+    }
+
+    const next = safeAuthNextPath(nextPath);
+    saveAuthNextPath(next);
+
+    // Ensure foreign project auth keys cannot poison PKCE before redirect.
+    const { ensureSupabaseAuthStorageReady } = await import(
+      "@/lib/supabase/authStorage"
+    );
+    ensureSupabaseAuthStorageReady();
+
+    const redirectTo = buildAuthCallbackRedirectTo(next);
+    const supabaseCallback = getSupabaseAuthCallbackUrl();
+
+    const supabase = createSupabaseBrowserClient();
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo,
+        scopes: "openid email profile",
+        skipBrowserRedirect: true,
+        queryParams: {
+          access_type: "offline",
+          // Force account chooser so users can pick a live Google account
+          // instead of a previously sticky / deleted YouTube channel session.
+          prompt: "select_account",
+        },
+      },
+    });
+
+    if (error) {
+      const message = formatOAuthError(error.message);
+      console.error("Google login error:", message, {
+        redirectTo,
+        supabaseCallback,
+        allowedSiteOrigins: SUPABASE_AUTH_SITE_ORIGINS,
+      });
+      return { data, error: new Error(message) };
+    }
+
+    if (!data?.url) {
+      return {
+        data,
+        error: new Error("Google OAuth URL missing from Supabase response."),
+      };
+    }
+
+    window.location.assign(data.url);
+    return { data, error: null };
+  } catch (err) {
+    const message = formatOAuthError(
+      err instanceof Error ? err.message : String(err)
+    );
+    console.error("Google login error:", message);
+    return { data: null, error: new Error(message) };
+  }
+}
+
+/**
  * Supabase Custom OAuth for Microsoft (`custom:microsoft`).
  *
+ * Dashboard endpoints must use the `common` tenant (not a fixed directory ID),
+ * or AADSTS70016 occurs for accounts outside that tenant:
+ *   authorize/token: .../common/oauth2/v2.0/...
+ *   issuer: .../common/v2.0
+ *   jwks: .../common/discovery/v2.0/keys
  * Azure app Redirect URI must be Supabase's callback (not the site origin):
- *   https://oorujqbivznftsyqilyj.supabase.co/auth/v1/callback
+ *   CANONICAL_SUPABASE_AUTH_CALLBACK_URL
  * App `redirectTo` is the site origin; middleware forwards `?code=` → /auth/callback.
  */
 export async function signInWithMicrosoft(
-  nextPath = "/generate"
+  nextPath: string = APP_HOME_PATH
 ): Promise<{ data: unknown; error: Error | null }> {
   try {
     if (!isSupabaseConfigured()) {
@@ -273,18 +497,19 @@ export async function signInWithMicrosoft(
       return { data: null, error: err };
     }
 
-    saveAuthNextPath(nextPath);
+    const next = safeAuthNextPath(nextPath);
+    saveAuthNextPath(next);
+
+    const { ensureSupabaseAuthStorageReady } = await import(
+      "@/lib/supabase/authStorage"
+    );
+    ensureSupabaseAuthStorageReady();
 
     const supabase = createSupabaseBrowserClient();
-    const redirectTo =
-      typeof window !== "undefined"
-        ? window.location.origin
-        : "https://www.studio-canvas-ai.com";
-
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "custom:microsoft" as Provider,
       options: {
-        redirectTo,
+        redirectTo: buildAuthCallbackRedirectTo(next),
         scopes: "openid profile email offline_access",
       },
     });
@@ -303,15 +528,25 @@ export async function signInWithMicrosoft(
 }
 
 /**
- * Supabase built-in Kakao OAuth.
+ * Supabase built-in Kakao OAuth (`provider: "kakao"`).
  *
- * Dashboard: Authentication → Providers → Kakao (Client ID = REST API key,
- * Client Secret = Kakao Client Secret). Kakao Redirect URI must be:
- *   https://oorujqbivznftsyqilyj.supabase.co/auth/v1/callback
- * Enable "Allow users without an email" if account_email consent is unavailable.
+ * Do **not** use `custom:kakao` — that path is not configured / fails in this project.
+ * Use the dashboard **Kakao** provider (REST API key + Client Secret).
+ *
+ * Kakao Redirect URI (must match IdP dashboard + env project):
+ *   CANONICAL_SUPABASE_AUTH_CALLBACK_URL
+ *   (= getSupabaseAuthCallbackUrl() when NEXT_PUBLIC_SUPABASE_URL is correct)
+ *
+ * KOE006 = Kakao redirect_uri mismatch → wrong/empty NEXT_PUBLIC_SUPABASE_URL
+ *   or Kakao console missing the canonical callback above.
+ * KOE205 (personal / non-Biz Kakao apps): `account_email` is unavailable.
+ * We set `queryParams.scope` to only `profile_nickname,profile_image` so the
+ * authorize URL does not request `account_email`.
+ * Enable Supabase Kakao → **Allow users without an email**.
+ * App bridge synthesizes `{kakaoId}@users.kakao.id` when email is missing.
  */
 export async function signInWithKakao(
-  nextPath = "/generate"
+  nextPath: string = APP_HOME_PATH
 ): Promise<{ data: unknown; error: Error | null }> {
   try {
     if (!isSupabaseConfigured()) {
@@ -323,31 +558,41 @@ export async function signInWithKakao(
       return { data: null, error: err };
     }
 
-    saveAuthNextPath(nextPath);
+    const next = safeAuthNextPath(nextPath);
+    saveAuthNextPath(next);
+
+    // Drop leftover PKCE/session keys from retired test projects before OAuth.
+    const { ensureSupabaseAuthStorageReady } = await import(
+      "@/lib/supabase/authStorage"
+    );
+    ensureSupabaseAuthStorageReady();
 
     const supabase = createSupabaseBrowserClient();
-    // Prefer live browser origin (www vs apex, localhost) so PKCE cookies match.
-    // Production: https://www.studio-canvas-ai.com — middleware forwards ?code= → /auth/callback.
-    const redirectTo =
-      typeof window !== "undefined"
-        ? window.location.origin
-        : "https://www.studio-canvas-ai.com";
-
+    const idpCallback =
+      getSupabaseAuthCallbackUrl() || CANONICAL_SUPABASE_AUTH_CALLBACK_URL;
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "kakao",
       options: {
-        redirectTo,
+        redirectTo: buildAuthCallbackRedirectTo(next),
+        // Personal Kakao apps: never request account_email (KOE205).
+        // Pass scope via queryParams so Kakao authorize receives nickname/image only.
+        queryParams: {
+          scope: "profile_nickname,profile_image",
+        },
       },
     });
 
     if (error) {
-      console.error("카카오 로그인 에러:", error.message);
-      return { data, error: new Error(error.message) };
+      const message = formatOAuthError(error.message);
+      console.error("카카오 로그인 에러:", message, { idpCallback });
+      return { data, error: new Error(message) };
     }
 
     return { data, error: null };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = formatOAuthError(
+      err instanceof Error ? err.message : String(err)
+    );
     console.error("카카오 로그인 에러:", message);
     return { data: null, error: new Error(message) };
   }
@@ -361,7 +606,7 @@ export async function signInWithKakao(
  * Scopes must be `profile` only (not `openid`), or Supabase skips userinfo.
  */
 export async function signInWithNaver(
-  nextPath = "/generate"
+  nextPath: string = APP_HOME_PATH
 ): Promise<{ data: unknown; error: Error | null }> {
   try {
     if (!isSupabaseConfigured()) {
@@ -373,13 +618,19 @@ export async function signInWithNaver(
       return { data: null, error: err };
     }
 
-    saveAuthNextPath(nextPath);
+    const next = safeAuthNextPath(nextPath);
+    saveAuthNextPath(next);
+
+    const { ensureSupabaseAuthStorageReady } = await import(
+      "@/lib/supabase/authStorage"
+    );
+    ensureSupabaseAuthStorageReady();
 
     const supabase = createSupabaseBrowserClient();
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "custom:naver",
       options: {
-        redirectTo: window.location.origin,
+        redirectTo: buildAuthCallbackRedirectTo(next),
         // Avoid `openid` so Auth uses the (proxied) userinfo endpoint.
         scopes: "profile",
       },

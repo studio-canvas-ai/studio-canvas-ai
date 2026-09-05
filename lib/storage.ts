@@ -22,6 +22,9 @@ export function saveJson<T>(key: string, value: T) {
 
 export const STORAGE_KEYS = {
   faceProfiles: "sca_face_profiles_v1",
+  /** @deprecated General photos are cloud/R2-backed — do not write here. */
+  generalPhotos: "sca_general_photos_v1",
+  /** @deprecated Tickets are server/R2-backed — do not write here. */
   tickets: "sca_support_tickets_v1",
   galleryHistory: "sca_gallery_history_v1",
   accountMeta: "sca_account_meta_v1",

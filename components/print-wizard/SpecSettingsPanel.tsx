@@ -1,236 +1,802 @@
 "use client";
 
-import { useState, type KeyboardEvent } from "react";
+import { useEffect, useState } from "react";
+import { useI18n } from "@/components/I18nProvider";
+import { fillCanvas } from "@/lib/i18n";
+import { ChevronDown } from "lucide-react";
 import {
-  BG_PRESETS,
+  FIELD_CATEGORIES,
   PRINT_FORMATS,
+  PHOTO_FORMATS,
   PRINT_USES,
+  PHOTO_USES,
   PRINT_PAGE_COUNTS,
+  PRINT_CUSTOM_SIZE_MAX_CM,
+  PRINT_CUSTOM_SIZE_MAX_INCH,
+  SCREEN_26_FORMAT_PRESET_PAIRS,
+  formatDisplayLabel,
+  fieldById,
+  emptySpecPicks,
   type BgPresetId,
+  type PrintCustomSize,
+  type PrintCustomUnit,
   type PrintFormatId,
   type PrintUseId,
   type PrintPageCount,
+  type PrintWizardSpecPicks,
 } from "@/lib/printWizardTypes";
-import { SMART_PROMPT_PRESETS } from "@/lib/printWizardPromptPresets";
+import type { WizardProductId } from "@/lib/wizard/wizardProduct";
+import {
+  applyBgExamplePreset,
+  BG_EXAMPLE_CATEGORIES,
+  findSelectedBgExamplePreset,
+  isBgExamplePresetSelected,
+} from "@/lib/aiBackgroundExamplePresets";
+import {
+  PHOTO_LOOKBOOK_EXAMPLE_HINT,
+  getPhotoLookbookExampleCategories,
+} from "@/lib/photoLookbookExamples";
 import ControlBarDropdown, {
   ControlMenuItem,
 } from "@/components/print-wizard/ControlBarDropdown";
+import AiBackgroundPromptBar from "@/components/print-wizard/AiBackgroundPromptBar";
+import PhotoLookbookPromptPanel from "@/components/print-wizard/PhotoLookbookPromptPanel";
+import type { SpecSettingsTagId } from "@/components/print-wizard/AiBackgroundPromptBar";
+import {
+  IMAGE_STYLE_PRESETS,
+  type VisualStyleSelection,
+} from "@/lib/ai/visualStylePresets";
 
 export type SpecSettingsPanelProps = {
   formatId: PrintFormatId;
   useId: PrintUseId;
   pageCount: PrintPageCount;
+  customSize: PrintCustomSize | null;
+  specPicks?: PrintWizardSpecPicks;
   bgKeyword: string;
   bgPresetId: BgPresetId | null;
   selectedPromptPresetId: string | null;
   mainPrompt: string;
+  visualStyle: VisualStyleSelection;
   generating?: boolean;
-  submitting?: boolean;
+  /** Photo: which generate action is running. */
+  generatingKind?: "background" | "subject" | null;
+  /** Photo wizard shows the short pictorial use list only. */
+  productId?: WizardProductId;
+  /** Screen 26: expand to content height (no inner scrollbar / clipped CTA). */
+  fitContent?: boolean;
+  /** Screen 26 — hide 장수 chip; mini thumbs stay fixed at 8 slots. */
+  hidePageCountOption?: boolean;
   onFormatChange: (id: PrintFormatId) => void;
+  onCustomSizeApply: (size: PrintCustomSize) => void;
   onUseChange: (id: PrintUseId) => void;
   onPageCountChange: (count: PrintPageCount) => void;
   onBgKeywordChange: (keyword: string) => void;
   onBgPresetPick: (id: BgPresetId) => void;
   onGenerateBackground: () => void;
+  /** Photo: dedicated subject-edit generate. */
+  onGenerateSubject?: () => void;
   onPromptPresetPick: (id: string, prompt: string) => void;
   onMainPromptChange: (value: string) => void;
-  onSubmit: () => void;
+  onVisualStyleChange: (next: VisualStyleSelection) => void;
+  /** Clear one spec tag (Screen 26 bidirectional sync). */
+  onClearSpecTag?: (key: SpecSettingsTagId) => void;
 };
 
-type OpenKey = "format" | "use" | "pages" | "prompt" | "bg" | null;
+type OpenKey = "format" | "style" | "use" | "pages" | "prompt" | "bg" | null;
+
+const PRINT_PRESET_FORMATS = PRINT_FORMATS.filter((f) => f.id !== "free");
+const PHOTO_PRESET_FORMATS = PHOTO_FORMATS.filter((f) => f.id !== "free");
 
 /**
- * Center panel: 규격/용도/장수/예시/배경 compact row + main prompt.
+ * Center panel: compact option row + Adobe-inspired AI background prompt bar.
  */
 export default function SpecSettingsPanel({
   formatId,
   useId,
   pageCount,
+  customSize,
+  specPicks: specPicksProp,
   bgKeyword,
   bgPresetId,
-  selectedPromptPresetId,
+  selectedPromptPresetId: _selectedPromptPresetId,
   mainPrompt,
+  visualStyle,
   generating = false,
-  submitting = false,
+  generatingKind = null,
+  productId = "print",
+  fitContent = false,
+  hidePageCountOption = false,
   onFormatChange,
+  onCustomSizeApply,
   onUseChange,
   onPageCountChange,
   onBgKeywordChange,
   onBgPresetPick,
   onGenerateBackground,
-  onPromptPresetPick,
+  onGenerateSubject,
+  onPromptPresetPick: _onPromptPresetPick,
   onMainPromptChange,
-  onSubmit,
+  onVisualStyleChange,
+  onClearSpecTag,
 }: SpecSettingsPanelProps) {
+  const { t, locale } = useI18n();
+  const cs = t.canvasStudio;
+  const formatTitle = (id: string, fallback: string) =>
+    id === "original"
+      ? cs.formatOriginal
+      : id === "free"
+        ? cs.formatFree
+        : fallback;
+  const useTitle = (id: keyof typeof cs.uses, fallback: string) =>
+    cs.uses[id] ?? fallback;
+  const isPhotoProduct = productId === "photo";
+  const isScreen26Presets = fitContent && hidePageCountOption;
+  const useCatalog = isPhotoProduct ? PHOTO_USES : PRINT_USES;
+  const presetFormats = isPhotoProduct
+    ? PHOTO_PRESET_FORMATS
+    : PRINT_PRESET_FORMATS;
+  const resolveFormatLabel = (id: PrintFormatId) => {
+    if (id === "free") return cs.formatFree;
+    if (isScreen26Presets) return formatDisplayLabel(id);
+    return formatTitle(id, PRINT_FORMATS.find((f) => f.id === id)?.label ?? id);
+  };
+  const resolveUseLabel = (id: PrintUseId | string, fallback: string) => {
+    if (isPhotoProduct && id === "sns") {
+      return cs.uses["profile-sns"] ?? fallback;
+    }
+    return useTitle(id as keyof typeof cs.uses, fallback);
+  };
+  const pageTitle = (value: number) =>
+    value === 1
+      ? cs.pageSingle
+      : value === 2
+        ? cs.pageDouble
+        : fillCanvas(cs.pageN, { n: value });
+  const styleValueLabel = visualStyle.imageStyleId
+    ? cs.imageStyles[
+        visualStyle.imageStyleId as keyof typeof cs.imageStyles
+      ] ??
+      IMAGE_STYLE_PRESETS.find((p) => p.id === visualStyle.imageStyleId)?.[
+        locale === "kr" ? "labelKo" : "labelEn"
+      ] ??
+      ""
+    : "";
   const [openKey, setOpenKey] = useState<OpenKey>(null);
+  const [freeSizeOpen, setFreeSizeOpen] = useState(false);
+  const [customUnit, setCustomUnit] = useState<PrintCustomUnit>(
+    customSize?.unit ?? "cm"
+  );
+  const [widthInput, setWidthInput] = useState(
+    String(customSize?.width ?? 21)
+  );
+  const [heightInput, setHeightInput] = useState(
+    String(customSize?.height ?? 29.7)
+  );
+  const [sizeError, setSizeError] = useState<string | null>(null);
+  const unitLabel = customUnit === "cm" ? "cm" : cs.inch;
 
-  const onMainKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key !== "Enter" || e.shiftKey) return;
-    e.preventDefault();
-    if (!submitting) onSubmit();
+  // Keep accordion closed whenever the 규격 menu re-opens.
+  useEffect(() => {
+    if (openKey !== "format") setFreeSizeOpen(false);
+  }, [openKey]);
+
+  useEffect(() => {
+    if (!customSize) return;
+    setCustomUnit(customSize.unit);
+    setWidthInput(String(customSize.width));
+    setHeightInput(String(customSize.height));
+  }, [customSize]);
+
+  const formatValueLabel =
+    formatId === "free" && customSize
+      ? `${customSize.width}×${customSize.height}${
+          customSize.unit === "cm" ? "cm" : cs.inch
+        }`
+      : resolveFormatLabel(formatId);
+
+  const applyFreeSize = () => {
+    const width = Number(widthInput);
+    const height = Number(heightInput);
+    if (
+      !Number.isFinite(width) ||
+      !Number.isFinite(height) ||
+      width <= 0 ||
+      height <= 0
+    ) {
+      setSizeError("가로·세로 값을 올바르게 입력해 주세요.");
+      return;
+    }
+    const maxPhysical =
+      customUnit === "cm"
+        ? PRINT_CUSTOM_SIZE_MAX_CM
+        : PRINT_CUSTOM_SIZE_MAX_INCH;
+    if (width > maxPhysical || height > maxPhysical) {
+      setSizeError(
+        `한 변은 최대 ${maxPhysical}${customUnit === "cm" ? "cm" : "인치"}까지 입력할 수 있습니다.`
+      );
+      return;
+    }
+    setSizeError(null);
+    onCustomSizeApply({ unit: customUnit, width, height });
+    setOpenKey(null);
+    setFreeSizeOpen(false);
   };
 
+  const specPicks = specPicksProp ?? emptySpecPicks();
+  const selectedBgExample = findSelectedBgExamplePreset(bgKeyword);
+  const selectedPhotoExample = isPhotoProduct
+    ? getPhotoLookbookExampleCategories({
+        useId,
+        imageStyleId: visualStyle.imageStyleId,
+      })
+        .flatMap((c) => [...c.examples])
+        .find((ex) => ex === bgKeyword.trim()) ?? null
+    : null;
+  const useValueLabel = resolveUseLabel(
+    useId,
+    useCatalog.find((u) => u.id === useId)?.label ??
+      PRINT_USES.find((u) => u.id === useId)?.label ??
+      useId
+  );
+  const pageValueLabel = pageTitle(pageCount);
+  const fieldValueLabel = bgPresetId
+    ? cs.bgPresets[bgPresetId] ?? fieldById(bgPresetId)?.label
+    : "";
+  const exampleValueLabel = isPhotoProduct
+    ? selectedPhotoExample
+      ? selectedPhotoExample.length > 22
+        ? `${selectedPhotoExample.slice(0, 22)}…`
+        : selectedPhotoExample
+      : bgKeyword.trim()
+        ? bgKeyword.trim().length > 22
+          ? `${bgKeyword.trim().slice(0, 22)}…`
+          : bgKeyword.trim()
+        : ""
+    : selectedBgExample
+      ? selectedBgExample.labelKo.length > 22
+        ? `${selectedBgExample.labelKo.slice(0, 22)}…`
+        : selectedBgExample.labelKo
+      : bgKeyword.trim()
+        ? bgKeyword.trim().length > 22
+          ? `${bgKeyword.trim().slice(0, 22)}…`
+          : bgKeyword.trim()
+        : "";
+  const specTags = [
+    specPicks.format && formatValueLabel
+      ? { id: "format" as const, label: cs.specFormat, value: formatValueLabel }
+      : null,
+    specPicks.style && styleValueLabel
+      ? { id: "style" as const, label: cs.specStyle, value: styleValueLabel }
+      : null,
+    specPicks.use && useValueLabel
+      ? { id: "use" as const, label: cs.specUse, value: useValueLabel }
+      : null,
+    !isPhotoProduct &&
+    !hidePageCountOption &&
+    specPicks.pages &&
+    pageValueLabel
+      ? { id: "pages" as const, label: cs.specPages, value: pageValueLabel }
+      : null,
+    exampleValueLabel
+      ? { id: "prompt" as const, label: cs.specExample, value: exampleValueLabel }
+      : null,
+    !isPhotoProduct && fieldValueLabel
+      ? { id: "bg" as const, label: cs.specBg, value: fieldValueLabel }
+      : null,
+  ].filter(
+    (tag): tag is { id: SpecSettingsTagId | "pages"; label: string; value: string } =>
+      Boolean(tag)
+  );
+  const bgPromptSelected = bgKeyword.trim().length > 0;
+  const fieldSelected = Boolean(bgPresetId);
+  const canGenerateBackground = isPhotoProduct
+    ? specPicks.format &&
+      specPicks.style &&
+      specPicks.use &&
+      bgKeyword.trim().length > 0
+    : specPicks.format &&
+      specPicks.style &&
+      specPicks.use &&
+      fieldSelected &&
+      bgPromptSelected;
+  const canGenerateSubject = Boolean(
+    isPhotoProduct &&
+      specPicks.format &&
+      specPicks.style &&
+      specPicks.use &&
+      mainPrompt.trim().length > 0
+  );
+
+  const compactSpecToolbar =
+    fitContent && hidePageCountOption && !isPhotoProduct;
+
   return (
-    <section className="flex h-full min-h-0 flex-col gap-2.5 overflow-hidden rounded-2xl border border-slate-800 bg-[#121824] p-3 shadow-[0_8px_32px_rgba(0,0,0,0.35)] sm:p-4">
-      {/* 규격 · 용도 · 장수 · 예시 · 배경 — single compact row */}
-      <div className="flex shrink-0 flex-row items-center gap-1.5">
+    <section
+      className={
+        fitContent
+          ? "flex w-full min-w-0 flex-col gap-2.5 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3 pb-4 shadow-sm sm:p-3.5"
+          : "flex h-full min-h-0 flex-col gap-2.5 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3 pb-4 shadow-sm sm:p-3.5"
+      }
+    >
+      {/* 규격 · 스타일 · 용도 · (인쇄: 장수) · 배경 · (인쇄: 분야) */}
+      <div
+        data-spec-row
+        className={
+          compactSpecToolbar
+            ? "flex min-w-0 shrink-0 flex-row flex-nowrap items-stretch gap-1 [&>*]:min-w-0 [&>*]:flex-1"
+            : `flex min-w-0 shrink-0 flex-row flex-wrap items-stretch ${
+                isPhotoProduct ? "gap-2" : "gap-1.5"
+              } [&>*]:min-w-0 [&>*]:flex-[1_1_7.5rem]`
+        }
+      >
         <ControlBarDropdown
           compact
-          label="규격"
-          value={PRINT_FORMATS.find((f) => f.id === formatId)?.label}
+          dense={compactSpecToolbar}
+          selected={specPicks.format}
+          label={cs.specFormat}
+          value={specPicks.format ? formatValueLabel : undefined}
           open={openKey === "format"}
           onOpenChange={(v) => setOpenKey(v ? "format" : null)}
-          menuMinWidth={200}
-          menuMaxWidth={260}
+          menuMinWidth={320}
+          menuMaxWidth={380}
         >
-          {PRINT_FORMATS.map((fmt) => (
-            <ControlMenuItem
-              key={fmt.id}
-              active={formatId === fmt.id}
-              title={fmt.label}
-              description={fmt.previewHint}
-              onClick={() => {
-                onFormatChange(fmt.id);
-                setOpenKey(null);
-              }}
-            />
-          ))}
-        </ControlBarDropdown>
-
-        <ControlBarDropdown
-          compact
-          label="용도"
-          value={PRINT_USES.find((u) => u.id === useId)?.label}
-          open={openKey === "use"}
-          onOpenChange={(v) => setOpenKey(v ? "use" : null)}
-          menuMinWidth={180}
-          menuMaxWidth={220}
-        >
-          {PRINT_USES.map((item) => (
-            <ControlMenuItem
-              key={item.id}
-              active={useId === item.id}
-              title={item.label}
-              onClick={() => {
-                onUseChange(item.id);
-                setOpenKey(null);
-              }}
-            />
-          ))}
-        </ControlBarDropdown>
-
-        <ControlBarDropdown
-          compact
-          label="장수"
-          value={
-            PRINT_PAGE_COUNTS.find((p) => p.value === pageCount)?.label
-          }
-          open={openKey === "pages"}
-          onOpenChange={(v) => setOpenKey(v ? "pages" : null)}
-          menuMinWidth={160}
-          menuMaxWidth={200}
-        >
-          {PRINT_PAGE_COUNTS.map((item) => (
-            <ControlMenuItem
-              key={item.value}
-              active={pageCount === item.value}
-              title={item.label}
-              onClick={() => {
-                onPageCountChange(item.value);
-                setOpenKey(null);
-              }}
-            />
-          ))}
-        </ControlBarDropdown>
-
-        <ControlBarDropdown
-          compact
-          label="예시"
-          value={
-            SMART_PROMPT_PRESETS.find((p) => p.id === selectedPromptPresetId)
-              ?.label
-          }
-          open={openKey === "prompt"}
-          onOpenChange={(v) => setOpenKey(v ? "prompt" : null)}
-          menuMinWidth={300}
-          menuMaxWidth={400}
-        >
-          {SMART_PROMPT_PRESETS.map((item) => (
-            <ControlMenuItem
-              key={item.id}
-              active={selectedPromptPresetId === item.id}
-              title={item.label}
-              description={item.prompt}
-              onClick={() => {
-                onPromptPresetPick(item.id, item.prompt);
-                setOpenKey(null);
-              }}
-            />
-          ))}
-        </ControlBarDropdown>
-
-        <ControlBarDropdown
-          compact
-          label="배경"
-          value={
-            BG_PRESETS.find((p) => p.id === bgPresetId)?.label ??
-            (bgKeyword.trim() ? "커스텀" : undefined)
-          }
-          open={openKey === "bg"}
-          onOpenChange={(v) => setOpenKey(v ? "bg" : null)}
-          menuMinWidth={300}
-          menuMaxWidth={360}
-        >
-          <div className="space-y-3 p-2">
-            <div className="flex flex-wrap gap-1.5">
-              {BG_PRESETS.map((preset) => {
-                const on = bgPresetId === preset.id;
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => onBgPresetPick(preset.id)}
-                    className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
-                      on
-                        ? "border-indigo-400/50 bg-indigo-500/20 text-indigo-100"
-                        : "border-slate-700 bg-[#0E1420] text-slate-400 hover:border-slate-600 hover:text-slate-200"
-                    }`}
+          <div className="grid grid-cols-2 gap-1">
+            {isScreen26Presets
+              ? SCREEN_26_FORMAT_PRESET_PAIRS.map((pair) => (
+                  <div
+                    key={`${pair.left}-${pair.right}`}
+                    className="col-span-2 grid grid-cols-2 gap-1"
                   >
-                    {preset.label}
-                  </button>
-                );
-              })}
-            </div>
-            <textarea
-              value={bgKeyword}
-              onChange={(e) => onBgKeywordChange(e.target.value)}
-              rows={3}
-              placeholder="커스텀 키워드…"
-              className="w-full resize-y rounded-xl border border-slate-700 bg-[#0B0F19] px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:border-slate-500 focus:ring-2 focus:ring-indigo-500/20"
-            />
+                    {([pair.left, pair.right] as const).map((id) => (
+                      <ControlMenuItem
+                        key={id}
+                        active={specPicks.format && formatId === id}
+                        title={formatDisplayLabel(id)}
+                        onClick={() => {
+                          onFormatChange(id);
+                          setOpenKey(null);
+                        }}
+                      />
+                    ))}
+                  </div>
+                ))
+              : presetFormats.map((fmt) => (
+                  <ControlMenuItem
+                    key={fmt.id}
+                    active={specPicks.format && formatId === fmt.id}
+                    title={resolveFormatLabel(fmt.id)}
+                    onClick={() => {
+                      onFormatChange(fmt.id);
+                      setOpenKey(null);
+                    }}
+                  />
+                ))}
+          </div>
+
+          <div className="mt-1.5 border-t border-slate-200 pt-1.5">
             <button
               type="button"
-              disabled={generating || !bgKeyword.trim()}
               onClick={() => {
-                onGenerateBackground();
+                setFreeSizeOpen((v) => !v);
+                setSizeError(null);
+              }}
+              className={`flex w-full items-center justify-between rounded-lg border px-2.5 py-2 text-left text-[12px] font-semibold transition ${
+                (specPicks.format && formatId === "free") || freeSizeOpen
+                  ? "border-indigo-400 bg-indigo-50 text-indigo-900"
+                  : "border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50"
+              }`}
+            >
+              <span className="[word-break:keep-all]">
+                {cs.customSize}
+              </span>
+              <ChevronDown
+                className={`h-3.5 w-3.5 shrink-0 text-slate-900 transition-transform ${
+                  freeSizeOpen ? "rotate-180" : ""
+                }`}
+                aria-hidden
+              />
+            </button>
+
+            <div
+              className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+                freeSizeOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+              }`}
+            >
+              <div className="min-h-0 overflow-hidden">
+                <div className="mt-2 space-y-2.5 rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+                  <div className="flex overflow-hidden rounded-lg border border-slate-200">
+                    {(
+                      [
+                        { id: "cm", label: "CM" },
+                        { id: "inch", label: cs.inch },
+                      ] as const
+                    ).map((u) => (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => setCustomUnit(u.id)}
+                        className={`flex-1 py-1.5 text-[11px] font-semibold transition ${
+                          customUnit === u.id
+                            ? "bg-slate-800 text-white"
+                            : "bg-white font-semibold text-slate-900 hover:bg-slate-50"
+                        }`}
+                      >
+                        {u.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="space-y-1">
+                      <span className="text-[10px] font-semibold text-slate-900">
+                        {cs.width} ({unitLabel})
+                      </span>
+                      <input
+                        type="number"
+                        min={0.1}
+                        step={0.1}
+                        value={widthInput}
+                        onChange={(e) => {
+                          setWidthInput(e.target.value);
+                          setSizeError(null);
+                        }}
+                        className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-[10px] font-semibold text-slate-900">
+                        {cs.height} ({unitLabel})
+                      </span>
+                      <input
+                        type="number"
+                        min={0.1}
+                        step={0.1}
+                        value={heightInput}
+                        onChange={(e) => {
+                          setHeightInput(e.target.value);
+                          setSizeError(null);
+                        }}
+                        className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
+                      />
+                    </label>
+                  </div>
+
+                  <p className="text-[10px] font-medium leading-relaxed text-slate-900">
+                    최대 {PRINT_CUSTOM_SIZE_MAX_CM}cm /{" "}
+                    {PRINT_CUSTOM_SIZE_MAX_INCH}인치
+                  </p>
+
+                  {sizeError ? (
+                    <p className="text-[11px] font-medium text-rose-600">
+                      {sizeError}
+                    </p>
+                  ) : null}
+
+                  <button
+                    type="button"
+                    onClick={applyFreeSize}
+                    className="w-full rounded-lg bg-gradient-to-r from-indigo-600 to-violet-600 px-3 py-2 text-xs font-semibold text-white hover:opacity-90"
+                  >
+                    {cs.apply}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </ControlBarDropdown>
+
+        <ControlBarDropdown
+          compact
+          dense={compactSpecToolbar}
+          selected={specPicks.style && Boolean(visualStyle.imageStyleId)}
+          label={cs.specStyle}
+          value={specPicks.style ? styleValueLabel || undefined : undefined}
+          open={openKey === "style"}
+          onOpenChange={(v) => setOpenKey(v ? "style" : null)}
+          menuMinWidth={400}
+          menuMaxWidth={480}
+        >
+          <div className="flex flex-col gap-0.5">
+            {IMAGE_STYLE_PRESETS.map((preset) => {
+              const active = visualStyle.imageStyleId === preset.id;
+              const name =
+                cs.imageStyles[
+                  preset.id as keyof typeof cs.imageStyles
+                ] ??
+                (locale === "kr" ? preset.labelKo : preset.labelEn);
+              const hint = locale === "kr" ? preset.hintKo : preset.hintEn;
+              return (
+                <ControlMenuItem
+                  key={preset.id}
+                  active={active}
+                  oneLine
+                  title={name}
+                  hint={hint}
+                  onClick={() => {
+                    onVisualStyleChange({
+                      imageStyleId: active ? null : preset.id,
+                      moodStyleId: null,
+                    });
+                    setOpenKey(null);
+                  }}
+                />
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => {
+                onVisualStyleChange({
+                  imageStyleId: null,
+                  moodStyleId: null,
+                });
                 setOpenKey(null);
               }}
-              className="w-full rounded-xl bg-indigo-500 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-40"
+              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[11px] font-semibold text-slate-900 hover:border-slate-300 hover:bg-slate-50"
             >
-              {generating ? "생성 중…" : "배경 생성"}
+              {cs.styleReset}
             </button>
           </div>
         </ControlBarDropdown>
+
+        <ControlBarDropdown
+          compact
+          dense={compactSpecToolbar}
+          selected={specPicks.use}
+          label={cs.specUse}
+          value={specPicks.use ? useValueLabel : undefined}
+          open={openKey === "use"}
+          onOpenChange={(v) => setOpenKey(v ? "use" : null)}
+          menuMinWidth={isPhotoProduct ? 220 : 300}
+          menuMaxWidth={isPhotoProduct ? 280 : 360}
+        >
+          <div
+            className={
+              isPhotoProduct
+                ? "flex flex-col gap-0.5"
+                : "grid grid-cols-2 gap-1"
+            }
+          >
+            {useCatalog.map((item) => (
+              <ControlMenuItem
+                key={item.id}
+                active={specPicks.use && useId === item.id}
+                title={resolveUseLabel(item.id, item.label)}
+                onClick={() => {
+                  onUseChange(item.id);
+                  setOpenKey(null);
+                }}
+              />
+            ))}
+          </div>
+        </ControlBarDropdown>
+
+        {!isPhotoProduct && !hidePageCountOption ? (
+          <ControlBarDropdown
+            compact
+            dense={compactSpecToolbar}
+            label={cs.specPages}
+            value={specPicks.pages ? pageValueLabel : undefined}
+            open={openKey === "pages"}
+            onOpenChange={(v) => setOpenKey(v ? "pages" : null)}
+            menuMinWidth={180}
+            menuMaxWidth={220}
+          >
+            {PRINT_PAGE_COUNTS.map((item) => (
+              <ControlMenuItem
+                key={item.value}
+                active={specPicks.pages && pageCount === item.value}
+                title={pageTitle(item.value)}
+                onClick={() => {
+                  onPageCountChange(item.value);
+                  setOpenKey(null);
+                }}
+              />
+            ))}
+          </ControlBarDropdown>
+        ) : null}
+
+        <ControlBarDropdown
+          compact
+          dense={compactSpecToolbar}
+          selected={bgPromptSelected}
+          label={cs.specExample}
+          value={exampleValueLabel || undefined}
+          open={openKey === "prompt"}
+          onOpenChange={(v) => setOpenKey(v ? "prompt" : null)}
+          menuMinWidth={isPhotoProduct ? 320 : 280}
+          menuMaxWidth={isPhotoProduct ? 520 : 640}
+          menuAnchorSelector="[data-spec-row]"
+        >
+          {isPhotoProduct ? (
+            <div className="flex max-h-[min(70vh,32rem)] flex-col gap-3 overflow-y-auto p-2.5 sm:p-3">
+              <p className="shrink-0 text-[12px] font-bold leading-snug text-red-500 [word-break:keep-all]">
+                {PHOTO_LOOKBOOK_EXAMPLE_HINT}
+              </p>
+              {getPhotoLookbookExampleCategories({
+                useId,
+                imageStyleId: visualStyle.imageStyleId,
+              }).map((group) => (
+                <div key={group.id} className="flex flex-col gap-1.5">
+                  <p className="text-[11px] font-bold tracking-wide text-slate-900 [word-break:keep-all]">
+                    {group.label}
+                  </p>
+                  <div className="flex flex-col gap-1.5">
+                    {group.examples.map((example) => {
+                      const on = bgKeyword.trim() === example;
+                      return (
+                        <button
+                          key={example}
+                          type="button"
+                          onClick={() => {
+                            onBgKeywordChange(example);
+                            setOpenKey(null);
+                          }}
+                          className={`rounded-lg border px-2.5 py-2 text-left text-[11px] font-medium leading-snug [word-break:keep-all] transition pointer-coarse:min-h-10 ${
+                            on
+                              ? "border-indigo-500 bg-indigo-50 text-indigo-900 ring-2 ring-indigo-400/60"
+                              : "border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50"
+                          }`}
+                        >
+                          {example}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="max-h-[min(60vh,28rem)] overflow-y-auto overscroll-contain p-2 sm:p-2.5">
+              {BG_EXAMPLE_CATEGORIES.map((group) => (
+                <div key={group.id} className="mb-3 last:mb-0">
+                  <p className="mb-2 text-[16px] font-bold tracking-wide text-slate-900 sm:text-[17px] [word-break:keep-all]">
+                    {group.labelKo}
+                  </p>
+                  <div className="flex flex-row flex-wrap gap-1.5">
+                    {group.presets.map((preset) => {
+                      const on = isBgExamplePresetSelected(
+                        bgKeyword,
+                        preset.promptEn
+                      );
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => {
+                            onBgKeywordChange(
+                              applyBgExamplePreset(preset.promptEn)
+                            );
+                          }}
+                          className={`min-w-[9.5rem] flex-[1_1_45%] rounded-lg text-left shadow-sm transition [word-break:keep-all] ${
+                            on
+                              ? "border-[3px] border-indigo-500 bg-indigo-50 px-[5px] py-[2px] shadow-md ring-2 ring-indigo-400/60"
+                              : "border border-gray-200 bg-white px-2 py-1 hover:border-gray-300 hover:shadow"
+                          }`}
+                        >
+                          <span className="line-clamp-2 block text-[14px] font-bold leading-[1.2] text-black sm:text-[15px]">
+                            {preset.titleKo}
+                          </span>
+                          <span className="mt-0.5 line-clamp-1 block text-[13px] font-semibold leading-[1.2] text-blue-700 sm:text-[14px]">
+                            ({preset.hintKo})
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </ControlBarDropdown>
+
+        {!isPhotoProduct ? (
+          <ControlBarDropdown
+            compact
+            dense={compactSpecToolbar}
+            selected={fieldSelected}
+            label={cs.specBg}
+            value={
+              bgPresetId
+                ? cs.bgPresets[bgPresetId] ?? fieldById(bgPresetId)?.label
+                : undefined
+            }
+            open={openKey === "bg"}
+            onOpenChange={(v) => setOpenKey(v ? "bg" : null)}
+            menuMinWidth={280}
+            menuMaxWidth={640}
+            menuAnchorSelector="[data-spec-row]"
+          >
+            <div className="max-h-[min(60vh,28rem)] overflow-y-auto overscroll-contain p-2 sm:p-2.5">
+              {FIELD_CATEGORIES.map((group) => (
+                <div key={group.id} className="mb-3 last:mb-0">
+                  <p className="mb-2 text-[16px] font-bold tracking-wide text-slate-900 sm:text-[17px] [word-break:keep-all]">
+                    {cs.fieldGroups[group.id]}
+                  </p>
+                  <div className="flex flex-row flex-wrap gap-1.5">
+                    {group.items.map((item) => {
+                      const on = bgPresetId === item.id;
+                      const title = cs.bgPresets[item.id] ?? item.label;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            onBgPresetPick(item.id as BgPresetId);
+                            setOpenKey(null);
+                          }}
+                          className={`min-w-[9.5rem] flex-[1_1_45%] rounded-lg text-left shadow-sm transition [word-break:keep-all] pointer-coarse:min-h-10 ${
+                            on
+                              ? "border-[3px] border-indigo-500 bg-indigo-50 px-[5px] py-[2px] shadow-md ring-2 ring-indigo-400/60"
+                              : "border border-gray-200 bg-white px-2 py-1 hover:border-indigo-300 hover:shadow"
+                          }`}
+                        >
+                          <span className="line-clamp-2 block text-[14px] font-bold leading-[1.2] text-black sm:text-[15px]">
+                            {title}
+                          </span>
+                          <span className="mt-0.5 line-clamp-1 block text-[13px] font-semibold leading-[1.2] text-blue-700 sm:text-[14px]">
+                            ({item.hint})
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </ControlBarDropdown>
+        ) : null}
       </div>
 
-      <textarea
-        value={mainPrompt}
-        onChange={(e) => onMainPromptChange(e.target.value)}
-        onKeyDown={onMainKeyDown}
-        aria-label="메인 프롬프트 / 주문 내용"
-        placeholder="예시에서 선택하거나 주문을 입력하세요. Enter로 초안 생성"
-        className="min-h-0 w-full flex-1 resize-none rounded-xl border border-slate-700 bg-[#0E1420] px-3 py-2.5 text-sm leading-relaxed text-slate-100 outline-none placeholder:text-slate-600 focus:border-slate-500 focus:ring-2 focus:ring-indigo-500/20"
-      />
+      {/* Photo: two-tier prompts. Print: single Adobe-style bar. */}
+      {isPhotoProduct ? (
+        <div className="flex w-full shrink-0 flex-col">
+          <PhotoLookbookPromptPanel
+            bgValue={bgKeyword}
+            subjectValue={mainPrompt}
+            generating={generating}
+            generatingKind={generatingKind}
+            specTags={specTags}
+            canGenerateBackground={Boolean(canGenerateBackground)}
+            canGenerateSubject={canGenerateSubject}
+            onBgChange={onBgKeywordChange}
+            onSubjectChange={onMainPromptChange}
+            onGenerateBackground={onGenerateBackground}
+            onGenerateSubject={() => onGenerateSubject?.()}
+          />
+        </div>
+      ) : (
+        <AiBackgroundPromptBar
+          productId={productId}
+          value={bgKeyword}
+          generating={generating}
+          bgPresetId={bgPresetId}
+          specTags={specTags}
+          canGenerate={canGenerateBackground}
+          onClearSpecTag={onClearSpecTag}
+          onChange={onBgKeywordChange}
+          onPresetPick={onBgPresetPick}
+          onGenerate={onGenerateBackground}
+          expandedContent={
+            <div className="space-y-1">
+              <p className="text-[11px] font-semibold text-slate-900">
+                주문 / 초안 프롬프트
+              </p>
+              <textarea
+                value={mainPrompt}
+                onChange={(e) => onMainPromptChange(e.target.value)}
+                aria-label="메인 프롬프트 / 주문 내용"
+                rows={2}
+                placeholder="예시에서 선택하거나 주문 내용을 입력하세요."
+                className="min-h-[3.5rem] w-full resize-none rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm leading-relaxed text-slate-900 outline-none placeholder:text-slate-700 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
+              />
+            </div>
+          }
+        />
+      )}
+
+      {/* Reserved empty space for future tools */}
+      <div className="min-h-0 flex-1" aria-hidden />
     </section>
   );
 }

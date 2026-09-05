@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { getSupabaseAnonKey, getSupabaseUrl, isSupabaseConfigured } from "@/lib/supabase/config";
+import { getSupabaseAuthStorageKey } from "@/lib/supabase/authStorage";
 
 type CookieToSet = {
   name: string;
@@ -21,7 +22,18 @@ export async function exchangeSupabaseCode(
     return { error: "Supabase is not configured" };
   }
 
+  const storageKey = getSupabaseAuthStorageKey();
+
   const supabase = createServerClient(getSupabaseUrl()!, getSupabaseAnonKey()!, {
+    ...(storageKey
+      ? {
+          cookieOptions: {
+            name: storageKey,
+            path: "/",
+            sameSite: "lax" as const,
+          },
+        }
+      : {}),
     cookies: {
       getAll() {
         return request.cookies.getAll();

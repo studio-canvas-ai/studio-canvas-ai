@@ -2,8 +2,9 @@ import {
   CREDIT_PACKS,
   type BillingInterval,
   creditPackAmount,
+  getDomesticMonthlyPriceKrw,
+  getDomesticQuarterlyPriceKrw,
   getPlanOffer,
-  billingPeriodDays,
   isPrepaidPass,
   pricingPlanIds,
 } from "@/lib/data";
@@ -13,21 +14,45 @@ import { resolveCheckoutRegion } from "@/lib/paymentRouting";
 import { getDb, newId, withDbLock } from "@/lib/db/store";
 import type { PaymentOrder, PaymentProviderId, UserRecord } from "@/lib/db/types";
 import { activateSubscription } from "@/lib/subscriptionLifecycle";
+import { subscriptionPeriodEndMs } from "@/lib/subscriptionPeriod";
+import { ensurePlanUsage } from "@/lib/db/planUsage";
 import {
   createStripeCheckoutSession,
   stripeConfigured,
 } from "@/lib/payments/stripe";
 import { getSiteUrl } from "@/lib/site";
+import { KCP_RECURRING_ENABLED } from "@/lib/checkoutPolicy";
 
 export type CheckoutKind = "subscription" | "credit_pack";
 
+export function requiresKcpRecurringBilling(input: {
+  kind: CheckoutKind;
+  billingInterval?: BillingInterval;
+  locale?: Locale;
+}): boolean {
+  if (!KCP_RECURRING_ENABLED) return false;
+  if (input.kind !== "subscription") return false;
+  if (input.billingInterval !== "monthly") return false;
+  return resolveCheckoutRegion(input.locale ?? "kr") === "domestic";
+}
+
+export function shouldBypassRecurringForBcCard(input: {
+  kind: CheckoutKind;
+  billingInterval?: BillingInterval;
+  locale?: Locale;
+  domesticCardBrand?: string | null;
+}): boolean {
+  if (input.kind !== "subscription") return false;
+  if (input.billingInterval !== "monthly") return false;
+  if (resolveCheckoutRegion(input.locale ?? "kr") !== "domestic") return false;
+  return (input.domesticCardBrand ?? "").trim().toLowerCase() === "bc";
+}
+
 export function getDomesticProvider(): "toss" | "portone" | "demo" {
   const forced = process.env.PAYMENT_PROVIDER as PaymentProviderId | undefined;
-  if (forced && forced !== "stripe") return forced;
-  if (process.env.TOSS_SECRET_KEY && process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY) return "toss";
-  if (process.env.PORTONE_API_SECRET && process.env.NEXT_PUBLIC_PORTONE_STORE_ID)
-    return "portone";
-  return "demo";
+  if (forced === "toss" || forced === "demo" || forced === "portone") return forced;
+  // Default domestic rail: PortOne (storeId/channelKey have hardcoded test fallbacks).
+  return "portone";
 }
 
 export function getPaymentProvider(locale?: Locale): PaymentProviderId {
@@ -68,8 +93,21 @@ export async function createPaymentOrder(input: {
       const interval = input.billingInterval ?? "annual";
       const offer = getPlanOffer(input.planId, interval);
       amountUsd = offer.totalUsd;
-      // Live/cached FX — do not rely on module-load static totalKrw alone.
-      baseAmountKrw = usdToKrw(amountUsd);
+
+      if (currency === "KRW" && interval === "monthly") {
+        // Domestic monthly: fixed VAT-inclusive list prices for Toss / PortOne.
+        const fixed = getDomesticMonthlyPriceKrw(input.planId);
+        baseAmountKrw = fixed ?? offer.totalKrw;
+      } else if (currency === "KRW" && interval === "quarterly") {
+        // Domestic 3-month prepaid: fixed VAT-inclusive list prices.
+        const fixed = getDomesticQuarterlyPriceKrw(input.planId);
+        baseAmountKrw = fixed ?? offer.totalKrw;
+      } else if (currency === "KRW") {
+        baseAmountKrw = offer.totalKrw > 0 ? offer.totalKrw : usdToKrw(amountUsd);
+      } else {
+        // Global / Stripe: FX-derived KRW for bookkeeping only; charge is USD.
+        baseAmountKrw = usdToKrw(amountUsd);
+      }
       amountKrw = baseAmountKrw;
       credits = offer.credits;
 
@@ -177,8 +215,10 @@ export async function markOrderPaid(params: {
       o.stripePaymentIntentId = params.externalPaymentKey;
     }
 
-    user.credits = Math.round((user.credits + o.credits) * 10) / 10;
-    user.maxCredits = Math.max(user.maxCredits, user.credits);
+    if (o.kind !== "subscription") {
+      user.credits = Math.round((user.credits + o.credits) * 10) / 10;
+      user.maxCredits = Math.max(user.maxCredits, user.credits);
+    }
     user.updatedAt = now;
     activateSubscription(user);
 
@@ -201,7 +241,12 @@ export async function markOrderPaid(params: {
         delete user.scheduledCancelAt;
       }
       user.currentPeriodStart = now;
-      user.currentPeriodEnd = now + billingPeriodDays(interval) * 24 * 60 * 60 * 1000;
+      user.currentPeriodEnd = subscriptionPeriodEndMs(now, interval);
+      user.autoRenew = !isPrepaidPass(interval);
+      user.quotaPeriodStart = now;
+      user.fhdRemaining = undefined;
+      user.uhd4kRemaining = undefined;
+      ensurePlanUsage(user);
       user.lastPlanAmountKrw = o.baseAmountKrw ?? o.amountKrw;
       user.lastPlanAmountUsd = o.amountUsd;
       db.ledger.push({

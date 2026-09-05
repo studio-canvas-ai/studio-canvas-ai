@@ -1,0 +1,311 @@
+================================================================================
+Studio Canvas AI — PortOne V2 + NHN KCP 일반결제·정기결제 연동 체크리스트 v1
+================================================================================
+작성 목적: 다른 플랫폼 구축 시 참고용 (전 과정 · 실패 원인 · 성공 조건 정리)
+프로젝트: studio-canvas-ai (www.studio-canvas-ai.com)
+기준일: 2026-08-12
+
+================================================================================
+0. 전제: 이 프로젝트는 PortOne V1이 아님
+================================================================================
+
+코드베이스에는 imp_key / imp_secret / api.iamport.kr / IMP.request_pay 가 없습니다.
+이미 PortOne V2 기준입니다.
+
+  구분              V1 (구 아임포트)              현재 프로젝트 (V2)
+  ---------------------------------------------------------------------------
+  브라우저 SDK      IMP.request_pay               @portone/browser-sdk/v2
+  REST 호스트       api.iamport.kr                api.portone.io
+  인증              imp_key+imp_secret → 토큰     Authorization: PortOne {PORTONE_API_SECRET}
+  식별자            imp_uid, merchant_uid         paymentId, storeId, channelKey
+  핵심 파일         —                             lib/payments/portone.ts
+
+
+================================================================================
+1. 상품·결제 유형 매트릭스 (국내 KR 기준)
+================================================================================
+
+  상품                    결제 방식           PG 채널                    브라우저 API              서버 확정
+  ----------------------------------------------------------------------------------------------------------------
+  3개월 이용권(quarterly)  일반결제(단건)      KG Inicis V2 (CHANNEL_KEY)  requestPayment            fetchPortOnePayment
+  월간 구독(monthly)       정기결제(빌링키)    NHN KCP 빌링 (BILLING_KEY) requestIssueBillingKey    chargePortOneBillingKey
+  해외 구독                Stripe              Stripe                      Checkout Session          Stripe Webhook
+
+※ 월간 = 정기, 3개월권 = 단건(선불). 채널도 서로 다릅니다.
+
+
+================================================================================
+2. 필수 환경변수 체크리스트
+================================================================================
+
+  # 공통
+  NEXT_PUBLIC_PORTONE_STORE_ID=store-xxxxxxxx
+  PORTONE_API_SECRET=test_... 또는 live_...   ← V2 콘솔 API Secret (imp_secret 아님!)
+
+  # 일반결제 (3개월권 등)
+  NEXT_PUBLIC_PORTONE_CHANNEL_KEY=channel-key-...   ← KG Inicis V2
+
+  # 정기결제 (월간 구독) — 별도 채널 필수
+  NEXT_PUBLIC_PORTONE_BILLING_CHANNEL_KEY=channel-key-...   ← KCP 빌링 전용
+
+  # 정책 플래그 (lib/checkoutPolicy.ts)
+  KCP_RECURRING_ENABLED=true|false    ← 정기 UI·플로우 on/off
+  ALLOW_GUEST_CHECKOUT=true|false     ← 카드사 심사 중 게스트 결제 허용
+
+  # 선택 (서버 전용 빌링 채널 alias)
+  PORTONE_BILLING_CHANNEL_KEY=channel-key-...
+
+
+--------------------------------------------------------------------------------
+KCP 콘솔에만 있는 값 (env가 아님)
+--------------------------------------------------------------------------------
+
+  항목                              용도                    없으면
+  ---------------------------------------------------------------------------
+  사이트코드 (예: IP9N2)             KCP 상점 식별           결제 불가
+  PG-API .pem 인증서/개인키         승인·취소 API           REST 호출 실패
+  자동결제 그룹아이디                 빌링키 발급             정기결제 창 자체가 안 열림
+                                    (batchPaymentGroupId)
+
+※ 인증서 등록 ≠ 그룹아이디 등록. 둘 다 필요합니다.
+
+
+================================================================================
+3. 일반결제(단건) — 전체 흐름
+================================================================================
+
+[3.1 사용자 관점]
+  요금제 페이지 → 3개월 탭 선택 → 플랜 선택
+  → PaymentModal → 약관 동의 → 결제
+  → PortOne/KCP 결제창 → 카드 입력 → 승인
+  → /pricing?payment=success → 플랜 활성화
+
+[3.2 기술 흐름]
+  [클라이언트] PaymentModal.startCheckout("domestic")
+      ↓
+  [API] POST /api/payments/create
+      - createPaymentOrder() → 주문 DB 저장
+      - checkoutMode: "one_time"
+      - portoneStoreId, portoneChannelKey 반환
+      ↓
+  [브라우저] PortOne.requestPayment()  ← lib/payments/portone.ts
+      - storeId, channelKey (Inicis)
+      - paymentId, orderName, totalAmount
+      - customer: fullName, email, phoneNumber (KG Inicis PC 필수)
+      ↓
+  [PG] 결제창 → 사용자 카드 승인
+      ↓
+  [클라이언트] POST /api/payments/confirm { orderId, paymentId }
+      ↓
+  [서버] fetchPortOnePayment(paymentId)  ← GET api.portone.io/payments/{id}
+      - status === PAID 확인
+      - amount.total === order.amountKrw 검증
+      ↓
+  [서버] markOrderPaid() → 플랜·크레딧 부여
+
+[3.3 관련 코드]
+  - 브라우저: requestPortOnePayment() → PortOne.requestPayment
+  - 서버 조회: fetchPortOnePayment() → GET https://api.portone.io/payments/{paymentId}
+  - 확정: app/api/payments/confirm/route.ts (portonePaymentId 분기)
+
+[3.4 일반결제 실패 원인]
+  증상                          원인                              해결
+  ---------------------------------------------------------------------------
+  결제창 안 열림                CHANNEL_KEY 없음/잘못됨             PortOne Inicis 채널 확인
+  Danal 채널 사용               V2 미지원 구 채널                   OBSOLETE_DANAL 필터링
+  고객정보 오류                 Inicis PC name/email/phone 필수    resolveCustomer* fallback
+  confirm 402 portone_not_paid  결제 미완료 또는 창 닫음            사용자 재시도
+  portone_secret_missing        PORTONE_API_SECRET 미설정          Vercel env V2 Secret
+  portone_amount_mismatch       주문금액 ≠ 실결제금액              create 시점 금액 고정
+  로그인 요구                   ALLOW_GUEST_CHECKOUT=false         심사용 true 유지
+
+
+================================================================================
+4. 정기결제(빌링키) — 전체 흐름
+================================================================================
+
+[4.1 사용자 관점]
+  요금제 → 월간 탭 → 플랜 선택
+  → PaymentModal (KCP 정기결제 UI + 동의 체크)
+  → KCP 정기과금 창 → 카드 등록(빌링키 발급)
+  → 1회차 자동 승인 → 구독 활성화
+
+[4.2 기술 흐름 (1회차)]
+  [클라이언트] PaymentModal — isRecurringMonthly && KCP_RECURRING_ENABLED
+      ↓
+  [API] POST /api/payments/create
+      - requiresKcpRecurringBilling() === true
+      - checkoutMode: "recurring_billing_key"
+      - portoneBillingChannelKey 필수 (없으면 500 portone_billing_channel_missing)
+      ↓
+  [브라우저] PortOne.requestIssueBillingKey()
+      - channelKey = BILLING_CHANNEL_KEY (Inicis 채널 쓰면 안 됨)
+      - billingKeyMethod: "CARD"
+      - issueId, issueName, offerPeriod: { interval: "1m" }
+      ↓
+  [PG/KCP] 빌링키 발급 창 → billingKey 반환
+      ↓
+  [클라이언트] POST /api/payments/confirm { orderId, billingKey, issueId }
+      ↓
+  [서버] saveBillingCredentials() — user.billingKey 저장
+      ↓
+  [서버] chargePortOneBillingKey() — 1회차 즉시 청구
+      POST api.portone.io/payments/{paymentId}/billing-key
+      ↓
+  [서버] fetchPortOnePayment() 로 PAID 확인
+      ↓
+  [서버] markOrderPaid() → 월간 구독 활성화
+
+[4.3 자동 갱신 (2회차 이후)]
+  [Vercel Cron] /api/cron/subscription-renewal (일 1회)
+      ↓
+  lib/subscriptionRenewal.ts → processSubscriptionRenewals()
+      - billingInterval === "monthly"
+      - user.billingKey 존재
+      - currentPeriodEnd 지남
+      - cancelAtPeriodEnd 아님
+      ↓
+  createPaymentOrder() → chargePortOneBillingKey() → markOrderPaid()
+
+
+================================================================================
+5. 정기결제 실패 원인 (핵심)
+================================================================================
+
+[5.1] batchPaymentGroupId 에러 — 가장 큰 함정
+--------------------------------------------------------------------------------
+에러 메시지:
+  "빌링키 발급 중 호출에 실패했습니다.
+   batchPaymentGroupId를 가져오는데 실패했습니다.
+   채널 정보에 batchPaymentGroupId가 설정되어 있는지 확인해 주세요."
+
+  원인: PortOne KCP 빌링 채널에 KCP 자동결제 그룹아이디 미등록
+  코드로 해결?: 불가 — SDK/REST 파라미터에 없음
+  해결: KCP 파트너관리자 그룹 등록 → PortOne 콘솔 채널에 그룹아이디 입력
+
+  발급 경로 (KCP):
+    1. https://partner.kcp.co.kr 로그인 (사이트코드 IP9N2 등)
+    2. 결제관리 → 자동결제 → 그룹관리 → 그룹등록
+    3. 생성된 그룹아이디 복사
+    4. PortOne 콘솔 → KCP 빌링 채널 수정 → 자동결제 그룹아이디 저장
+
+[5.2] portone_billing_channel_missing
+--------------------------------------------------------------------------------
+  원인: NEXT_PUBLIC_PORTONE_BILLING_CHANNEL_KEY 비어 있음
+  해결: KCP 빌링 전용 channel-key 설정
+  주의: Inicis 단건 채널을 빌링에 쓰면 실패 (별도 채널 필수)
+  현재 코드: 빌링 키 없으면 Inicis로 대체하지 않고 주문 생성 단계에서 차단
+
+[5.3] 빌링 채널 ≠ 일반 채널
+--------------------------------------------------------------------------------
+  일반결제: NEXT_PUBLIC_PORTONE_CHANNEL_KEY      → KG Inicis V2
+  정기결제: NEXT_PUBLIC_PORTONE_BILLING_CHANNEL_KEY → NHN KCP API 빌링
+  같은 channel-key를 넣으면 정기결제 실패
+
+[5.4] PORTONE_API_SECRET이 V1 시크릿
+--------------------------------------------------------------------------------
+  증상: 401 Unauthorized
+  원인: imp_secret을 V2 PORTONE_API_SECRET 자리에 넣음
+  해결: PortOne V2 콘솔 API Secret (test_ / live_ 접두)
+
+[5.5] 카드사 심사 미완료
+--------------------------------------------------------------------------------
+  KCP 사이트코드로 카드사 가맹점 등록 전에는 실결제 실패 가능
+  KCP 상점관리자에서 직접 심사 신청 필요
+
+
+================================================================================
+6. 카드사 심사 기간 운영 조치
+================================================================================
+
+  플래그                    심사 중                    심사 후
+  ---------------------------------------------------------------------------
+  KCP_RECURRING_ENABLED     false (정기 UI 숨김)       true (정기 복구)
+  ALLOW_GUEST_CHECKOUT      true (게스트 결제)         false (회원만)
+
+  복구: lib/checkoutPolicy.ts 플래그 변경 + Vercel 재배포
+  ※ 결제 코드 삭제하지 말고 플래그로만 제어
+
+
+================================================================================
+7. 성공 체크리스트
+================================================================================
+
+[일반결제 — 3개월권]
+  [ ] PortOne Store ID 설정
+  [ ] NEXT_PUBLIC_PORTONE_CHANNEL_KEY = Inicis V2 채널
+  [ ] PORTONE_API_SECRET = V2 API Secret
+  [ ] customer fullName, email, phoneNumber 전달 (Inicis PC)
+  [ ] create → requestPayment → confirm 3단계 연결
+  [ ] confirm에서 PAID + 금액 일치 검증
+
+[정기결제 — 월간]
+  [ ] 위 일반결제 조건 +
+  [ ] KCP 빌링 전용 채널 (BILLING_CHANNEL_KEY)
+  [ ] KCP PG-API 인증서/개인키 PortOne 채널 등록
+  [ ] KCP 자동결제 그룹아이디 PortOne 채널 등록 (batchPaymentGroupId)
+  [ ] KCP_RECURRING_ENABLED = true
+  [ ] PaymentModal: 정기 동의 → requestIssueBillingKey
+  [ ] confirm: billingKey 저장 + chargePortOneBillingKey 1회차
+  [ ] Cron subscription-renewal 2회차 이후 자동 청구
+
+
+================================================================================
+8. 아직 미완 / 다음 플랫폼 보완 권장
+================================================================================
+
+  항목                  현재 상태                         권장
+  ---------------------------------------------------------------------------
+  PortOne V2 웹훅       Toss 형태 스텁                    Transaction.Paid + HMAC
+  PortOne 환불 API      provider_unsupported              POST /payments/{id}/cancel
+  confirm 폴링 의존     창 닫으면 미확정 가능             웹훅 보완
+  메모리 DB             Vercel cold start 유실            영구 DB
+  빌링키 폐기/해지      UI 있음, PG 연동 확인 필요        KCP 빌링키 삭제 API
+
+
+================================================================================
+9. 다른 플랫폼 만들 때 교훈 (요약)
+================================================================================
+
+  1. V1/V2 혼동 금지 — imp_ 키는 V2에서 쓰지 않음
+  2. 채널을 상품별로 분리 — 단건(Inicis) vs 정기(KCP 빌링) channel-key 다름
+  3. KCP 정기는 3종 세트 — 인증서 + 사이트코드 + 그룹아이디
+  4. 그룹아이디는 코드가 아니라 콘솔 설정 (batchPaymentGroupId)
+  5. 심사 중엔 플래그로 UI만 막기 — 코드 삭제 금지
+  6. 확정은 서버에서 — fetchPortOnePayment + 금액 검증
+  7. 1회차 정기는 2단계 — 빌링키 발급 → billing-key API 1회차 청구
+  8. env 이름 문서화 — CHANNEL_KEY vs BILLING_CHANNEL_KEY 혼동 주의
+  9. 게스트 결제는 심사용 — 라이브 전 ALLOW_GUEST_CHECKOUT=false 복구
+  10. 웹훅은 초기부터 — confirm 폴링만으로는 창 이탈에 취약
+
+
+================================================================================
+10. 핵심 파일 맵
+================================================================================
+
+  역할                  파일
+  ---------------------------------------------------------------------------
+  PortOne V2 SDK/REST   lib/payments/portone.ts
+  정책 플래그           lib/checkoutPolicy.ts
+  주문·플랜 로직        lib/payments.ts
+  결제 UI               components/PaymentModal.tsx
+  주문 생성 API         app/api/payments/create/route.ts
+  결제 확정 API         app/api/payments/confirm/route.ts
+  자동 갱신 Cron        app/api/cron/subscription-renewal/route.ts
+                        lib/subscriptionRenewal.ts
+  env 예시              .env.example (166~178행)
+
+
+================================================================================
+11. 현재 프로덕션 상태 (2026-08-12 기준)
+================================================================================
+
+  - 일반결제: PortOne V2 + KG Inicis, requestPayment → confirm 완료
+  - 정기결제: KCP_RECURRING_ENABLED = true (UI·플로우 활성화)
+  - 빌링 채널: NEXT_PUBLIC_PORTONE_BILLING_CHANNEL_KEY 필수
+  - batchPaymentGroupId: KCP 그룹 등록 + PortOne 채널 입력 필요 (코드 수정 불가)
+  - 게스트 결제: 심사용 ON (ALLOW_GUEST_CHECKOUT)
+
+================================================================================
+END OF DOCUMENT
+================================================================================

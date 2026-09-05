@@ -20,6 +20,7 @@ import {
 } from "@/lib/supabase/oauth";
 import { authJsCookiesConfig } from "@/lib/authCookies";
 import { hasConfiguredAuthSecret, requireAuthSecret } from "@/lib/authSecret";
+import { isPrivilegedAdminEmail } from "@/lib/unlimitedAccount";
 
 type NaverProfile = {
   resultcode: string;
@@ -67,11 +68,13 @@ function isValidEmail(email: string): boolean {
 
 /** Admin accounts must come from a real OAuth identity, never passwordless email. */
 function isAdminEmail(email: string): boolean {
+  const normalized = email.trim().toLowerCase();
+  if (isPrivilegedAdminEmail(normalized)) return true;
   return (process.env.ADMIN_EMAILS ?? "")
     .split(",")
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean)
-    .includes(email);
+    .includes(normalized);
 }
 
 /** Passwordless email login is a dev-only convenience. */
@@ -97,6 +100,14 @@ function buildProviders() {
       Google({
         clientId: process.env.GOOGLE_CLIENT_ID,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        authorization: {
+          params: {
+            scope: "openid email profile",
+            // Always show the Google account picker (avoid sticky deleted/wrong channel).
+            prompt: "select_account",
+            access_type: "offline",
+          },
+        },
       })
     );
   }
@@ -144,9 +155,8 @@ function buildProviders() {
             await upsertProfileWithAccessToken(accessToken, {
               id: user.id,
               email: profile.email,
-              fullName: profile.name,
+              name: profile.name,
               avatarUrl: profile.image,
-              provider: profile.provider,
               appUserId: dbUser.id,
             });
           } catch {
@@ -277,8 +287,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   // Avoid `__Host-` CSRF cookies (often rejected on custom domains after OAuth redirects).
   cookies: authJsCookiesConfig(),
   pages: {
-    signIn: "/generate",
-    error: "/generate",
+    signIn: "/",
+    error: "/",
   },
   callbacks: {
     async signIn({ user, account }) {
@@ -300,7 +310,29 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       });
       return true;
     },
-    async jwt({ token, account, user }) {
+    async jwt({ token, account, user, trigger }) {
+      const PLAN_CACHE_MS = Number(
+        process.env.JWT_PLAN_CACHE_MS || 15 * 60 * 1000
+      );
+
+      const applyDbUser = (dbUser: {
+        credits: number;
+        planId: string;
+        currentPeriodEnd?: number;
+        provider?: string;
+        providerAccountId?: string;
+      }) => {
+        token.credits = dbUser.credits;
+        token.planId = dbUser.planId;
+        token.currentPeriodEnd = dbUser.currentPeriodEnd ?? null;
+        token.planCachedAt = Date.now();
+        if (dbUser.provider) token.authProvider = dbUser.provider;
+        if (dbUser.providerAccountId) {
+          token.providerAccountId =
+            token.providerAccountId || dbUser.providerAccountId;
+        }
+      };
+
       if (account && user) {
         token.authProvider = account.provider;
         if (
@@ -309,12 +341,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           account.provider === "supabase"
         ) {
           token.uid = user.id;
+          if (account.providerAccountId) {
+            token.providerAccountId = account.providerAccountId;
+          } else if (user.email) {
+            token.providerAccountId = user.email;
+          }
           const { getUserById } = await import("@/lib/db/credits");
           const dbUser = await getUserById(user.id!);
-          if (dbUser) {
-            token.credits = dbUser.credits;
-            token.planId = dbUser.planId;
-          }
+          if (dbUser) applyDbUser(dbUser);
         } else {
           const provider = account.provider as AuthProviderId;
           const { user: dbUser } = await findOrCreateOAuthUser({
@@ -325,15 +359,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             image: user.image,
           });
           token.uid = dbUser.id;
-          token.credits = dbUser.credits;
-          token.planId = dbUser.planId;
+          token.providerAccountId = account.providerAccountId;
+          applyDbUser(dbUser);
         }
       } else if (token.uid) {
-        const { getUserById } = await import("@/lib/db/credits");
-        const dbUser = await getUserById(token.uid as string);
-        if (dbUser) {
-          token.credits = dbUser.credits;
-          token.planId = dbUser.planId;
+        // Force refresh after explicit session update (e.g. payment).
+        const force = trigger === "update";
+        const cachedAt =
+          typeof token.planCachedAt === "number" ? token.planCachedAt : 0;
+        const stale = force || Date.now() - cachedAt > PLAN_CACHE_MS;
+        if (stale) {
+          const { getUserById } = await import("@/lib/db/credits");
+          const dbUser = await getUserById(token.uid as string);
+          if (dbUser) applyDbUser(dbUser);
         }
       }
       return token;
@@ -343,6 +381,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         (session.user as { id?: string }).id = token.uid as string;
         (session as { credits?: number }).credits = token.credits as number;
         (session as { planId?: string }).planId = token.planId as string;
+        (session as { currentPeriodEnd?: number | null }).currentPeriodEnd =
+          (token.currentPeriodEnd as number | null | undefined) ?? null;
         (session as { authProvider?: string }).authProvider =
           token.authProvider as string;
       }

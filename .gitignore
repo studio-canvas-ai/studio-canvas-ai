@@ -35,11 +35,16 @@ yarn-error.log*
 # local JSON user/ledger store
 .data/
 
+# Google Drive desktop sync temp (breaks Vercel upload if present)
+.tmp.driveupload/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
 
 .vercel
+.tools/
 
 # Supabase CLI local link cache
 supabase/.temp/
+.env*

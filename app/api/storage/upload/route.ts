@@ -18,6 +18,7 @@ import { retentionContextFromAccount } from "@/lib/retentionPolicy";
 import { auth } from "@/lib/auth";
 import { cookies } from "next/headers";
 import { getPromotionByToken, PROMO_COOKIE_NAME } from "@/lib/promotions";
+import { checkUploadRateLimit } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -28,6 +29,22 @@ export async function POST(req: Request) {
   try {
     const session = await auth();
     const userId = (session?.user as { id?: string } | undefined)?.id ?? null;
+    const sessionPlanId = (session as { planId?: PlanId } | null)?.planId;
+
+    const rl = checkUploadRateLimit(req, userId);
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: "rate_limited", resetAt: rl.resetAt },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(Math.ceil((rl.resetAt - Date.now()) / 1000)),
+            "X-RateLimit-Limit": String(rl.limit),
+            "X-RateLimit-Remaining": "0",
+          },
+        }
+      );
+    }
 
     // Promotion-code visitors are legitimate paying users without an account.
     let promoAllowed = false;
@@ -44,7 +61,9 @@ export async function POST(req: Request) {
     const form = await req.formData();
     const file = form.get("file");
     const id = String(form.get("id") ?? "").trim();
-    const planId = (String(form.get("planId") ?? "free") as PlanId) || "free";
+    // Prefer JWT/session plan over client-supplied form value (abuse resistance).
+    const formPlan = (String(form.get("planId") ?? "free") as PlanId) || "free";
+    const planId: PlanId = sessionPlanId || formPlan;
     const cancelledAtRaw = form.get("cancelledAt");
     const lastPaidPlan = form.get("lastPaidPlan");
 
@@ -71,12 +90,14 @@ export async function POST(req: Request) {
 
     if (!isR2Configured()) {
       const thumbDataUrl = `data:image/webp;base64,${thumb.toString("base64")}`;
+      const localManifest = buildManifest(id, planId, ctx, "", "");
       return NextResponse.json({
         id,
         thumbnailUrl: thumbDataUrl,
         imageUrl: thumbDataUrl,
         originalAvailable: false,
-        expiresAt: buildManifest(id, planId, ctx, "", "").expiresAt,
+        expiresAt: localManifest.expiresAt,
+        originalExpiresAt: localManifest.originalExpiresAt,
       });
     }
 
@@ -102,6 +123,7 @@ export async function POST(req: Request) {
       storageId: id,
       originalAvailable: true,
       expiresAt: manifest.expiresAt,
+      originalExpiresAt: manifest.originalExpiresAt,
     });
   } catch (err) {
     console.error("[storage/upload]", err);

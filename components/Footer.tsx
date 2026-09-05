@@ -13,6 +13,7 @@ export default function Footer() {
   return (
     <FooterClient
       contactEmail={biz.email}
+      business={biz}
       businessSlot={<BusinessDisclosure />}
     />
   );

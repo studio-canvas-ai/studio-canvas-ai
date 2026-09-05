@@ -12,7 +12,7 @@ import {
 import { createPortal } from "react-dom";
 import { ChevronDown } from "lucide-react";
 
-const MENU_Z = 260;
+const MENU_Z = 1200;
 
 function clamp(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, n));
@@ -22,22 +22,31 @@ function useFixedBelowMenu(
   open: boolean,
   triggerRef: React.RefObject<HTMLElement | null>,
   minWidth: number,
-  maxWidth = 420
+  maxWidth = 420,
+  anchorSelector?: string
 ) {
   const [style, setStyle] = useState<CSSProperties>({});
 
   const update = useCallback(() => {
     const el = triggerRef.current;
     if (!el) return;
-    const r = el.getBoundingClientRect();
-    const maxW = Math.min(maxWidth, Math.max(180, window.innerWidth - 16));
-    const width = clamp(Math.max(r.width, minWidth), 180, maxW);
+    const anchor = anchorSelector
+      ? (el.closest(anchorSelector) as HTMLElement | null)
+      : null;
+    const r = (anchor ?? el).getBoundingClientRect();
+  const pad = 8;
+    const maxW = Math.min(maxWidth, Math.max(180, window.innerWidth - pad * 2));
+    const preferAnchor = Boolean(anchor);
+    const width = preferAnchor
+      ? clamp(r.width, 180, maxW)
+      : clamp(Math.max(r.width, minWidth), 180, maxW);
     let left = r.left;
-    if (left + width > window.innerWidth - 8) {
-      left = window.innerWidth - width - 8;
+    if (left + width > window.innerWidth - pad) {
+      left = window.innerWidth - width - pad;
     }
-    left = Math.max(8, left);
-    const top = r.bottom + 8;
+    left = Math.max(pad, left);
+    const triggerBottom = el.getBoundingClientRect().bottom;
+    const top = triggerBottom + 8;
     const maxHeight = Math.max(140, window.innerHeight - top - 12);
     setStyle({
       position: "fixed",
@@ -47,7 +56,7 @@ function useFixedBelowMenu(
       maxHeight,
       zIndex: MENU_Z,
     });
-  }, [maxWidth, minWidth, triggerRef]);
+  }, [anchorSelector, maxWidth, minWidth, triggerRef]);
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -71,12 +80,18 @@ type ControlBarDropdownProps = {
   onOpenChange: (open: boolean) => void;
   menuMinWidth?: number;
   menuMaxWidth?: number;
+  /** CSS selector — size the menu to this ancestor (e.g. the spec row). */
+  menuAnchorSelector?: string;
   children: ReactNode;
   className?: string;
   /** Stretch trigger to full column width (center panel). */
   fullWidth?: boolean;
   /** Two-char chip: label only, equal flex share in a row. */
   compact?: boolean;
+  /** Screen 26 — tighter font/padding so five chips stay on one row. */
+  dense?: boolean;
+  /** Option chosen — distinct from menu open state. */
+  selected?: boolean;
 };
 
 /**
@@ -90,19 +105,28 @@ export default function ControlBarDropdown({
   onOpenChange,
   menuMinWidth = 240,
   menuMaxWidth = 420,
+  menuAnchorSelector,
   children,
   className = "",
   fullWidth = false,
   compact = false,
+  dense = false,
+  selected = false,
 }: ControlBarDropdownProps) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const [isMounted, setIsMounted] = useState(false);
   const menuStyle = useFixedBelowMenu(
     open,
     triggerRef,
     menuMinWidth,
-    menuMaxWidth
+    menuMaxWidth,
+    menuAnchorSelector
   );
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -126,8 +150,8 @@ export default function ControlBarDropdown({
 
   return (
     <div
-      className={`relative min-w-0 ${
-        compact ? "flex-1" : fullWidth ? "w-full" : ""
+      className={`relative min-w-0 max-w-full ${
+        compact ? "w-full flex-1" : fullWidth ? "w-full" : ""
       } ${className}`}
     >
       <button
@@ -137,16 +161,20 @@ export default function ControlBarDropdown({
         aria-expanded={open}
         aria-label={value ? `${label} ${value}` : label}
         onClick={() => onOpenChange(!open)}
-        className={`inline-flex items-center text-left font-semibold transition ${
+        className={`inline-flex max-w-full items-center text-left font-semibold transition ${
           compact
-            ? "h-9 w-full justify-center gap-0.5 rounded-lg px-1.5 text-[13px]"
+            ? dense
+              ? "h-8 w-full min-w-0 justify-center gap-0.5 rounded-lg px-0.5 text-[11px] sm:px-1 sm:text-[11px]"
+              : "h-9 w-full min-w-0 justify-center gap-0.5 rounded-lg px-1 text-[12px] sm:px-1.5 sm:text-[13px]"
             : `h-11 gap-2 rounded-xl px-3 text-[13px] font-medium ${
                 fullWidth ? "w-full" : "max-w-full"
               }`
         } ${
           open
-            ? "border border-slate-600 bg-slate-800/80 text-slate-100 shadow-[0_0_0_1px_rgba(148,163,184,0.12)]"
-            : "border border-slate-800 bg-[#0E1420] text-slate-200 hover:border-slate-700 hover:bg-slate-800/40"
+            ? "border border-amber-300 bg-yellow-50 text-slate-800 shadow-sm ring-1 ring-amber-200/80"
+            : selected
+              ? "border border-indigo-400 bg-indigo-50 text-indigo-900 shadow-sm ring-1 ring-indigo-300/70"
+              : "border border-amber-200/80 bg-yellow-50 text-slate-800 shadow-sm hover:border-amber-300 hover:bg-yellow-100/80"
         }`}
       >
         {!compact && icon ? (
@@ -155,32 +183,38 @@ export default function ControlBarDropdown({
           </span>
         ) : null}
         {compact ? (
-          <span className="whitespace-nowrap text-slate-100">{label}</span>
+          <span className="min-w-0 truncate font-semibold text-slate-800">
+            {label}
+          </span>
         ) : (
           <span className="min-w-0 flex-1 truncate">
-            <span className="text-slate-400">{label}</span>
+            <span className="font-semibold text-slate-800">{label}</span>
             {value ? (
               <>
-                <span className="mx-1 text-slate-600">·</span>
-                <span className="font-semibold text-slate-100">{value}</span>
+                <span className="mx-1 font-semibold text-slate-800">·</span>
+                <span className="font-semibold text-slate-800">{value}</span>
               </>
             ) : null}
           </span>
         )}
         <ChevronDown
-          className={`shrink-0 text-slate-500 transition ${
-            compact ? "h-3 w-3" : "h-3.5 w-3.5"
+          className={`shrink-0 text-slate-800 transition ${
+            compact
+              ? dense
+                ? "h-2.5 w-2.5"
+                : "h-3 w-3"
+              : "h-3.5 w-3.5"
           } ${open ? "rotate-180" : ""}`}
           aria-hidden
         />
       </button>
 
-      {open && typeof document !== "undefined"
+      {open && isMounted
         ? createPortal(
             <div
               ref={menuRef}
               role="listbox"
-              className="overflow-hidden rounded-2xl border border-slate-700/80 bg-[#121824] shadow-[0_16px_48px_rgba(0,0,0,0.55)] ring-1 ring-black/40"
+              className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg ring-1 ring-slate-900/5"
               style={menuStyle}
             >
               <div className="max-h-[inherit] overflow-y-auto overscroll-contain p-1.5">
@@ -197,12 +231,17 @@ export default function ControlBarDropdown({
 export function ControlMenuItem({
   active,
   title,
+  hint,
   description,
+  oneLine,
   onClick,
 }: {
   active?: boolean;
   title: string;
+  hint?: string;
   description?: string;
+  /** Keep title + hint on a single packed row. */
+  oneLine?: boolean;
   onClick: () => void;
 }) {
   return (
@@ -211,21 +250,30 @@ export function ControlMenuItem({
       role="option"
       aria-selected={active}
       onClick={onClick}
-      className={`w-full rounded-xl px-3 py-2.5 text-left transition ${
+      className={`w-full rounded-lg px-2 py-2 text-left transition ${
         active
-          ? "bg-indigo-500/20 text-slate-50 ring-1 ring-indigo-400/35"
-          : "text-slate-200 hover:bg-slate-800/80"
+          ? "bg-indigo-50 text-slate-900 ring-1 ring-indigo-300"
+          : "text-slate-800 hover:bg-slate-50"
       }`}
     >
-      <span className="block text-[13px] font-semibold [word-break:keep-all]">
-        {title}
-      </span>
+      {oneLine ? (
+        <span className="inline-flex max-w-full min-w-0 items-baseline gap-1.5 overflow-hidden whitespace-nowrap">
+          <span className="shrink-0 text-[17px] font-bold leading-none tracking-tight text-slate-900">
+            {title}
+          </span>
+          {hint ? (
+            <span className="min-w-0 truncate text-[14px] font-medium leading-none text-blue-700">
+              ({hint})
+            </span>
+          ) : null}
+        </span>
+      ) : (
+        <span className="block text-[12px] font-semibold leading-snug text-slate-900 [word-break:keep-all]">
+          {title}
+        </span>
+      )}
       {description ? (
-        <span
-          className={`mt-0.5 line-clamp-2 block text-[11px] leading-snug ${
-            active ? "text-slate-300" : "text-slate-500"
-          }`}
-        >
+        <span className="mt-0.5 line-clamp-2 block text-[11px] font-medium leading-snug text-slate-900">
           {description}
         </span>
       ) : null}
