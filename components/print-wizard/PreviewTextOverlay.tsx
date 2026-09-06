@@ -24,6 +24,7 @@ import {
   canvasTextScale,
   clampBoxAllowOverflow,
   designFontSizeToStage,
+  isCompactPrintPreviewStage,
   isReliablePrintStageSize,
   layerToBox,
   layerZone,
@@ -394,10 +395,12 @@ export default function PreviewTextOverlay({
   const stageReliable = isReliablePrintStageSize(size.w, size.h);
   const snapPx = Math.max(SNAP_THRESHOLD_PX, Math.min(size.w, size.h) * 0.025);
 
-  // After fonts settle (+ remount), force grow-only boxH until glyphs fit.
+  // Desktop only: persist grow-only boxH. Compact mobile hosts must not rewrite
+  // fractions (that piles every text layer into the canvas center).
   useEffect(() => {
     if (!fontsReady || !stageReliable) return;
     if (pointerActive || dragging || editingId) return;
+    if (isCompactPrintPreviewStage(size.w, size.h)) return;
 
     let cancelled = false;
     let passes = 0;
@@ -411,7 +414,6 @@ export default function PreviewTextOverlay({
         size.h
       );
       if (changed) onLayersChangeRef.current(fitted);
-      // Second/third pass after layout paint (fonts + wrap settle).
       if (passes < 3) {
         requestAnimationFrame(() => {
           requestAnimationFrame(runFit);
@@ -775,26 +777,32 @@ export default function PreviewTextOverlay({
         const isInfoCol =
           /info|label|value|일시|장소|입장/.test(layer.id || "") ||
           isNarrowLabel;
+        const compact = isCompactPrintPreviewStage(size.w, size.h);
         const minBox = Math.max(
           24,
           minReadableDisplayFontPx(size.w, size.h) * 2
         );
-        const minW = isInfoCol
-          ? minBox
-          : Math.max(minBox, size.w * 0.4);
-        const contentFit = layer.showBox
-          ? { height: box.height }
-          : measureLayerContentSize(layer, size.w, size.h);
+        // Compact mobile: never force 40% width — that re-wraps and looks piled.
+        const minW = compact
+          ? Math.max(8, box.width)
+          : isInfoCol
+            ? minBox
+            : Math.max(minBox, size.w * 0.4);
+        const contentFit =
+          layer.showBox || compact
+            ? { height: box.height }
+            : measureLayerContentSize(layer, size.w, size.h);
         const safeBox = {
           x: box.x,
           y: box.y,
           width: Math.max(minW, box.width),
-          // Always ≥ measured glyph block (never minBox*0.45 sesame height).
-          height: Math.max(
-            box.height,
-            contentFit.height,
-            layer.showBox ? 8 : fontSize * 1.35 + 12
-          ),
+          height: compact
+            ? Math.max(box.height, layer.showBox ? 8 : fontSize * 1.2 + 8)
+            : Math.max(
+                box.height,
+                contentFit.height,
+                layer.showBox ? 8 : fontSize * 1.35 + 12
+              ),
         };
         // If width was expanded, keep centered / left origin stable.
         if (safeBox.width > box.width && layer.align === "center") {

@@ -20,7 +20,7 @@ export default function PrintUnifiedEditorLayout({
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-transparent">
       <div className="relative mx-auto flex h-full min-h-0 w-full max-w-[1920px] flex-1 flex-col gap-2 overflow-hidden px-3 py-2.5 sm:px-4 sm:py-3 lg:grid lg:grid-cols-[minmax(0,44fr)_minmax(0,26fr)_minmax(0,30fr)] lg:gap-3 lg:overflow-hidden lg:px-5 lg:pb-4">
-        <div className="h-[34vh] max-h-[38vh] min-h-[200px] shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-sm lg:h-full lg:max-h-none lg:min-h-[320px]">
+        <div className="h-[42vh] max-h-[48vh] min-h-[220px] shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-sm lg:h-full lg:max-h-none lg:min-h-[320px]">
           {canvas}
         </div>
 

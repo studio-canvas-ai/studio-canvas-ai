@@ -31,6 +31,21 @@ export function isReliablePrintStageSize(stageW: number, stageH: number): boolea
   );
 }
 
+/**
+ * Compact CSS preview hosts (mobile Screen-26 ~34vh canvas).
+ * Remeasuring wrap here inflates boxH fractions and piles text in the center.
+ */
+export function isCompactPrintPreviewStage(
+  stageW: number,
+  stageH: number
+): boolean {
+  if (!isReliablePrintStageSize(stageW, stageH)) return true;
+  return Math.min(stageW, stageH) < 520;
+}
+
+/** Cap a single content layer height as a fraction of stage (after measure). */
+export const MAX_CONTENT_BOX_H_FRAC = 0.2;
+
 export function clampOffset(v: number): number {
   return Math.max(-OFFSET_CLAMP, Math.min(OFFSET_CLAMP, v));
 }
@@ -396,8 +411,11 @@ export function layerToBox(
     if (layer.showBox) {
       // Pure plates: keep authored height.
       height = storedHPx > 0 ? storedHPx : natural.height;
+    } else if (isCompactPrintPreviewStage(stageW, stageH)) {
+      // Mobile preview: keep AI/export fractions — never remasure wrap into boxH.
+      height = storedHPx > 0 ? storedHPx : measured.height;
     } else {
-      // Grow-only vs stored: never clip Hangul — box hugs measured wrap height.
+      // Desktop: grow-only so Hangul is not clipped by a short authored box.
       height = Math.max(storedHPx || 0, measured.height);
     }
   } else if (layer.layoutLocked) {
@@ -433,7 +451,9 @@ export function layerToBox(
 
 /**
  * Persist grow-only boxH so preview selection chrome and export match glyphs.
- * Call after fonts settle / Magic Layout inject.
+ * Always measure in the provided stage space — callers must pass the
+ * **reference 1080 stage** (or desktop host). Compact mobile CSS hosts are
+ * rejected so wrap inflation cannot rewrite layout fractions.
  */
 export function syncContentLayerBoxHeights(
   layers: TextLayer[],
@@ -441,6 +461,10 @@ export function syncContentLayerBoxHeights(
   stageH: number
 ): { layers: TextLayer[]; changed: boolean } {
   if (!layers.length || stageW < 8 || stageH < 8) {
+    return { layers, changed: false };
+  }
+  // Never bake mobile-preview wrap metrics into stored boxH.
+  if (isCompactPrintPreviewStage(stageW, stageH)) {
     return { layers, changed: false };
   }
   let changed = false;
@@ -453,7 +477,11 @@ export function syncContentLayerBoxHeights(
     const measured = measureLayerContentSize(layer, stageW, stageH);
     const storedH =
       layer.boxH && layer.boxH > 0 ? layer.boxH * stageH : 0;
-    if (measured.height <= storedH + 0.75) return layer;
+    const cappedH = Math.min(
+      measured.height,
+      stageH * MAX_CONTENT_BOX_H_FRAC
+    );
+    if (cappedH <= storedH + 0.75) return layer;
     changed = true;
     const widthPx =
       layer.boxW && layer.boxW > 0
@@ -464,7 +492,7 @@ export function syncContentLayerBoxHeights(
       layoutLocked: true,
       boxManual: true,
       boxW: widthPx / stageW,
-      boxH: measured.height / stageH,
+      boxH: cappedH / stageH,
       maxWidth: widthPx / stageW,
     };
   });
