@@ -66,7 +66,11 @@ async function requestLookbookFaceId(opts: {
 
   if (!res.ok || !data?.ok || !data.imageUrl || !/^https:\/\//i.test(data.imageUrl)) {
     throw new Error(
-      data?.message || data?.error || "화보 FaceID 생성에 실패했습니다."
+      data?.message ||
+        data?.error ||
+        (res.status === 402
+          ? "크레딧이 부족합니다. AI 고퀄 인물 생성에 필요한 크레딧을 확인해 주세요."
+          : "화보 FaceID 생성에 실패했습니다.")
     );
   }
 
