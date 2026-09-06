@@ -1076,6 +1076,8 @@ export type FalInstantIdInput = {
   ip_adapter_scale?: number;
   identity_controlnet_conditioning_scale?: number;
   controlnet_conditioning_scale?: number;
+  /** pose | canny | depth — omit or leave unset when pose must stay free. */
+  controlnet_selection?: "pose" | "canny" | "depth";
   enhance_face_region?: boolean;
   enable_lcm?: boolean;
   seed?: number;
@@ -1146,6 +1148,9 @@ export async function runFalInstantId(
     enable_lcm:
       typeof input.enable_lcm === "boolean" ? input.enable_lcm : false,
     ...(typeof input.seed === "number" ? { seed: input.seed } : {}),
+    ...(input.controlnet_selection
+      ? { controlnet_selection: input.controlnet_selection }
+      : {}),
   };
 
   console.info("[fal] instantid request", {
@@ -1154,6 +1159,10 @@ export async function runFalInstantId(
     promptPreview: prompt.slice(0, 140),
     face: summarizeImageUrl(faceUrl),
     ip_adapter_scale: body.ip_adapter_scale,
+    controlnet_selection: body.controlnet_selection ?? null,
+    controlnet_conditioning_scale: body.controlnet_conditioning_scale,
+    identity_controlnet_conditioning_scale:
+      body.identity_controlnet_conditioning_scale,
   });
 
   try {

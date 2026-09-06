@@ -30,23 +30,35 @@ function useFixedBelowMenu(
   const update = useCallback(() => {
     const el = triggerRef.current;
     if (!el) return;
-    const anchor = anchorSelector
-      ? (el.closest(anchorSelector) as HTMLElement | null)
-      : null;
-    const r = (anchor ?? el).getBoundingClientRect();
-  const pad = 8;
-    const maxW = Math.min(maxWidth, Math.max(180, window.innerWidth - pad * 2));
-    const preferAnchor = Boolean(anchor);
-    const width = preferAnchor
-      ? clamp(r.width, 180, maxW)
-      : clamp(Math.max(r.width, minWidth), 180, maxW);
-    let left = r.left;
-    if (left + width > window.innerWidth - pad) {
-      left = window.innerWidth - width - pad;
+
+    // Prefer explicit anchor, then the SpecSettingsPanel column, for containment.
+    const anchored =
+      (anchorSelector
+        ? (el.closest(anchorSelector) as HTMLElement | null)
+        : null) ??
+      (el.closest("[data-spec-panel]") as HTMLElement | null);
+
+    const triggerRect = el.getBoundingClientRect();
+    const boundRect = (anchored ?? el).getBoundingClientRect();
+    const pad = 8;
+    const boundWidth = Math.max(180, boundRect.width - pad * 2);
+    const viewportCap = Math.max(180, window.innerWidth - pad * 2);
+    const maxW = Math.min(maxWidth, boundWidth, viewportCap);
+    const width = clamp(Math.max(triggerRect.width, minWidth), 180, maxW);
+
+    // Anchor under the trigger, then keep the panel fully inside the control column.
+    let left = triggerRect.left;
+    const minLeft = boundRect.left + pad;
+    const maxLeft = boundRect.right - width - pad;
+    if (maxLeft >= minLeft) {
+      left = clamp(left, minLeft, maxLeft);
+    } else {
+      // Panel narrower than menu — pin to panel start within viewport.
+      left = clamp(boundRect.left + pad, pad, window.innerWidth - width - pad);
     }
-    left = Math.max(pad, left);
-    const triggerBottom = el.getBoundingClientRect().bottom;
-    const top = triggerBottom + 8;
+    left = clamp(left, pad, window.innerWidth - width - pad);
+
+    const top = triggerRect.bottom + 8;
     const maxHeight = Math.max(140, window.innerHeight - top - 12);
     setStyle({
       position: "fixed",
@@ -80,7 +92,7 @@ type ControlBarDropdownProps = {
   onOpenChange: (open: boolean) => void;
   menuMinWidth?: number;
   menuMaxWidth?: number;
-  /** CSS selector — size the menu to this ancestor (e.g. the spec row). */
+  /** CSS selector — keep the menu horizontally inside this ancestor (e.g. control panel). */
   menuAnchorSelector?: string;
   children: ReactNode;
   className?: string;

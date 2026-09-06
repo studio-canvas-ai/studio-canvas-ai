@@ -349,6 +349,7 @@ export default function SpecSettingsPanel({
 
   return (
     <section
+      data-spec-panel
       className={
         fitContent
           ? "flex w-full min-w-0 flex-col gap-2.5 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3 pb-4 shadow-sm sm:p-3.5"
@@ -374,8 +375,9 @@ export default function SpecSettingsPanel({
           value={specPicks.format ? formatValueLabel : undefined}
           open={openKey === "format"}
           onOpenChange={(v) => setOpenKey(v ? "format" : null)}
-          menuMinWidth={320}
-          menuMaxWidth={380}
+          menuMinWidth={280}
+          menuMaxWidth={360}
+          menuAnchorSelector="[data-spec-panel]"
         >
           <div className="grid grid-cols-2 gap-1">
             {isScreen26Presets
@@ -530,8 +532,9 @@ export default function SpecSettingsPanel({
           value={specPicks.style ? styleValueLabel || undefined : undefined}
           open={openKey === "style"}
           onOpenChange={(v) => setOpenKey(v ? "style" : null)}
-          menuMinWidth={400}
-          menuMaxWidth={480}
+          menuMinWidth={280}
+          menuMaxWidth={360}
+          menuAnchorSelector="[data-spec-panel]"
         >
           <div className="flex flex-col gap-0.5">
             {IMAGE_STYLE_PRESETS.map((preset) => {
@@ -583,8 +586,9 @@ export default function SpecSettingsPanel({
           value={specPicks.use ? useValueLabel : undefined}
           open={openKey === "use"}
           onOpenChange={(v) => setOpenKey(v ? "use" : null)}
-          menuMinWidth={isPhotoProduct ? 220 : 300}
+          menuMinWidth={isPhotoProduct ? 220 : 280}
           menuMaxWidth={isPhotoProduct ? 280 : 360}
+          menuAnchorSelector="[data-spec-panel]"
         >
           <div
             className={
@@ -631,6 +635,7 @@ export default function SpecSettingsPanel({
             onOpenChange={(v) => setOpenKey(v ? "pages" : null)}
             menuMinWidth={180}
             menuMaxWidth={220}
+            menuAnchorSelector="[data-spec-panel]"
           >
             {PRINT_PAGE_COUNTS.map((item) => (
               <ControlMenuItem
@@ -655,8 +660,8 @@ export default function SpecSettingsPanel({
           open={openKey === "prompt"}
           onOpenChange={(v) => setOpenKey(v ? "prompt" : null)}
           menuMinWidth={isPhotoProduct ? 320 : 280}
-          menuMaxWidth={isPhotoProduct ? 520 : 640}
-          menuAnchorSelector="[data-spec-row]"
+          menuMaxWidth={isPhotoProduct ? 420 : 360}
+          menuAnchorSelector="[data-spec-panel]"
         >
           {isPhotoProduct ? (
             <div className="flex max-h-[min(70vh,32rem)] flex-col gap-3 overflow-y-auto p-2.5 sm:p-3">
@@ -726,6 +731,7 @@ export default function SpecSettingsPanel({
                             onBgKeywordChange(
                               applyBgExamplePreset(preset.promptEn)
                             );
+                            setOpenKey(null);
                           }}
                           className={`min-w-[9.5rem] flex-[1_1_45%] rounded-lg text-left shadow-sm transition [word-break:keep-all] ${
                             on
@@ -768,8 +774,8 @@ export default function SpecSettingsPanel({
               setOpenKey(v ? "bg" : null);
             }}
             menuMinWidth={280}
-            menuMaxWidth={640}
-            menuAnchorSelector="[data-spec-row]"
+            menuMaxWidth={360}
+            menuAnchorSelector="[data-spec-panel]"
             disabled={portraitPurposeLock}
           >
             <div className="max-h-[min(60vh,28rem)] overflow-y-auto overscroll-contain p-2 sm:p-2.5">

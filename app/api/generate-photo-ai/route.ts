@@ -17,8 +17,10 @@ import {
 import {
   isPortraitAiPurposeUse,
   portraitAiPromptLock,
+  portraitInstantIdParams,
   PORTRAIT_BODY_SHAPE_LOCK,
   PORTRAIT_BODY_SHAPE_NEGATIVE,
+  PORTRAIT_FREE_POSE_NEGATIVE,
   type PortraitAiPurposeUseId,
 } from "@/lib/printPortraitPurpose";
 import { checkGenerateRateLimit } from "@/lib/rateLimit";
@@ -164,6 +166,9 @@ export async function POST(req: Request) {
         raw.clientRequestId.trim().slice(0, 80)) ||
       newRequestId();
 
+    const instantParams = portraitInstantIdParams(purpose);
+    const freePose = purpose === "lookbook" || purpose === "sns";
+
     const lockedPrompt = [
       userPrompt,
       portraitAiPromptLock(purpose),
@@ -175,8 +180,8 @@ export async function POST(req: Request) {
 
     const built = buildAtomicLookbookPrompt({
       userPrompt: lockedPrompt,
-      // Always subject_studio framing so InstantID stays on clean studio plate.
-      mode: "subject_studio",
+      // ID: locked studio plate. Lookbook/SNS: generative scene synthesis.
+      mode: instantParams.promptMode,
       requestId,
     });
 
@@ -184,6 +189,9 @@ export async function POST(req: Request) {
       built.prompt,
       STUDIO_BACKGROUND_LOCK,
       PORTRAIT_BODY_SHAPE_LOCK,
+      freePose
+        ? "Generative InstantID synthesis with face preservation — invent pose and wardrobe from the prompt."
+        : "",
     ]
       .join(" ")
       .replace(/\s+/g, " ")
@@ -192,7 +200,9 @@ export async function POST(req: Request) {
       built.negativePrompt,
       STUDIO_NEGATIVE_LOCK,
       PORTRAIT_BODY_SHAPE_NEGATIVE,
+      freePose ? PORTRAIT_FREE_POSE_NEGATIVE : "",
     ]
+      .filter(Boolean)
       .join(", ")
       .replace(/\s+/g, " ")
       .trim();
@@ -200,6 +210,9 @@ export async function POST(req: Request) {
     console.info("[api/generate-photo-ai] start", {
       requestId,
       purpose,
+      freePose,
+      controlnet_selection: instantParams.controlnet_selection ?? null,
+      controlnet_conditioning_scale: instantParams.controlnet_conditioning_scale,
       faceHost: (() => {
         try {
           if (faceImageUrl.startsWith("data:")) return "data";
@@ -211,19 +224,21 @@ export async function POST(req: Request) {
       promptPreview: falPrompt.slice(0, 160),
     });
 
-    // Slightly stronger identity/pose conditioning + milder guidance
-    // to reduce fashion-model slimming while keeping the same face.
     const result = await runFalInstantId({
       face_image_url: faceImageUrl,
       prompt: falPrompt,
       negative_prompt: falNegative,
-      ip_adapter_scale: 0.9,
-      identity_controlnet_conditioning_scale: 0.9,
-      controlnet_conditioning_scale: 0.85,
-      enhance_face_region: true,
+      ip_adapter_scale: instantParams.ip_adapter_scale,
+      identity_controlnet_conditioning_scale:
+        instantParams.identity_controlnet_conditioning_scale,
+      controlnet_conditioning_scale: instantParams.controlnet_conditioning_scale,
+      ...(instantParams.controlnet_selection
+        ? { controlnet_selection: instantParams.controlnet_selection }
+        : {}),
+      enhance_face_region: instantParams.enhance_face_region,
       enable_lcm: false,
-      num_inference_steps: 30,
-      guidance_scale: 3.8,
+      num_inference_steps: instantParams.num_inference_steps,
+      guidance_scale: instantParams.guidance_scale,
       style: "(No style)",
     });
 

@@ -61,6 +61,55 @@ export const PORTRAIT_BODY_SHAPE_LOCK =
 export const PORTRAIT_BODY_SHAPE_NEGATIVE =
   "emaciated, gaunt, extreme slimming, distorted body proportions, underweight, overly thin face, skinny model body, hollow cheeks, stick-thin limbs, unnatural slim waist, weight-loss look";
 
+/** Extra negatives when pose ControlNet is disabled (화보 / SNS). */
+export const PORTRAIT_FREE_POSE_NEGATIVE =
+  "rigid selfie posture, locked original pose, stiff mugshot stance, identical reference pose, frozen front-facing posture, cutout paste composition, flat collage, rembg silhouette only";
+
+export type PortraitInstantIdParams = {
+  controlnet_selection?: "pose" | "canny" | "depth";
+  controlnet_conditioning_scale: number;
+  identity_controlnet_conditioning_scale: number;
+  ip_adapter_scale: number;
+  guidance_scale: number;
+  num_inference_steps: number;
+  enhance_face_region: boolean;
+  /** Atomic prompt builder mode. */
+  promptMode: "subject_studio" | "base_scene";
+};
+
+/**
+ * Mode-dependent InstantID conditioning.
+ * - 증명사진: strong pose + identity lock (standard ID composition)
+ * - 화보 / SNS: disable pose/depth ControlNet; keep face IP-Adapter + IdentityNet
+ */
+export function portraitInstantIdParams(
+  purpose: PortraitAiPurposeUseId | string | null | undefined
+): PortraitInstantIdParams {
+  if (purpose === "id-photo") {
+    return {
+      controlnet_selection: "pose",
+      controlnet_conditioning_scale: 0.85,
+      identity_controlnet_conditioning_scale: 0.9,
+      ip_adapter_scale: 0.9,
+      guidance_scale: 3.8,
+      num_inference_steps: 30,
+      enhance_face_region: true,
+      promptMode: "subject_studio",
+    };
+  }
+
+  // lookbook | sns — generative face-preserved img2img, free pose from prompt
+  return {
+    controlnet_conditioning_scale: 0,
+    identity_controlnet_conditioning_scale: 0.75,
+    ip_adapter_scale: 0.82,
+    guidance_scale: 5.2,
+    num_inference_steps: 32,
+    enhance_face_region: true,
+    promptMode: "base_scene",
+  };
+}
+
 /** Purpose-specific English locks for /api/generate-photo-ai. */
 export function portraitAiPromptLock(
   useId: PortraitAiPurposeUseId | string | null | undefined
@@ -77,16 +126,20 @@ export function portraitAiPromptLock(
   }
   if (useId === "lookbook") {
     return [
-      "High-end fashion editorial pictorial.",
-      "Designer styling, dramatic professional lighting, polished posing.",
+      "High-end fashion editorial pictorial — true generative InstantID synthesis, not a cutout collage.",
+      "Invent a dynamic editorial pose, natural body angle, and creative composition from the scene prompt.",
+      "Do not lock to the reference selfie posture or silhouette.",
+      "Designer styling, dramatic professional lighting, polished fashion posing.",
       "Preserve exact facial identity — do not invent a new person.",
       body,
     ].join(" ");
   }
   if (useId === "sns") {
     return [
-      "Friendly SNS profile portrait.",
-      "Smart-casual posture, flattering soft lighting, tasteful blurred aesthetic background.",
+      "Friendly SNS profile portrait — generative face-preserved synthesis, not a cutout collage.",
+      "Allow natural varied posture and flattering body angle guided by the prompt.",
+      "Do not copy the reference selfie pose rigidly.",
+      "Smart-casual styling, soft lighting, tasteful studio aesthetic.",
       "Preserve exact facial identity — do not invent a new person.",
       body,
     ].join(" ");
