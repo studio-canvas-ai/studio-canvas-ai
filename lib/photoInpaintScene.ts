@@ -226,6 +226,72 @@ export function resolveScreen26PhotoIdentitySrc(
   return null;
 }
 
+export type Screen26PortraitIdentityHit = {
+  identity: string;
+  pageIndex: number;
+  subjectLayer: PrintPhotoLayer | null;
+  layers: PrintPhotoLayer[];
+};
+
+/**
+ * Screen-26 FaceID / keep-original: find a valid identity from the active
+ * viewport page first, then any page that already has a photo layer.
+ * Avoids false "upload a photo" errors when Magic Layout targets the next
+ * empty background page while the selfie still lives on page 1.
+ */
+export function resolveScreen26PortraitIdentity(
+  photoPages: PrintPhotoLayer[][],
+  preferredPageIndex: number,
+  activePhotoLayerId?: string | null
+): Screen26PortraitIdentityHit | null {
+  const tryPage = (pageIndex: number): Screen26PortraitIdentityHit | null => {
+    if (pageIndex < 0 || pageIndex >= photoPages.length) return null;
+    const layers = photoPages[pageIndex] ?? [];
+    if (!layers.length) return null;
+
+    if (activePhotoLayerId) {
+      const active = layers.find((l) => l.id === activePhotoLayerId);
+      if (active) {
+        const fromActive =
+          active.identitySrc?.trim() ||
+          resolveScreen26PhotoIdentitySrc([active]) ||
+          active.src?.trim() ||
+          null;
+        if (fromActive) {
+          return {
+            identity: fromActive,
+            pageIndex,
+            subjectLayer: active,
+            layers,
+          };
+        }
+      }
+    }
+
+    const identity =
+      resolveScreen26PhotoIdentitySrc(layers) ||
+      layers[0]?.src?.trim() ||
+      null;
+    if (!identity) return null;
+    return {
+      identity,
+      pageIndex,
+      subjectLayer: layers[0] ?? null,
+      layers,
+    };
+  };
+
+  const preferred = tryPage(preferredPageIndex);
+  if (preferred) return preferred;
+
+  for (let i = 0; i < photoPages.length; i++) {
+    if (i === preferredPageIndex) continue;
+    const hit = tryPage(i);
+    if (hit) return hit;
+  }
+  return null;
+}
+
 /**
  * Pick identity face for lookbook / inpaint (photo product wizard).
  * Priority: active trained vault → canvas layer → upload vault.

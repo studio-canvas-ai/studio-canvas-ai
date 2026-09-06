@@ -125,7 +125,7 @@ import {
   parseIdPhotoBackgroundColor,
   shouldUseSolidIdBackground,
 } from "@/lib/photoIdPhotoBackground";
-import { resolveScreen26PhotoIdentitySrc } from "@/lib/photoInpaintScene";
+import { resolveScreen26PortraitIdentity } from "@/lib/photoInpaintScene";
 
 const AiTemplateStudio = dynamic(
   () => import("@/components/AiTemplateStudio"),
@@ -310,6 +310,8 @@ export default function PrintUnifiedEditor() {
   stateRef.current = state;
   const currentPageRef = useRef(currentPage);
   currentPageRef.current = currentPage;
+  const activePhotoLayerIdRef = useRef(activePhotoLayerId);
+  activePhotoLayerIdRef.current = activePhotoLayerId;
   const formatSeedKeyRef = useRef("");
 
   const activatePage = useCallback((page: number) => {
@@ -1019,17 +1021,48 @@ export default function PrintUnifiedEditor() {
     }
 
     const s = stateRef.current;
-    const target = resolveBackgroundGenerationTarget(
-      s,
-      currentPageRef.current
-    );
-    if (!target) {
-      window.alert(
-        `${s.pageCount}페이지 배경이 모두 생성되었습니다. 미니 보기에서 페이지를 선택해 편집하거나, 배경을 삭제한 뒤 다시 생성해 주세요.`
+    const keepOriginal = isIdPhotoKeepOriginalUse(s.useId);
+    const portraitAi = isPortraitAiPurposeUse(s.useId);
+    const portraitIsolated = isPortraitPurposeUse(s.useId);
+
+    let photoPages = resizePhotoPages(s.photoLayersByPage, s.pageCount);
+    const viewportPageIndex =
+      currentPageRef.current > 0 ? currentPageRef.current - 1 : 0;
+
+    // Portrait modes must bind to the page that already shows the selfie.
+    // Non-portrait Magic Layout still advances to the next empty background slot.
+    let pageIndex: number;
+    let portraitIdentity: ReturnType<
+      typeof resolveScreen26PortraitIdentity
+    > = null;
+
+    if (portraitIsolated) {
+      portraitIdentity = resolveScreen26PortraitIdentity(
+        photoPages,
+        viewportPageIndex,
+        activePhotoLayerIdRef.current
       );
-      return;
+      if (!portraitIdentity) {
+        window.alert(
+          "사진을 먼저 업로드해 주세요. 캔버스에 인물 사진이 보이면 다시 업로드하거나 해당 레이어를 선택한 뒤 생성해 주세요."
+        );
+        return;
+      }
+      pageIndex = portraitIdentity.pageIndex;
+    } else {
+      const target = resolveBackgroundGenerationTarget(
+        s,
+        currentPageRef.current
+      );
+      if (!target) {
+        window.alert(
+          `${s.pageCount}페이지 배경이 모두 생성되었습니다. 미니 보기에서 페이지를 선택해 편집하거나, 배경을 삭제한 뒤 다시 생성해 주세요.`
+        );
+        return;
+      }
+      pageIndex = target.pageIndex;
     }
-    const { pageIndex } = target;
+
     const format = formatById(s.formatId || "a4");
     const use = useById(s.useId || "flyer");
     const field = fieldById(s.bgPresetId);
@@ -1043,10 +1076,6 @@ export default function PrintUnifiedEditor() {
       s.mainPrompt.trim();
     const pageContext = buildPagePrintAiContext(s, pageIndex).trim();
     const prompt = userTheme || pageContext || "elegant print design";
-
-    const keepOriginal = isIdPhotoKeepOriginalUse(s.useId);
-    const portraitAi = isPortraitAiPurposeUse(s.useId);
-    const portraitIsolated = isPortraitPurposeUse(s.useId);
 
     setGenerating(true);
     try {
@@ -1065,16 +1094,29 @@ export default function PrintUnifiedEditor() {
         s.pageCount
       );
       let decoPages = resizeDecoPages(s.decoLayersByPage, s.pageCount);
-      let photoPages = resizePhotoPages(s.photoLayersByPage, s.pageCount);
+      // Refresh pages from latest state in case upload landed during blur wait.
+      photoPages = resizePhotoPages(
+        stateRef.current.photoLayersByPage,
+        stateRef.current.pageCount
+      );
+      if (portraitIsolated) {
+        portraitIdentity = resolveScreen26PortraitIdentity(
+          photoPages,
+          pageIndex,
+          activePhotoLayerIdRef.current
+        );
+        if (!portraitIdentity) {
+          throw new Error(
+            "사진을 먼저 업로드해 주세요. 캔버스에 인물 사진이 보이면 다시 업로드하거나 해당 레이어를 선택한 뒤 생성해 주세요."
+          );
+        }
+        pageIndex = portraitIdentity.pageIndex;
+      }
 
       // ── Keep-original ID photo: rembg + solid/studio plate (no FaceID) ──
       if (keepOriginal) {
-        const layers = photoPages[pageIndex] ?? [];
-        const subjectLayer = layers[0] ?? null;
-        const identity =
-          resolveScreen26PhotoIdentitySrc(layers) ||
-          subjectLayer?.src?.trim() ||
-          null;
+        const identity = portraitIdentity?.identity ?? null;
+        const subjectLayer = portraitIdentity?.subjectLayer ?? null;
         if (!identity) {
           throw new Error(
             "사진을 먼저 업로드해 주세요. 원본유지 모드는 업로드된 인물 사진이 필요합니다."
@@ -1149,12 +1191,9 @@ export default function PrintUnifiedEditor() {
         );
       } else if (portraitAi) {
         // ── AI FaceID: 증명사진 / 화보 / SNS → /api/generate-photo-ai ──
-        const layers = photoPages[pageIndex] ?? [];
-        const subjectLayer = layers[0] ?? null;
-        const identity =
-          resolveScreen26PhotoIdentitySrc(layers) ||
-          subjectLayer?.src?.trim() ||
-          null;
+        const identity = portraitIdentity?.identity ?? null;
+        const subjectLayer = portraitIdentity?.subjectLayer ?? null;
+        const layers = portraitIdentity?.layers ?? [];
         if (!identity) {
           throw new Error(
             "사진을 먼저 업로드해 주세요. AI 인물 생성에는 얼굴이 보이는 원본이 필요합니다."
@@ -1165,6 +1204,7 @@ export default function PrintUnifiedEditor() {
         const purpose = s.useId as PortraitAiPurposeUseId;
         console.info("[unified-editor] FaceID identity source", {
           purpose,
+          pageIndex,
           fromIdentitySrc: Boolean(
             layers.some((l) => l.identitySrc?.trim())
           ),

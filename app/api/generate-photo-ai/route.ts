@@ -17,6 +17,8 @@ import {
 import {
   isPortraitAiPurposeUse,
   portraitAiPromptLock,
+  PORTRAIT_BODY_SHAPE_LOCK,
+  PORTRAIT_BODY_SHAPE_NEGATIVE,
   type PortraitAiPurposeUseId,
 } from "@/lib/printPortraitPurpose";
 import { checkGenerateRateLimit } from "@/lib/rateLimit";
@@ -166,6 +168,7 @@ export async function POST(req: Request) {
       userPrompt,
       portraitAiPromptLock(purpose),
       STUDIO_BACKGROUND_LOCK,
+      PORTRAIT_BODY_SHAPE_LOCK,
     ]
       .filter(Boolean)
       .join(" ");
@@ -177,11 +180,19 @@ export async function POST(req: Request) {
       requestId,
     });
 
-    const falPrompt = [built.prompt, STUDIO_BACKGROUND_LOCK]
+    const falPrompt = [
+      built.prompt,
+      STUDIO_BACKGROUND_LOCK,
+      PORTRAIT_BODY_SHAPE_LOCK,
+    ]
       .join(" ")
       .replace(/\s+/g, " ")
       .trim();
-    const falNegative = [built.negativePrompt, STUDIO_NEGATIVE_LOCK]
+    const falNegative = [
+      built.negativePrompt,
+      STUDIO_NEGATIVE_LOCK,
+      PORTRAIT_BODY_SHAPE_NEGATIVE,
+    ]
       .join(", ")
       .replace(/\s+/g, " ")
       .trim();
@@ -200,16 +211,19 @@ export async function POST(req: Request) {
       promptPreview: falPrompt.slice(0, 160),
     });
 
+    // Slightly stronger identity/pose conditioning + milder guidance
+    // to reduce fashion-model slimming while keeping the same face.
     const result = await runFalInstantId({
       face_image_url: faceImageUrl,
       prompt: falPrompt,
       negative_prompt: falNegative,
-      ip_adapter_scale: 0.85,
-      identity_controlnet_conditioning_scale: 0.85,
+      ip_adapter_scale: 0.9,
+      identity_controlnet_conditioning_scale: 0.9,
+      controlnet_conditioning_scale: 0.85,
       enhance_face_region: true,
       enable_lcm: false,
-      num_inference_steps: 28,
-      guidance_scale: 4.5,
+      num_inference_steps: 30,
+      guidance_scale: 3.8,
       style: "(No style)",
     });
 
