@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/components/I18nProvider";
 import { fillCanvas } from "@/lib/i18n";
 import { ChevronDown } from "lucide-react";
@@ -29,9 +29,11 @@ import type { WizardProductId } from "@/lib/wizard/wizardProduct";
 import {
   applyBgExamplePreset,
   BG_EXAMPLE_CATEGORIES,
+  bgExampleCategoriesForUse,
   findSelectedBgExamplePreset,
   isBgExamplePresetSelected,
 } from "@/lib/aiBackgroundExamplePresets";
+import { isPortraitPurposeUse } from "@/lib/printPortraitPurpose";
 import {
   PHOTO_LOOKBOOK_EXAMPLE_HINT,
   getPhotoLookbookExampleCategories,
@@ -132,6 +134,12 @@ export default function SpecSettingsPanel({
     cs.uses[id] ?? fallback;
   const isPhotoProduct = productId === "photo";
   const isScreen26Presets = fitContent && hidePageCountOption;
+  const portraitPurposeLock =
+    !isPhotoProduct && isPortraitPurposeUse(useId);
+  const bgExampleCategories = isPhotoProduct
+    ? null
+    : bgExampleCategoriesForUse(useId);
+  const portraitCategoryRef = useRef<HTMLDivElement | null>(null);
   const useCatalog = isPhotoProduct ? PHOTO_USES : PRINT_USES;
   const presetFormats = isPhotoProduct
     ? PHOTO_PRESET_FORMATS
@@ -180,6 +188,19 @@ export default function SpecSettingsPanel({
   useEffect(() => {
     if (openKey !== "format") setFreeSizeOpen(false);
   }, [openKey]);
+
+  // Portrait purposes: open 예시 and scroll to 「증명사진,화보,sns」 category.
+  useEffect(() => {
+    if (!portraitPurposeLock) return;
+    setOpenKey("prompt");
+    const t = window.setTimeout(() => {
+      portraitCategoryRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
+    }, 80);
+    return () => window.clearTimeout(t);
+  }, [portraitPurposeLock, useId]);
 
   useEffect(() => {
     if (!customSize) return;
@@ -295,11 +316,16 @@ export default function SpecSettingsPanel({
       specPicks.style &&
       specPicks.use &&
       bgKeyword.trim().length > 0
-    : specPicks.format &&
-      specPicks.style &&
-      specPicks.use &&
-      fieldSelected &&
-      bgPromptSelected;
+    : portraitPurposeLock
+      ? specPicks.format &&
+        specPicks.style &&
+        specPicks.use &&
+        bgPromptSelected
+      : specPicks.format &&
+        specPicks.style &&
+        specPicks.use &&
+        fieldSelected &&
+        bgPromptSelected;
   const canGenerateSubject = Boolean(
     isPhotoProduct &&
       specPicks.format &&
@@ -648,8 +674,17 @@ export default function SpecSettingsPanel({
             </div>
           ) : (
             <div className="max-h-[min(60vh,28rem)] overflow-y-auto overscroll-contain p-2 sm:p-2.5">
-              {BG_EXAMPLE_CATEGORIES.map((group) => (
-                <div key={group.id} className="mb-3 last:mb-0">
+              {(bgExampleCategories ?? BG_EXAMPLE_CATEGORIES).map((group) => (
+                <div
+                  key={group.id}
+                  ref={
+                    group.id === "portrait-suite"
+                      ? portraitCategoryRef
+                      : undefined
+                  }
+                  data-bg-example-category={group.id}
+                  className="mb-3 last:mb-0"
+                >
                   <p className="mb-2 text-[16px] font-bold tracking-wide text-slate-900 sm:text-[17px] [word-break:keep-all]">
                     {group.labelKo}
                   </p>
@@ -694,18 +729,24 @@ export default function SpecSettingsPanel({
           <ControlBarDropdown
             compact
             dense={compactSpecToolbar}
-            selected={fieldSelected}
+            selected={!portraitPurposeLock && fieldSelected}
             label={cs.specBg}
             value={
-              bgPresetId
-                ? cs.bgPresets[bgPresetId] ?? fieldById(bgPresetId)?.label
-                : undefined
+              portraitPurposeLock
+                ? undefined
+                : bgPresetId
+                  ? cs.bgPresets[bgPresetId] ?? fieldById(bgPresetId)?.label
+                  : undefined
             }
-            open={openKey === "bg"}
-            onOpenChange={(v) => setOpenKey(v ? "bg" : null)}
+            open={!portraitPurposeLock && openKey === "bg"}
+            onOpenChange={(v) => {
+              if (portraitPurposeLock) return;
+              setOpenKey(v ? "bg" : null);
+            }}
             menuMinWidth={280}
             menuMaxWidth={640}
             menuAnchorSelector="[data-spec-row]"
+            disabled={portraitPurposeLock}
           >
             <div className="max-h-[min(60vh,28rem)] overflow-y-auto overscroll-contain p-2 sm:p-2.5">
               {FIELD_CATEGORIES.map((group) => (

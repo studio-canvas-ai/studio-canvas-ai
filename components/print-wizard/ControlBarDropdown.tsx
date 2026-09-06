@@ -92,6 +92,8 @@ type ControlBarDropdownProps = {
   dense?: boolean;
   /** Option chosen — distinct from menu open state. */
   selected?: boolean;
+  /** Soft-disable trigger (e.g. Screen-26 portrait purpose locks 분야). */
+  disabled?: boolean;
 };
 
 /**
@@ -112,6 +114,7 @@ export default function ControlBarDropdown({
   compact = false,
   dense = false,
   selected = false,
+  disabled = false,
 }: ControlBarDropdownProps) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -160,7 +163,11 @@ export default function ControlBarDropdown({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={value ? `${label} ${value}` : label}
-        onClick={() => onOpenChange(!open)}
+        disabled={disabled}
+        onClick={() => {
+          if (disabled) return;
+          onOpenChange(!open);
+        }}
         className={`inline-flex max-w-full items-center text-left font-semibold transition ${
           compact
             ? dense
@@ -170,7 +177,9 @@ export default function ControlBarDropdown({
                 fullWidth ? "w-full" : "max-w-full"
               }`
         } ${
-          open
+          disabled
+            ? "cursor-not-allowed border border-slate-200 bg-slate-100 text-slate-400 opacity-60 shadow-none"
+            : open
             ? "border border-amber-300 bg-yellow-50 text-slate-800 shadow-sm ring-1 ring-amber-200/80"
             : selected
               ? "border border-indigo-400 bg-indigo-50 text-indigo-900 shadow-sm ring-1 ring-indigo-300/70"

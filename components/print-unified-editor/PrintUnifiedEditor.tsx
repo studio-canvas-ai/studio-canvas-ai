@@ -95,9 +95,12 @@ import { PRINT_WIZARD_SESSION_KEY } from "@/lib/printWizardTypes";
 import { toDisplayImageSrc } from "@/lib/resultSession";
 import type { TextLayer } from "@/lib/thumbnailStyles";
 import {
-  emptyVisualStyleSelection,
+  imageStyleIdForPurpose,
+  purposeUseIdForStyle,
+  PURPOSE_GENERAL_STYLE_ID,
   resolveVisualStylePreset,
 } from "@/lib/ai/visualStylePresets";
+import { isPortraitPurposeUse } from "@/lib/printPortraitPurpose";
 import { mapLayoutPlanToCanvasLayers } from "@/lib/ai/printLayoutEngine";
 import { requestGenerateLayout } from "@/lib/ai/requestGenerateLayout";
 
@@ -544,14 +547,33 @@ export default function PrintUnifiedEditor() {
           );
           break;
         case "style":
+          // Reset → purpose-linked default tag (증명사진/화보/sns or 통합 표기).
           next = markSpecPick(
-            { ...next, visualStyle: emptyVisualStyleSelection() },
+            {
+              ...next,
+              visualStyle: {
+                imageStyleId: imageStyleIdForPurpose(next.useId),
+                moodStyleId: null,
+              },
+            },
             "style",
-            false
+            true
           );
           break;
         case "use":
-          next = markSpecPick({ ...next, useId: "flyer" }, "use", false);
+          next = markSpecPick(
+            {
+              ...next,
+              useId: "flyer",
+              visualStyle: {
+                imageStyleId: PURPOSE_GENERAL_STYLE_ID,
+                moodStyleId: null,
+              },
+            },
+            "use",
+            false
+          );
+          next = markSpecPick(next, "style", true);
           break;
         case "prompt":
           next = { ...next, bgKeyword: "" };
@@ -1010,61 +1032,82 @@ export default function PrintUnifiedEditor() {
           ? `${s.customSize.width}×${s.customSize.height}${s.customSize.unit}`
           : format.label || "A4";
 
-      // 1) Gemini Magic Layout — required (no soft-fail to background-only).
-      const plan = await requestGenerateLayout({
-        formatLabel,
-        styleLabel: stylePreset?.labelKo || "모던",
-        useLabel: use.label || "전단지",
-        backgroundFieldLabel: field?.label || field?.keyword || "일반",
-        categoryLabel: fieldCategory?.label,
-        prompt,
-        canvasWidth: stage.w,
-        canvasHeight: stage.h,
-        pageIndex,
-        pageCount: s.pageCount || 1,
-      });
-      const mapped = mapLayoutPlanToCanvasLayers(plan, stage.w, stage.h, {
-        styleLabel: stylePreset?.labelKo || "모던",
-        useLabel: use.label || "전단지",
-        backgroundFieldLabel: field?.label || field?.keyword || "일반",
-        categoryLabel: fieldCategory?.label,
-        prompt,
-      });
-      if (!mapped.textLayers.length && !mapped.decoLayers.length) {
-        throw new Error(
-          "레이아웃 요소가 비어 있습니다. 옵션/프롬프트를 확인한 뒤 다시 생성해 주세요."
+      const portraitPurpose = isPortraitPurposeUse(s.useId);
+      let url = "";
+      let textPages = resizeBlankIsolatedPages(
+        s.textLayersByPage,
+        s.pageCount
+      );
+      let decoPages = resizeDecoPages(s.decoLayersByPage, s.pageCount);
+      const photoPages = resizePhotoPages(s.photoLayersByPage, s.pageCount).map(
+        (page, i) => (i === pageIndex ? [] : page)
+      );
+
+      if (portraitPurpose) {
+        // 증명사진/화보/SNS: background only — block Magic Layout text templates.
+        url = await generatePrintBackgroundDataUrl({
+          keyword: prompt,
+          aspect,
+          pageIndex,
+          pageCount: s.pageCount || 1,
+          formatLabel,
+          useLabel: use.label || "전단지",
+          imageStyleId: s.visualStyle?.imageStyleId,
+          moodStyleId: s.visualStyle?.moodStyleId,
+        });
+      } else {
+        // 1) Gemini Magic Layout — required (no soft-fail to background-only).
+        const plan = await requestGenerateLayout({
+          formatLabel,
+          styleLabel: stylePreset?.labelKo || "모던",
+          useLabel: use.label || "전단지",
+          backgroundFieldLabel: field?.label || field?.keyword || "일반",
+          categoryLabel: fieldCategory?.label,
+          prompt,
+          canvasWidth: stage.w,
+          canvasHeight: stage.h,
+          pageIndex,
+          pageCount: s.pageCount || 1,
+        });
+        const mapped = mapLayoutPlanToCanvasLayers(plan, stage.w, stage.h, {
+          styleLabel: stylePreset?.labelKo || "모던",
+          useLabel: use.label || "전단지",
+          backgroundFieldLabel: field?.label || field?.keyword || "일반",
+          categoryLabel: fieldCategory?.label,
+          prompt,
+        });
+        if (!mapped.textLayers.length && !mapped.decoLayers.length) {
+          throw new Error(
+            "레이아웃 요소가 비어 있습니다. 옵션/프롬프트를 확인한 뒤 다시 생성해 주세요."
+          );
+        }
+
+        // 2) Fal background from Gemini bg_prompt.
+        url = await generatePrintBackgroundDataUrl({
+          keyword: plan.bg_prompt,
+          directEnglishPrompt: plan.bg_prompt,
+          aspect,
+          pageIndex,
+          pageCount: s.pageCount || 1,
+          formatLabel,
+          useLabel: use.label || "전단지",
+          imageStyleId: s.visualStyle?.imageStyleId,
+          moodStyleId: s.visualStyle?.moodStyleId,
+        });
+
+        textPages = textPages.map((page, i) =>
+          i === pageIndex ? mapped.textLayers : page
+        );
+        decoPages = decoPages.map((page, i) =>
+          i === pageIndex ? mapped.decoLayers : page
         );
       }
 
-      // 2) Fal background from Gemini bg_prompt.
-      const url = await generatePrintBackgroundDataUrl({
-        keyword: plan.bg_prompt,
-        directEnglishPrompt: plan.bg_prompt,
-        aspect,
-        pageIndex,
-        pageCount: s.pageCount || 1,
-        formatLabel,
-        useLabel: use.label || "전단지",
-        imageStyleId: s.visualStyle?.imageStyleId,
-        moodStyleId: s.visualStyle?.moodStyleId,
-      });
-
-      // 3) Atomic inject: background + all layout layers on the target page.
+      // 3) Atomic inject: background (+ layout layers when not portrait purpose).
       const urls = Array.from({ length: s.pageCount }, (_, i) =>
         s.backgroundUrls?.[i] ?? (i === 0 ? s.backgroundUrl ?? "" : "")
       );
       urls[pageIndex] = url;
-
-      const textPages = resizeBlankIsolatedPages(
-        s.textLayersByPage,
-        s.pageCount
-      ).map((page, i) => (i === pageIndex ? mapped.textLayers : page));
-      const decoPages = resizeDecoPages(s.decoLayersByPage, s.pageCount).map(
-        (page, i) => (i === pageIndex ? mapped.decoLayers : page)
-      );
-      const photoPages = resizePhotoPages(s.photoLayersByPage, s.pageCount).map(
-        (page, i) => (i === pageIndex ? [] : page)
-      );
 
       patch({
         backgroundUrls: urls,
@@ -1078,7 +1121,8 @@ export default function PrintUnifiedEditor() {
         photoLayersByPage: photoPages,
       });
 
-      const firstText = mapped.textLayers.find((layer) =>
+      const pageTexts = textPages[pageIndex] ?? [];
+      const firstText = pageTexts.find((layer) =>
         Boolean(String(layer.text || "").replace(/\u200B/g, "").trim())
       );
       // activatePage clears selection — set page then re-select main text.
@@ -1319,9 +1363,30 @@ export default function PrintUnifiedEditor() {
           )
         )
       }
-      onUseChange={(id: PrintUseId) =>
-        patch(markSpecPick({ ...stateRef.current, useId: id }, "use"))
-      }
+      onUseChange={(id: PrintUseId) => {
+        const styleId = imageStyleIdForPurpose(id);
+        const portrait = isPortraitPurposeUse(id);
+        patch(
+          markSpecPick(
+            markSpecPick(
+              {
+                ...stateRef.current,
+                useId: id,
+                // Portrait purposes: clear 분야 — not used for generation.
+                bgPresetId: portrait ? null : stateRef.current.bgPresetId,
+                visualStyle: {
+                  ...stateRef.current.visualStyle,
+                  imageStyleId: styleId,
+                  moodStyleId: null,
+                },
+              },
+              "use"
+            ),
+            "style",
+            true
+          )
+        );
+      }}
       onPageCountChange={(count: PrintPageCount) => {
         patch({
           ...markSpecPick({ ...stateRef.current, pageCount: count }, "pages"),
@@ -1347,16 +1412,21 @@ export default function PrintUnifiedEditor() {
       }
       onMainPromptChange={(value) => patch({ mainPrompt: value })}
       onVisualStyleChange={(visualStyle) => {
-        const hasStyle = Boolean(
-          visualStyle.imageStyleId || visualStyle.moodStyleId
-        );
-        patch(
-          markSpecPick(
-            { ...stateRef.current, visualStyle },
-            "style",
-            hasStyle
-          )
-        );
+        const styleId =
+          visualStyle.imageStyleId ||
+          imageStyleIdForPurpose(stateRef.current.useId);
+        const linkedUse = purposeUseIdForStyle(styleId);
+        let next: PrintWizardState = {
+          ...stateRef.current,
+          visualStyle: {
+            imageStyleId: styleId,
+            moodStyleId: visualStyle.moodStyleId,
+          },
+        };
+        if (linkedUse) {
+          next = markSpecPick({ ...next, useId: linkedUse }, "use", true);
+        }
+        patch(markSpecPick(next, "style", true));
       }}
       onClearSpecTag={clearSpecTag}
     />

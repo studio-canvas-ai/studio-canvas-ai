@@ -130,6 +130,36 @@ export const IMAGE_STYLE_PRESETS: VisualStylePreset[] = [
     modifiers:
       "Professional studio ID photo, clean solid color background, studio soft lighting, passport-style head-and-shoulders framing, even exposure, natural skin, no beauty distortion, preserve exact facial identity",
   },
+  {
+    id: "lookbook-studio",
+    category: "image",
+    labelKo: "화보용",
+    hintKo: "화보·매거진 톤 인물 컷",
+    labelEn: "Lookbook Studio",
+    hintEn: "editorial lookbook portrait tone",
+    modifiers:
+      "editorial lookbook portrait, magazine fashion photography, soft natural light, refined color grade, full-scene environmental portrait, photorealistic skin and fabric",
+  },
+  {
+    id: "sns-studio",
+    category: "image",
+    labelKo: "sns용",
+    hintKo: "프로필·SNS 피드용 컷",
+    labelEn: "SNS Studio",
+    hintEn: "profile / social feed portrait",
+    modifiers:
+      "social media profile portrait, clean lifestyle feed photo, bright approachable lighting, square-friendly composition, photorealistic, natural expression",
+  },
+  {
+    id: "purpose-general",
+    category: "image",
+    labelKo: "증명사진,화보,sns용",
+    hintKo: "용도 미지정 · 통합 스타일 표기",
+    labelEn: "ID / Lookbook / SNS",
+    hintEn: "general portrait style tag",
+    modifiers:
+      "versatile portrait photography suitable for ID photo, lookbook, or social profile use, clean lighting, photorealistic",
+  },
 ];
 
 /** Lighting & mood category */
@@ -178,6 +208,52 @@ export type VisualStyleSelection = {
 
 export function emptyVisualStyleSelection(): VisualStyleSelection {
   return { imageStyleId: null, moodStyleId: null };
+}
+
+/** Default style tag when purpose is not 증명사진/화보/SNS. */
+export const PURPOSE_STYLE_TAG_DEFAULT = "증명사진,화보,sns용";
+export const PURPOSE_GENERAL_STYLE_ID = "purpose-general";
+
+const USE_TO_STYLE_ID: Record<string, string> = {
+  "id-photo": "id-photo-studio",
+  lookbook: "lookbook-studio",
+  sns: "sns-studio",
+};
+
+const USE_TO_STYLE_TAG: Record<string, string> = {
+  "id-photo": "증명사진용",
+  lookbook: "화보용",
+  sns: "sns용",
+  증명사진: "증명사진용",
+  화보: "화보용",
+  SNS: "sns용",
+  "프로필 / SNS": "sns용",
+};
+
+/** Map 용도 → style preset id (Screen-26 purpose ↔ style tag sync). */
+export function imageStyleIdForPurpose(
+  useId: string | null | undefined
+): string {
+  if (!useId) return PURPOSE_GENERAL_STYLE_ID;
+  return USE_TO_STYLE_ID[useId] ?? PURPOSE_GENERAL_STYLE_ID;
+}
+
+/** Map 용도/라벨 → style tag display text. */
+export function styleTagLabelForPurpose(
+  useIdOrLabel: string | null | undefined
+): string {
+  if (!useIdOrLabel) return PURPOSE_STYLE_TAG_DEFAULT;
+  return USE_TO_STYLE_TAG[useIdOrLabel] ?? PURPOSE_STYLE_TAG_DEFAULT;
+}
+
+/** Reverse: purpose-bound style → matching use id (or null). */
+export function purposeUseIdForStyle(
+  imageStyleId: string | null | undefined
+): "id-photo" | "lookbook" | "sns" | null {
+  if (imageStyleId === "id-photo-studio") return "id-photo";
+  if (imageStyleId === "lookbook-studio") return "lookbook";
+  if (imageStyleId === "sns-studio") return "sns";
+  return null;
 }
 
 export function resolveVisualStylePreset(

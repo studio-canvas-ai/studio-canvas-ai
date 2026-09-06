@@ -3,12 +3,18 @@
  * UI label (Korean + hint in parentheses) maps to English prompt for bgKeyword.
  */
 
+import {
+  isPortraitPurposeUse,
+  PORTRAIT_PURPOSE_BG_CATEGORY_ID,
+} from "@/lib/printPortraitPurpose";
+
 export type BgExampleCategoryId =
   | "traditional"
   | "nature"
   | "minimal"
   | "luxury"
-  | "studio";
+  | "studio"
+  | "portrait-suite";
 
 export type BgExamplePreset = {
   id: string;
@@ -972,6 +978,48 @@ export const BG_EXAMPLE_CATEGORIES: readonly BgExampleCategory[] = [
       ),
     ],
   },
+  {
+    id: "portrait-suite",
+    labelKo: "증명사진,화보,sns",
+    presets: [
+      p(
+        "port-id-white",
+        "증명사진 흰배경",
+        "단색 스튜디오 · 인물 고정용",
+        "Clean solid white studio backdrop for ID photo, even soft lighting, no props, empty negative space"
+      ),
+      p(
+        "port-id-light-gray",
+        "증명사진 연그레이",
+        "밝은 회색 스튜디오 배경",
+        "Light gray seamless studio backdrop for passport ID photo, soft even key light"
+      ),
+      p(
+        "port-lookbook-soft",
+        "화보 소프트 스튜디오",
+        "매거진 톤 소프트 조명",
+        "Editorial lookbook soft studio lighting, magazine portrait backdrop, gentle gradient"
+      ),
+      p(
+        "port-lookbook-editorial",
+        "화보 에디토리얼",
+        "패션 화보 드라마틱 음영",
+        "Fashion lookbook editorial backdrop, dramatic soft shadows, premium magazine mood"
+      ),
+      p(
+        "port-sns-bright",
+        "SNS 브라이트",
+        "프로필 피드용 화사한 배경",
+        "Bright clean social profile backdrop, airy soft daylight, feed-friendly pastel wash"
+      ),
+      p(
+        "port-sns-lifestyle",
+        "SNS 라이프스타일",
+        "일상 감성 프로필 배경",
+        "Lifestyle social media backdrop, casual warm ambient light, approachable portrait setting"
+      ),
+    ],
+  },
 ] as const;
 
 /** Single-select: set preset prompt with trailing comma-space for continued typing. */
@@ -1000,6 +1048,16 @@ export function findSelectedBgExamplePreset(
     }
   }
   return null;
+}
+
+/** Screen-26: portrait purposes only see 「증명사진,화보,sns」 background category. */
+export function bgExampleCategoriesForUse(
+  useId: string | null | undefined
+): readonly BgExampleCategory[] {
+  if (!isPortraitPurposeUse(useId)) return BG_EXAMPLE_CATEGORIES;
+  return BG_EXAMPLE_CATEGORIES.filter(
+    (c) => c.id === PORTRAIT_PURPOSE_BG_CATEGORY_ID
+  );
 }
 
 export function isBgExamplePresetSelected(
