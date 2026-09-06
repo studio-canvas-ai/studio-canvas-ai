@@ -29,6 +29,13 @@ export const maxDuration = 120;
 
 const PORTRAIT_CREDIT = FEATURE_CREDIT_COST.portraitGenerative;
 
+/** Hard lock — indoor studio only for every Screen-26 FaceID purpose. */
+const STUDIO_BACKGROUND_LOCK =
+  "Indoor professional photo studio setting, clean solid color wall backdrop, soft studio lighting, studio portrait, minimalist background, absolutely no outdoor scenery, no nature, no mountains, no landscape";
+
+const STUDIO_NEGATIVE_LOCK =
+  "outdoor, outdoors, nature, mountains, landscape, beach, forest, street, park, sky, trees, scenery, environmental background, location plate, travel photo";
+
 type Body = {
   /** Uploaded selfie / identity — https or data URI. */
   imageUrl?: string;
@@ -155,15 +162,29 @@ export async function POST(req: Request) {
         raw.clientRequestId.trim().slice(0, 80)) ||
       newRequestId();
 
-    const lockedPrompt = [userPrompt, portraitAiPromptLock(purpose)]
+    const lockedPrompt = [
+      userPrompt,
+      portraitAiPromptLock(purpose),
+      STUDIO_BACKGROUND_LOCK,
+    ]
       .filter(Boolean)
       .join(" ");
 
     const built = buildAtomicLookbookPrompt({
       userPrompt: lockedPrompt,
-      mode: purpose === "id-photo" ? "subject_studio" : "base_scene",
+      // Always subject_studio framing so InstantID stays on clean studio plate.
+      mode: "subject_studio",
       requestId,
     });
+
+    const falPrompt = [built.prompt, STUDIO_BACKGROUND_LOCK]
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const falNegative = [built.negativePrompt, STUDIO_NEGATIVE_LOCK]
+      .join(", ")
+      .replace(/\s+/g, " ")
+      .trim();
 
     console.info("[api/generate-photo-ai] start", {
       requestId,
@@ -176,13 +197,13 @@ export async function POST(req: Request) {
           return "invalid";
         }
       })(),
-      promptPreview: built.prompt.slice(0, 140),
+      promptPreview: falPrompt.slice(0, 160),
     });
 
     const result = await runFalInstantId({
       face_image_url: faceImageUrl,
-      prompt: built.prompt,
-      negative_prompt: built.negativePrompt,
+      prompt: falPrompt,
+      negative_prompt: falNegative,
       ip_adapter_scale: 0.85,
       identity_controlnet_conditioning_scale: 0.85,
       enhance_face_region: true,
@@ -229,7 +250,7 @@ export async function POST(req: Request) {
       requestId,
       mode: purpose,
       purpose,
-      falPrompt: built.prompt,
+      falPrompt,
       amount: PORTRAIT_CREDIT,
       remaining: debit.remaining,
       usage: snapshotPlanUsage(debit.user),

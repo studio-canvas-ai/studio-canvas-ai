@@ -70,6 +70,7 @@ import {
 import { compositePrintWizardPageBlob, printWizardHasExportableFrame } from "@/lib/printWizardComposite";
 import {
   createPrintPhotoLayerFromFile,
+  createPrintPhotoLayerFromSrc,
   resizePhotoPages,
 } from "@/lib/printWizardPhotoLayers";
 import {
@@ -113,9 +114,7 @@ import { requestGenerateLayout } from "@/lib/ai/requestGenerateLayout";
 import { requestGeneratePhotoAi } from "@/lib/requestGeneratePhotoAi";
 import {
   LOOKBOOK_SUBJECT_LAYER_ID,
-  cleanScenicBackgroundFromPlate,
   createLookbookSubjectLayer,
-  cutoutLookbookSubject,
   generateLookbookScenicBackground,
   replaceSubjectLayerCutout,
 } from "@/lib/photoLookbookDualLayer";
@@ -1178,46 +1177,25 @@ export default function PrintUnifiedEditor() {
           prompt: [prompt, portraitAiPromptLock(purpose)].join(" "),
         });
 
-        const formatMeta = formatById(s.formatId);
-        const aspectRatio =
-          s.formatId === "free" && s.customSize
-            ? `${s.customSize.width}:${s.customSize.height}`
-            : formatMeta.label.includes(":")
-              ? formatMeta.label
-              : s.formatId === "id-photo"
-                ? "3.5:4.5"
-                : s.formatId.startsWith("a")
-                  ? "3:4"
-                  : "9:16";
+        // Single asset bind: one full InstantID plate as the photo layer.
+        // Avoid scenic+cutout dual stack (overlapping dashed boxes / ghost frames).
+        const nextSubject = await createPrintPhotoLayerFromSrc(plateUrl, {
+          mode: "original",
+          stageW: stage.w,
+          stageH: stage.h,
+          stackIndex: 0,
+          id: LOOKBOOK_SUBJECT_LAYER_ID,
+          lookbookPortraitScale: true,
+          identitySrc: identity,
+        });
 
-        const [scenicUrl, cutoutUrl] = await Promise.all([
-          cleanScenicBackgroundFromPlate({
-            plateUrl,
-            aspectRatio,
-            imageStyleId: s.visualStyle?.imageStyleId,
-            moodStyleId: s.visualStyle?.moodStyleId,
-          }).catch(() => plateUrl),
-          cutoutLookbookSubject(plateUrl),
-        ]);
+        const studioPlate = await createSolidBackgroundHttps({
+          color: "#F3F4F6",
+          width: stage.w,
+          height: stage.h,
+        });
 
-        const nextSubject =
-          subjectLayer?.src?.trim()
-            ? await replaceSubjectLayerCutout(
-                subjectLayer,
-                cutoutUrl,
-                stage.w,
-                stage.h,
-                identity
-              )
-            : await createLookbookSubjectLayer(
-                cutoutUrl,
-                stage.w,
-                stage.h,
-                LOOKBOOK_SUBJECT_LAYER_ID,
-                identity
-              );
-
-        url = scenicUrl;
+        url = studioPlate;
         textPages = resizeBlankIsolatedPages(undefined, s.pageCount);
         decoPages = Array.from({ length: s.pageCount }, () => []);
         photoPages = photoPages.map((page, i) =>
@@ -1312,12 +1290,20 @@ export default function PrintUnifiedEditor() {
         setCurrentPage(pageIndex + 1);
         setActiveTextLayerId(null);
         setActiveDecoLayerId(null);
-        const photos = photoPages[pageIndex] ?? [];
-        setActivePhotoLayerId(photos[0]?.id ?? null);
-        if (keepOriginal) {
-          showToast("배경만 교체했습니다. 원본 인물은 그대로입니다.", "success");
-        } else if (portraitAi) {
+        // Portrait AI: clear selection so dashed drag boxes do not linger on the asset.
+        // Keep-original: leave cutout selected for fine repositioning.
+        if (portraitAi) {
+          setActivePhotoLayerId(null);
           showToast("AI 인물 이미지를 캔버스에 반영했습니다.", "success");
+        } else {
+          const photos = photoPages[pageIndex] ?? [];
+          setActivePhotoLayerId(photos[0]?.id ?? null);
+          if (keepOriginal) {
+            showToast(
+              "배경만 교체했습니다. 원본 인물은 그대로입니다.",
+              "success"
+            );
+          }
         }
       } else {
         const pageTexts = textPages[pageIndex] ?? [];
