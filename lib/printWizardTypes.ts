@@ -884,6 +884,11 @@ export type PrintPhotoLayer = {
   id: string;
   src: string;
   photoKind: "original" | "cutout";
+  /**
+   * Immutable face reference for Screen-26 FaceID.
+   * Survives rembg / AI cutout replacement so vault faces cannot hijack identity.
+   */
+  identitySrc?: string;
   /** Normalized stage fractions (0–1). */
   x: number;
   y: number;

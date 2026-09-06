@@ -409,6 +409,8 @@ export async function createPrintPhotoLayerFromFile(
   return {
     id: newPhotoId(),
     src,
+    /** Always the user upload — used as FaceID even after rembg/AI replace. */
+    identitySrc: dataUrl,
     photoKind,
     trim,
     ...boxToPhoto(box, opts.stageW, opts.stageH),
@@ -426,6 +428,8 @@ export async function createPrintPhotoLayerFromSrc(
     id?: string;
     /** Use lookbook portrait scale (≥50% stage height). */
     lookbookPortraitScale?: boolean;
+    /** Preserve FaceID source across cutout/AI swaps. */
+    identitySrc?: string;
   }
 ): Promise<PrintPhotoLayer> {
   const src = srcInput.trim();
@@ -449,9 +453,11 @@ export async function createPrintPhotoLayerFromSrc(
         opts.stageH,
         opts.stackIndex ?? 0
       );
+  const identitySrc = (opts.identitySrc || src).trim() || undefined;
   return {
     id: opts.id || newPhotoId(),
     src,
+    ...(identitySrc ? { identitySrc } : {}),
     photoKind,
     trim,
     ...boxToPhoto(box, opts.stageW, opts.stageH),

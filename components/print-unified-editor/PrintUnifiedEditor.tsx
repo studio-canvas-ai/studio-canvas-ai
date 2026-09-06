@@ -126,7 +126,7 @@ import {
   parseIdPhotoBackgroundColor,
   shouldUseSolidIdBackground,
 } from "@/lib/photoIdPhotoBackground";
-import { resolvePhotoIdentitySrc } from "@/lib/photoInpaintScene";
+import { resolveScreen26PhotoIdentitySrc } from "@/lib/photoInpaintScene";
 
 const AiTemplateStudio = dynamic(
   () => import("@/components/AiTemplateStudio"),
@@ -1073,7 +1073,9 @@ export default function PrintUnifiedEditor() {
         const layers = photoPages[pageIndex] ?? [];
         const subjectLayer = layers[0] ?? null;
         const identity =
-          resolvePhotoIdentitySrc(layers) || subjectLayer?.src?.trim() || null;
+          resolveScreen26PhotoIdentitySrc(layers) ||
+          subjectLayer?.src?.trim() ||
+          null;
         if (!identity) {
           throw new Error(
             "사진을 먼저 업로드해 주세요. 원본유지 모드는 업로드된 인물 사진이 필요합니다."
@@ -1129,13 +1131,15 @@ export default function PrintUnifiedEditor() {
                 subjectLayer,
                 cutoutHttps,
                 stage.w,
-                stage.h
+                stage.h,
+                identity
               )
             : await createLookbookSubjectLayer(
                 cutoutHttps,
                 stage.w,
                 stage.h,
-                LOOKBOOK_SUBJECT_LAYER_ID
+                LOOKBOOK_SUBJECT_LAYER_ID,
+                identity
               );
 
         url = scenicHttps;
@@ -1149,7 +1153,9 @@ export default function PrintUnifiedEditor() {
         const layers = photoPages[pageIndex] ?? [];
         const subjectLayer = layers[0] ?? null;
         const identity =
-          resolvePhotoIdentitySrc(layers) || subjectLayer?.src?.trim() || null;
+          resolveScreen26PhotoIdentitySrc(layers) ||
+          subjectLayer?.src?.trim() ||
+          null;
         if (!identity) {
           throw new Error(
             "사진을 먼저 업로드해 주세요. AI 인물 생성에는 얼굴이 보이는 원본이 필요합니다."
@@ -1158,6 +1164,14 @@ export default function PrintUnifiedEditor() {
         showToast("AI 인물 스튜디오 생성 중…", "info");
 
         const purpose = s.useId as PortraitAiPurposeUseId;
+        console.info("[unified-editor] FaceID identity source", {
+          purpose,
+          fromIdentitySrc: Boolean(
+            layers.some((l) => l.identitySrc?.trim())
+          ),
+          layerId: subjectLayer?.id ?? null,
+          preview: identity.slice(0, 48),
+        });
         const { imageUrl: plateUrl } = await requestGeneratePhotoAi({
           identityUrl: identity,
           purpose,
@@ -1192,13 +1206,15 @@ export default function PrintUnifiedEditor() {
                 subjectLayer,
                 cutoutUrl,
                 stage.w,
-                stage.h
+                stage.h,
+                identity
               )
             : await createLookbookSubjectLayer(
                 cutoutUrl,
                 stage.w,
                 stage.h,
-                LOOKBOOK_SUBJECT_LAYER_ID
+                LOOKBOOK_SUBJECT_LAYER_ID,
+                identity
               );
 
         url = scenicUrl;

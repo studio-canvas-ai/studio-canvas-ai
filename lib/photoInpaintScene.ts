@@ -197,9 +197,39 @@ export type PhotoInpaintScenePayload = {
 };
 
 /**
- * Pick identity face for lookbook / inpaint.
- * Priority: active trained vault → newest trained → non-generated canvas layer → upload vault.
- * Never use the AI-generated lookbook subject layer (causes face/outfit bleed).
+ * Screen-26 FaceID identity — canvas upload ONLY.
+ * Never reads localStorage trained/active vault or upload-vault fallbacks,
+ * so a prior face (e.g. previous female session) cannot override the current selfie.
+ *
+ * Priority:
+ * 1) layer.identitySrc (immutable original upload)
+ * 2) non-generated canvas layer src
+ * 3) any canvas layer src (regen after lookbook-subject replace)
+ */
+export function resolveScreen26PhotoIdentitySrc(
+  photoLayers: PrintPhotoLayer[]
+): string | null {
+  for (const layer of photoLayers) {
+    const locked = layer?.identitySrc?.trim();
+    if (locked) return locked;
+  }
+  for (const layer of photoLayers) {
+    const src = layer?.src?.trim();
+    if (!src) continue;
+    if (layer.id === "lookbook-subject") continue;
+    return src;
+  }
+  for (const layer of photoLayers) {
+    const src = layer?.src?.trim();
+    if (src) return src;
+  }
+  return null;
+}
+
+/**
+ * Pick identity face for lookbook / inpaint (photo product wizard).
+ * Priority: active trained vault → canvas layer → upload vault.
+ * Screen-26 MUST use resolveScreen26PhotoIdentitySrc instead — never this.
  */
 export function resolvePhotoIdentitySrc(
   photoLayers: PrintPhotoLayer[]

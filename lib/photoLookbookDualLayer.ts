@@ -101,16 +101,20 @@ export async function replaceSubjectLayerCutout(
   layer: PrintPhotoLayer,
   cutoutSrcInput: string,
   stageW?: number,
-  stageH?: number
+  stageH?: number,
+  identitySrc?: string
 ): Promise<PrintPhotoLayer> {
   const src = toDisplayImageSrc(cutoutSrcInput.trim());
   if (!src) throw new Error("cutout_src_empty");
   const trim = await measureOpaqueTrim(src);
+  const locked =
+    (identitySrc || layer.identitySrc || "").trim() || undefined;
   let next: PrintPhotoLayer = {
     ...layer,
     src,
     photoKind: "cutout",
     trim,
+    ...(locked ? { identitySrc: locked } : {}),
   };
   if (
     typeof stageW === "number" &&
@@ -131,7 +135,8 @@ export async function createLookbookSubjectLayer(
   cutoutHttpsOrDisplay: string,
   stageW: number,
   stageH: number,
-  id: string = LOOKBOOK_SUBJECT_LAYER_ID
+  id: string = LOOKBOOK_SUBJECT_LAYER_ID,
+  identitySrc?: string
 ): Promise<PrintPhotoLayer> {
   const src = toDisplayImageSrc(cutoutHttpsOrDisplay.trim());
   return createPrintPhotoLayerFromSrc(src, {
@@ -141,6 +146,7 @@ export async function createLookbookSubjectLayer(
     stackIndex: 0,
     id,
     lookbookPortraitScale: true,
+    identitySrc,
   });
 }
 
