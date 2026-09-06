@@ -13,9 +13,8 @@ export const FEATURE_CREDIT_COST = {
   /** AI promo image / background generation */
   aiBackground: 25,
   /**
-   * High-end FaceID / InstantID + ControlNet portrait generation.
-   * Mid of 15–20 directive range. Screen-26 Mode A/B UI stays hidden until
-   * this pool debit is live on `/api/ai/lookbook` (and related bridges).
+   * High-end FaceID / InstantID + ControlNet portrait generation (15–20 range mid).
+   * Debited on `/api/generate-photo-ai` and `/api/ai/lookbook`.
    */
   portraitGenerative: 18,
   /** Shorts hook auto-extract */

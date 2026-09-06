@@ -100,9 +100,33 @@ import {
   PURPOSE_GENERAL_STYLE_ID,
   resolveVisualStylePreset,
 } from "@/lib/ai/visualStylePresets";
-import { isPortraitPurposeUse } from "@/lib/printPortraitPurpose";
+import {
+  isIdPhotoKeepOriginalUse,
+  isPortraitAiPurposeUse,
+  isPortraitPurposeUse,
+  portraitAiPromptLock,
+  portraitKeepOriginalScenicLock,
+  type PortraitAiPurposeUseId,
+} from "@/lib/printPortraitPurpose";
 import { mapLayoutPlanToCanvasLayers } from "@/lib/ai/printLayoutEngine";
 import { requestGenerateLayout } from "@/lib/ai/requestGenerateLayout";
+import { requestGeneratePhotoAi } from "@/lib/requestGeneratePhotoAi";
+import {
+  LOOKBOOK_SUBJECT_LAYER_ID,
+  cleanScenicBackgroundFromPlate,
+  createLookbookSubjectLayer,
+  cutoutLookbookSubject,
+  generateLookbookScenicBackground,
+  replaceSubjectLayerCutout,
+} from "@/lib/photoLookbookDualLayer";
+import {
+  ID_PHOTO_STUDIO_LOCK,
+  createSolidBackgroundHttps,
+  cutoutOriginalIdentityOnly,
+  parseIdPhotoBackgroundColor,
+  shouldUseSolidIdBackground,
+} from "@/lib/photoIdPhotoBackground";
+import { resolvePhotoIdentitySrc } from "@/lib/photoInpaintScene";
 
 const AiTemplateStudio = dynamic(
   () => import("@/components/AiTemplateStudio"),
@@ -1021,6 +1045,10 @@ export default function PrintUnifiedEditor() {
     const pageContext = buildPagePrintAiContext(s, pageIndex).trim();
     const prompt = userTheme || pageContext || "elegant print design";
 
+    const keepOriginal = isIdPhotoKeepOriginalUse(s.useId);
+    const portraitAi = isPortraitAiPurposeUse(s.useId);
+    const portraitIsolated = isPortraitPurposeUse(s.useId);
+
     setGenerating(true);
     try {
       const aspect = resolvePrintAspect(s.formatId || "a4", s.customSize);
@@ -1032,22 +1060,155 @@ export default function PrintUnifiedEditor() {
           ? `${s.customSize.width}×${s.customSize.height}${s.customSize.unit}`
           : format.label || "A4";
 
-      const portraitPurpose = isPortraitPurposeUse(s.useId);
       let url = "";
       let textPages = resizeBlankIsolatedPages(
         s.textLayersByPage,
         s.pageCount
       );
       let decoPages = resizeDecoPages(s.decoLayersByPage, s.pageCount);
-      // Portrait: keep uploaded photo layers; Magic Layout path clears photos on target page.
-      const photoPages = portraitPurpose
-        ? resizePhotoPages(s.photoLayersByPage, s.pageCount)
-        : resizePhotoPages(s.photoLayersByPage, s.pageCount).map((page, i) =>
-            i === pageIndex ? [] : page
-          );
+      let photoPages = resizePhotoPages(s.photoLayersByPage, s.pageCount);
 
-      if (portraitPurpose) {
-        // Isolation only: background plate + existing photo — no FaceID / credit stubs.
+      // ── Keep-original ID photo: rembg + solid/studio plate (no FaceID) ──
+      if (keepOriginal) {
+        const layers = photoPages[pageIndex] ?? [];
+        const subjectLayer = layers[0] ?? null;
+        const identity =
+          resolvePhotoIdentitySrc(layers) || subjectLayer?.src?.trim() || null;
+        if (!identity) {
+          throw new Error(
+            "사진을 먼저 업로드해 주세요. 원본유지 모드는 업로드된 인물 사진이 필요합니다."
+          );
+        }
+        showToast("원본 인물 고정 · 누끼 및 배경만 교체 중…", "info");
+
+        const formatMeta = formatById(s.formatId);
+        const aspectRatio =
+          s.formatId === "free" && s.customSize
+            ? `${s.customSize.width}:${s.customSize.height}`
+            : formatMeta.label.includes(":")
+              ? formatMeta.label
+              : s.formatId === "id-photo"
+                ? "3.5:4.5"
+                : s.formatId.startsWith("a")
+                  ? "3:4"
+                  : "9:16";
+
+        const solidColor = parseIdPhotoBackgroundColor(prompt);
+        const useSolid = shouldUseSolidIdBackground({
+          useId: s.useId,
+          imageStyleId: s.visualStyle?.imageStyleId,
+          bgPrompt: prompt,
+        });
+
+        let scenicHttps: string;
+        if (useSolid || solidColor) {
+          scenicHttps = await createSolidBackgroundHttps({
+            color: solidColor || "#FFFFFF",
+            width: stage.w,
+            height: stage.h,
+          });
+        } else {
+          scenicHttps = await generateLookbookScenicBackground({
+            prompt: [
+              prompt,
+              portraitKeepOriginalScenicLock(),
+              ID_PHOTO_STUDIO_LOCK,
+            ]
+              .filter(Boolean)
+              .join(" "),
+            aspectRatio,
+            imageStyleId: s.visualStyle?.imageStyleId,
+            moodStyleId: s.visualStyle?.moodStyleId,
+          });
+        }
+
+        const cutoutHttps = await cutoutOriginalIdentityOnly(identity);
+        const nextSubject =
+          subjectLayer?.src?.trim()
+            ? await replaceSubjectLayerCutout(
+                subjectLayer,
+                cutoutHttps,
+                stage.w,
+                stage.h
+              )
+            : await createLookbookSubjectLayer(
+                cutoutHttps,
+                stage.w,
+                stage.h,
+                LOOKBOOK_SUBJECT_LAYER_ID
+              );
+
+        url = scenicHttps;
+        textPages = resizeBlankIsolatedPages(undefined, s.pageCount);
+        decoPages = Array.from({ length: s.pageCount }, () => []);
+        photoPages = photoPages.map((page, i) =>
+          i === pageIndex ? [nextSubject] : page
+        );
+      } else if (portraitAi) {
+        // ── AI FaceID: 증명사진 / 화보 / SNS → /api/generate-photo-ai ──
+        const layers = photoPages[pageIndex] ?? [];
+        const subjectLayer = layers[0] ?? null;
+        const identity =
+          resolvePhotoIdentitySrc(layers) || subjectLayer?.src?.trim() || null;
+        if (!identity) {
+          throw new Error(
+            "사진을 먼저 업로드해 주세요. AI 인물 생성에는 얼굴이 보이는 원본이 필요합니다."
+          );
+        }
+        showToast("AI 인물 스튜디오 생성 중…", "info");
+
+        const purpose = s.useId as PortraitAiPurposeUseId;
+        const { imageUrl: plateUrl } = await requestGeneratePhotoAi({
+          identityUrl: identity,
+          purpose,
+          prompt: [prompt, portraitAiPromptLock(purpose)].join(" "),
+        });
+
+        const formatMeta = formatById(s.formatId);
+        const aspectRatio =
+          s.formatId === "free" && s.customSize
+            ? `${s.customSize.width}:${s.customSize.height}`
+            : formatMeta.label.includes(":")
+              ? formatMeta.label
+              : s.formatId === "id-photo"
+                ? "3.5:4.5"
+                : s.formatId.startsWith("a")
+                  ? "3:4"
+                  : "9:16";
+
+        const [scenicUrl, cutoutUrl] = await Promise.all([
+          cleanScenicBackgroundFromPlate({
+            plateUrl,
+            aspectRatio,
+            imageStyleId: s.visualStyle?.imageStyleId,
+            moodStyleId: s.visualStyle?.moodStyleId,
+          }).catch(() => plateUrl),
+          cutoutLookbookSubject(plateUrl),
+        ]);
+
+        const nextSubject =
+          subjectLayer?.src?.trim()
+            ? await replaceSubjectLayerCutout(
+                subjectLayer,
+                cutoutUrl,
+                stage.w,
+                stage.h
+              )
+            : await createLookbookSubjectLayer(
+                cutoutUrl,
+                stage.w,
+                stage.h,
+                LOOKBOOK_SUBJECT_LAYER_ID
+              );
+
+        url = scenicUrl;
+        textPages = resizeBlankIsolatedPages(undefined, s.pageCount);
+        decoPages = Array.from({ length: s.pageCount }, () => []);
+        photoPages = photoPages.map((page, i) =>
+          i === pageIndex ? [nextSubject] : page
+        );
+      } else if (portraitIsolated) {
+        // Safety: any other isolated portrait path → background plate only.
         url = await generatePrintBackgroundDataUrl({
           keyword: prompt,
           aspect,
@@ -1061,6 +1222,11 @@ export default function PrintUnifiedEditor() {
         textPages = resizeBlankIsolatedPages(undefined, s.pageCount);
         decoPages = Array.from({ length: s.pageCount }, () => []);
       } else {
+        // Non-portrait: clear photos on target page for Magic Layout.
+        photoPages = photoPages.map((page, i) =>
+          i === pageIndex ? [] : page
+        );
+
         // 1) Gemini Magic Layout — required (no soft-fail to background-only).
         const plan = await requestGenerateLayout({
           formatLabel,
@@ -1126,12 +1292,17 @@ export default function PrintUnifiedEditor() {
         photoLayersByPage: photoPages,
       });
 
-      if (portraitPurpose) {
+      if (portraitIsolated) {
         setCurrentPage(pageIndex + 1);
         setActiveTextLayerId(null);
         setActiveDecoLayerId(null);
         const photos = photoPages[pageIndex] ?? [];
         setActivePhotoLayerId(photos[0]?.id ?? null);
+        if (keepOriginal) {
+          showToast("배경만 교체했습니다. 원본 인물은 그대로입니다.", "success");
+        } else if (portraitAi) {
+          showToast("AI 인물 이미지를 캔버스에 반영했습니다.", "success");
+        }
       } else {
         const pageTexts = textPages[pageIndex] ?? [];
         const firstText = pageTexts.find((layer) =>
@@ -1143,16 +1314,16 @@ export default function PrintUnifiedEditor() {
         setActivePhotoLayerId(null);
       }
     } catch (err) {
-      console.error("[unified-editor] Magic template generate failed", err);
+      console.error("[unified-editor] generate failed", err);
       window.alert(
         err instanceof Error
           ? err.message
-          : "AI 템플릿 생성에 실패했습니다. 잠시 후 다시 시도해 주세요."
+          : "AI 생성에 실패했습니다. 잠시 후 다시 시도해 주세요."
       );
     } finally {
       setGenerating(false);
     }
-  }, [generating, patch]);
+  }, [generating, patch, showToast]);
 
   const selectPage = useCallback(
     (page: number) => {

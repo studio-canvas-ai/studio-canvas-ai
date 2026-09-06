@@ -216,12 +216,14 @@ export const PURPOSE_GENERAL_STYLE_ID = "purpose-general";
 
 const USE_TO_STYLE_ID: Record<string, string> = {
   "id-photo": "id-photo-studio",
+  "id-photo-keep-original": "id-photo-studio",
   lookbook: "lookbook-studio",
   sns: "sns-studio",
 };
 
 const USE_TO_STYLE_TAG: Record<string, string> = {
   "id-photo": "증명사진용",
+  "id-photo-keep-original": "증명사진용",
   lookbook: "화보용",
   sns: "sns용",
   증명사진: "증명사진용",
