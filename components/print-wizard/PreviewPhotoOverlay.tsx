@@ -420,11 +420,11 @@ export default function PreviewPhotoOverlay({
                 src={layer.src}
                 alt=""
                 draggable={false}
-                className="pointer-events-none max-h-full max-w-full object-contain"
+                className="pointer-events-none h-full w-full object-contain"
                 style={
                   layer.trim
                     ? {
-                        /* Keep intrinsic ratio; trim only crops via object-position approx */
+                        /* Fill the bbox so resize scales the image with the container. */
                         objectFit: "contain",
                         objectPosition: `${
                           ((layer.trim.x + layer.trim.w / 2) * 100).toFixed(2)

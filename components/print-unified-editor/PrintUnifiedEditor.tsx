@@ -100,9 +100,33 @@ import {
   PURPOSE_GENERAL_STYLE_ID,
   resolveVisualStylePreset,
 } from "@/lib/ai/visualStylePresets";
-import { isPortraitPurposeUse } from "@/lib/printPortraitPurpose";
+import {
+  defaultPortraitStudioMode,
+  isPortraitPurposeUse,
+  portraitBasicScenicLock,
+  portraitGenerativePromptLock,
+  PORTRAIT_GENERATIVE_CREDIT_COST,
+  type PortraitStudioMode,
+} from "@/lib/printPortraitPurpose";
 import { mapLayoutPlanToCanvasLayers } from "@/lib/ai/printLayoutEngine";
 import { requestGenerateLayout } from "@/lib/ai/requestGenerateLayout";
+import {
+  createLookbookSubjectLayer,
+  generateLookbookBaseSceneDualLayer,
+  generateLookbookScenicBackground,
+  LOOKBOOK_SUBJECT_LAYER_ID,
+  replaceSubjectLayerCutout,
+} from "@/lib/photoLookbookDualLayer";
+import {
+  createSolidBackgroundHttps,
+  cutoutOriginalIdentityOnly,
+  ID_PHOTO_STUDIO_LOCK,
+  parseIdPhotoBackgroundColor,
+  shouldUseSolidIdBackground,
+} from "@/lib/photoIdPhotoBackground";
+import { resolvePhotoIdentitySrc } from "@/lib/photoInpaintScene";
+import { photoInpaintUi } from "@/lib/photoInpaintCopy";
+import { useI18n } from "@/components/I18nProvider";
 
 const AiTemplateStudio = dynamic(
   () => import("@/components/AiTemplateStudio"),
@@ -260,13 +284,16 @@ function hydrateInitialState(): PrintWizardState {
  */
 export default function PrintUnifiedEditor() {
   const { showToast } = useFeedback();
-  const { isAdmin } = useCredits();
+  const { isAdmin, consumeCredit } = useCredits();
+  const { locale } = useI18n();
   const [state, setState] = useState<PrintWizardState>(defaultPrintWizardState);
   const [hydrated, setHydrated] = useState(false);
   /** 0 until the user clicks a page tab — no canvas guides on first paint. */
   const [currentPage, setCurrentPage] = useState(0);
   const [zoom, setZoom] = useState<PrintUnifiedZoom>(1);
   const [generating, setGenerating] = useState(false);
+  const [portraitStudioMode, setPortraitStudioMode] =
+    useState<PortraitStudioMode>("basic");
   const [activeTextLayerId, setActiveTextLayerId] = useState<string | null>(
     null
   );
@@ -297,7 +324,9 @@ export default function PrintUnifiedEditor() {
   }, []);
 
   useEffect(() => {
-    setState(hydrateInitialState());
+    const initial = hydrateInitialState();
+    setState(initial);
+    setPortraitStudioMode(defaultPortraitStudioMode(initial.useId));
     setHydrated(true);
   }, []);
 
@@ -1021,6 +1050,29 @@ export default function PrintUnifiedEditor() {
     const pageContext = buildPagePrintAiContext(s, pageIndex).trim();
     const prompt = userTheme || pageContext || "elegant print design";
 
+    const portraitPurpose = isPortraitPurposeUse(s.useId);
+    const studioMode = portraitStudioMode;
+    const ui = photoInpaintUi(locale);
+
+    if (portraitPurpose) {
+      const layers =
+        resizePhotoPages(s.photoLayersByPage, s.pageCount)[pageIndex] ?? [];
+      const identity =
+        resolvePhotoIdentitySrc(layers) || layers[0]?.src?.trim() || null;
+      if (!identity) {
+        window.alert(
+          ui.needFace ||
+            "사진을 먼저 업로드해 주세요. 인물 사진이 필요합니다."
+        );
+        return;
+      }
+      if (studioMode === "generative") {
+        if (!consumeCredit(PORTRAIT_GENERATIVE_CREDIT_COST)) {
+          return;
+        }
+      }
+    }
+
     setGenerating(true);
     try {
       const aspect = resolvePrintAspect(s.formatId || "a4", s.customSize);
@@ -1032,7 +1084,154 @@ export default function PrintUnifiedEditor() {
           ? `${s.customSize.width}×${s.customSize.height}${s.customSize.unit}`
           : format.label || "A4";
 
-      const portraitPurpose = isPortraitPurposeUse(s.useId);
+      // ── Portrait photo mode: photo + background only (no Magic Layout text) ──
+      if (portraitPurpose) {
+        const photoPages = resizePhotoPages(s.photoLayersByPage, s.pageCount);
+        const layers = photoPages[pageIndex] ?? [];
+        const subjectLayer = layers[0] ?? null;
+        const hasSubject = Boolean(subjectLayer?.src?.trim());
+        const identity =
+          resolvePhotoIdentitySrc(layers) || subjectLayer?.src?.trim() || null;
+        if (!identity) {
+          window.alert(
+            ui.needFace ||
+              "사진을 먼저 업로드해 주세요. 인물 사진이 필요합니다."
+          );
+          return;
+        }
+
+        const formatMeta = formatById(s.formatId);
+        const aspectRatio =
+          s.formatId === "free" && s.customSize
+            ? `${s.customSize.width}:${s.customSize.height}`
+            : formatMeta.label.includes(":")
+              ? formatMeta.label
+              : s.formatId === "id-photo"
+                ? "3.5:4.5"
+                : s.formatId.startsWith("a")
+                  ? "3:4"
+                  : "9:16";
+        const styleOpts = {
+          aspectRatio,
+          imageStyleId: s.visualStyle?.imageStyleId,
+          moodStyleId: s.visualStyle?.moodStyleId,
+        };
+
+        let scenicHttps: string;
+        let nextSubject: PrintPhotoLayer;
+
+        if (studioMode === "basic") {
+          showToast("원본 인물 고정 · 배경만 교체 중…", "info");
+          const solidColor = parseIdPhotoBackgroundColor(prompt);
+          const useSolid = shouldUseSolidIdBackground({
+            useId: s.useId,
+            imageStyleId: s.visualStyle?.imageStyleId,
+            bgPrompt: prompt,
+          });
+          if (useSolid || solidColor) {
+            scenicHttps = await createSolidBackgroundHttps({
+              color: solidColor || "#FFFFFF",
+              width: stage.w,
+              height: stage.h,
+            });
+          } else {
+            scenicHttps = await generateLookbookScenicBackground({
+              prompt: [
+                prompt,
+                portraitBasicScenicLock(s.useId),
+                s.useId === "id-photo" ? ID_PHOTO_STUDIO_LOCK : "",
+              ]
+                .filter(Boolean)
+                .join(" "),
+              ...styleOpts,
+            });
+          }
+          const cutoutHttps = await cutoutOriginalIdentityOnly(identity);
+          nextSubject =
+            hasSubject && subjectLayer
+              ? await replaceSubjectLayerCutout(
+                  subjectLayer,
+                  cutoutHttps,
+                  stage.w,
+                  stage.h
+                )
+              : await createLookbookSubjectLayer(
+                  cutoutHttps,
+                  stage.w,
+                  stage.h,
+                  LOOKBOOK_SUBJECT_LAYER_ID
+                );
+        } else {
+          showToast("AI 고퀄 인물 스튜디오 생성 중…", "info");
+          const { scenicUrl, cutoutUrl } =
+            await generateLookbookBaseSceneDualLayer({
+              prompt: [prompt, portraitGenerativePromptLock(s.useId)].join(
+                " "
+              ),
+              identityUrl: identity,
+              ...styleOpts,
+            });
+          scenicHttps = scenicUrl;
+          nextSubject =
+            hasSubject && subjectLayer
+              ? await replaceSubjectLayerCutout(
+                  subjectLayer,
+                  cutoutUrl,
+                  stage.w,
+                  stage.h
+                )
+              : await createLookbookSubjectLayer(
+                  cutoutUrl,
+                  stage.w,
+                  stage.h,
+                  LOOKBOOK_SUBJECT_LAYER_ID
+                );
+        }
+
+        const displayScenic = (() => {
+          const raw = scenicHttps.trim();
+          if (!raw) return "";
+          const proxied = toDisplayImageSrc(raw);
+          return proxied.includes("?")
+            ? `${proxied}&_cb=${Date.now()}`
+            : `${proxied}?_cb=${Date.now()}`;
+        })();
+
+        const urls = Array.from({ length: s.pageCount }, (_, i) =>
+          s.backgroundUrls?.[i] ?? (i === 0 ? s.backgroundUrl ?? "" : "")
+        );
+        urls[pageIndex] = displayScenic;
+
+        const nextPhotoPages = photoPages.map((page, i) =>
+          i === pageIndex ? [nextSubject] : page
+        );
+        const blankText = resizeBlankIsolatedPages(undefined, s.pageCount);
+        const blankDeco = Array.from({ length: s.pageCount }, () => []);
+
+        patch({
+          backgroundUrls: urls,
+          backgroundUrl: urls[0] ?? null,
+          backgroundPansByPage: resizeBackgroundPans(
+            s.backgroundPansByPage,
+            s.pageCount
+          ),
+          textLayersByPage: blankText,
+          decoLayersByPage: blankDeco,
+          photoLayersByPage: nextPhotoPages,
+        });
+        setCurrentPage(pageIndex + 1);
+        setActivePhotoLayerId(nextSubject.id);
+        setActiveTextLayerId(null);
+        setActiveDecoLayerId(null);
+        showToast(
+          studioMode === "basic"
+            ? "배경만 교체했습니다. 원본 인물은 그대로입니다."
+            : "AI 스튜디오 결과물을 적용했습니다.",
+          "success"
+        );
+        return;
+      }
+
       let url = "";
       let textPages = resizeBlankIsolatedPages(
         s.textLayersByPage,
@@ -1043,67 +1242,53 @@ export default function PrintUnifiedEditor() {
         (page, i) => (i === pageIndex ? [] : page)
       );
 
-      if (portraitPurpose) {
-        // 증명사진/화보/SNS: background only — block Magic Layout text templates.
-        url = await generatePrintBackgroundDataUrl({
-          keyword: prompt,
-          aspect,
-          pageIndex,
-          pageCount: s.pageCount || 1,
-          formatLabel,
-          useLabel: use.label || "전단지",
-          imageStyleId: s.visualStyle?.imageStyleId,
-          moodStyleId: s.visualStyle?.moodStyleId,
-        });
-      } else {
-        // 1) Gemini Magic Layout — required (no soft-fail to background-only).
-        const plan = await requestGenerateLayout({
-          formatLabel,
-          styleLabel: stylePreset?.labelKo || "모던",
-          useLabel: use.label || "전단지",
-          backgroundFieldLabel: field?.label || field?.keyword || "일반",
-          categoryLabel: fieldCategory?.label,
-          prompt,
-          canvasWidth: stage.w,
-          canvasHeight: stage.h,
-          pageIndex,
-          pageCount: s.pageCount || 1,
-        });
-        const mapped = mapLayoutPlanToCanvasLayers(plan, stage.w, stage.h, {
-          styleLabel: stylePreset?.labelKo || "모던",
-          useLabel: use.label || "전단지",
-          backgroundFieldLabel: field?.label || field?.keyword || "일반",
-          categoryLabel: fieldCategory?.label,
-          prompt,
-        });
-        if (!mapped.textLayers.length && !mapped.decoLayers.length) {
-          throw new Error(
-            "레이아웃 요소가 비어 있습니다. 옵션/프롬프트를 확인한 뒤 다시 생성해 주세요."
-          );
-        }
-
-        // 2) Fal background from Gemini bg_prompt.
-        url = await generatePrintBackgroundDataUrl({
-          keyword: plan.bg_prompt,
-          directEnglishPrompt: plan.bg_prompt,
-          aspect,
-          pageIndex,
-          pageCount: s.pageCount || 1,
-          formatLabel,
-          useLabel: use.label || "전단지",
-          imageStyleId: s.visualStyle?.imageStyleId,
-          moodStyleId: s.visualStyle?.moodStyleId,
-        });
-
-        textPages = textPages.map((page, i) =>
-          i === pageIndex ? mapped.textLayers : page
-        );
-        decoPages = decoPages.map((page, i) =>
-          i === pageIndex ? mapped.decoLayers : page
+      // 1) Gemini Magic Layout — required (no soft-fail to background-only).
+      const plan = await requestGenerateLayout({
+        formatLabel,
+        styleLabel: stylePreset?.labelKo || "모던",
+        useLabel: use.label || "전단지",
+        backgroundFieldLabel: field?.label || field?.keyword || "일반",
+        categoryLabel: fieldCategory?.label,
+        prompt,
+        canvasWidth: stage.w,
+        canvasHeight: stage.h,
+        pageIndex,
+        pageCount: s.pageCount || 1,
+      });
+      const mapped = mapLayoutPlanToCanvasLayers(plan, stage.w, stage.h, {
+        styleLabel: stylePreset?.labelKo || "모던",
+        useLabel: use.label || "전단지",
+        backgroundFieldLabel: field?.label || field?.keyword || "일반",
+        categoryLabel: fieldCategory?.label,
+        prompt,
+      });
+      if (!mapped.textLayers.length && !mapped.decoLayers.length) {
+        throw new Error(
+          "레이아웃 요소가 비어 있습니다. 옵션/프롬프트를 확인한 뒤 다시 생성해 주세요."
         );
       }
 
-      // 3) Atomic inject: background (+ layout layers when not portrait purpose).
+      // 2) Fal background from Gemini bg_prompt.
+      url = await generatePrintBackgroundDataUrl({
+        keyword: plan.bg_prompt,
+        directEnglishPrompt: plan.bg_prompt,
+        aspect,
+        pageIndex,
+        pageCount: s.pageCount || 1,
+        formatLabel,
+        useLabel: use.label || "전단지",
+        imageStyleId: s.visualStyle?.imageStyleId,
+        moodStyleId: s.visualStyle?.moodStyleId,
+      });
+
+      textPages = textPages.map((page, i) =>
+        i === pageIndex ? mapped.textLayers : page
+      );
+      decoPages = decoPages.map((page, i) =>
+        i === pageIndex ? mapped.decoLayers : page
+      );
+
+      // 3) Atomic inject: background + layout layers.
       const urls = Array.from({ length: s.pageCount }, (_, i) =>
         s.backgroundUrls?.[i] ?? (i === 0 ? s.backgroundUrl ?? "" : "")
       );
@@ -1140,7 +1325,14 @@ export default function PrintUnifiedEditor() {
     } finally {
       setGenerating(false);
     }
-  }, [generating, patch]);
+  }, [
+    generating,
+    patch,
+    portraitStudioMode,
+    locale,
+    consumeCredit,
+    showToast,
+  ]);
 
   const selectPage = useCallback(
     (page: number) => {
@@ -1350,6 +1542,8 @@ export default function PrintUnifiedEditor() {
       mainPrompt={state.mainPrompt}
       visualStyle={state.visualStyle}
       generating={generating}
+      portraitStudioMode={portraitStudioMode}
+      onPortraitStudioModeChange={setPortraitStudioMode}
       onFormatChange={(id: PrintFormatId) =>
         patch(
           markSpecPick({ ...stateRef.current, formatId: id }, "format")
@@ -1366,6 +1560,8 @@ export default function PrintUnifiedEditor() {
       onUseChange={(id: PrintUseId) => {
         const styleId = imageStyleIdForPurpose(id);
         const portrait = isPortraitPurposeUse(id);
+        setPortraitStudioMode(defaultPortraitStudioMode(id));
+        const pageCount = stateRef.current.pageCount;
         patch(
           markSpecPick(
             markSpecPick(
@@ -1374,6 +1570,13 @@ export default function PrintUnifiedEditor() {
                 useId: id,
                 // Portrait purposes: clear 분야 — not used for generation.
                 bgPresetId: portrait ? null : stateRef.current.bgPresetId,
+                // Strict isolation: strip marketing text / deco layers.
+                textLayersByPage: portrait
+                  ? resizeBlankIsolatedPages(undefined, pageCount)
+                  : stateRef.current.textLayersByPage,
+                decoLayersByPage: portrait
+                  ? Array.from({ length: pageCount }, () => [])
+                  : stateRef.current.decoLayersByPage,
                 visualStyle: {
                   ...stateRef.current.visualStyle,
                   imageStyleId: styleId,
@@ -1386,6 +1589,10 @@ export default function PrintUnifiedEditor() {
             true
           )
         );
+        if (portrait) {
+          setActiveTextLayerId(null);
+          setActiveDecoLayerId(null);
+        }
       }}
       onPageCountChange={(count: PrintPageCount) => {
         patch({
@@ -1424,7 +1631,27 @@ export default function PrintUnifiedEditor() {
           },
         };
         if (linkedUse) {
-          next = markSpecPick({ ...next, useId: linkedUse }, "use", true);
+          const portrait = isPortraitPurposeUse(linkedUse);
+          setPortraitStudioMode(defaultPortraitStudioMode(linkedUse));
+          next = markSpecPick(
+            {
+              ...next,
+              useId: linkedUse,
+              bgPresetId: portrait ? null : next.bgPresetId,
+              textLayersByPage: portrait
+                ? resizeBlankIsolatedPages(undefined, next.pageCount)
+                : next.textLayersByPage,
+              decoLayersByPage: portrait
+                ? Array.from({ length: next.pageCount }, () => [])
+                : next.decoLayersByPage,
+            },
+            "use",
+            true
+          );
+          if (portrait) {
+            setActiveTextLayerId(null);
+            setActiveDecoLayerId(null);
+          }
         }
         patch(markSpecPick(next, "style", true));
       }}

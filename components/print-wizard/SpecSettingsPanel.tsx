@@ -33,7 +33,11 @@ import {
   findSelectedBgExamplePreset,
   isBgExamplePresetSelected,
 } from "@/lib/aiBackgroundExamplePresets";
-import { isPortraitPurposeUse } from "@/lib/printPortraitPurpose";
+import {
+  isPortraitPurposeUse,
+  PORTRAIT_GENERATIVE_CREDIT_COST,
+  type PortraitStudioMode,
+} from "@/lib/printPortraitPurpose";
 import {
   PHOTO_LOOKBOOK_EXAMPLE_HINT,
   getPhotoLookbookExampleCategories,
@@ -69,6 +73,9 @@ export type SpecSettingsPanelProps = {
   fitContent?: boolean;
   /** Screen 26 — hide 장수 chip; mini thumbs stay fixed at 8 slots. */
   hidePageCountOption?: boolean;
+  /** Screen 26 portrait: Mode A (basic) vs Mode B (generative). */
+  portraitStudioMode?: PortraitStudioMode;
+  onPortraitStudioModeChange?: (mode: PortraitStudioMode) => void;
   onFormatChange: (id: PrintFormatId) => void;
   onCustomSizeApply: (size: PrintCustomSize) => void;
   onUseChange: (id: PrintUseId) => void;
@@ -109,6 +116,8 @@ export default function SpecSettingsPanel({
   productId = "print",
   fitContent = false,
   hidePageCountOption = false,
+  portraitStudioMode = "basic",
+  onPortraitStudioModeChange,
   onFormatChange,
   onCustomSizeApply,
   onUseChange,
@@ -302,7 +311,7 @@ export default function SpecSettingsPanel({
     exampleValueLabel
       ? { id: "prompt" as const, label: cs.specExample, value: exampleValueLabel }
       : null,
-    !isPhotoProduct && fieldValueLabel
+    !isPhotoProduct && !portraitPurposeLock && fieldValueLabel
       ? { id: "bg" as const, label: cs.specBg, value: fieldValueLabel }
       : null,
   ].filter(
@@ -807,33 +816,65 @@ export default function SpecSettingsPanel({
           />
         </div>
       ) : (
-        <AiBackgroundPromptBar
-          productId={productId}
-          value={bgKeyword}
-          generating={generating}
-          bgPresetId={bgPresetId}
-          specTags={specTags}
-          canGenerate={canGenerateBackground}
-          onClearSpecTag={onClearSpecTag}
-          onChange={onBgKeywordChange}
-          onPresetPick={onBgPresetPick}
-          onGenerate={onGenerateBackground}
-          expandedContent={
-            <div className="space-y-1">
-              <p className="text-[11px] font-semibold text-slate-900">
-                주문 / 초안 프롬프트
-              </p>
-              <textarea
-                value={mainPrompt}
-                onChange={(e) => onMainPromptChange(e.target.value)}
-                aria-label="메인 프롬프트 / 주문 내용"
-                rows={2}
-                placeholder="예시에서 선택하거나 주문 내용을 입력하세요."
-                className="min-h-[3.5rem] w-full resize-none rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm leading-relaxed text-slate-900 outline-none placeholder:text-slate-700 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
-              />
+        <div className="flex w-full shrink-0 flex-col gap-2">
+          {portraitPurposeLock && onPortraitStudioModeChange ? (
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="사진 스튜디오 모드">
+              <button
+                type="button"
+                disabled={generating}
+                onClick={() => onPortraitStudioModeChange("basic")}
+                className={`rounded-lg px-2.5 py-1.5 text-left text-[12px] font-semibold leading-snug transition [word-break:keep-all] disabled:opacity-50 ${
+                  portraitStudioMode === "basic"
+                    ? "border-[2px] border-indigo-500 bg-indigo-50 text-indigo-900 ring-1 ring-indigo-400/50"
+                    : "border border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                }`}
+              >
+                빠른 배경교체 (누끼)
+              </button>
+              <button
+                type="button"
+                disabled={generating}
+                onClick={() => onPortraitStudioModeChange("generative")}
+                className={`rounded-lg px-2.5 py-1.5 text-left text-[12px] font-semibold leading-snug transition [word-break:keep-all] disabled:opacity-50 ${
+                  portraitStudioMode === "generative"
+                    ? "border-[2px] border-indigo-500 bg-indigo-50 text-indigo-900 ring-1 ring-indigo-400/50"
+                    : "border border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                }`}
+              >
+                AI 고퀄 생성 ({PORTRAIT_GENERATIVE_CREDIT_COST} 크레딧)
+              </button>
             </div>
-          }
-        />
+          ) : null}
+          <AiBackgroundPromptBar
+            productId={productId}
+            value={bgKeyword}
+            generating={generating}
+            bgPresetId={bgPresetId}
+            specTags={specTags}
+            canGenerate={canGenerateBackground}
+            onClearSpecTag={onClearSpecTag}
+            onChange={onBgKeywordChange}
+            onPresetPick={onBgPresetPick}
+            onGenerate={onGenerateBackground}
+            expandedContent={
+              portraitPurposeLock ? undefined : (
+                <div className="space-y-1">
+                  <p className="text-[11px] font-semibold text-slate-900">
+                    주문 / 초안 프롬프트
+                  </p>
+                  <textarea
+                    value={mainPrompt}
+                    onChange={(e) => onMainPromptChange(e.target.value)}
+                    aria-label="메인 프롬프트 / 주문 내용"
+                    rows={2}
+                    placeholder="예시에서 선택하거나 주문 내용을 입력하세요."
+                    className="min-h-[3.5rem] w-full resize-none rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm leading-relaxed text-slate-900 outline-none placeholder:text-slate-700 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
+                  />
+                </div>
+              )
+            }
+          />
+        </div>
       )}
 
       {/* Reserved empty space for future tools */}

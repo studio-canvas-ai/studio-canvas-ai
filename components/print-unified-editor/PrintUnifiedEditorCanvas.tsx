@@ -33,6 +33,7 @@ import type {
   PrintUseId,
 } from "@/lib/printWizardTypes";
 import { resolvePrintAspect } from "@/lib/printWizardTypes";
+import { isPortraitPurposeUse } from "@/lib/printPortraitPurpose";
 import type { TextLayer } from "@/lib/thumbnailStyles";
 import type { PhotoKind } from "@/lib/canvas/addPhotoLayer";
 import type { RecentProjectNamespace } from "@/lib/canvas/recentProjects";
@@ -141,6 +142,7 @@ export default function PrintUnifiedEditorCanvas({
   const [zoomAnimating, setZoomAnimating] = useState(false);
   const pageIndex = Math.max(0, currentPage - 1);
   const aspect = resolvePrintAspect(formatId, customSize);
+  const portraitPhotoMode = isPortraitPurposeUse(useId);
   const pageBg = pageActivated
     ? pageBackgroundUrl(backgroundUrls, backgroundUrl, pageIndex)
     : null;
@@ -346,16 +348,18 @@ export default function PrintUnifiedEditorCanvas({
             ) : null}
           </div>
           <div className="pointer-events-auto flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => openTemplateWarehouse()}
-              disabled={exportBusy || generating}
-              title="템플릿 창고"
-              aria-label="템플릿 창고"
-              className="inline-flex h-8 shrink-0 items-center rounded-lg border border-sky-300 bg-sky-50/95 px-2.5 text-[10px] font-semibold leading-none text-sky-900 shadow-md backdrop-blur-sm transition hover:border-sky-400 hover:bg-sky-100 disabled:pointer-events-none disabled:opacity-35"
-            >
-              템플릿 창고
-            </button>
+            {!portraitPhotoMode ? (
+              <button
+                type="button"
+                onClick={() => openTemplateWarehouse()}
+                disabled={exportBusy || generating}
+                title="템플릿 창고"
+                aria-label="템플릿 창고"
+                className="inline-flex h-8 shrink-0 items-center rounded-lg border border-sky-300 bg-sky-50/95 px-2.5 text-[10px] font-semibold leading-none text-sky-900 shadow-md backdrop-blur-sm transition hover:border-sky-400 hover:bg-sky-100 disabled:pointer-events-none disabled:opacity-35"
+              >
+                템플릿 창고
+              </button>
+            ) : null}
             {pageActivated && onClearCanvasImage ? (
               <button
                 type="button"
@@ -468,30 +472,34 @@ export default function PrintUnifiedEditorCanvas({
                     </>
                   ) : null}
 
-                  <div
-                    data-text-overlay
-                    className="pointer-events-none absolute inset-0 z-[2] overflow-visible"
-                  >
-                    <PreviewTextOverlay
-                      key={`text-${pageIndex}`}
-                      layers={textLayers}
-                      onLayersChange={(layers) =>
-                        onTextLayersChange(pageIndex, layers)
-                      }
-                      interactive
-                      showEmptyGuideBoxes={false}
-                      enlargedResizeHandles
-                      activeLayerId={activeTextLayerId ?? null}
-                      onActiveLayerChange={onActiveTextLayerChange}
-                      pageIndex={pageIndex}
-                      backgroundSrc={pageBg}
-                      editOnSingleClick
-                      photoInteractionMode={Boolean(activePhotoLayerId)}
-                      viewScale={zoom}
-                    />
-                  </div>
+                  {!portraitPhotoMode ? (
+                    <div
+                      data-text-overlay
+                      className="pointer-events-none absolute inset-0 z-[2] overflow-visible"
+                    >
+                      <PreviewTextOverlay
+                        key={`text-${pageIndex}`}
+                        layers={textLayers}
+                        onLayersChange={(layers) =>
+                          onTextLayersChange(pageIndex, layers)
+                        }
+                        interactive
+                        showEmptyGuideBoxes={false}
+                        enlargedResizeHandles
+                        activeLayerId={activeTextLayerId ?? null}
+                        onActiveLayerChange={onActiveTextLayerChange}
+                        pageIndex={pageIndex}
+                        backgroundSrc={pageBg}
+                        editOnSingleClick
+                        photoInteractionMode={Boolean(activePhotoLayerId)}
+                        viewScale={zoom}
+                      />
+                    </div>
+                  ) : null}
 
-                  {decoLayers?.length && onDecoLayersChange ? (
+                  {!portraitPhotoMode &&
+                  decoLayers?.length &&
+                  onDecoLayersChange ? (
                     <div
                       data-deco-overlay
                       className="pointer-events-none absolute inset-0 z-[8] overflow-visible"
