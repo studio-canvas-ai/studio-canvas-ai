@@ -98,7 +98,6 @@ import type { TextLayer } from "@/lib/thumbnailStyles";
 import {
   imageStyleIdForPurpose,
   purposeUseIdForStyle,
-  PURPOSE_GENERAL_STYLE_ID,
   resolveVisualStylePreset,
 } from "@/lib/ai/visualStylePresets";
 import {
@@ -572,36 +571,32 @@ export default function PrintUnifiedEditor() {
           );
           break;
         case "style":
-          // Reset → purpose-linked default tag (증명사진/화보/sns or 통합 표기).
+          // Unmount chip — do not re-inject purpose-linked style locks.
           next = markSpecPick(
             {
               ...next,
               visualStyle: {
-                imageStyleId: imageStyleIdForPurpose(next.useId),
+                imageStyleId: null,
                 moodStyleId: null,
               },
             },
             "style",
-            true
+            false
           );
           break;
         case "use":
+          // Clear use chip only; leave style pick untouched (no system re-lock).
           next = markSpecPick(
             {
               ...next,
               useId: "flyer",
-              visualStyle: {
-                imageStyleId: PURPOSE_GENERAL_STYLE_ID,
-                moodStyleId: null,
-              },
             },
             "use",
             false
           );
-          next = markSpecPick(next, "style", true);
           break;
         case "prompt":
-          next = { ...next, bgKeyword: "" };
+          next = { ...next, bgKeyword: "", selectedPromptPresetId: null };
           break;
         case "bg":
           next = { ...next, bgPresetId: null };

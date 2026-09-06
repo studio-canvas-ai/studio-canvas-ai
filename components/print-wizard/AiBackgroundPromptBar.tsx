@@ -288,8 +288,12 @@ export default function AiBackgroundPromptBar({
                     <button
                       type="button"
                       aria-label={`${tag.label} 선택 해제`}
-                      onClick={() => onClearSpecTag(tag.id as SpecSettingsTagId)}
-                      className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full text-pink-700 transition hover:bg-pink-100 hover:text-pink-900"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onClearSpecTag(tag.id as SpecSettingsTagId);
+                      }}
+                      className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-pink-700 transition hover:bg-pink-100 hover:text-pink-900"
                     >
                       <X className="h-2.5 w-2.5" aria-hidden />
                     </button>

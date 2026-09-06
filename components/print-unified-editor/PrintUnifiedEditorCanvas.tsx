@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Minus, Plus, Save, Trash2 } from "lucide-react";
+import { Loader2, Minus, Plus, Save, Trash2 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { openTemplateWarehouse } from "@/lib/templateWarehouse";
 import CanvasUploadToolbar from "@/components/canvas/CanvasUploadToolbar";
@@ -317,6 +317,23 @@ export default function PrintUnifiedEditorCanvas({
       </header>
 
       <div className="relative flex min-h-0 flex-1 flex-col rounded-xl border border-slate-200/90 bg-slate-100 p-1.5 shadow-inner sm:gap-2 sm:p-2">
+        {generating ? (
+          <div
+            role="status"
+            aria-live="polite"
+            aria-busy="true"
+            className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 rounded-xl bg-slate-900/50 backdrop-blur-[2px]"
+          >
+            <Loader2
+              className="h-10 w-10 animate-spin text-white"
+              aria-hidden
+              strokeWidth={2.25}
+            />
+            <p className="text-base font-semibold tracking-tight text-white [word-break:keep-all]">
+              생성 중...
+            </p>
+          </div>
+        ) : null}
         {/* Canvas header line — left: +, right: trash (symmetric page controls) */}
         <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between px-3 pt-3">
           <div className="pointer-events-auto flex items-center gap-1.5">
