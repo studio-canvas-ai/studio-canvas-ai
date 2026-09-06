@@ -282,7 +282,7 @@ export function ControlMenuItem({
         </span>
       )}
       {description ? (
-        <span className="mt-0.5 line-clamp-2 block text-[11px] font-medium leading-snug text-slate-900">
+        <span className="mt-0.5 block text-[11px] font-medium leading-snug text-slate-600 [word-break:keep-all] [overflow-wrap:anywhere]">
           {description}
         </span>
       ) : null}

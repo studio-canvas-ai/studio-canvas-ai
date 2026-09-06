@@ -104,6 +104,7 @@ export type CanvasStudioCopy = {
     "profile-sns": string;
     poster: string;
     "id-photo": string;
+    "id-photo-keep-original": string;
     "concept-photo": string;
     pamphlet: string;
     menu: string;
@@ -282,6 +283,7 @@ export const canvasStudioKr: CanvasStudioCopy = {
     "profile-sns": "프로필 / SNS",
     poster: "포스터",
     "id-photo": "증명사진",
+    "id-photo-keep-original": "증명사진",
     "concept-photo": "컨셉 포토",
     pamphlet: "팸플릿",
     menu: "메뉴판",
@@ -502,6 +504,7 @@ export const canvasStudioEn: CanvasStudioCopy = {
     "profile-sns": "Profile / SNS",
     poster: "Poster",
     "id-photo": "ID photo",
+    "id-photo-keep-original": "ID photo",
     "concept-photo": "Concept photo",
     pamphlet: "Pamphlet",
     menu: "Menu",
@@ -707,6 +710,7 @@ export const canvasStudioJa: CanvasStudioCopy = {
     "profile-sns": "プロフィール / SNS",
     poster: "ポスター",
     "id-photo": "証明写真",
+    "id-photo-keep-original": "証明写真",
     "concept-photo": "コンセプトフォト",
     pamphlet: "パンフレット",
     menu: "メニュー",
@@ -898,6 +902,7 @@ export const canvasStudioZh: CanvasStudioCopy = {
     "profile-sns": "形象 / 社交",
     poster: "海报",
     "id-photo": "证件照",
+    "id-photo-keep-original": "证件照",
     "concept-photo": "概念写真",
     pamphlet: "宣传册",
     menu: "菜单",
@@ -1089,6 +1094,7 @@ export const canvasStudioEs: CanvasStudioCopy = {
     "profile-sns": "Perfil / Redes",
     poster: "Póster",
     "id-photo": "Foto carnet",
+    "id-photo-keep-original": "Foto carnet",
     "concept-photo": "Foto concepto",
     pamphlet: "Folleto",
     menu: "Menú",
@@ -1280,6 +1286,7 @@ export const canvasStudioFr: CanvasStudioCopy = {
     "profile-sns": "Profil / Réseaux",
     poster: "Affiche",
     "id-photo": "Photo d’identité",
+    "id-photo-keep-original": "Photo d’identité",
     "concept-photo": "Photo concept",
     pamphlet: "Pamphlet",
     menu: "Menu",
@@ -1471,6 +1478,7 @@ export const canvasStudioDe: CanvasStudioCopy = {
     "profile-sns": "Profil / Social",
     poster: "Poster",
     "id-photo": "Passfoto",
+    "id-photo-keep-original": "Passfoto",
     "concept-photo": "Konzeptfoto",
     pamphlet: "Pamphlet",
     menu: "Speisekarte",
@@ -1662,6 +1670,7 @@ export const canvasStudioIt: CanvasStudioCopy = {
     "profile-sns": "Profilo / Social",
     poster: "Poster",
     "id-photo": "Foto tessera",
+    "id-photo-keep-original": "Foto tessera",
     "concept-photo": "Foto concept",
     pamphlet: "Depliant",
     menu: "Menu",
@@ -1853,6 +1862,7 @@ export const canvasStudioVi: CanvasStudioCopy = {
     "profile-sns": "Hồ sơ / Mạng xã hội",
     poster: "Poster",
     "id-photo": "Ảnh thẻ",
+    "id-photo-keep-original": "Ảnh thẻ",
     "concept-photo": "Ảnh concept",
     pamphlet: "Tờ rơi",
     menu: "Thực đơn",
@@ -2044,6 +2054,7 @@ export const canvasStudioHi: CanvasStudioCopy = {
     "profile-sns": "प्रोफ़ाइल / सोशल",
     poster: "पोस्टर",
     "id-photo": "आईडी फ़ोटो",
+    "id-photo-keep-original": "आईडी फ़ोटो",
     "concept-photo": "कॉन्सेप्ट फ़ोटो",
     pamphlet: "पैम्फलेट",
     menu: "मेनू",

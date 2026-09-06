@@ -87,6 +87,7 @@ const USE_PROFILES: Record<PrintUseId, UseLayoutProfile> = {
   sns: { layoutKind: "product", distribution: "flyer-split" },
   poster: { layoutKind: "poster-bold", distribution: "flyer-split" },
   "id-photo": { layoutKind: "formal", distribution: "minimal" },
+  "id-photo-keep-original": { layoutKind: "formal", distribution: "minimal" },
   "concept-photo": { layoutKind: "product", distribution: "lookbook-minimal" },
   pamphlet: { layoutKind: "seminar", distribution: "tri-fold" },
   menu: { layoutKind: "menu", distribution: "menu-split" },

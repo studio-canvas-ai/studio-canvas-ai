@@ -181,6 +181,15 @@ export const PRINT_USES = [
   { id: "sns", label: "SNS" },
   { id: "poster", label: "포스터" },
   { id: "id-photo", label: "증명사진" },
+  /**
+   * Screen-26: keep-original ID photo (UI label only for now).
+   * Dropdown shows two lines; generation pipeline unchanged.
+   */
+  {
+    id: "id-photo-keep-original",
+    label: "증명사진",
+    description: "(원본유지.배경만변경)",
+  },
   { id: "pamphlet", label: "팸플릿" },
   { id: "menu", label: "메뉴판" },
   { id: "flyer", label: "전단지" },
@@ -193,6 +202,16 @@ export const PRINT_USES = [
   { id: "presentation", label: "프리젠테이션" },
   { id: "invitation", label: "청첩장·초청장" },
 ] as const;
+
+/** Optional second line under a 용도 menu item (Screen-26). */
+export function printUseMenuDescription(
+  id: string | null | undefined
+): string | undefined {
+  const item = PRINT_USES.find((u) => u.id === id);
+  if (!item || !("description" in item)) return undefined;
+  const desc = (item as { description?: string }).description;
+  return typeof desc === "string" && desc.trim() ? desc.trim() : undefined;
+}
 
 /**
  * Photo lookbook wizard (화보 뚝딱생성기) — pictorial / portrait uses only.

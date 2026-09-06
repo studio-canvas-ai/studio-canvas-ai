@@ -17,6 +17,7 @@ import {
   formatDisplayLabel,
   fieldById,
   emptySpecPicks,
+  printUseMenuDescription,
   type BgPresetId,
   type PrintCustomSize,
   type PrintCustomUnit,
@@ -155,6 +156,15 @@ export default function SpecSettingsPanel({
     }
     return useTitle(id as keyof typeof cs.uses, fallback);
   };
+  /** Closed chip / spec tag — distinguish keep-original from plain 증명사진. */
+  const resolveUseValueLabel = (id: PrintUseId | string, fallback: string) => {
+    const base = resolveUseLabel(id, fallback);
+    if (id === "id-photo-keep-original") {
+      const desc = printUseMenuDescription(id);
+      return desc ? `${base} ${desc}` : base;
+    }
+    return base;
+  };
   const pageTitle = (value: number) =>
     value === 1
       ? cs.pageSingle
@@ -254,7 +264,7 @@ export default function SpecSettingsPanel({
         .flatMap((c) => [...c.examples])
         .find((ex) => ex === bgKeyword.trim()) ?? null
     : null;
-  const useValueLabel = resolveUseLabel(
+  const useValueLabel = resolveUseValueLabel(
     useId,
     useCatalog.find((u) => u.id === useId)?.label ??
       PRINT_USES.find((u) => u.id === useId)?.label ??
@@ -583,17 +593,31 @@ export default function SpecSettingsPanel({
                 : "grid grid-cols-2 gap-1"
             }
           >
-            {useCatalog.map((item) => (
-              <ControlMenuItem
-                key={item.id}
-                active={specPicks.use && useId === item.id}
-                title={resolveUseLabel(item.id, item.label)}
-                onClick={() => {
-                  onUseChange(item.id);
-                  setOpenKey(null);
-                }}
-              />
-            ))}
+            {useCatalog.map((item) => {
+              const menuDesc =
+                !isPhotoProduct && "description" in item
+                  ? printUseMenuDescription(item.id)
+                  : undefined;
+              const twoLine = Boolean(menuDesc);
+              return (
+                <div
+                  key={item.id}
+                  className={
+                    twoLine && !isPhotoProduct ? "col-span-2 min-w-0" : "min-w-0"
+                  }
+                >
+                  <ControlMenuItem
+                    active={specPicks.use && useId === item.id}
+                    title={resolveUseLabel(item.id, item.label)}
+                    description={menuDesc}
+                    onClick={() => {
+                      onUseChange(item.id);
+                      setOpenKey(null);
+                    }}
+                  />
+                </div>
+              );
+            })}
           </div>
         </ControlBarDropdown>
 
