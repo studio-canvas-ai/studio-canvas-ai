@@ -26,9 +26,11 @@ import {
 import { expandInfoGridSeeds } from "@/lib/ai/layoutInfoGrid";
 import { syncContentLayerBoxHeights } from "@/lib/printWizardTextLayers";
 import {
+  applyLargeLightPlateGlass,
   cappedPlateOpacity,
   expandPlatesUnderContent,
   isObscuringDarkOverlay,
+  plateAreaRatio,
   refitContentTextBoxes,
   resolveOverlappingTextLayers,
   snapTextLayersToSectionBands,
@@ -227,7 +229,7 @@ DYNAMIC LAYOUT:
 5. bg_prompt English only with negative space matching text clusters.
 6. STRICT JSON only.
 7. SPACING: Stack text with ≥16px vertical gaps. Never overlap text boxes.
-8. OVERLAY BAN: Never invent a tall dark vertical center strip or a wide semi-transparent dark rectangle that covers the photo mid-area. Decorative plates must be small (badge/ribbon/stamp) or soft (opacity ≤ 0.28).`
+8. OVERLAY BAN: Never invent a tall dark vertical center strip or a wide semi-transparent dark rectangle that covers the photo mid-area. Small decorative plates (badge/ribbon/stamp) may stay opaque. Large light info cards covering ≥40% of the canvas MUST use translucent glass fills — rgba(255,255,255,0.35–0.45) — so the photo/festival background shows through. Never emit solid #FFFFFF at full opacity for those large central panels.`
 
 function clamp01(n: number): number {
   if (!Number.isFinite(n)) return 0;
@@ -863,7 +865,11 @@ function makePlateLayer(opts: {
       ? parseRgba(opts.stroke).hex
       : undefined,
     boxColor: fill.hex,
-    boxOpacity: cappedPlateOpacity(opts.fill, fill.opacity),
+    boxOpacity: cappedPlateOpacity(
+      opts.fill,
+      fill.opacity,
+      plateAreaRatio(opts.w, opts.h)
+    ),
     boxRadius: radiusFrac,
     color: "white",
     fontSize: 12,
@@ -1482,8 +1488,9 @@ export function mapLayoutPlanToCanvasLayers(
   const banded = snapTextLayersToSectionBands(fitted, stageW, stageH);
   const packed = resolveOverlappingTextLayers(banded, stageW, stageH, 16);
   const withPlates = expandPlatesUnderContent(packed, stageW, stageH);
+  const glassPlates = applyLargeLightPlateGlass(withPlates, stageW, stageH);
   const rematched = rematchContentContrastOnPlates(
-    withPlates,
+    glassPlates,
     stageW,
     stageH,
     sceneTone

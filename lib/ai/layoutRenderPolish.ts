@@ -232,20 +232,83 @@ export function isObscuringDarkOverlay(
 }
 
 /**
- * Soften dark photo veils; keep light info panels opaque enough for type.
+ * Soften dark photo veils; keep small light info panels opaque enough for type.
+ * Large light plates (≥40% of stage) become glass so festival/pamphlet art shows through.
  * Must stay ≥ contrast backdrop gate (0.22) so box-local contrast still runs.
  */
+export const LARGE_PLATE_AREA_RATIO = 0.4;
+/** Semi-transparent glass fill for massive central white cards. */
+export const LARGE_LIGHT_PLATE_GLASS_OPACITY = 0.4;
+/** Minimum opacity for small light badges / stickers. */
+export const SMALL_LIGHT_PLATE_MIN_OPACITY = 0.78;
+
+export function plateAreaRatio(
+  wNorm: number,
+  hNorm: number
+): number {
+  const a = Math.max(0, wNorm) * Math.max(0, hNorm);
+  return Number.isFinite(a) ? a : 0;
+}
+
+export function isLargePlateArea(
+  wNorm: number,
+  hNorm: number,
+  threshold = LARGE_PLATE_AREA_RATIO
+): boolean {
+  return plateAreaRatio(wNorm, hNorm) >= threshold;
+}
+
 export function cappedPlateOpacity(
   fill: string | undefined,
-  opacity: number
+  opacity: number,
+  areaRatio?: number
 ): number {
   const parsed = parseFillColor(fill);
   if (!parsed) return Math.min(1, Math.max(0, opacity));
   const lum = hexLuminance(parsed.hex);
   if (lum > 0.45) {
-    return Math.max(0.78, Math.min(1, opacity <= 0 ? 0.88 : opacity));
+    if (
+      typeof areaRatio === "number" &&
+      areaRatio >= LARGE_PLATE_AREA_RATIO
+    ) {
+      return LARGE_LIGHT_PLATE_GLASS_OPACITY;
+    }
+    return Math.max(
+      SMALL_LIGHT_PLATE_MIN_OPACITY,
+      Math.min(1, opacity <= 0 ? 0.88 : opacity)
+    );
   }
   return Math.min(0.32, Math.max(0.24, opacity));
+}
+
+/**
+ * Force glass opacity on any light plate that already covers ≥40% of the stage
+ * (after expand / warehouse load). Small badges stay opaque.
+ */
+export function applyLargeLightPlateGlass(
+  layers: TextLayer[],
+  stageW: number,
+  stageH: number
+): TextLayer[] {
+  if (!layers.length || stageW < 8 || stageH < 8) return layers;
+  return layers.map((layer) => {
+    if (!layer.showBox) return layer;
+    const lum = hexLuminance(layer.boxColor || "#000000");
+    if (lum <= 0.45) return layer;
+    const wNorm = layer.boxW ?? 0;
+    const hNorm = layer.boxH ?? 0;
+    if (!isLargePlateArea(wNorm, hNorm)) return layer;
+    if (
+      Math.abs((layer.boxOpacity ?? 1) - LARGE_LIGHT_PLATE_GLASS_OPACITY) <
+      0.01
+    ) {
+      return layer;
+    }
+    return {
+      ...layer,
+      boxOpacity: LARGE_LIGHT_PLATE_GLASS_OPACITY,
+    };
+  });
 }
 
 /**
@@ -347,13 +410,21 @@ export function expandPlatesUnderContent(
     if (!hit) continue;
     minY = Math.max(0, minY);
     maxY = Math.min(stageH, maxY);
+    const nextHNorm = Math.max(ph / stageH, (maxY - minY) / stageH);
+    const nextWNorm = plate.boxW ?? pw / stageW;
+    const large = isLargePlateArea(nextWNorm, nextHNorm);
     next[pi] = {
       ...plate,
       manualY: minY / stageH,
-      boxH: Math.max(ph / stageH, (maxY - minY) / stageH),
+      boxH: nextHNorm,
       boxManual: true,
       layoutLocked: true,
-      boxOpacity: Math.max(0.78, plate.boxOpacity ?? 0.88),
+      boxOpacity: large
+        ? LARGE_LIGHT_PLATE_GLASS_OPACITY
+        : Math.max(
+            SMALL_LIGHT_PLATE_MIN_OPACITY,
+            plate.boxOpacity ?? 0.88
+          ),
     };
   }
   return next;

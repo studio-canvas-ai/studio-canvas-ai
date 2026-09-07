@@ -6,6 +6,11 @@
 import type { PrintFormatId, PrintPageCount } from "@/lib/printWizardTypes";
 import type { TextLayer } from "@/lib/thumbnailStyles";
 import { createLayer } from "@/lib/thumbnailStyles";
+import {
+  isLargePlateArea,
+  LARGE_LIGHT_PLATE_GLASS_OPACITY,
+} from "@/lib/ai/layoutRenderPolish";
+import { hexLuminance } from "@/lib/ai/textContrastSafety";
 
 export const TEMPLATE_WAREHOUSE_OPEN_EVENT = "sca:open-template-warehouse";
 export const TEMPLATE_WAREHOUSE_APPLY_EVENT = "sca:apply-warehouse-template";
@@ -413,6 +418,9 @@ function boxedLayer(
     showBox,
     ...boxGeom
   } = geom;
+  const light = hexLuminance(boxGeom.boxColor) > 0.45;
+  const largeGlass =
+    light && isLargePlateArea(boxGeom.boxW, boxGeom.boxH);
   return createLayer({
     text,
     pos,
@@ -425,7 +433,9 @@ function boxedLayer(
     maxWidth: boxGeom.boxW,
     showBox: showBox ?? true,
     showBoxBorder: showBoxBorder ?? Boolean(boxBorderColor),
-    boxOpacity: boxOpacity ?? 1,
+    boxOpacity:
+      boxOpacity ??
+      (largeGlass ? LARGE_LIGHT_PLATE_GLASS_OPACITY : 1),
     boxColor: boxGeom.boxColor,
     boxBorderColor,
     boxRadius,

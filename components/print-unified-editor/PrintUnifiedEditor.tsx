@@ -29,6 +29,7 @@ import {
   openTemplateWarehouse,
   type WarehouseTemplate,
 } from "@/lib/templateWarehouse";
+import { applyLargeLightPlateGlass } from "@/lib/ai/layoutRenderPolish";
 import {
   SPACE4_ADMIN_REVIEW_APPLY_EVENT,
   clearSpace4AdminReview,
@@ -338,7 +339,11 @@ export default function PrintUnifiedEditor() {
         pageCount
       ).map((page, i) => {
         if (!page.length) return [];
-        return applyUnifiedEditorPageLayout(page, i, stage.w, stage.h);
+        return applyLargeLightPlateGlass(
+          applyUnifiedEditorPageLayout(page, i, stage.w, stage.h),
+          stage.w,
+          stage.h
+        );
       });
       const next: PrintWizardState = {
         ...defaultPrintWizardState(),

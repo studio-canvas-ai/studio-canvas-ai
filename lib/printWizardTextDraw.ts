@@ -18,6 +18,7 @@ import {
 import { hexToRgba } from "@/lib/shortsCaptions";
 import {
   isLightFillHex,
+  hexLuminance,
   resolveDrawTextShadow,
 } from "@/lib/ai/textContrastSafety";
 
@@ -221,6 +222,14 @@ export function drawPrintLayerInBox(
 
   const opacity = Math.max(0.15, Math.min(1, layer.boxOpacity ?? 0.55));
   if (layer.showBox) {
+    const boxAreaNorm =
+      (typeof layer.boxW === "number" ? layer.boxW : 0) *
+      (typeof layer.boxH === "number" ? layer.boxH : 0);
+    const glassLarge =
+      opacity <= 0.5 &&
+      boxAreaNorm >= 0.4 &&
+      hexLuminance(layer.boxColor || "#ffffff") > 0.45;
+
     ctx.fillStyle = hexToRgba(layer.boxColor || "#000000", opacity);
     const radiusFrac =
       typeof layer.boxRadius === "number" && layer.boxRadius > 0
@@ -237,7 +246,15 @@ export function drawPrintLayerInBox(
     ctx.arcTo(0, 0, boxW, 0, r);
     ctx.closePath();
     ctx.fill();
-    if (layer.showBoxBorder) {
+    // Soft glass rim — signals a removable editable plate over festival art.
+    if (glassLarge && !layer.showBoxBorder) {
+      ctx.strokeStyle = "rgba(255,255,255,0.55)";
+      ctx.lineWidth = Math.max(1.25, Math.min(boxW, boxH) * 0.006);
+      ctx.stroke();
+      ctx.strokeStyle = "rgba(15,23,42,0.12)";
+      ctx.lineWidth = Math.max(1, Math.min(boxW, boxH) * 0.004);
+      ctx.stroke();
+    } else if (layer.showBoxBorder) {
       const borderHex = layer.boxBorderColor || "#ffffff";
       ctx.strokeStyle = hexToRgba(borderHex, borderHex === "#ffffff" ? 0.35 : 0.92);
       ctx.lineWidth = Math.max(
