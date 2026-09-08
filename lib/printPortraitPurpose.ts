@@ -5,6 +5,8 @@
  * Isolation (skip Magic Layout, disable 분야, portrait BG category) applies to both.
  */
 
+import { FEATURE_CREDIT_COST } from "@/lib/featureCreditCosts";
+
 export const PORTRAIT_AI_PURPOSE_USE_IDS = [
   "id-photo",
   "lookbook",
@@ -150,4 +152,22 @@ export function portraitAiPromptLock(
 /** Empty-plate lock for keep-original scenic generation (no people). */
 export function portraitKeepOriginalScenicLock(): string {
   return "Empty solid or soft-gradient studio ID-photo backdrop only — no people, no faces, no props.";
+}
+
+/** Screen-26 generate CTA cost — FaceID purposes use portrait pool, else AI background. */
+export function screen26GenerateCreditCost(
+  useId: string | null | undefined
+): number {
+  if (isPortraitAiPurposeUse(useId)) {
+    return FEATURE_CREDIT_COST.portraitGenerative;
+  }
+  return FEATURE_CREDIT_COST.aiBackground;
+}
+
+/** Dropdown suffix for FaceID 용도 items, e.g. "(50크레딧)". */
+export function portraitUseCreditLabelSuffix(
+  useId: string | null | undefined
+): string | null {
+  if (!isPortraitAiPurposeUse(useId)) return null;
+  return `(${screen26GenerateCreditCost(useId)}크레딧)`;
 }

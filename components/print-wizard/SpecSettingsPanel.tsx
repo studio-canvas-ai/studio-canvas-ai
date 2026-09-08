@@ -34,7 +34,7 @@ import {
   findSelectedBgExamplePreset,
   isBgExamplePresetSelected,
 } from "@/lib/aiBackgroundExamplePresets";
-import { isPortraitPurposeUse } from "@/lib/printPortraitPurpose";
+import { isPortraitPurposeUse, portraitUseCreditLabelSuffix } from "@/lib/printPortraitPurpose";
 import {
   PHOTO_LOOKBOOK_EXAMPLE_HINT,
   getPhotoLookbookExampleCategories,
@@ -151,10 +151,14 @@ export default function SpecSettingsPanel({
     return formatTitle(id, PRINT_FORMATS.find((f) => f.id === id)?.label ?? id);
   };
   const resolveUseLabel = (id: PrintUseId | string, fallback: string) => {
+    let base = fallback;
     if (isPhotoProduct && id === "sns") {
-      return cs.uses["profile-sns"] ?? fallback;
+      base = cs.uses["profile-sns"] ?? fallback;
+    } else {
+      base = useTitle(id as keyof typeof cs.uses, fallback);
     }
-    return useTitle(id as keyof typeof cs.uses, fallback);
+    const credit = portraitUseCreditLabelSuffix(id);
+    return credit ? `${base} ${credit}` : base;
   };
   /** Closed chip / spec tag — distinguish keep-original from plain 증명사진. */
   const resolveUseValueLabel = (id: PrintUseId | string, fallback: string) => {
@@ -839,6 +843,7 @@ export default function SpecSettingsPanel({
       ) : (
         <AiBackgroundPromptBar
           productId={productId}
+          useId={useId}
           value={bgKeyword}
           generating={generating}
           bgPresetId={bgPresetId}

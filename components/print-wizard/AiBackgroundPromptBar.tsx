@@ -16,6 +16,7 @@ import {
 } from "@/lib/printWizardTypes";
 import type { WizardProductId } from "@/lib/wizard/wizardProduct";
 import { photoInpaintUi } from "@/lib/photoInpaintCopy";
+import { screen26GenerateCreditCost } from "@/lib/printPortraitPurpose";
 
 export type SpecSettingsTagId = "format" | "style" | "use" | "prompt" | "bg";
 
@@ -33,6 +34,8 @@ export type AiBackgroundPromptBarProps = {
   expandedContent?: ReactNode;
   /** Photo lookbook uses subject-transform (inpaint) copy + hides field mood. */
   productId?: WizardProductId;
+  /** Screen-26 용도 — drives dynamic credit on the generate CTA. */
+  useId?: string | null;
 };
 
 /**
@@ -49,6 +52,7 @@ export default function AiBackgroundPromptBar({
   onGenerate,
   expandedContent,
   productId = "print",
+  useId = null,
   onClearSpecTag,
 }: AiBackgroundPromptBarProps) {
   const { t, locale } = useI18n();
@@ -59,6 +63,8 @@ export default function AiBackgroundPromptBar({
   const generateLabel = photoUi?.generate ?? cs.bgGenerate;
   const generatingLabel = photoUi?.generating ?? cs.bgGenerating;
   const placeholder = photoUi?.placeholder ?? cs.bgPlaceholder;
+  const creditCost = screen26GenerateCreditCost(useId);
+  const generateCtaLabel = `${generateLabel} (${creditCost}크레딧)`;
   const [orderOpen, setOrderOpen] = useState(false);
   const [moodOpen, setMoodOpen] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
@@ -339,13 +345,8 @@ export default function AiBackgroundPromptBar({
           )}
           <span className="inline-flex flex-col items-center gap-0.5 leading-tight [word-break:keep-all]">
             <span>
-              {generating ? generatingLabel : generateLabel}
+              {generating ? generatingLabel : generateCtaLabel}
             </span>
-            {!generating && !isPhoto ? (
-              <span className="text-[11px] font-bold tracking-tight opacity-95">
-                (25 크레딧)
-              </span>
-            ) : null}
           </span>
         </button>
       </div>

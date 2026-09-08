@@ -13,10 +13,10 @@ export const FEATURE_CREDIT_COST = {
   /** AI promo image / background generation */
   aiBackground: 25,
   /**
-   * High-end FaceID / InstantID + ControlNet portrait generation (15–20 range mid).
+   * High-end FaceID / InstantID portrait generation (증명사진·화보·SNS).
    * Debited on `/api/generate-photo-ai` and `/api/ai/lookbook`.
    */
-  portraitGenerative: 18,
+  portraitGenerative: 50,
   /** Shorts hook auto-extract */
   shortsHook: 2,
   /** AI auto captions */
