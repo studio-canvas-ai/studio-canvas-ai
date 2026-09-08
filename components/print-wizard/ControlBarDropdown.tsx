@@ -23,7 +23,9 @@ function useFixedBelowMenu(
   triggerRef: React.RefObject<HTMLElement | null>,
   minWidth: number,
   maxWidth = 420,
-  anchorSelector?: string
+  anchorSelector?: string,
+  /** When true, ignore panel column width and size against the viewport. */
+  widenToViewport = false
 ) {
   const [style, setStyle] = useState<CSSProperties>({});
 
@@ -43,20 +45,27 @@ function useFixedBelowMenu(
     const pad = 8;
     const boundWidth = Math.max(180, boundRect.width - pad * 2);
     const viewportCap = Math.max(180, window.innerWidth - pad * 2);
-    const maxW = Math.min(maxWidth, boundWidth, viewportCap);
+    const maxW = widenToViewport
+      ? Math.min(maxWidth, viewportCap)
+      : Math.min(maxWidth, boundWidth, viewportCap);
     const width = clamp(Math.max(triggerRect.width, minWidth), 180, maxW);
 
-    // Anchor under the trigger, then keep the panel fully inside the control column.
+    // Anchor under the trigger, then keep the panel fully inside the control column
+    // (or viewport when widenToViewport).
     let left = triggerRect.left;
-    const minLeft = boundRect.left + pad;
-    const maxLeft = boundRect.right - width - pad;
-    if (maxLeft >= minLeft) {
-      left = clamp(left, minLeft, maxLeft);
+    if (widenToViewport) {
+      left = clamp(left, pad, window.innerWidth - width - pad);
     } else {
-      // Panel narrower than menu — pin to panel start within viewport.
-      left = clamp(boundRect.left + pad, pad, window.innerWidth - width - pad);
+      const minLeft = boundRect.left + pad;
+      const maxLeft = boundRect.right - width - pad;
+      if (maxLeft >= minLeft) {
+        left = clamp(left, minLeft, maxLeft);
+      } else {
+        // Panel narrower than menu — pin to panel start within viewport.
+        left = clamp(boundRect.left + pad, pad, window.innerWidth - width - pad);
+      }
+      left = clamp(left, pad, window.innerWidth - width - pad);
     }
-    left = clamp(left, pad, window.innerWidth - width - pad);
 
     const top = triggerRect.bottom + 8;
     const maxHeight = Math.max(140, window.innerHeight - top - 12);
@@ -68,7 +77,7 @@ function useFixedBelowMenu(
       maxHeight,
       zIndex: MENU_Z,
     });
-  }, [anchorSelector, maxWidth, minWidth, triggerRef]);
+  }, [anchorSelector, maxWidth, minWidth, triggerRef, widenToViewport]);
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -94,6 +103,8 @@ type ControlBarDropdownProps = {
   menuMaxWidth?: number;
   /** CSS selector — keep the menu horizontally inside this ancestor (e.g. control panel). */
   menuAnchorSelector?: string;
+  /** Size/position against viewport instead of the SpecSettingsPanel column. */
+  menuWidenToViewport?: boolean;
   children: ReactNode;
   className?: string;
   /** Stretch trigger to full column width (center panel). */
@@ -120,6 +131,7 @@ export default function ControlBarDropdown({
   menuMinWidth = 240,
   menuMaxWidth = 420,
   menuAnchorSelector,
+  menuWidenToViewport = false,
   children,
   className = "",
   fullWidth = false,
@@ -136,7 +148,8 @@ export default function ControlBarDropdown({
     triggerRef,
     menuMinWidth,
     menuMaxWidth,
-    menuAnchorSelector
+    menuAnchorSelector,
+    menuWidenToViewport
   );
 
   useEffect(() => {

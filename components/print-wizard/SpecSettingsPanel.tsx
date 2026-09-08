@@ -654,8 +654,9 @@ export default function SpecSettingsPanel({
           value={exampleValueLabel || undefined}
           open={openKey === "prompt"}
           onOpenChange={(v) => setOpenKey(v ? "prompt" : null)}
-          menuMinWidth={320}
-          menuMaxWidth={isPhotoProduct ? 420 : 400}
+          menuMinWidth={480}
+          menuMaxWidth={isPhotoProduct ? 640 : 600}
+          menuWidenToViewport
           menuAnchorSelector="[data-spec-panel]"
         >
           {isPhotoProduct ? (
@@ -682,13 +683,15 @@ export default function SpecSettingsPanel({
                             onBgKeywordChange(example);
                             setOpenKey(null);
                           }}
-                          className={`min-w-0 w-full rounded-lg border px-2.5 py-2 text-left text-[11px] font-medium leading-snug [word-break:keep-all] transition pointer-coarse:min-h-10 ${
+                          className={`min-w-0 w-full overflow-hidden rounded-lg border px-2.5 py-1.5 text-left text-[12px] font-medium leading-snug transition pointer-coarse:min-h-10 ${
                             on
                               ? "border-indigo-500 bg-indigo-50 text-indigo-900 ring-2 ring-indigo-400/60"
                               : "border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50"
                           }`}
                         >
-                          {example}
+                          <span className="line-clamp-2 block [overflow-wrap:anywhere]">
+                            {example}
+                          </span>
                         </button>
                       );
                     })}
@@ -728,16 +731,16 @@ export default function SpecSettingsPanel({
                             );
                             setOpenKey(null);
                           }}
-                          className={`min-w-0 w-full rounded-lg text-left shadow-sm transition [word-break:keep-all] ${
+                          className={`flex min-h-0 min-w-0 w-full flex-col justify-center gap-0.5 overflow-hidden rounded-lg text-left shadow-sm transition ${
                             on
-                              ? "border-[3px] border-indigo-500 bg-indigo-50 px-[5px] py-[2px] shadow-md ring-2 ring-indigo-400/60"
-                              : "border border-gray-200 bg-white px-2 py-1 hover:border-gray-300 hover:shadow"
+                              ? "border-[3px] border-indigo-500 bg-indigo-50 px-2 py-1 shadow-md ring-2 ring-indigo-400/60"
+                              : "border border-gray-200 bg-white px-2.5 py-1.5 hover:border-gray-300 hover:shadow"
                           }`}
                         >
-                          <span className="line-clamp-2 block text-[14px] font-bold leading-[1.2] text-black sm:text-[15px]">
+                          <span className="line-clamp-1 block min-w-0 truncate text-[13px] font-bold leading-tight text-black sm:text-[14px]">
                             {preset.titleKo}
                           </span>
-                          <span className="mt-0.5 line-clamp-1 block text-[13px] font-semibold leading-[1.2] text-blue-700 sm:text-[14px]">
+                          <span className="line-clamp-1 block min-w-0 truncate text-[12px] font-semibold leading-tight text-blue-700 sm:text-[13px]">
                             ({preset.hintKo})
                           </span>
                         </button>
@@ -768,8 +771,9 @@ export default function SpecSettingsPanel({
               if (portraitPurposeLock) return;
               setOpenKey(v ? "bg" : null);
             }}
-            menuMinWidth={280}
-            menuMaxWidth={400}
+            menuMinWidth={480}
+            menuMaxWidth={600}
+            menuWidenToViewport
             menuAnchorSelector="[data-spec-panel]"
             disabled={portraitPurposeLock}
           >
@@ -791,16 +795,16 @@ export default function SpecSettingsPanel({
                             onBgPresetPick(item.id as BgPresetId);
                             setOpenKey(null);
                           }}
-                          className={`min-w-0 w-full rounded-lg text-left shadow-sm transition [word-break:keep-all] pointer-coarse:min-h-10 ${
+                          className={`flex min-h-0 min-w-0 w-full flex-col justify-center gap-0.5 overflow-hidden rounded-lg text-left shadow-sm transition pointer-coarse:min-h-10 ${
                             on
-                              ? "border-[3px] border-indigo-500 bg-indigo-50 px-[5px] py-[2px] shadow-md ring-2 ring-indigo-400/60"
-                              : "border border-gray-200 bg-white px-2 py-1 hover:border-indigo-300 hover:shadow"
+                              ? "border-[3px] border-indigo-500 bg-indigo-50 px-2 py-1 shadow-md ring-2 ring-indigo-400/60"
+                              : "border border-gray-200 bg-white px-2.5 py-1.5 hover:border-indigo-300 hover:shadow"
                           }`}
                         >
-                          <span className="line-clamp-2 block text-[14px] font-bold leading-[1.2] text-black sm:text-[15px]">
+                          <span className="line-clamp-1 block min-w-0 truncate text-[13px] font-bold leading-tight text-black sm:text-[14px]">
                             {title}
                           </span>
-                          <span className="mt-0.5 line-clamp-1 block text-[13px] font-semibold leading-[1.2] text-blue-700 sm:text-[14px]">
+                          <span className="line-clamp-1 block min-w-0 truncate text-[12px] font-semibold leading-tight text-blue-700 sm:text-[13px]">
                             ({item.hint})
                           </span>
                         </button>
