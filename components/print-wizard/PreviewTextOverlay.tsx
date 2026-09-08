@@ -308,7 +308,8 @@ export default function PreviewTextOverlay({
     }
   }, [pageIndex]);
 
-  // Font loading gateway — wait before first paint / after page switch.
+  // Font loading gateway — wait before first paint / after page switch / after
+  // Magic Layout injects layers onto an already-mounted empty page.
   useEffect(() => {
     let cancelled = false;
     setFontsReady(false);
@@ -346,7 +347,7 @@ export default function PreviewTextOverlay({
     return () => {
       cancelled = true;
     };
-  }, [pageIndex]);
+  }, [pageIndex, layers.length]);
 
   useEffect(() => {
     if (!activeLayerId) {
@@ -379,6 +380,17 @@ export default function PreviewTextOverlay({
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  // Generation inject: empty → filled without remount — remeasure immediately.
+  useEffect(() => {
+    if (!layers.length) return;
+    const el = hostRef.current;
+    if (!el) return;
+    setSize({
+      w: Math.max(1, el.offsetWidth || 1),
+      h: Math.max(1, el.offsetHeight || 1),
+    });
+  }, [layers.length]);
 
   useEffect(() => {
     const canvas = guideRef.current;
@@ -698,10 +710,10 @@ export default function PreviewTextOverlay({
     };
   }, [backgroundSrc, interactive, size.h, size.w, fontsReady]);
 
-  if (!layers.length) return null;
-
   const showPaintedLayers = fontsReady && stageReliable;
 
+  // Always mount the measure host — even with zero layers — so ResizeObserver
+  // attaches before Magic Layout injects text/plates (avoids stuck opacity:0).
   return (
     <div
       ref={hostRef}
@@ -709,10 +721,12 @@ export default function PreviewTextOverlay({
       style={{
         transformOrigin: "top left",
         // Hide until fonts + reliable stage — avoids empty/tiny first paint on mobile.
-        opacity: showPaintedLayers ? 1 : 0,
+        opacity: layers.length && showPaintedLayers ? 1 : 0,
       }}
-      aria-hidden={!showPaintedLayers}
+      aria-hidden={!layers.length || !showPaintedLayers}
     >
+      {layers.length ? (
+        <>
       <canvas
         ref={guideRef}
         aria-hidden
@@ -1035,6 +1049,8 @@ export default function PreviewTextOverlay({
           </div>
         );
       })}
+        </>
+      ) : null}
     </div>
   );
 }

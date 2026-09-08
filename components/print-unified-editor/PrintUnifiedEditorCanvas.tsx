@@ -75,6 +75,8 @@ export type PrintUnifiedEditorCanvasProps = {
   onZoomChange: (zoom: PrintUnifiedZoom) => void;
   exportBusy?: boolean;
   generating?: boolean;
+  /** Remount token after AI generation completes (layer bind + stage measure). */
+  canvasBindEpoch?: number;
   requireSubscription?: () => boolean;
   onInstallPhoto?: (file: File, mode: PhotoKind) => Promise<void>;
   onOpenRecentProject?: (project: StudioCanvasProjectV1) => void;
@@ -126,6 +128,7 @@ export default function PrintUnifiedEditorCanvas({
   onZoomChange,
   exportBusy = false,
   generating = false,
+  canvasBindEpoch = 0,
   requireSubscription,
   onInstallPhoto,
   onOpenRecentProject,
@@ -495,7 +498,7 @@ export default function PrintUnifiedEditorCanvas({
                       className="pointer-events-none absolute inset-0 z-[2] overflow-visible"
                     >
                       <PreviewTextOverlay
-                        key={`text-${pageIndex}`}
+                        key={`text-${pageIndex}-${canvasBindEpoch}`}
                         layers={textLayers}
                         onLayersChange={(layers) =>
                           onTextLayersChange(pageIndex, layers)
@@ -514,16 +517,14 @@ export default function PrintUnifiedEditorCanvas({
                     </div>
                   ) : null}
 
-                  {!portraitPhotoMode &&
-                  decoLayers?.length &&
-                  onDecoLayersChange ? (
+                  {!portraitPhotoMode && onDecoLayersChange ? (
                     <div
                       data-deco-overlay
                       className="pointer-events-none absolute inset-0 z-[8] overflow-visible"
                     >
                       <PreviewDecoOverlay
-                        key={`deco-${pageIndex}`}
-                        layers={decoLayers}
+                        key={`deco-${pageIndex}-${canvasBindEpoch}`}
+                        layers={decoLayers ?? []}
                         onLayersChange={(layers) =>
                           onDecoLayersChange(pageIndex, layers)
                         }

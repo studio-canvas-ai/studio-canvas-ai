@@ -325,6 +325,17 @@ export default function PreviewDecoOverlay({
     return () => ro.disconnect();
   }, []);
 
+  // Generation inject: empty → filled without remount — remeasure immediately.
+  useEffect(() => {
+    if (!layers.length) return;
+    const el = hostRef.current;
+    if (!el) return;
+    setSize({
+      w: Math.max(1, el.offsetWidth || 1),
+      h: Math.max(1, el.offsetHeight || 1),
+    });
+  }, [layers.length]);
+
   const commitLayer = useCallback(
     (
       layerId: string,
@@ -522,8 +533,7 @@ export default function PreviewDecoOverlay({
     };
   }, [pointerActive, endDrag, viewScale]);
 
-  if (!layers.length) return null;
-
+  // Always mount the measure host so ResizeObserver attaches before deco inject.
   return (
     <div
       ref={hostRef}

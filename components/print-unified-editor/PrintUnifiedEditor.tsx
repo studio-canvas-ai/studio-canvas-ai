@@ -290,6 +290,8 @@ export default function PrintUnifiedEditor() {
   const [currentPage, setCurrentPage] = useState(0);
   const [zoom, setZoom] = useState<PrintUnifiedZoom>(1);
   const [generating, setGenerating] = useState(false);
+  /** Bumps after AI inject so overlay hosts remount with fresh stage measure. */
+  const [canvasBindEpoch, setCanvasBindEpoch] = useState(0);
   const [activeTextLayerId, setActiveTextLayerId] = useState<string | null>(
     null
   );
@@ -1325,6 +1327,9 @@ export default function PrintUnifiedEditor() {
         decoLayersByPage: decoPages,
         photoLayersByPage: photoPages,
       });
+      // Force overlay remount so text/plates bind with the new background
+      // even when currentPage is unchanged (React would otherwise skip remount).
+      setCanvasBindEpoch((n) => n + 1);
 
       if (portraitIsolated) {
         setCurrentPage(pageIndex + 1);
@@ -1729,6 +1734,7 @@ export default function PrintUnifiedEditor() {
             contentOffsetByPage={state.contentOffsetByPage}
             onContentOffsetChange={updateContentOffsetForPage}
             textLayers={activeTextLayers}
+            canvasBindEpoch={canvasBindEpoch}
             onTextLayersChange={(idx, layers) =>
               onTextLayersChange(idx, layers, { applyLayout: false })
             }
