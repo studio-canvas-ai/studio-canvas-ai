@@ -16,7 +16,7 @@ import {
   resolvePageTextLayersForExport,
 } from "@/lib/printWizardTextLayers";
 import {
-  resolvePrintAspect,
+  resolvePrintExportSize,
   type PrintWizardState,
 } from "@/lib/printWizardTypes";
 
@@ -91,9 +91,10 @@ export async function compositePrintWizardPageBlob(opts: {
   quality: "standard" | "high";
 }): Promise<Blob> {
   const pageIndex = Math.max(0, opts.pageIndex ?? 0);
-  const aspect = resolvePrintAspect(opts.state.formatId, opts.state.customSize);
-  const stageW = 1080;
-  const stageH = Math.max(1, Math.round(stageW / Math.max(aspect, 0.05)));
+  const { width: stageW, height: stageH } = resolvePrintExportSize(
+    opts.state.formatId,
+    opts.state.customSize
+  );
   const canvas = document.createElement("canvas");
   canvas.width = stageW;
   canvas.height = stageH;

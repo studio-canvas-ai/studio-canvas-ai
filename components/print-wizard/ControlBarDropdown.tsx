@@ -271,7 +271,7 @@ export function ControlMenuItem({
       role="option"
       aria-selected={active}
       onClick={onClick}
-      className={`w-full rounded-lg px-2 py-2 text-left transition ${
+      className={`min-w-0 w-full rounded-lg px-2 py-2 text-left transition [word-break:keep-all] ${
         active
           ? "bg-indigo-50 text-slate-900 ring-1 ring-indigo-300"
           : "text-slate-800 hover:bg-slate-50"

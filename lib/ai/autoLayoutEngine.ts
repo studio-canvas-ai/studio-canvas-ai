@@ -131,6 +131,7 @@ const FORMAT_MM: Partial<
   "ratio-3-1": { widthMm: 1200, heightMm: 400 },
   "banner-500x90": { widthMm: 5000, heightMm: 900 },
   "id-photo": { widthMm: 35, heightMm: 45 },
+  "photocard-55x85": { widthMm: 55, heightMm: 85 },
   "invite-square-150": { widthMm: 150, heightMm: 150 },
   "invite-postcard-100x150": { widthMm: 100, heightMm: 150 },
 };

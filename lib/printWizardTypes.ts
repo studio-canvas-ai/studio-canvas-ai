@@ -21,6 +21,11 @@ export type PrintFormatDefinition = {
   aspect: number;
   /** Trim size in cm when the preset is a physical print size. */
   physicalCm?: { width: number; height: number };
+  /**
+   * Optional download/export pixel size. When set, Screen-26 composite uses these
+   * dimensions instead of the default 1080-wide raster.
+   */
+  exportPx?: { width: number; height: number };
 };
 
 export const PRINT_FORMATS = [
@@ -110,34 +115,74 @@ export const PRINT_FORMATS = [
     aspect: 100 / 150,
     physicalCm: { width: 10, height: 15 },
   },
+  {
+    id: "wallpaper-9-19.5",
+    label: "스마트폰 배경화면",
+    subtitle: "9:19.5 · 1080×2340 px",
+    aspect: 9 / 19.5,
+    exportPx: { width: 1080, height: 2340 },
+  },
+  {
+    id: "photocard-55x85",
+    label: "포토카드 / 굿즈용",
+    subtitle: "5.5 × 8.5 cm",
+    aspect: 5.5 / 8.5,
+    physicalCm: { width: 5.5, height: 8.5 },
+    /** 300 DPI trim (5.5×8.5 cm). */
+    exportPx: { width: 650, height: 1004 },
+  },
+  {
+    id: "yt-thumb-16-9",
+    label: "유튜브·블로그 썸네일",
+    subtitle: "16:9 픽셀 지정형",
+    aspect: 16 / 9,
+    exportPx: { width: 1920, height: 1080 },
+  },
   { id: "free", label: "직접 입력 / 프리 사이즈", aspect: 1 },
 ] as const satisfies readonly PrintFormatDefinition[];
 
 export type PrintFormatId = (typeof PRINT_FORMATS)[number]["id"];
 
 /**
- * Screen 26 — fixed left/right 규격 pairs (do not reorder or omit).
- * Left column = digital/social ratios + ISO A sizes.
- * Right column = paired print / banner / ID sizes.
+ * Screen 26 — 규격 menu order (2-column grid).
+ * Z-gen / SNS formats sit near digital ratios; remaining print sizes follow.
  */
-export const SCREEN_26_FORMAT_PRESET_PAIRS = [
-  { left: "ratio-16-9", right: "b5" },
-  { left: "ratio-9-16", right: "ratio-1-2" },
-  { left: "ratio-4-5", right: "ratio-4-3" },
-  { left: "ratio-1-1", right: "ratio-3-1" },
-  { left: "a4", right: "banner-500x90" },
-  { left: "a5", right: "id-photo" },
-  { left: "a3", right: "invite-square-150" },
-  { left: "a2", right: "invite-postcard-100x150" },
-] as const satisfies ReadonlyArray<{
-  left: PrintFormatId;
-  right: PrintFormatId;
-}>;
+export const SCREEN_26_PRESET_FORMAT_IDS = [
+  "ratio-16-9",
+  "b5",
+  "yt-thumb-16-9",
+  "photocard-55x85",
+  "ratio-9-16",
+  "wallpaper-9-19.5",
+  "ratio-1-2",
+  "ratio-4-5",
+  "ratio-4-3",
+  "ratio-1-1",
+  "ratio-3-1",
+  "a4",
+  "banner-500x90",
+  "a5",
+  "id-photo",
+  "a3",
+  "invite-square-150",
+  "a2",
+  "invite-postcard-100x150",
+] as const satisfies readonly PrintFormatId[];
 
-/** Screen 26 preset ids in display order (left column then right column per row). */
-export const SCREEN_26_PRESET_FORMAT_IDS = SCREEN_26_FORMAT_PRESET_PAIRS.flatMap(
-  (pair) => [pair.left, pair.right]
-) as PrintFormatId[];
+/**
+ * Screen 26 — left/right pairs derived from preset order (legacy / docs).
+ * Trailing odd id is omitted from the last incomplete pair.
+ */
+export const SCREEN_26_FORMAT_PRESET_PAIRS = (() => {
+  const pairs: Array<{ left: PrintFormatId; right: PrintFormatId }> = [];
+  for (let i = 0; i + 1 < SCREEN_26_PRESET_FORMAT_IDS.length; i += 2) {
+    pairs.push({
+      left: SCREEN_26_PRESET_FORMAT_IDS[i]!,
+      right: SCREEN_26_PRESET_FORMAT_IDS[i + 1]!,
+    });
+  }
+  return pairs;
+})();
 
 export function formatDisplayLabel(id: PrintFormatId | string): string {
   const fmt = PRINT_FORMATS.find((f) => f.id === id);
@@ -1022,6 +1067,31 @@ export function resolvePrintAspect(
     return fmt.physicalCm.width / fmt.physicalCm.height;
   }
   return fmt.aspect;
+}
+
+/** Raster export size for download / composite (format exportPx or 1080-wide). */
+export function resolvePrintExportSize(
+  formatId: PrintFormatId | string,
+  customSize: PrintCustomSize | null | undefined
+): { width: number; height: number } {
+  const fmt = formatById(formatId);
+  if (
+    "exportPx" in fmt &&
+    fmt.exportPx &&
+    Number.isFinite(fmt.exportPx.width) &&
+    Number.isFinite(fmt.exportPx.height) &&
+    fmt.exportPx.width > 0 &&
+    fmt.exportPx.height > 0
+  ) {
+    return {
+      width: Math.round(fmt.exportPx.width),
+      height: Math.round(fmt.exportPx.height),
+    };
+  }
+  const aspect = resolvePrintAspect(formatId, customSize);
+  const width = 1080;
+  const height = Math.max(1, Math.round(width / Math.max(aspect, 0.05)));
+  return { width, height };
 }
 
 export function formatCustomSizeLabel(size: PrintCustomSize): string {

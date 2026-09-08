@@ -13,7 +13,7 @@ import {
   PRINT_PAGE_COUNTS,
   PRINT_CUSTOM_SIZE_MAX_CM,
   PRINT_CUSTOM_SIZE_MAX_INCH,
-  SCREEN_26_FORMAT_PRESET_PAIRS,
+  SCREEN_26_PRESET_FORMAT_IDS,
   formatDisplayLabel,
   fieldById,
   emptySpecPicks,
@@ -383,29 +383,22 @@ export default function SpecSettingsPanel({
           value={specPicks.format ? formatValueLabel : undefined}
           open={openKey === "format"}
           onOpenChange={(v) => setOpenKey(v ? "format" : null)}
-          menuMinWidth={280}
-          menuMaxWidth={360}
+          menuMinWidth={320}
+          menuMaxWidth={420}
           menuAnchorSelector="[data-spec-panel]"
         >
-          <div className="grid grid-cols-2 gap-1">
+          <div className="grid grid-cols-2 gap-1.5 [grid-template-columns:repeat(2,minmax(0,1fr))]">
             {isScreen26Presets
-              ? SCREEN_26_FORMAT_PRESET_PAIRS.map((pair) => (
-                  <div
-                    key={`${pair.left}-${pair.right}`}
-                    className="col-span-2 grid grid-cols-2 gap-1"
-                  >
-                    {([pair.left, pair.right] as const).map((id) => (
-                      <ControlMenuItem
-                        key={id}
-                        active={specPicks.format && formatId === id}
-                        title={formatDisplayLabel(id)}
-                        onClick={() => {
-                          onFormatChange(id);
-                          setOpenKey(null);
-                        }}
-                      />
-                    ))}
-                  </div>
+              ? SCREEN_26_PRESET_FORMAT_IDS.map((id) => (
+                  <ControlMenuItem
+                    key={id}
+                    active={specPicks.format && formatId === id}
+                    title={formatDisplayLabel(id)}
+                    onClick={() => {
+                      onFormatChange(id);
+                      setOpenKey(null);
+                    }}
+                  />
                 ))
               : presetFormats.map((fmt) => (
                   <ControlMenuItem
