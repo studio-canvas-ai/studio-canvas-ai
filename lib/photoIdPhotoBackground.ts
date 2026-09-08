@@ -6,18 +6,20 @@
 import { prepareGenerateImageUrls } from "@/lib/prepareGenerateImages";
 import { toRawImageUrl, processSubjectViaApi } from "@/lib/aiCommand";
 
-export const ID_PHOTO_STYLE_ID = "id-photo-studio";
+export const ID_PHOTO_STYLE_ID = "portrait-lock-studio";
 
 /** Flux / prompt lock when ID photo use + style are active. */
 export const ID_PHOTO_STUDIO_LOCK =
-  "Professional studio ID photo, clean solid color background, studio soft lighting. Preserve the exact original person face, facial features, hair, and upper-body silhouette — do not invent a new person.";
+  "Professional studio ID photo, clean solid studio backdrop, studio soft lighting. Preserve the exact original person face, facial features, hair, and upper-body silhouette — do not invent a new person.";
 
 export function isIdPhotoLookbookMode(opts: {
   useId?: string | null;
   imageStyleId?: string | null;
 }): boolean {
   return (
-    opts.useId === "id-photo" || opts.imageStyleId === ID_PHOTO_STYLE_ID
+    opts.useId === "id-photo" ||
+    opts.imageStyleId === ID_PHOTO_STYLE_ID ||
+    opts.imageStyleId === "id-photo-studio"
   );
 }
 

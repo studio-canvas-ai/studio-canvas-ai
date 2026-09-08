@@ -121,44 +121,24 @@ export const IMAGE_STYLE_PRESETS: VisualStylePreset[] = [
       "epic fantasy atmosphere, grand dramatic scale, volumetric god rays, mythic cinematic mood, majestic landscape",
   },
   {
-    id: "id-photo-studio",
+    id: "portrait-lock-studio",
     category: "image",
-    labelKo: "증명사진용",
-    hintKo: "원본 인물 고정 · 단색 스튜디오 배경",
-    labelEn: "ID Photo Studio",
-    hintEn: "lock original person · solid studio backdrop",
-    modifiers:
-      "Professional studio ID photo, clean solid color background, studio soft lighting, passport-style head-and-shoulders framing, even exposure, natural skin, no beauty distortion, preserve exact facial identity",
-  },
-  {
-    id: "lookbook-studio",
-    category: "image",
-    labelKo: "화보용",
-    hintKo: "화보·매거진 톤 인물 컷",
-    labelEn: "Lookbook Studio",
-    hintEn: "editorial lookbook portrait tone",
-    modifiers:
-      "editorial lookbook portrait, magazine fashion photography, soft natural light, refined color grade, full-scene environmental portrait, photorealistic skin and fabric",
-  },
-  {
-    id: "sns-studio",
-    category: "image",
-    labelKo: "sns용",
-    hintKo: "프로필·SNS 피드용 컷",
-    labelEn: "SNS Studio",
-    hintEn: "profile / social feed portrait",
-    modifiers:
-      "social media profile portrait, clean lifestyle feed photo, bright approachable lighting, square-friendly composition, photorealistic, natural expression",
-  },
-  {
-    id: "purpose-general",
-    category: "image",
-    labelKo: "증명사진,화보,sns용",
-    hintKo: "용도 미지정 · 통합 스타일 표기",
+    labelKo: "증명사진, 화보, SNS",
+    hintKo: "원본고정, 스튜디오배경",
     labelEn: "ID / Lookbook / SNS",
-    hintEn: "general portrait style tag",
+    hintEn: "keep original · studio backdrop only",
     modifiers:
-      "versatile portrait photography suitable for ID photo, lookbook, or social profile use, clean lighting, photorealistic",
+      "Preserve the exact original subject silhouette and identity; replace only with a clean solid studio backdrop; rembg cutout + studio plate; photorealistic; no FaceID identity rewrite",
+  },
+  {
+    id: "portrait-new-bg",
+    category: "image",
+    labelKo: "증명사진, 화보, SNS",
+    hintKo: "새 배경생성",
+    labelEn: "ID / Lookbook / SNS",
+    hintEn: "generate new background (FaceID)",
+    modifiers:
+      "FaceID InstantID portrait with freshly generated scenic or studio background, preserve facial identity, photorealistic environmental backdrop generation",
   },
 ];
 
@@ -210,38 +190,51 @@ export function emptyVisualStyleSelection(): VisualStyleSelection {
   return { imageStyleId: null, moodStyleId: null };
 }
 
-/** Default style tag when purpose is not 증명사진/화보/SNS. */
-export const PURPOSE_STYLE_TAG_DEFAULT = "증명사진,화보,sns용";
-export const PURPOSE_GENERAL_STYLE_ID = "purpose-general";
+/** Keep-original / rembg path (원본고정 · 스튜디오배경) — lower credit. */
+export const PORTRAIT_LOCK_STUDIO_STYLE_ID = "portrait-lock-studio";
+/** FaceID InstantID path (새 배경생성) — 50-credit generative uses. */
+export const PORTRAIT_NEW_BG_STYLE_ID = "portrait-new-bg";
+
+/** @deprecated Legacy id — maps to keep-original style. */
+export const PURPOSE_GENERAL_STYLE_ID = PORTRAIT_LOCK_STUDIO_STYLE_ID;
+export const PURPOSE_STYLE_TAG_DEFAULT =
+  "증명사진, 화보, SNS (원본고정, 스튜디오배경)";
+
+const LEGACY_STYLE_ID_MAP: Record<string, string> = {
+  "id-photo-studio": PORTRAIT_LOCK_STUDIO_STYLE_ID,
+  "lookbook-studio": PORTRAIT_LOCK_STUDIO_STYLE_ID,
+  "sns-studio": PORTRAIT_LOCK_STUDIO_STYLE_ID,
+  "purpose-general": PORTRAIT_LOCK_STUDIO_STYLE_ID,
+};
 
 const USE_TO_STYLE_ID: Record<string, string> = {
-  "id-photo": "id-photo-studio",
-  "id-photo-keep-original": "id-photo-studio",
-  lookbook: "lookbook-studio",
-  "lookbook-keep-original": "lookbook-studio",
-  sns: "sns-studio",
-  "sns-keep-original": "sns-studio",
+  "id-photo-keep-original": PORTRAIT_LOCK_STUDIO_STYLE_ID,
+  "lookbook-keep-original": PORTRAIT_LOCK_STUDIO_STYLE_ID,
+  "sns-keep-original": PORTRAIT_LOCK_STUDIO_STYLE_ID,
+  "id-photo": PORTRAIT_NEW_BG_STYLE_ID,
+  lookbook: PORTRAIT_NEW_BG_STYLE_ID,
+  sns: PORTRAIT_NEW_BG_STYLE_ID,
 };
 
 const USE_TO_STYLE_TAG: Record<string, string> = {
-  "id-photo": "증명사진용",
-  "id-photo-keep-original": "증명사진용",
-  lookbook: "화보용",
-  "lookbook-keep-original": "화보용",
-  sns: "sns용",
-  "sns-keep-original": "sns용",
-  증명사진: "증명사진용",
-  화보: "화보용",
-  SNS: "sns용",
-  "프로필 / SNS": "sns용",
+  "id-photo-keep-original": PURPOSE_STYLE_TAG_DEFAULT,
+  "lookbook-keep-original": PURPOSE_STYLE_TAG_DEFAULT,
+  "sns-keep-original": PURPOSE_STYLE_TAG_DEFAULT,
+  "id-photo": "증명사진, 화보, SNS (새 배경생성)",
+  lookbook: "증명사진, 화보, SNS (새 배경생성)",
+  sns: "증명사진, 화보, SNS (새 배경생성)",
+  증명사진: "증명사진, 화보, SNS (새 배경생성)",
+  화보: "증명사진, 화보, SNS (새 배경생성)",
+  SNS: "증명사진, 화보, SNS (새 배경생성)",
+  "프로필 / SNS": "증명사진, 화보, SNS (새 배경생성)",
 };
 
 /** Map 용도 → style preset id (Screen-26 purpose ↔ style tag sync). */
 export function imageStyleIdForPurpose(
   useId: string | null | undefined
-): string {
-  if (!useId) return PURPOSE_GENERAL_STYLE_ID;
-  return USE_TO_STYLE_ID[useId] ?? PURPOSE_GENERAL_STYLE_ID;
+): string | null {
+  if (!useId) return null;
+  return USE_TO_STYLE_ID[useId] ?? null;
 }
 
 /** Map 용도/라벨 → style tag display text. */
@@ -252,13 +245,59 @@ export function styleTagLabelForPurpose(
   return USE_TO_STYLE_TAG[useIdOrLabel] ?? PURPOSE_STYLE_TAG_DEFAULT;
 }
 
-/** Reverse: purpose-bound style → matching use id (or null). */
+/**
+ * Reverse: purpose-bound style → matching use id.
+ * 1) portrait-lock-studio → 원본유지 (배경만 변경)
+ * 2) portrait-new-bg → FaceID 50크레딧
+ */
 export function purposeUseIdForStyle(
-  imageStyleId: string | null | undefined
-): "id-photo" | "lookbook" | "sns" | null {
-  if (imageStyleId === "id-photo-studio") return "id-photo";
-  if (imageStyleId === "lookbook-studio") return "lookbook";
-  if (imageStyleId === "sns-studio") return "sns";
+  imageStyleId: string | null | undefined,
+  currentUseId?: string | null
+):
+  | "id-photo"
+  | "lookbook"
+  | "sns"
+  | "id-photo-keep-original"
+  | "lookbook-keep-original"
+  | "sns-keep-original"
+  | null {
+  const resolved =
+    (imageStyleId && LEGACY_STYLE_ID_MAP[imageStyleId]) || imageStyleId;
+
+  // 1) 원본고정 → keep-original (low credit)
+  if (resolved === PORTRAIT_LOCK_STUDIO_STYLE_ID) {
+    if (
+      currentUseId === "id-photo-keep-original" ||
+      currentUseId === "lookbook-keep-original" ||
+      currentUseId === "sns-keep-original"
+    ) {
+      return currentUseId;
+    }
+    if (currentUseId === "id-photo") return "id-photo-keep-original";
+    if (currentUseId === "lookbook") return "lookbook-keep-original";
+    if (currentUseId === "sns") return "sns-keep-original";
+    return "id-photo-keep-original";
+  }
+
+  // 2) 새 배경생성 → FaceID 50-credit uses
+  if (resolved === PORTRAIT_NEW_BG_STYLE_ID) {
+    if (
+      currentUseId === "id-photo" ||
+      currentUseId === "lookbook" ||
+      currentUseId === "sns"
+    ) {
+      return currentUseId;
+    }
+    if (currentUseId === "id-photo-keep-original") return "id-photo";
+    if (currentUseId === "lookbook-keep-original") return "lookbook";
+    if (currentUseId === "sns-keep-original") return "sns";
+    return "id-photo";
+  }
+
+  // Legacy per-purpose styles → FaceID siblings
+  if (resolved === "id-photo-studio") return "id-photo";
+  if (resolved === "lookbook-studio") return "lookbook";
+  if (resolved === "sns-studio") return "sns";
   return null;
 }
 
@@ -266,7 +305,8 @@ export function resolveVisualStylePreset(
   id: string | null | undefined
 ): VisualStylePreset | null {
   if (!id) return null;
-  return PRESET_BY_ID.get(id.trim()) ?? null;
+  const mapped = LEGACY_STYLE_ID_MAP[id.trim()] ?? id.trim();
+  return PRESET_BY_ID.get(mapped) ?? null;
 }
 
 /** Normalize client payload → validated selection. */

@@ -1654,10 +1654,11 @@ export default function PrintUnifiedEditor() {
       }
       onMainPromptChange={(value) => patch({ mainPrompt: value })}
       onVisualStyleChange={(visualStyle) => {
-        const styleId =
-          visualStyle.imageStyleId ||
-          imageStyleIdForPurpose(stateRef.current.useId);
-        const linkedUse = purposeUseIdForStyle(styleId);
+        const styleId = visualStyle.imageStyleId;
+        const linkedUse = purposeUseIdForStyle(
+          styleId,
+          stateRef.current.useId
+        );
         let next: PrintWizardState = {
           ...stateRef.current,
           visualStyle: {

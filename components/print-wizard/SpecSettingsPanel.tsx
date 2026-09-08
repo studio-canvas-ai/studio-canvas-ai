@@ -179,15 +179,19 @@ export default function SpecSettingsPanel({
       : value === 2
         ? cs.pageDouble
         : fillCanvas(cs.pageN, { n: value });
-  const styleValueLabel = visualStyle.imageStyleId
-    ? cs.imageStyles[
-        visualStyle.imageStyleId as keyof typeof cs.imageStyles
-      ] ??
-      IMAGE_STYLE_PRESETS.find((p) => p.id === visualStyle.imageStyleId)?.[
-        locale === "kr" ? "labelKo" : "labelEn"
-      ] ??
-      ""
-    : "";
+  const styleValueLabel = (() => {
+    const id = visualStyle.imageStyleId;
+    if (!id) return "";
+    const preset = IMAGE_STYLE_PRESETS.find((p) => p.id === id);
+    if (preset) {
+      const name =
+        cs.imageStyles[id as keyof typeof cs.imageStyles] ??
+        (locale === "kr" ? preset.labelKo : preset.labelEn);
+      const hint = locale === "kr" ? preset.hintKo : preset.hintEn;
+      return hint ? `${name} (${hint})` : name;
+    }
+    return cs.imageStyles[id as keyof typeof cs.imageStyles] ?? "";
+  })();
   const [openKey, setOpenKey] = useState<OpenKey>(null);
   const [freeSizeOpen, setFreeSizeOpen] = useState(false);
   const [customUnit, setCustomUnit] = useState<PrintCustomUnit>(
@@ -533,8 +537,8 @@ export default function SpecSettingsPanel({
           value={specPicks.style ? styleValueLabel || undefined : undefined}
           open={openKey === "style"}
           onOpenChange={(v) => setOpenKey(v ? "style" : null)}
-          menuMinWidth={560}
-          menuMaxWidth={720}
+          menuMinWidth={640}
+          menuMaxWidth={820}
           menuWidenToViewport
           menuAnchorSelector="[data-spec-panel]"
         >
