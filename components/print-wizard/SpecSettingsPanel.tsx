@@ -661,8 +661,8 @@ export default function SpecSettingsPanel({
           value={exampleValueLabel || undefined}
           open={openKey === "prompt"}
           onOpenChange={(v) => setOpenKey(v ? "prompt" : null)}
-          menuMinWidth={isPhotoProduct ? 320 : 280}
-          menuMaxWidth={isPhotoProduct ? 420 : 360}
+          menuMinWidth={320}
+          menuMaxWidth={isPhotoProduct ? 420 : 400}
           menuAnchorSelector="[data-spec-panel]"
         >
           {isPhotoProduct ? (
@@ -678,7 +678,7 @@ export default function SpecSettingsPanel({
                   <p className="text-[11px] font-bold tracking-wide text-slate-900 [word-break:keep-all]">
                     {group.label}
                   </p>
-                  <div className="flex flex-col gap-1.5">
+                  <div className="grid grid-cols-2 gap-2 [grid-template-columns:repeat(2,minmax(0,1fr))]">
                     {group.examples.map((example) => {
                       const on = bgKeyword.trim() === example;
                       return (
@@ -689,7 +689,7 @@ export default function SpecSettingsPanel({
                             onBgKeywordChange(example);
                             setOpenKey(null);
                           }}
-                          className={`rounded-lg border px-2.5 py-2 text-left text-[11px] font-medium leading-snug [word-break:keep-all] transition pointer-coarse:min-h-10 ${
+                          className={`min-w-0 w-full rounded-lg border px-2.5 py-2 text-left text-[11px] font-medium leading-snug [word-break:keep-all] transition pointer-coarse:min-h-10 ${
                             on
                               ? "border-indigo-500 bg-indigo-50 text-indigo-900 ring-2 ring-indigo-400/60"
                               : "border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50"
@@ -719,7 +719,7 @@ export default function SpecSettingsPanel({
                   <p className="mb-2 text-[16px] font-bold tracking-wide text-slate-900 sm:text-[17px] [word-break:keep-all]">
                     {group.labelKo}
                   </p>
-                  <div className="flex flex-row flex-wrap gap-1.5">
+                  <div className="grid grid-cols-2 gap-2 [grid-template-columns:repeat(2,minmax(0,1fr))]">
                     {group.presets.map((preset) => {
                       const on = isBgExamplePresetSelected(
                         bgKeyword,
@@ -735,7 +735,7 @@ export default function SpecSettingsPanel({
                             );
                             setOpenKey(null);
                           }}
-                          className={`min-w-[9.5rem] flex-[1_1_45%] rounded-lg text-left shadow-sm transition [word-break:keep-all] ${
+                          className={`min-w-0 w-full rounded-lg text-left shadow-sm transition [word-break:keep-all] ${
                             on
                               ? "border-[3px] border-indigo-500 bg-indigo-50 px-[5px] py-[2px] shadow-md ring-2 ring-indigo-400/60"
                               : "border border-gray-200 bg-white px-2 py-1 hover:border-gray-300 hover:shadow"
@@ -776,7 +776,7 @@ export default function SpecSettingsPanel({
               setOpenKey(v ? "bg" : null);
             }}
             menuMinWidth={280}
-            menuMaxWidth={360}
+            menuMaxWidth={400}
             menuAnchorSelector="[data-spec-panel]"
             disabled={portraitPurposeLock}
           >
@@ -786,7 +786,7 @@ export default function SpecSettingsPanel({
                   <p className="mb-2 text-[16px] font-bold tracking-wide text-slate-900 sm:text-[17px] [word-break:keep-all]">
                     {cs.fieldGroups[group.id]}
                   </p>
-                  <div className="flex flex-row flex-wrap gap-1.5">
+                  <div className="grid grid-cols-2 gap-2 [grid-template-columns:repeat(2,minmax(0,1fr))]">
                     {group.items.map((item) => {
                       const on = bgPresetId === item.id;
                       const title = cs.bgPresets[item.id] ?? item.label;
@@ -798,7 +798,7 @@ export default function SpecSettingsPanel({
                             onBgPresetPick(item.id as BgPresetId);
                             setOpenKey(null);
                           }}
-                          className={`min-w-[9.5rem] flex-[1_1_45%] rounded-lg text-left shadow-sm transition [word-break:keep-all] pointer-coarse:min-h-10 ${
+                          className={`min-w-0 w-full rounded-lg text-left shadow-sm transition [word-break:keep-all] pointer-coarse:min-h-10 ${
                             on
                               ? "border-[3px] border-indigo-500 bg-indigo-50 px-[5px] py-[2px] shadow-md ring-2 ring-indigo-400/60"
                               : "border border-gray-200 bg-white px-2 py-1 hover:border-indigo-300 hover:shadow"
