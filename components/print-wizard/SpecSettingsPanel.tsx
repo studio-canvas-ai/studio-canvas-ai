@@ -533,8 +533,9 @@ export default function SpecSettingsPanel({
           value={specPicks.style ? styleValueLabel || undefined : undefined}
           open={openKey === "style"}
           onOpenChange={(v) => setOpenKey(v ? "style" : null)}
-          menuMinWidth={280}
-          menuMaxWidth={360}
+          menuMinWidth={560}
+          menuMaxWidth={720}
+          menuWidenToViewport
           menuAnchorSelector="[data-spec-panel]"
         >
           <div className="flex flex-col gap-0.5">

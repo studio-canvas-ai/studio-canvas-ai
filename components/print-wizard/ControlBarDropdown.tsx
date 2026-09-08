@@ -291,12 +291,12 @@ export function ControlMenuItem({
       }`}
     >
       {oneLine ? (
-        <span className="inline-flex max-w-full min-w-0 items-baseline gap-1.5 overflow-hidden whitespace-nowrap">
+        <span className="inline-flex items-baseline gap-1.5 whitespace-nowrap">
           <span className="shrink-0 text-[17px] font-bold leading-none tracking-tight text-slate-900">
             {title}
           </span>
           {hint ? (
-            <span className="min-w-0 truncate text-[14px] font-medium leading-none text-blue-700">
+            <span className="shrink-0 text-[14px] font-medium leading-none text-blue-700">
               ({hint})
             </span>
           ) : null}
