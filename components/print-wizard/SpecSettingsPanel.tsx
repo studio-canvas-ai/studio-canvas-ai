@@ -34,7 +34,11 @@ import {
   findSelectedBgExamplePreset,
   isBgExamplePresetSelected,
 } from "@/lib/aiBackgroundExamplePresets";
-import { isPortraitPurposeUse, portraitUseCreditLabelSuffix } from "@/lib/printPortraitPurpose";
+import {
+  isPortraitKeepOriginalUse,
+  isPortraitPurposeUse,
+  portraitUseCreditLabelSuffix,
+} from "@/lib/printPortraitPurpose";
 import {
   PHOTO_LOOKBOOK_EXAMPLE_HINT,
   getPhotoLookbookExampleCategories,
@@ -160,10 +164,10 @@ export default function SpecSettingsPanel({
     const credit = portraitUseCreditLabelSuffix(id);
     return credit ? `${base} ${credit}` : base;
   };
-  /** Closed chip / spec tag — distinguish keep-original from plain 증명사진. */
+  /** Closed chip / spec tag — distinguish keep-original variants. */
   const resolveUseValueLabel = (id: PrintUseId | string, fallback: string) => {
     const base = resolveUseLabel(id, fallback);
-    if (id === "id-photo-keep-original") {
+    if (isPortraitKeepOriginalUse(id)) {
       const desc = printUseMenuDescription(id);
       return desc ? `${base} ${desc}` : base;
     }
@@ -590,8 +594,8 @@ export default function SpecSettingsPanel({
           value={specPicks.use ? useValueLabel : undefined}
           open={openKey === "use"}
           onOpenChange={(v) => setOpenKey(v ? "use" : null)}
-          menuMinWidth={isPhotoProduct ? 220 : 280}
-          menuMaxWidth={isPhotoProduct ? 280 : 360}
+          menuMinWidth={isPhotoProduct ? 220 : 320}
+          menuMaxWidth={isPhotoProduct ? 280 : 400}
           menuAnchorSelector="[data-spec-panel]"
         >
           <div
@@ -606,14 +610,8 @@ export default function SpecSettingsPanel({
                 !isPhotoProduct && "description" in item
                   ? printUseMenuDescription(item.id)
                   : undefined;
-              const twoLine = Boolean(menuDesc);
               return (
-                <div
-                  key={item.id}
-                  className={
-                    twoLine && !isPhotoProduct ? "col-span-2 min-w-0" : "min-w-0"
-                  }
-                >
+                <div key={item.id} className="min-w-0">
                   <ControlMenuItem
                     active={specPicks.use && useId === item.id}
                     title={resolveUseLabel(item.id, item.label)}

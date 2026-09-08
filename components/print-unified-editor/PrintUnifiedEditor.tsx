@@ -102,8 +102,8 @@ import {
   resolveVisualStylePreset,
 } from "@/lib/ai/visualStylePresets";
 import {
-  isIdPhotoKeepOriginalUse,
   isPortraitAiPurposeUse,
+  isPortraitKeepOriginalUse,
   isPortraitPurposeUse,
   portraitAiPromptLock,
   portraitKeepOriginalScenicLock,
@@ -1023,7 +1023,7 @@ export default function PrintUnifiedEditor() {
     }
 
     const s = stateRef.current;
-    const keepOriginal = isIdPhotoKeepOriginalUse(s.useId);
+    const keepOriginal = isPortraitKeepOriginalUse(s.useId);
     const portraitAi = isPortraitAiPurposeUse(s.useId);
     const portraitIsolated = isPortraitPurposeUse(s.useId);
 

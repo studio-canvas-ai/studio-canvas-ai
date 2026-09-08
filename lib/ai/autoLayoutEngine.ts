@@ -82,12 +82,17 @@ const DETAIL_PRIORITY: SmartInputField[] = ["programs", "organizer"];
 /** 용도 — layout tone + page distribution strategy. */
 const USE_PROFILES: Record<PrintUseId, UseLayoutProfile> = {
   banner: { layoutKind: "poster-bold", distribution: "banner-wide" },
-  lookbook: { layoutKind: "corporate", distribution: "lookbook-minimal" },
   calendar: { layoutKind: "formal", distribution: "default" },
-  sns: { layoutKind: "product", distribution: "flyer-split" },
   poster: { layoutKind: "poster-bold", distribution: "flyer-split" },
   "id-photo": { layoutKind: "formal", distribution: "minimal" },
   "id-photo-keep-original": { layoutKind: "formal", distribution: "minimal" },
+  lookbook: { layoutKind: "corporate", distribution: "lookbook-minimal" },
+  "lookbook-keep-original": {
+    layoutKind: "corporate",
+    distribution: "lookbook-minimal",
+  },
+  sns: { layoutKind: "product", distribution: "flyer-split" },
+  "sns-keep-original": { layoutKind: "product", distribution: "flyer-split" },
   "concept-photo": { layoutKind: "product", distribution: "lookbook-minimal" },
   pamphlet: { layoutKind: "seminar", distribution: "tri-fold" },
   menu: { layoutKind: "menu", distribution: "menu-split" },

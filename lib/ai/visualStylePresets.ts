@@ -218,14 +218,18 @@ const USE_TO_STYLE_ID: Record<string, string> = {
   "id-photo": "id-photo-studio",
   "id-photo-keep-original": "id-photo-studio",
   lookbook: "lookbook-studio",
+  "lookbook-keep-original": "lookbook-studio",
   sns: "sns-studio",
+  "sns-keep-original": "sns-studio",
 };
 
 const USE_TO_STYLE_TAG: Record<string, string> = {
   "id-photo": "증명사진용",
   "id-photo-keep-original": "증명사진용",
   lookbook: "화보용",
+  "lookbook-keep-original": "화보용",
   sns: "sns용",
+  "sns-keep-original": "sns용",
   증명사진: "증명사진용",
   화보: "화보용",
   SNS: "sns용",

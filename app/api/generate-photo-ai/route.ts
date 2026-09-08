@@ -68,6 +68,8 @@ function coercePurpose(
 ): PortraitAiPurposeUseId | null {
   const v = (raw || "").trim();
   if (v === "id-photo-keep-original") return null;
+  if (v === "lookbook-keep-original") return null;
+  if (v === "sns-keep-original") return null;
   if (isPortraitAiPurposeUse(v)) return v;
   return null;
 }

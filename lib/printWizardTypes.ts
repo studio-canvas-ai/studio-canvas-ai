@@ -176,20 +176,8 @@ export function coercePhotoFormatId(
 /** Purpose / use case (용도) — print / marketing catalog. */
 export const PRINT_USES = [
   { id: "banner", label: "배너" },
-  { id: "lookbook", label: "화보" },
   { id: "calendar", label: "달력" },
-  { id: "sns", label: "SNS" },
   { id: "poster", label: "포스터" },
-  { id: "id-photo", label: "증명사진" },
-  /**
-   * Screen-26: keep-original ID photo (UI label only for now).
-   * Dropdown shows two lines; generation pipeline unchanged.
-   */
-  {
-    id: "id-photo-keep-original",
-    label: "증명사진",
-    description: "(원본유지.배경만변경)",
-  },
   { id: "pamphlet", label: "팸플릿" },
   { id: "menu", label: "메뉴판" },
   { id: "flyer", label: "전단지" },
@@ -201,6 +189,25 @@ export const PRINT_USES = [
   { id: "detail-page", label: "상세페이지" },
   { id: "presentation", label: "프리젠테이션" },
   { id: "invitation", label: "청첩장·초청장" },
+  /** Paired rows (2-col): FaceID | 원본유지 — keep adjacent for Screen-26 grid. */
+  { id: "lookbook", label: "화보" },
+  {
+    id: "lookbook-keep-original",
+    label: "화보",
+    description: "(원본유지, 배경만 변경)",
+  },
+  { id: "sns", label: "SNS" },
+  {
+    id: "sns-keep-original",
+    label: "SNS",
+    description: "(원본유지, 배경만 변경)",
+  },
+  { id: "id-photo", label: "증명사진" },
+  {
+    id: "id-photo-keep-original",
+    label: "증명사진",
+    description: "(원본유지, 배경만 변경)",
+  },
 ] as const;
 
 /** Optional second line under a 용도 menu item (Screen-26). */

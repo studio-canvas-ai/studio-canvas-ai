@@ -105,6 +105,8 @@ export type CanvasStudioCopy = {
     poster: string;
     "id-photo": string;
     "id-photo-keep-original": string;
+    "lookbook-keep-original": string;
+    "sns-keep-original": string;
     "concept-photo": string;
     pamphlet: string;
     menu: string;
@@ -284,6 +286,8 @@ export const canvasStudioKr: CanvasStudioCopy = {
     poster: "포스터",
     "id-photo": "증명사진",
     "id-photo-keep-original": "증명사진",
+    "lookbook-keep-original": "화보",
+    "sns-keep-original": "SNS",
     "concept-photo": "컨셉 포토",
     pamphlet: "팸플릿",
     menu: "메뉴판",
@@ -505,6 +509,8 @@ export const canvasStudioEn: CanvasStudioCopy = {
     poster: "Poster",
     "id-photo": "ID photo",
     "id-photo-keep-original": "ID photo",
+    "lookbook-keep-original": "Lookbook",
+    "sns-keep-original": "Social",
     "concept-photo": "Concept photo",
     pamphlet: "Pamphlet",
     menu: "Menu",
@@ -711,6 +717,8 @@ export const canvasStudioJa: CanvasStudioCopy = {
     poster: "ポスター",
     "id-photo": "証明写真",
     "id-photo-keep-original": "証明写真",
+    "lookbook-keep-original": "ルックブック",
+    "sns-keep-original": "SNS",
     "concept-photo": "コンセプトフォト",
     pamphlet: "パンフレット",
     menu: "メニュー",
@@ -903,6 +911,8 @@ export const canvasStudioZh: CanvasStudioCopy = {
     poster: "海报",
     "id-photo": "证件照",
     "id-photo-keep-original": "证件照",
+    "lookbook-keep-original": "画报",
+    "sns-keep-original": "社交",
     "concept-photo": "概念写真",
     pamphlet: "宣传册",
     menu: "菜单",
@@ -1095,6 +1105,8 @@ export const canvasStudioEs: CanvasStudioCopy = {
     poster: "Póster",
     "id-photo": "Foto carnet",
     "id-photo-keep-original": "Foto carnet",
+    "lookbook-keep-original": "Lookbook",
+    "sns-keep-original": "Redes",
     "concept-photo": "Foto concepto",
     pamphlet: "Folleto",
     menu: "Menú",
@@ -1287,6 +1299,8 @@ export const canvasStudioFr: CanvasStudioCopy = {
     poster: "Affiche",
     "id-photo": "Photo d’identité",
     "id-photo-keep-original": "Photo d’identité",
+    "lookbook-keep-original": "Lookbook",
+    "sns-keep-original": "Réseaux",
     "concept-photo": "Photo concept",
     pamphlet: "Pamphlet",
     menu: "Menu",
@@ -1479,6 +1493,8 @@ export const canvasStudioDe: CanvasStudioCopy = {
     poster: "Poster",
     "id-photo": "Passfoto",
     "id-photo-keep-original": "Passfoto",
+    "lookbook-keep-original": "Lookbook",
+    "sns-keep-original": "Social",
     "concept-photo": "Konzeptfoto",
     pamphlet: "Pamphlet",
     menu: "Speisekarte",
@@ -1671,6 +1687,8 @@ export const canvasStudioIt: CanvasStudioCopy = {
     poster: "Poster",
     "id-photo": "Foto tessera",
     "id-photo-keep-original": "Foto tessera",
+    "lookbook-keep-original": "Lookbook",
+    "sns-keep-original": "Social",
     "concept-photo": "Foto concept",
     pamphlet: "Depliant",
     menu: "Menu",
@@ -1863,6 +1881,8 @@ export const canvasStudioVi: CanvasStudioCopy = {
     poster: "Poster",
     "id-photo": "Ảnh thẻ",
     "id-photo-keep-original": "Ảnh thẻ",
+    "lookbook-keep-original": "Lookbook",
+    "sns-keep-original": "MXH",
     "concept-photo": "Ảnh concept",
     pamphlet: "Tờ rơi",
     menu: "Thực đơn",
@@ -2055,6 +2075,8 @@ export const canvasStudioHi: CanvasStudioCopy = {
     poster: "पोस्टर",
     "id-photo": "आईडी फ़ोटो",
     "id-photo-keep-original": "आईडी फ़ोटो",
+    "lookbook-keep-original": "लुकबुक",
+    "sns-keep-original": "सोशल",
     "concept-photo": "कॉन्सेप्ट फ़ोटो",
     pamphlet: "पैम्फलेट",
     menu: "मेनू",
