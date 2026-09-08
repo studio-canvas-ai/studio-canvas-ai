@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import { Clapperboard, Play } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 
 /** High-res AI design poster shown in the hero dual showcase (left card). */
@@ -11,8 +10,15 @@ const HERO_DESIGN_TEMPLATE = {
   height: 1024,
 } as const;
 
+/** High-res shorts / thumbnail phone screen (right card, 9:16). */
+const HERO_PHONE_TEMPLATE = {
+  src: "/hero/shorts-phone-template.jpg",
+  width: 576,
+  height: 1024,
+} as const;
+
 /**
- * Landing hero right visual — Shorts/Reels thumbnail + A4 print poster dual mock.
+ * Landing hero right visual — Shorts thumbnail + A4 print poster dual mock.
  */
 export default function HeroDualShowcase() {
   const { t } = useI18n();
@@ -56,41 +62,25 @@ export default function HeroDualShowcase() {
           </p>
         </div>
 
-        {/* Shorts / Reels thumbnail phone — front-right */}
+        {/* Shorts / thumbnail phone — front-right (high-res source, full-bleed) */}
         <div
           className="hero-dual__card absolute bottom-[2%] right-[0%] z-[2] w-[48%] origin-bottom rotate-[6deg] animate-float"
           style={{ animationDuration: "6s" }}
         >
           <div className="overflow-hidden rounded-[1.35rem] border border-white/20 bg-[#0b1220] p-1.5 shadow-[0_28px_60px_rgba(0,0,0,0.5)] ring-1 ring-emerald-400/25">
-            <div className="relative aspect-[9/16] overflow-hidden rounded-[1.05rem] bg-gradient-to-b from-emerald-500/30 via-teal-700/40 to-slate-950">
-              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_30%,rgba(52,211,153,0.45),transparent_60%)]" />
-              <div className="absolute inset-x-0 top-0 flex items-center justify-between px-2.5 pt-2.5">
-                <span className="inline-flex items-center gap-1 rounded-full bg-black/45 px-1.5 py-0.5 text-[8px] font-bold text-emerald-200 backdrop-blur-sm">
-                  <Clapperboard className="h-2.5 w-2.5" aria-hidden />
-                  9:16
-                </span>
-                <span className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[8px] font-black text-white">
-                  LIVE
-                </span>
-              </div>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="flex h-11 w-11 items-center justify-center rounded-full border border-white/30 bg-black/35 shadow-lg backdrop-blur-sm">
-                  <Play className="h-5 w-5 fill-white text-white" aria-hidden />
-                </span>
-              </div>
-              <div className="absolute inset-x-2.5 bottom-2.5 space-y-1.5">
-                <div className="rounded-md bg-black/55 px-2 py-1.5 backdrop-blur-md">
-                  <p className="text-[10px] font-black leading-tight text-white [word-break:keep-all]">
-                    {h.ctaVideoThumbnailLine2}
-                  </p>
-                  <p className="mt-0.5 text-[8px] font-semibold text-emerald-200/90">
-                    {h.ctaVideoThumbnailLine1}
-                  </p>
-                </div>
-                <div className="h-1 overflow-hidden rounded-full bg-white/20">
-                  <div className="h-full w-[62%] rounded-full bg-emerald-400" />
-                </div>
-              </div>
+            <div className="relative aspect-[9/16] w-full overflow-hidden rounded-[1.05rem] bg-black">
+              <Image
+                src={HERO_PHONE_TEMPLATE.src}
+                alt={h.ctaVideoThumbnail}
+                width={HERO_PHONE_TEMPLATE.width}
+                height={HERO_PHONE_TEMPLATE.height}
+                priority
+                quality={100}
+                unoptimized
+                sizes="(max-width: 640px) 45vw, (max-width: 1280px) 240px, 280px"
+                className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover object-center"
+                draggable={false}
+              />
             </div>
           </div>
           <p className="mt-2 text-center text-[10px] font-semibold tracking-tight text-white/80 [word-break:keep-all] sm:text-[11px]">
