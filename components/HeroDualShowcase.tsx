@@ -1,11 +1,18 @@
 "use client";
 
-import { Clapperboard, FileText, Play } from "lucide-react";
+import Image from "next/image";
+import { Clapperboard, Play } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
+
+/** High-res AI design poster shown in the hero dual showcase (left card). */
+const HERO_DESIGN_TEMPLATE = {
+  src: "/hero/ai-design-template.jpg",
+  width: 724,
+  height: 1024,
+} as const;
 
 /**
  * Landing hero right visual — Shorts/Reels thumbnail + A4 print poster dual mock.
- * Pure UI chrome (no selfie before/after).
  */
 export default function HeroDualShowcase() {
   const { t } = useI18n();
@@ -23,42 +30,25 @@ export default function HeroDualShowcase() {
       />
 
       <div className="relative mx-auto aspect-[5/6] w-full max-h-[min(56svh,520px)]">
-        {/* A4 print poster — back-left */}
+        {/* A4 print poster — back-left (high-res source, full-bleed) */}
         <div
           className="hero-dual__card absolute left-[2%] top-[6%] z-[1] w-[58%] origin-bottom rotate-[-7deg] animate-float"
           style={{ animationDuration: "7s", animationDelay: "0.15s" }}
         >
           <div className="overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-[0_22px_50px_rgba(0,0,0,0.35)] ring-1 ring-white/40">
-            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-2.5 py-1.5">
-              <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wide text-sky-700">
-                <FileText className="h-3 w-3" aria-hidden />
-                A4
-              </span>
-              <span className="truncate text-[9px] font-semibold text-slate-500">
-                {h.ctaDesignGeneratorLine1}
-              </span>
-            </div>
-            <div className="relative aspect-[210/297] bg-gradient-to-br from-sky-50 via-white to-slate-100 p-3 sm:p-3.5">
-              <div className="absolute inset-x-3 top-3 h-[38%] overflow-hidden rounded-md bg-gradient-to-br from-sky-400 via-blue-500 to-indigo-600 sm:inset-x-3.5 sm:top-3.5">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.35),transparent_55%)]" />
-                <div className="absolute bottom-2 left-2 right-2 space-y-1">
-                  <div className="h-1.5 w-3/4 rounded-full bg-white/90" />
-                  <div className="h-1 w-1/2 rounded-full bg-white/55" />
-                </div>
-              </div>
-              <div className="absolute inset-x-3 bottom-3 top-[46%] flex flex-col gap-1.5 sm:inset-x-3.5 sm:bottom-3.5">
-                <div className="h-2 w-[88%] rounded-full bg-slate-800/90" />
-                <div className="h-1.5 w-[70%] rounded-full bg-slate-500/70" />
-                <div className="mt-1 space-y-1">
-                  <div className="h-1 w-full rounded-full bg-slate-300/90" />
-                  <div className="h-1 w-[92%] rounded-full bg-slate-300/80" />
-                  <div className="h-1 w-[78%] rounded-full bg-slate-300/70" />
-                </div>
-                <div className="mt-auto flex gap-1.5 pt-1">
-                  <div className="h-6 flex-1 rounded-md bg-sky-500/90" />
-                  <div className="h-6 w-10 rounded-md bg-slate-200" />
-                </div>
-              </div>
+            <div className="relative aspect-[724/1024] w-full bg-white">
+              <Image
+                src={HERO_DESIGN_TEMPLATE.src}
+                alt={h.ctaDesignGenerator}
+                width={HERO_DESIGN_TEMPLATE.width}
+                height={HERO_DESIGN_TEMPLATE.height}
+                priority
+                quality={100}
+                unoptimized
+                sizes="(max-width: 640px) 52vw, (max-width: 1280px) 280px, 320px"
+                className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover object-center"
+                draggable={false}
+              />
             </div>
           </div>
           <p className="mt-2 text-center text-[10px] font-semibold tracking-tight text-white/80 [word-break:keep-all] sm:text-[11px]">
