@@ -80,6 +80,8 @@ export type PrintUnifiedEditorCanvasProps = {
   requireSubscription?: () => boolean;
   onInstallPhoto?: (file: File, mode: PhotoKind) => Promise<void>;
   onOpenRecentProject?: (project: StudioCanvasProjectV1) => void;
+  /** Load a work from My gallery vault onto canvas + mini thumbs. */
+  onLoadFromGallery?: (project: StudioCanvasProjectV1) => void;
   onSaveCanvas?: () => void;
   saveCanvasBusy?: boolean;
   /** Duplicate / insert current page after itself (mini thumbs + canvas sync). */
@@ -132,6 +134,7 @@ export default function PrintUnifiedEditorCanvas({
   requireSubscription,
   onInstallPhoto,
   onOpenRecentProject,
+  onLoadFromGallery,
   onSaveCanvas,
   saveCanvasBusy = false,
   onDuplicatePage,
@@ -308,10 +311,9 @@ export default function PrintUnifiedEditorCanvas({
             recentNamespace={recentNamespace}
           />
         </div>
-        {onSaveCanvas ? (
+        {onLoadFromGallery || onSaveCanvas ? (
           <ScaGallerySaveButton
-            onSave={onSaveCanvas}
-            onLoadProject={onOpenRecentProject}
+            onLoadProject={onLoadFromGallery ?? onOpenRecentProject}
             busy={saveCanvasBusy}
             disabled={exportBusy || generating || !pageActivated}
             requireSubscription={requireSubscription}

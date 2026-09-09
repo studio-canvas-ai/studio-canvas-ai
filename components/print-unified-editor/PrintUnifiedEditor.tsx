@@ -1788,6 +1788,7 @@ export default function PrintUnifiedEditor() {
             requireSubscription={requireSubscription}
             onInstallPhoto={onInstallPhoto}
             onOpenRecentProject={onOpenRecentProject}
+            onLoadFromGallery={(project) => loadProjectFromGallery(project)}
             onSaveCanvas={() => void saveCanvasToSlotAndGallery()}
             saveCanvasBusy={saveCanvasBusy || exportBusy}
             onDuplicatePage={duplicateCurrentPageSlide}
@@ -1886,7 +1887,6 @@ export default function PrintUnifiedEditor() {
                 fileInputRef={projectFileInputRef}
                 onFileChange={(file) => void loadProjectFile(file)}
                 variant="unified"
-                useSharedGalleryVault
                 showHint
               />
             </div>

@@ -1,13 +1,13 @@
 "use client";
 
 /**
- * Screen 26 — shared "내 갤러리" vault popover.
- * Same chrome as "최근 파일 불러오기"; top save + bottom load share this menu.
+ * Screen 26 — "내 갤러리 보관함" vault popover (load only).
+ * Opens a dropdown of gallery works; selecting one restores canvas + mini thumbs.
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ImageDown, Images } from "lucide-react";
+import { Images } from "lucide-react";
 import { useCredits } from "@/components/CreditsProvider";
 import { useFeedback } from "@/components/FeedbackProvider";
 import { useI18n } from "@/components/I18nProvider";
@@ -26,7 +26,8 @@ import {
 } from "@/lib/scaGalleryProjects";
 
 type Props = {
-  onSave: () => void | Promise<void>;
+  /** @deprecated Save-on-open removed — kept optional for call-site compatibility. */
+  onSave?: () => void | Promise<void>;
   onLoadProject?: (project: StudioCanvasProjectV1) => void | Promise<void>;
   disabled?: boolean;
   busy?: boolean;
@@ -39,7 +40,6 @@ const MENU_MIN_W = 280;
 const VIEWPORT_PAD = 8;
 
 export default function ScaGallerySaveButton({
-  onSave,
   onLoadProject,
   disabled = false,
   busy = false,
@@ -76,7 +76,7 @@ export default function ScaGallerySaveButton({
       setProjects(data.projects);
       setServerMax(data.max);
     } catch {
-      /* keep last known list — no loading placeholder */
+      /* keep last known list */
     }
   }, []);
 
@@ -187,12 +187,6 @@ export default function ScaGallerySaveButton({
     };
   }, [open]);
 
-  const handleSave = async () => {
-    if (requireSubscription && !requireSubscription()) return;
-    await onSave();
-    await refresh();
-  };
-
   const handlePick = async (meta: ScaGalleryProjectMeta) => {
     if (!onLoadProject) return;
     if (requireSubscription && !requireSubscription()) return;
@@ -204,7 +198,6 @@ export default function ScaGallerySaveButton({
       await onLoadProject(project);
       externalAnchorRef.current = null;
       setOpen(false);
-      showToast(cs.loadFromGalleryDone, "success");
     } catch (err) {
       console.warn("[ScaGallerySaveButton] load failed", err);
       showToast(cs.loadFromGalleryFailed, "error");
@@ -302,8 +295,6 @@ export default function ScaGallerySaveButton({
         onClick={() => {
           if (requireSubscription && !requireSubscription()) return;
           externalAnchorRef.current = null;
-          // Opening from the save trigger persists to gallery first.
-          if (!open) void handleSave();
           setOpen((v) => !v);
         }}
         title={fillCanvas(cs.saveGalleryDrawerHint, { max })}
@@ -313,9 +304,9 @@ export default function ScaGallerySaveButton({
           "inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-indigo-300 bg-indigo-50 px-2 text-[10px] font-semibold leading-none text-indigo-800 transition hover:bg-indigo-100 disabled:opacity-40"
         }
       >
-        <ImageDown className="h-3 w-3 shrink-0" aria-hidden />
+        <Images className="h-3 w-3 shrink-0" aria-hidden />
         <span className="whitespace-nowrap">
-          {busy
+          {busy || loadBusy
             ? cs.saveGalleryBusy
             : fillCanvas(cs.saveGalleryLoad, {
                 count: projects.length,

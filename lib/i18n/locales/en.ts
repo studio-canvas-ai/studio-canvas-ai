@@ -1209,8 +1209,8 @@ const en: Translations = {
     quotaBannerOriginal:
       "Ultra-high-res premium vector download (5 credits): up to {n} times",
     quotaAiImageBg: "AI promo image/background (25 credits): up to {n} times",
-    quotaScaCloud: ".sca cloud vault: up to {n} files",
-    quotaWorksGallery: "Works gallery vault: up to {n} items",
+    quotaScaCloud: "Recent files vault: up to {n} files",
+    quotaWorksGallery: "My gallery vault: up to {n} items",
     quotaScaAutoSave: "Automatic .sca project save and free download",
     quotaFhd: "FHD {n} times max ↓",
     quotaFhdPlus: "FHD {n}+ times ↓",

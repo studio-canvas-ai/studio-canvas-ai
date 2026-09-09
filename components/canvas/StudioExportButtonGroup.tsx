@@ -1,11 +1,10 @@
 "use client";
 
 import type { RefObject } from "react";
-import { Cloud, Download, FolderOpen, Images, Loader2, Share2 } from "lucide-react";
+import { Cloud, Download, FolderOpen, Loader2, Share2 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import ScaGalleryLoadButton from "@/components/canvas/ScaGalleryLoadButton";
 import type { StudioCanvasProjectV1 } from "@/lib/canvas/projectFile";
-import { dispatchScaGalleryVault } from "@/lib/scaGalleryVaultUi";
 import { useCloudBackupStatus } from "@/lib/useCloudBackupStatus";
 import { useDownloadQuota } from "@/lib/useDownloadQuota";
 
@@ -25,10 +24,7 @@ export type StudioExportButtonGroupProps = {
   /** Template Studio right-rail sizing vs compact print preview. */
   variant?: "studio" | "compact" | "unified";
   showHint?: boolean;
-  /**
-   * Screen 26 — bottom gallery button opens the shared vault popover
-   * (same UI as top-left 내 갤러리 저장).
-   */
+  /** @deprecated Bottom gallery vault button removed on Screen 26. */
   useSharedGalleryVault?: boolean;
 };
 
@@ -55,7 +51,6 @@ export default function StudioExportButtonGroup({
   requireSubscription,
   variant = "studio",
   showHint = true,
-  useSharedGalleryVault = false,
 }: StudioExportButtonGroupProps) {
   const { t } = useI18n();
   const cs = t.canvasStudio;
@@ -78,9 +73,6 @@ export default function StudioExportButtonGroup({
     : compact
       ? "inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-[#0E1420] px-3 py-2 text-[11px] font-medium text-slate-200 hover:bg-slate-800/60 disabled:opacity-50"
       : "inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-white/85 hover:bg-white/10 disabled:opacity-50";
-
-  const galleryVaultBtnClass =
-    "inline-flex w-full flex-row items-center justify-center gap-1.5 rounded-lg border border-amber-300 bg-amber-100 px-2 py-2.5 text-[12px] font-semibold leading-none text-amber-950 hover:border-amber-400 hover:bg-amber-200 disabled:opacity-50 [word-break:keep-all] whitespace-nowrap";
 
   const iconClass = unified
     ? "h-3.5 w-3.5 shrink-0"
@@ -261,7 +253,7 @@ export default function StudioExportButtonGroup({
         </p>
       ) : null}
       {unified && onLoadFromGallery ? (
-        <div className="grid grid-cols-3 gap-1.5">
+        <div className="grid grid-cols-2 gap-1.5">
           <button
             type="button"
             onClick={onLoadProjectClick}
@@ -271,32 +263,6 @@ export default function StudioExportButtonGroup({
             <FolderOpen className={iconClass} aria-hidden />
             <span className="min-w-0 truncate">{cs.loadEditFile}</span>
           </button>
-          {useSharedGalleryVault ? (
-            <button
-              type="button"
-              disabled={busy}
-              className={galleryVaultBtnClass}
-              onClick={(e) => {
-                if (requireSubscription && !requireSubscription()) return;
-                dispatchScaGalleryVault({
-                  action: "toggle",
-                  anchor: e.currentTarget,
-                });
-              }}
-            >
-              <Images className={iconClass} aria-hidden />
-              <span className="min-w-0 truncate">내갤러리불러오기</span>
-            </button>
-          ) : (
-            <ScaGalleryLoadButton
-              compact={false}
-              disabled={busy}
-              tone="light"
-              requireSubscription={requireSubscription}
-              onLoadProject={onLoadFromGallery}
-              className={secondaryClass}
-            />
-          )}
           <button
             type="button"
             onClick={(e) => {
