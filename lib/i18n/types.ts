@@ -2,6 +2,8 @@ export const LOCALES = ["en", "kr", "es", "zh", "ja", "fr", "de", "it", "vi", "h
 export type Locale = (typeof LOCALES)[number];
 
 export const LOCALE_COOKIE = "studio-canvas-locale";
+/** localStorage mirror of LOCALE_COOKIE — kept in sync by I18nProvider. */
+export const LOCALE_STORAGE_KEY = LOCALE_COOKIE;
 
 export interface LocaleInfo {
   code: Locale;

@@ -108,7 +108,8 @@ export default function LanguageSelector() {
             ref={containerRef}
             role="listbox"
             aria-label="Select language"
-            className="fixed z-[9999] overflow-hidden rounded-xl border border-white/15 bg-navy-light shadow-glass backdrop-blur-2xl"
+            className="notranslate fixed z-[9999] overflow-hidden rounded-xl border border-white/15 bg-navy-light shadow-glass backdrop-blur-2xl"
+            translate="no"
             style={{
               top: menuStyle.top,
               left: menuStyle.left,
@@ -150,7 +151,7 @@ export default function LanguageSelector() {
 
   return (
     <>
-      <div className="relative shrink-0">
+      <div className="relative shrink-0 notranslate" translate="no">
         <button
           ref={buttonRef}
           type="button"

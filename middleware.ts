@@ -128,14 +128,27 @@ export async function middleware(request: NextRequest) {
   if (protectedRedirect) return protectedRedirect;
 
   const requestHeaders = withPathnameHeader(request, pathname);
-  let response = NextResponse.next({
-    request: { headers: requestHeaders },
-  });
 
   const country =
     request.headers.get("x-vercel-ip-country") ||
     request.headers.get("cf-ipcountry") ||
     "";
+
+  const existingLocale = request.cookies.get(LOCALE_COOKIE)?.value;
+  const userSelected =
+    request.cookies.get(`${LOCALE_COOKIE}-manual`)?.value === "true";
+  const acceptLanguage = request.headers.get("accept-language") || "";
+  const detectedLocale =
+    userSelected && existingLocale && isValidLocale(existingLocale)
+      ? existingLocale
+      : detectLocale(country, acceptLanguage, existingLocale);
+
+  // Forward to RSC layout on THIS request (Set-Cookie is not visible to cookies() yet).
+  requestHeaders.set("x-detected-locale", detectedLocale);
+
+  let response = NextResponse.next({
+    request: { headers: requestHeaders },
+  });
 
   if (country) {
     response.cookies.set(GEO_COUNTRY_COOKIE, country.toUpperCase(), {
@@ -154,24 +167,15 @@ export async function middleware(request: NextRequest) {
     );
   }
 
-  const existingLocale = request.cookies.get(LOCALE_COOKIE)?.value;
-  const userSelected = request.cookies.get(`${LOCALE_COOKIE}-manual`)?.value === "true";
-
-  if (userSelected && existingLocale && isValidLocale(existingLocale)) {
-    response.headers.set("x-detected-locale", existingLocale);
-    return refreshSupabaseSession(request, response);
+  if (!(userSelected && existingLocale && isValidLocale(existingLocale))) {
+    response.cookies.set(LOCALE_COOKIE, detectedLocale, {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: "lax",
+    });
   }
 
-  const acceptLanguage = request.headers.get("accept-language") || "";
-  const detected = detectLocale(country, acceptLanguage, existingLocale);
-
-  response.cookies.set(LOCALE_COOKIE, detected, {
-    path: "/",
-    maxAge: 60 * 60 * 24 * 365,
-    sameSite: "lax",
-  });
-
-  response.headers.set("x-detected-locale", detected);
+  response.headers.set("x-detected-locale", detectedLocale);
   return refreshSupabaseSession(request, response);
 }
 
