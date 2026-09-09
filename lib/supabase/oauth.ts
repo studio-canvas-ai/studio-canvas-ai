@@ -654,18 +654,18 @@ export async function signInWithNaver(
     ensureSupabaseAuthStorageReady();
 
     const supabase = createSupabaseBrowserClient();
+    // Go straight to Naver OAuth authorize — do NOT bounce through
+    // nidlogin.logout (Edge often lands on Naver itself instead of OAuth).
+    // `reauthenticate` forces ID/password so a sticky nid session cannot
+    // silently reuse 엘도라도123 → hercd without an account switch chance.
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "custom:naver",
       options: {
         redirectTo: buildAuthCallbackRedirectTo(next),
         // Avoid `openid` so Auth uses the (proxied) userinfo endpoint.
         scopes: "profile",
-        // We assign location ourselves so we can force Naver re-login first.
         skipBrowserRedirect: true,
         queryParams: {
-          // `reprompt` only re-shows consent for the already-logged-in Naver
-          // account (e.g. 엘도라도123 → hercd). `reauthenticate` forces ID/PW
-          // so the user can switch to scd777 (or any other Naver account).
           auth_type: "reauthenticate",
         },
       },
@@ -683,16 +683,7 @@ export async function signInWithNaver(
       };
     }
 
-    // Clear the active Naver SSO session, then continue into OAuth authorize.
-    // Without this, a sticky nid.naver.com login keeps returning the same person.
-    try {
-      const logout = new URL("https://nid.naver.com/nidlogin.logout");
-      logout.searchParams.set("returl", data.url);
-      window.location.assign(logout.toString());
-    } catch {
-      window.location.assign(data.url);
-    }
-
+    window.location.assign(data.url);
     return { data, error: null };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
