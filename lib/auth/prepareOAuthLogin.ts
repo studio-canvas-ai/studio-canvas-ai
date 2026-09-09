@@ -7,6 +7,7 @@ import type { SocialOAuthId } from "@/lib/supabase/oauth";
 import { clearAuthStorageOnly } from "@/lib/auth/clearAuthStorage";
 
 export const OAUTH_INTENT_KEY = "sca_oauth_intent_v1";
+const OAUTH_INTENT_COOKIE = "sca_oauth_intent_v1";
 const WALLET_COOKIE_NAME = "sca_wallet_v1";
 
 export type OAuthIntent = {
@@ -44,6 +45,36 @@ function expireBrowserCookie(name: string) {
   }
 }
 
+function writeBrowserCookie(name: string, value: string, maxAgeSec: number) {
+  try {
+    document.cookie = `${name}=${encodeURIComponent(value)}; Max-Age=${maxAgeSec}; path=/; SameSite=Lax`;
+  } catch {
+    /* ignore */
+  }
+}
+
+function readBrowserCookie(name: string): string | null {
+  try {
+    const match = document.cookie.match(
+      new RegExp(`(?:^|; )${name}=([^;]*)`)
+    );
+    return match ? decodeURIComponent(match[1]) : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseIntent(raw: string | null): OAuthIntent | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as OAuthIntent;
+    if (!parsed?.provider || typeof parsed.at !== "number") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 function clearAccountResidueCaches() {
   try {
     for (const key of PLAN_USAGE_KEYS) {
@@ -60,23 +91,28 @@ function clearAccountResidueCaches() {
 }
 
 export function writeOAuthIntent(intent: OAuthIntent) {
+  const raw = JSON.stringify(intent);
   try {
-    sessionStorage.setItem(OAUTH_INTENT_KEY, JSON.stringify(intent));
+    sessionStorage.setItem(OAUTH_INTENT_KEY, raw);
   } catch {
     /* ignore */
   }
+  // Cookie backup — Edge/Incognito can drop sessionStorage across IdP redirects.
+  writeBrowserCookie(OAUTH_INTENT_COOKIE, raw, 60 * 30);
 }
 
 export function readOAuthIntent(): OAuthIntent | null {
-  try {
-    const raw = sessionStorage.getItem(OAUTH_INTENT_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as OAuthIntent;
-    if (!parsed?.provider || typeof parsed.at !== "number") return null;
-    return parsed;
-  } catch {
-    return null;
-  }
+  const fromSession = parseIntent(
+    (() => {
+      try {
+        return sessionStorage.getItem(OAUTH_INTENT_KEY);
+      } catch {
+        return null;
+      }
+    })()
+  );
+  if (fromSession) return fromSession;
+  return parseIntent(readBrowserCookie(OAUTH_INTENT_COOKIE));
 }
 
 export function clearOAuthIntent() {
@@ -85,6 +121,7 @@ export function clearOAuthIntent() {
   } catch {
     /* ignore */
   }
+  expireBrowserCookie(OAUTH_INTENT_COOKIE);
 }
 
 /**

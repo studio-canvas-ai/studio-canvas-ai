@@ -38,7 +38,7 @@ import {
   hasUnlimitedCredits,
 } from "@/lib/unlimitedAccount";
 import { shouldApplyBrandWatermark } from "@/lib/watermarkPolicy";
-import { stashAuthErrorForModal } from "@/lib/supabase/oauthErrors";
+import { stashAuthErrorForModal, formatOAuthError } from "@/lib/supabase/oauthErrors";
 import { bridgeSupabaseAccessToken } from "@/lib/supabase/emailAuth";
 import {
   isOnAuthSessionGatePath,
@@ -282,7 +282,9 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
       const authError = url.searchParams.get("authError");
       const wantLogin = url.searchParams.get("login") === "1";
       if (!authError && !wantLogin) return;
-      if (authError) stashAuthErrorForModal(authError);
+      if (authError) {
+        stashAuthErrorForModal(formatOAuthError(authError));
+      }
       setShowAuthModal(true);
       url.searchParams.delete("authError");
       url.searchParams.delete("login");

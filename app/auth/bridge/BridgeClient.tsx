@@ -190,7 +190,10 @@ export default function BridgeClient() {
           err instanceof Error ? err.message : "auth_bridge_failed";
         console.error("로그인 에러:", detail);
         setErrorText(detail);
-        failRedirect(detail);
+        const code = /account_blocked|hercd@hanmail\.net/i.test(detail)
+          ? "account_blocked"
+          : detail;
+        failRedirect(code);
       }
     })();
 

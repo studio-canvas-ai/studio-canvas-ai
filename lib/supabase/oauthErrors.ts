@@ -4,6 +4,23 @@ export function formatOAuthError(raw: string): string {
   if (!t) return "oauth_error";
   const lower = t.toLowerCase();
 
+  if (
+    lower.includes("account_blocked") ||
+    lower.includes("hercd@hanmail.net")
+  ) {
+    return (
+      "이 계정(hercd@hanmail.net)은 로그인이 영구 차단되었습니다. " +
+      "네이버에서 scd777 등 다른 아이디로 다시 로그인해 주세요. " +
+      "(지금 브라우저에 남아 있는 네이버 세션이 hercd 한메일일 수 있습니다.)"
+    );
+  }
+  if (lower.includes("oauth_intent_missing") || lower.includes("oauth_intent_expired")) {
+    return "로그인 세션이 끊어졌습니다. 네이버로 계속하기를 다시 눌러 주세요.";
+  }
+  if (lower.includes("stale_session_reused") || lower.includes("provider_mismatch")) {
+    return "이전 계정 세션이 남아 로그인에 실패했습니다. 다시 소셜 로그인을 시도해 주세요.";
+  }
+
   if (lower.includes("access_denied") || lower.includes("user_cancelled")) {
     return "Sign-in was cancelled.";
   }

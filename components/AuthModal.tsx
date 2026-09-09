@@ -152,7 +152,7 @@ export default function AuthModal() {
   useEffect(() => {
     if (!showAuthModal) return;
     const stashed = consumeStashedAuthError();
-    setError(stashed);
+    setError(stashed ? formatOAuthError(stashed) : null);
     setBusy(false);
     setMode("signup");
     setAgreed(false);
