@@ -9,11 +9,15 @@ import {
   clearAuthConfirm,
   providerLabel,
   readAuthConfirm,
+  writeAuthConfirm,
   type AuthConfirmPayload,
 } from "@/lib/auth/confirmAccount";
 import { buildTermsConsentUrl, safePostConsentPath } from "@/lib/termsConsent";
 import { APP_HOME_PATH } from "@/lib/appRoutes";
 
+/**
+ * Must stay free of CreditsProvider / I18nProvider — /auth/* uses AuthShell.
+ */
 export default function ConfirmAccountClient({
   nextPath,
 }: {
@@ -23,28 +27,91 @@ export default function ConfirmAccountClient({
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
   const [blocked, setBlocked] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    const stored = readAuthConfirm();
-    if (!stored) {
-      // Missing confirm payload — send provisional users to terms, else home.
-      window.location.replace(safePostConsentPath(nextPath));
-      return;
-    }
-    if (isBlockedLoginEmail(stored.email)) {
-      setBlocked(true);
-      setPayload({
-        ...stored,
-        next: safePostConsentPath(stored.next || nextPath),
-      });
-      setReady(true);
-      return;
-    }
-    setPayload({
-      ...stored,
-      next: safePostConsentPath(stored.next || nextPath),
-    });
-    setReady(true);
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        let stored = readAuthConfirm();
+
+        // sessionStorage miss (rare) — rebuild from provisional JWT via /api/account/me
+        if (!stored) {
+          try {
+            const res = await fetch("/api/account/me", {
+              cache: "no-store",
+              credentials: "same-origin",
+            });
+            const data = (await res.json().catch(() => ({}))) as {
+              pendingTermsConsent?: boolean;
+              pendingIdentity?: {
+                email?: string | null;
+                name?: string | null;
+                image?: string | null;
+                provider?: string | null;
+              } | null;
+              blockedLogin?: boolean;
+              error?: string;
+            };
+            if (data.blockedLogin) {
+              if (!cancelled) {
+                setBlocked(true);
+                setPayload({
+                  email: data.pendingIdentity?.email ?? "hercd@hanmail.net",
+                  name: data.pendingIdentity?.name ?? null,
+                  image: data.pendingIdentity?.image ?? null,
+                  provider: data.pendingIdentity?.provider || "naver",
+                  needsTermsConsent: true,
+                  next: safePostConsentPath(nextPath),
+                  at: Date.now(),
+                });
+                setReady(true);
+              }
+              return;
+            }
+            if (data.pendingIdentity) {
+              stored = {
+                email: data.pendingIdentity.email ?? null,
+                name: data.pendingIdentity.name ?? null,
+                image: data.pendingIdentity.image ?? null,
+                provider: data.pendingIdentity.provider || "unknown",
+                needsTermsConsent: Boolean(data.pendingTermsConsent),
+                next: safePostConsentPath(nextPath),
+                at: Date.now(),
+              };
+              writeAuthConfirm(stored);
+            }
+          } catch {
+            /* fall through */
+          }
+        }
+
+        if (cancelled) return;
+
+        if (!stored) {
+          window.location.replace(safePostConsentPath(nextPath));
+          return;
+        }
+
+        const next = safePostConsentPath(stored.next || nextPath);
+        if (isBlockedLoginEmail(stored.email)) {
+          setBlocked(true);
+        }
+        setPayload({ ...stored, next });
+        setReady(true);
+      } catch (err) {
+        if (cancelled) return;
+        setLoadError(
+          err instanceof Error ? err.message : "계정 확인 화면을 열 수 없습니다."
+        );
+        setReady(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [nextPath]);
 
   const continueWithAccount = () => {
@@ -93,7 +160,7 @@ export default function ConfirmAccountClient({
     window.location.replace(`${APP_HOME_PATH}?login=1`);
   };
 
-  if (!ready || !payload) {
+  if (!ready) {
     return (
       <div className="mx-auto w-full max-w-lg rounded-2xl border border-white/10 bg-black/40 p-8 text-center text-sm text-white/60">
         계정 정보를 확인하는 중…
@@ -101,10 +168,30 @@ export default function ConfirmAccountClient({
     );
   }
 
+  if (loadError || !payload) {
+    return (
+      <div className="mx-auto w-full max-w-lg space-y-4 rounded-2xl border border-red-400/30 bg-black/40 p-8 text-center">
+        <p className="text-sm text-red-300">
+          {loadError || "계정 정보를 불러오지 못했습니다."}
+        </p>
+        <button
+          type="button"
+          onClick={() => void switchAccount()}
+          className="rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-sm font-semibold text-white"
+        >
+          다시 로그인
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto w-full max-w-lg space-y-6 rounded-2xl border border-white/10 bg-black/40 p-6 backdrop-blur-md sm:p-8">
       <div className="space-y-2">
-        <h1 className="font-display text-2xl font-bold text-white sm:text-3xl">
+        <p className="text-sm font-semibold tracking-wide text-emerald-300/90">
+          Studio Canvas AI
+        </p>
+        <h1 className="text-2xl font-bold text-white sm:text-3xl">
           이 계정으로 로그인할까요?
         </h1>
         <p className="text-sm leading-relaxed text-white/60">

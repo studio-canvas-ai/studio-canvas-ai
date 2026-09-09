@@ -24,23 +24,25 @@ export function buildAuthConfirmUrl(nextPath: string): string {
 }
 
 export function writeAuthConfirm(payload: AuthConfirmPayload) {
+  const raw = JSON.stringify(payload);
   try {
-    sessionStorage.setItem(AUTH_CONFIRM_KEY, JSON.stringify(payload));
+    sessionStorage.setItem(AUTH_CONFIRM_KEY, raw);
+  } catch {
+    /* ignore */
+  }
+  try {
+    document.cookie = `${AUTH_CONFIRM_KEY}=${encodeURIComponent(raw)}; Max-Age=${60 * 30}; path=/; SameSite=Lax`;
   } catch {
     /* ignore */
   }
 }
 
-export function readAuthConfirm(): AuthConfirmPayload | null {
+function parseConfirm(raw: string | null): AuthConfirmPayload | null {
+  if (!raw) return null;
   try {
-    const raw = sessionStorage.getItem(AUTH_CONFIRM_KEY);
-    if (!raw) return null;
     const parsed = JSON.parse(raw) as AuthConfirmPayload;
     if (!parsed || typeof parsed.at !== "number") return null;
-    if (Date.now() - parsed.at > 30 * 60 * 1000) {
-      sessionStorage.removeItem(AUTH_CONFIRM_KEY);
-      return null;
-    }
+    if (Date.now() - parsed.at > 30 * 60 * 1000) return null;
     return {
       ...parsed,
       next: safePostConsentPath(parsed.next, APP_HOME_PATH),
@@ -50,9 +52,32 @@ export function readAuthConfirm(): AuthConfirmPayload | null {
   }
 }
 
+export function readAuthConfirm(): AuthConfirmPayload | null {
+  try {
+    const fromSession = parseConfirm(sessionStorage.getItem(AUTH_CONFIRM_KEY));
+    if (fromSession) return fromSession;
+  } catch {
+    /* ignore */
+  }
+  try {
+    const match = document.cookie.match(
+      new RegExp(`(?:^|; )${AUTH_CONFIRM_KEY}=([^;]*)`)
+    );
+    if (match) return parseConfirm(decodeURIComponent(match[1]));
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 export function clearAuthConfirm() {
   try {
     sessionStorage.removeItem(AUTH_CONFIRM_KEY);
+  } catch {
+    /* ignore */
+  }
+  try {
+    document.cookie = `${AUTH_CONFIRM_KEY}=; Max-Age=0; path=/; SameSite=Lax`;
   } catch {
     /* ignore */
   }
