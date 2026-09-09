@@ -70,7 +70,8 @@ export async function POST(req: Request) {
     if (recurringCheckout && body.billingKey?.trim()) {
       const billingKey = body.billingKey.trim();
       const issueToken = (body.issueId || order.id).replace(/[^a-zA-Z0-9]/g, "");
-      const paymentId = `subpay${issueToken}`.slice(0, 40);
+      // Unique per attempt — reuse after a failed charge makes PortOne reject the id.
+      const paymentId = `subpay${issueToken}${Date.now().toString(36)}`.slice(0, 40);
       const planLabel =
         order.planId === "pro"
           ? "Pro"
@@ -123,10 +124,20 @@ export async function POST(req: Request) {
         externalPaymentKey: paymentId,
         paymentMethodLabel: "PortOne KCP 정기결제 (빌링키)",
       });
+      const paidUser = getDb().users[order.userId] ?? user;
+      const { snapshotPlanUsage } = await import("@/lib/db/planUsage");
       return NextResponse.json({
         ok: true,
         order: paid,
-        user,
+        user: {
+          id: paidUser.id,
+          email: paidUser.email,
+          name: paidUser.name,
+          planId: paidUser.planId,
+          billingInterval: paidUser.billingInterval ?? null,
+          credits: 0,
+          usage: snapshotPlanUsage(paidUser),
+        },
         recurring: true,
       });
     }

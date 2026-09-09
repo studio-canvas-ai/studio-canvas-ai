@@ -5,6 +5,7 @@ import { CalendarClock, CreditCard, Sparkles, X } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { useCredits } from "@/components/CreditsProvider";
 import { getPlanOffer, isPrepaidPass } from "@/lib/data";
+import { creditPoolForPlan } from "@/lib/featureCreditCosts";
 import { formatKrw, formatUsd } from "@/lib/currency";
 import { resolveCheckoutRegion } from "@/lib/paymentRouting";
 import {
@@ -24,6 +25,7 @@ export default function PaymentModal() {
     authUser,
     openAuthModal,
     completePayment,
+    dismissPaymentModal,
   } = useCredits();
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -109,6 +111,8 @@ export default function PaymentModal() {
   const priceLabel = showDomesticKrw
     ? formatKrw(offer.totalKrw)
     : formatUsd(offer.totalUsd);
+  const poolCredits =
+    creditPoolForPlan(checkoutPlanId, billingInterval) ?? offer.credits;
   const isPrepaid = isPrepaidPass(billingInterval);
   const isRecurringMonthly = region === "domestic" && !isPrepaid;
   const bcMonthlyOneTime = isRecurringMonthly && useBcCardMonthlyOneTime;
@@ -307,12 +311,18 @@ export default function PaymentModal() {
               error?: string;
             };
             if (confirmJson.error === "portone_secret_missing") {
-              window.location.href = `${redirectUrl}&billingKeyIssued=1`;
-              return;
+              throw new Error(
+                locale === "kr"
+                  ? "결제 서버 설정(PORTONE_API_SECRET)이 없습니다. 관리자에게 문의해 주세요."
+                  : "PortOne API secret is missing on the server."
+              );
             }
             if (confirmJson.error?.startsWith("portone_not_paid")) {
-              window.location.href = `${redirectUrl}&billingKeyIssued=1`;
-              return;
+              throw new Error(
+                locale === "kr"
+                  ? `카드 등록은 됐지만 1회차 승인이 확인되지 않았습니다. (${confirmJson.error})`
+                  : `Billing key issued but first charge was not confirmed. (${confirmJson.error})`
+              );
             }
             throw new Error(confirmJson.error || "recurring confirm failed");
           }
@@ -356,12 +366,18 @@ export default function PaymentModal() {
             error?: string;
           };
           if (confirmJson.error === "portone_secret_missing") {
-            window.location.href = `${redirectUrl}&paymentId=${encodeURIComponent(confirmPaymentId)}`;
-            return;
+            throw new Error(
+              locale === "kr"
+                ? "결제 서버 설정(PORTONE_API_SECRET)이 없습니다. 관리자에게 문의해 주세요."
+                : "PortOne API secret is missing on the server."
+            );
           }
           if (confirmJson.error?.startsWith("portone_not_paid")) {
-            window.location.href = `${redirectUrl}&paymentId=${encodeURIComponent(confirmPaymentId)}`;
-            return;
+            throw new Error(
+              locale === "kr"
+                ? `결제가 확인되지 않았습니다. (${confirmJson.error})`
+                : `Payment was not confirmed. (${confirmJson.error})`
+            );
           }
           throw new Error(confirmJson.error || "portone confirm failed");
         }
@@ -408,7 +424,7 @@ export default function PaymentModal() {
         type="button"
         className="absolute inset-0 bg-black/75 backdrop-blur-md"
         aria-label="Close"
-        onClick={() => setShowPaymentModal(false)}
+        onClick={() => dismissPaymentModal()}
       />
       <div
         className="relative z-10 max-h-[min(92vh,880px)] w-full max-w-xl overflow-y-auto rounded-2xl border border-white/12 p-8 shadow-[0_24px_80px_rgba(0,0,0,0.65)] sm:max-w-2xl sm:p-10 lg:p-12"
@@ -419,7 +435,7 @@ export default function PaymentModal() {
       >
         <button
           type="button"
-          onClick={() => setShowPaymentModal(false)}
+          onClick={() => dismissPaymentModal()}
           className="absolute top-5 right-5 rounded-lg p-2 text-gray-300 hover:bg-white/10 hover:text-white sm:top-6 sm:right-6"
         >
           <X className="h-5 w-5" />
@@ -452,7 +468,7 @@ export default function PaymentModal() {
                 {(isPrepaid
                   ? t.payment.creditsIncludedAnnual
                   : t.payment.creditsIncluded
-                ).replace("{count}", String(offer.credits))}
+                ).replace("{count}", String(poolCredits))}
               </p>
             </div>
             <div className="text-right">
@@ -577,7 +593,7 @@ export default function PaymentModal() {
             <button
               type="button"
               onClick={() => {
-                setShowPaymentModal(false);
+                dismissPaymentModal();
                 openAuthModal();
               }}
               className="btn-primary w-full py-3.5 text-base"

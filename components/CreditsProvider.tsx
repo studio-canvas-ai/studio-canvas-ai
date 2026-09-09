@@ -159,6 +159,7 @@ type CreditsContextValue = {
     interval?: BillingInterval
   ) => void;
   completePayment: () => void;
+  dismissPaymentModal: () => void;
   cancelSubscription: () => void;
   registerPortrait: (portraitId: string, createdAt?: number) => PortraitRetouchState;
   getPortraitRetouch: (portraitId: string) => PortraitRetouchState | null;
@@ -413,17 +414,15 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
         setPromoWallet(null);
         if (!pendingResumeDone.current) {
           const stored = readPendingCheckout();
-          // Already on a paid plan (e.g. just subscribed) — drop stale checkout UI.
+          pendingResumeDone.current = true;
           if (stored && data.user.planId && data.user.planId !== "free") {
-            pendingResumeDone.current = true;
+            // Paid — drop stale checkout intent.
             clearPendingCheckout();
             setPendingPlanId(null);
           } else if (stored) {
-            pendingResumeDone.current = true;
+            // Remember plan for post-login checkout, but never auto-open on refresh.
             setPendingPlanId(stored.planId);
             setPendingBillingInterval(stored.interval);
-            setShowAuthModal(false);
-            setShowPaymentModal(true);
           }
         }
         return;
@@ -814,6 +813,12 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
     await refreshServerState();
   }, [refreshServerState]);
 
+  const dismissPaymentModal = useCallback(() => {
+    setShowPaymentModal(false);
+    setPendingPlanId(null);
+    clearPendingCheckout();
+  }, []);
+
   const cancelSubscription = useCallback(async () => {
     try {
       await fetch("/api/payments/subscription/cancel", { method: "POST" });
@@ -946,6 +951,7 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
       signOutUser,
       requestSubscribe,
       completePayment,
+      dismissPaymentModal,
       cancelSubscription,
       registerPortrait,
       getPortraitRetouch,
@@ -987,6 +993,7 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
       signOutUser,
       requestSubscribe,
       completePayment,
+      dismissPaymentModal,
       cancelSubscription,
       registerPortrait,
       getPortraitRetouch,
