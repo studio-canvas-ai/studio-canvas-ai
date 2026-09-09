@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Minus, Plus, Save, Trash2 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
+import { useCredits } from "@/components/CreditsProvider";
 import { openTemplateWarehouse } from "@/lib/templateWarehouse";
 import CanvasUploadToolbar from "@/components/canvas/CanvasUploadToolbar";
 import ScaGallerySaveButton from "@/components/canvas/ScaGallerySaveButton";
@@ -142,6 +143,7 @@ export default function PrintUnifiedEditorCanvas({
   recentNamespace = "screen_008",
 }: PrintUnifiedEditorCanvasProps) {
   const { t } = useI18n();
+  const { isAuthenticated } = useCredits();
   const cs = t.canvasStudio;
   const stagePanRef = useRef<StagePanDrag | null>(null);
   const [stagePanning, setStagePanning] = useState(false);
@@ -370,7 +372,7 @@ export default function PrintUnifiedEditorCanvas({
             ) : null}
           </div>
           <div className="pointer-events-auto flex items-center gap-1.5">
-            {!portraitPhotoMode ? (
+            {!portraitPhotoMode && isAuthenticated ? (
               <button
                 type="button"
                 onClick={() => openTemplateWarehouse()}

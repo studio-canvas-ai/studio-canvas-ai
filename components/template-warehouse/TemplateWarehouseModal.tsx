@@ -94,7 +94,7 @@ function publicRecordToWarehouse(
 export default function TemplateWarehouseModal() {
   const router = useRouter();
   const pathname = usePathname() || "/";
-  const { isAdmin } = useCredits();
+  const { isAdmin, isAuthenticated, openAuthModal } = useCredits();
   const { showToast, confirm } = useFeedback();
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<WarehouseTabId>("single");
@@ -132,6 +132,10 @@ export default function TemplateWarehouseModal() {
 
   useEffect(() => {
     const onOpen = (event: Event) => {
+      if (!isAuthenticated) {
+        openAuthModal({ clearPending: true });
+        return;
+      }
       const detail = (event as CustomEvent<{ tab?: WarehouseTabId }>).detail;
       const nextTab = detail?.tab;
       setTab(
@@ -147,7 +151,11 @@ export default function TemplateWarehouseModal() {
     window.addEventListener(TEMPLATE_WAREHOUSE_OPEN_EVENT, onOpen);
     return () =>
       window.removeEventListener(TEMPLATE_WAREHOUSE_OPEN_EVENT, onOpen);
-  }, []);
+  }, [isAuthenticated, openAuthModal]);
+
+  useEffect(() => {
+    if (!isAuthenticated) setOpen(false);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (!open) return;

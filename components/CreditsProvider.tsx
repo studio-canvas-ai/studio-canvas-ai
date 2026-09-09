@@ -42,7 +42,7 @@ import { stashAuthErrorForModal } from "@/lib/supabase/oauthErrors";
 import { bridgeSupabaseAccessToken } from "@/lib/supabase/emailAuth";
 import { buildTermsConsentUrl, safePostConsentPath } from "@/lib/termsConsent";
 import { clearAuthStorageOnly } from "@/lib/auth/clearAuthStorage";
-import { SESSION_LOCK_STORAGE_KEY } from "@/lib/auth/sessionLockShared";
+import { clearEditorClientCachesOnLogout } from "@/lib/auth/clearEditorCaches";
 import type { PlanUsageSnapshot } from "@/lib/planQuotas";
 
 const PLAN_USAGE_CACHE_KEY = "sca_plan_usage_v2";
@@ -191,9 +191,10 @@ type CreditsContextValue = {
 const CreditsContext = createContext<CreditsContextValue | null>(null);
 
 function clearBrowserAuthResidue() {
-  // Auth/session keys only. Never Storage.clear() — studio vaults and recent
-  // files must survive logout in the same browser.
+  // Auth/session cookies + editor ephemeral caches (prompts, wizard options).
+  // Account vault / recent-file indices are left for cloud rehydrate.
   clearAuthStorageOnly();
+  clearEditorClientCachesOnLogout();
 }
 
 function todayKey() {
@@ -456,11 +457,6 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
     }
 
     clearBrowserAuthResidue();
-    try {
-      localStorage.removeItem(SESSION_LOCK_STORAGE_KEY);
-    } catch {
-      /* ignore */
-    }
     setIsAuthenticated(false);
     setAuthUser(null);
     setIsAdmin(false);

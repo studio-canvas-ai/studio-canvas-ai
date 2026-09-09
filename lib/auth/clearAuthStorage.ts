@@ -1,7 +1,9 @@
 /**
  * Logout / session-end storage purge.
  * Never uses Storage.clear() — only removes auth/session keys via removeItem.
- * Studio persist keys (recent files, vaults, wizards) are never touched.
+ * Studio vault / recent-file indices are never touched here.
+ * Editor prompts & wizard sessions are cleared separately via
+ * `clearEditorClientCachesOnLogout` (called from CreditsProvider sign-out).
  */
 
 import { isProtectedStudioStorageKey } from "@/lib/studioStore/persistKeys";

@@ -29,6 +29,7 @@ import {
   openTemplateWarehouse,
   type WarehouseTemplate,
 } from "@/lib/templateWarehouse";
+import { EDITOR_CACHE_CLEARED_EVENT } from "@/lib/auth/clearEditorCaches";
 import { applyLargeLightPlateGlass } from "@/lib/ai/layoutRenderPolish";
 import {
   SPACE4_ADMIN_REVIEW_APPLY_EVENT,
@@ -326,6 +327,29 @@ export default function PrintUnifiedEditor() {
   useEffect(() => {
     setState(hydrateInitialState());
     setHydrated(true);
+  }, []);
+
+  /** Logout wipe — drop in-memory editor prompts/options immediately. */
+  useEffect(() => {
+    const onCleared = () => {
+      const blank = defaultPrintWizardState();
+      setState(blank);
+      setCurrentPage(0);
+      setZoom(1);
+      setActiveTextLayerId(null);
+      setActivePhotoLayerId(null);
+      setActiveDecoLayerId(null);
+      setSpace4Review(null);
+      try {
+        sessionStorage.removeItem(PRINT_UNIFIED_EDITOR_SESSION_KEY);
+        sessionStorage.removeItem(PRINT_WIZARD_SESSION_KEY);
+      } catch {
+        /* ignore */
+      }
+    };
+    window.addEventListener(EDITOR_CACHE_CLEARED_EVENT, onCleared);
+    return () =>
+      window.removeEventListener(EDITOR_CACHE_CLEARED_EVENT, onCleared);
   }, []);
 
   const applyWarehouseTemplateToEditor = useCallback(

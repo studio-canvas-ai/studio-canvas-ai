@@ -286,7 +286,7 @@ export default function Navbar({ printWizardBack }: NavbarProps = {}) {
             >
               {t.nav.designGenerator}
             </Link>
-            {pathname !== PRINT_UNIFIED_EDITOR_PATH ? (
+            {pathname !== PRINT_UNIFIED_EDITOR_PATH && isAuthenticated ? (
               <button
                 type="button"
                 data-nav="template-warehouse"
