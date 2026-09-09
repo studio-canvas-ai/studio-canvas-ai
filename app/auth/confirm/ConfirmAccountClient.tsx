@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import {
   isBlockedLoginAccount,
   blockedLoginMessage,
+  publicAccountEmail,
 } from "@/lib/auth/blockedAccounts";
 import {
   clearAuthConfirm,
@@ -213,7 +214,9 @@ export default function ConfirmAccountClient({
           {payload.name || "이름 없음"}
         </p>
         <p className="mt-1 break-all text-sm text-white/70">
-          {payload.email || "이메일 없음"}
+          {publicAccountEmail(payload.email, {
+            provider: payload.provider,
+          }) || "이메일 없음"}
         </p>
       </div>
 

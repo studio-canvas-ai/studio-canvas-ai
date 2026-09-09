@@ -207,13 +207,30 @@ export function extractSupabaseOAuthProfile(user: {
     null;
 
   // Naver: never use a blocked contact address (hercd@hanmail.net) as app identity.
-  // Prefer a safe real contact (e.g. scd777@naver.com); else synthetic Auth email.
+  // Prefer a safe real contact; else an ASCII nickname@naver.com; else synthetic Auth key
+  // (synthetic is for uniqueness only — UI must hide it via publicAccountEmail).
+  const nickHint =
+    provider === "naver"
+      ? str(meta.preferred_username) ||
+        str(meta.nickname) ||
+        str(idData.preferred_username) ||
+        str(idData.nickname) ||
+        null
+      : null;
+  const nickAsNaverEmail =
+    nickHint && /^[a-zA-Z0-9][a-zA-Z0-9._-]{1,39}$/.test(nickHint)
+      ? `${nickHint}@naver.com`
+      : null;
+
   let email: string | null = null;
   if (provider === "naver") {
     const preferredContact =
-      [contactNaver, rawEmail && !rawEmail.endsWith("@users.naver.id") ? rawEmail : null].find(
-        (candidate) => candidate && !isBlockedLoginEmail(candidate)
-      ) || null;
+      [
+        contactNaver,
+        rawEmail && !rawEmail.endsWith("@users.naver.id") ? rawEmail : null,
+        nickAsNaverEmail,
+      ].find((candidate) => candidate && !isBlockedLoginEmail(candidate)) ||
+      null;
     email =
       preferredContact ||
       (rawEmail?.endsWith("@users.naver.id") ? rawEmail : null) ||

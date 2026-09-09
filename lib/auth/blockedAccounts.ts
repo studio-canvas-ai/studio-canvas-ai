@@ -38,6 +38,53 @@ export function isBlockedLoginAccount(opts: {
   return true;
 }
 
+/** Opaque Auth emails we mint for providers that omit a usable contact address. */
+export function isSyntheticProviderEmail(
+  email: string | null | undefined
+): boolean {
+  const normalized = normalizeLoginEmail(email);
+  if (!normalized) return false;
+  return (
+    normalized.endsWith("@users.naver.id") ||
+    normalized.endsWith("@users.kakao.id") ||
+    normalized.endsWith("@users.facebook.id")
+  );
+}
+
+/**
+ * Human-facing account line — never show opaque `{id}@users.*.id` strings.
+ */
+export function publicAccountEmail(
+  email: string | null | undefined,
+  opts?: { provider?: string | null; fallbackLabel?: string | null }
+): string | null {
+  const normalized = normalizeLoginEmail(email);
+  if (
+    normalized &&
+    !isSyntheticProviderEmail(normalized) &&
+    !isBlockedLoginEmail(normalized)
+  ) {
+    return email!.trim();
+  }
+  if (opts?.fallbackLabel?.trim()) return opts.fallbackLabel.trim();
+  const provider = (opts?.provider || "").toLowerCase();
+  if (provider.includes("naver") || normalized?.endsWith("@users.naver.id")) {
+    return "네이버 계정";
+  }
+  if (provider.includes("kakao") || normalized?.endsWith("@users.kakao.id")) {
+    return "카카오 계정";
+  }
+  if (
+    provider.includes("facebook") ||
+    normalized?.endsWith("@users.facebook.id")
+  ) {
+    return "Facebook 계정";
+  }
+  if (provider.includes("google")) return "Google 계정";
+  if (normalized) return "소셜 계정";
+  return null;
+}
+
 export function blockedLoginMessage(localeHint?: string | null): string {
   const kr =
     !localeHint ||

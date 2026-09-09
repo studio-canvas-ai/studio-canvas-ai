@@ -20,6 +20,7 @@ import { PRINT_UNIFIED_EDITOR_PATH } from "@/lib/printUnifiedEditor";
 import { APP_HOME_PATH, normalizeAppTabPath } from "@/lib/appRoutes";
 import { openTemplateWarehouse } from "@/lib/templateWarehouse";
 import TemplateWarehouseModal from "@/components/template-warehouse/TemplateWarehouseModal";
+import { publicAccountEmail } from "@/lib/auth/blockedAccounts";
 
 const PRIMARY_LINKS = [
   { href: "/", labelKey: "home" as const, authRequired: false },
@@ -121,7 +122,7 @@ export default function Navbar({ printWizardBack }: NavbarProps = {}) {
   };
 
   const displayName = authUser?.name || t.nav.myPage;
-  const displayEmail = authUser?.email || "";
+  const displayEmail = publicAccountEmail(authUser?.email) || "";
 
   const avatarEl = (size: "sm" | "md" = "md") => {
     const box = size === "sm" ? "h-7 w-7" : "h-8 w-8";

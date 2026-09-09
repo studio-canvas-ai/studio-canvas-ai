@@ -5,6 +5,7 @@ import Link from "next/link";
 import { safePostConsentPath } from "@/lib/termsConsent";
 import { CONTENT_LICENSE_CLAUSE_KR } from "@/lib/legalContent";
 import { providerLabel } from "@/lib/auth/confirmAccount";
+import { publicAccountEmail } from "@/lib/auth/blockedAccounts";
 
 type PendingIdentity = {
   email: string | null;
@@ -103,7 +104,9 @@ export default function TermsConsentForm({
             {identity.name || "이름 없음"}
           </p>
           <p className="mt-1 break-all text-sm text-white/70">
-            {identity.email || "이메일 없음"}
+            {publicAccountEmail(identity.email, {
+              provider: identity.provider,
+            }) || "이메일 없음"}
           </p>
           <p className="mt-2 text-[12px] leading-5 text-white/45">
             이 계정이 아니면 로그아웃 후 다른 소셜 계정으로 다시 로그인해 주세요.
