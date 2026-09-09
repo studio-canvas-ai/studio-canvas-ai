@@ -11,6 +11,7 @@ import {
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { formatOAuthError } from "@/lib/supabase/oauthErrors";
 import { APP_HOME_PATH } from "@/lib/appRoutes";
+import { isBlockedLoginEmail } from "@/lib/auth/blockedAccounts";
 
 export type SocialOAuthId =
   | "google"
@@ -187,20 +188,46 @@ export function extractSupabaseOAuthProfile(user: {
   const kakaoSub = isKakao ? providerSub : null;
   const facebookSub = provider === "facebook" ? providerSub : null;
 
-  const email =
+  const contactNaver =
+    provider === "naver"
+      ? str(meta.naver_email) || str(idData.naver_email) || null
+      : null;
+  const syntheticNaver =
+    provider === "naver" && naverSub
+      ? `${naverSub}@users.naver.id`
+      : provider === "naver"
+        ? `${user.id}@users.naver.id`
+        : null;
+
+  const rawEmail =
     str(user.email) ||
     str(meta.email) ||
     str(idData.email) ||
     str(kakaoAccount.email) ||
-    // Stable synthetic address when provider email consent was not granted.
-    (provider === "naver" && naverSub ? `${naverSub}@users.naver.id` : null) ||
-    (provider === "naver" ? `${user.id}@users.naver.id` : null) ||
-    (isKakao && kakaoSub ? `${kakaoSub}@users.kakao.id` : null) ||
-    (isKakao ? `${user.id}@users.kakao.id` : null) ||
-    (provider === "facebook" && facebookSub
-      ? `${facebookSub}@users.facebook.id`
-      : null) ||
-    (provider === "facebook" ? `${user.id}@users.facebook.id` : null);
+    null;
+
+  // Naver: never use a blocked contact address (hercd@hanmail.net) as app identity.
+  // Prefer a safe real contact (e.g. scd777@naver.com); else synthetic Auth email.
+  let email: string | null = null;
+  if (provider === "naver") {
+    const preferredContact =
+      [contactNaver, rawEmail && !rawEmail.endsWith("@users.naver.id") ? rawEmail : null].find(
+        (candidate) => candidate && !isBlockedLoginEmail(candidate)
+      ) || null;
+    email =
+      preferredContact ||
+      (rawEmail?.endsWith("@users.naver.id") ? rawEmail : null) ||
+      syntheticNaver;
+  } else {
+    email =
+      rawEmail ||
+      (isKakao && kakaoSub ? `${kakaoSub}@users.kakao.id` : null) ||
+      (isKakao ? `${user.id}@users.kakao.id` : null) ||
+      (provider === "facebook" && facebookSub
+        ? `${facebookSub}@users.facebook.id`
+        : null) ||
+      (provider === "facebook" ? `${user.id}@users.facebook.id` : null);
+  }
 
   const name =
     str(meta.full_name) ||

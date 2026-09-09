@@ -54,8 +54,8 @@ export async function createSessionFromSupabaseAccessToken(
   }
 
   const profile = extractSupabaseOAuthProfile(user);
-  assertEmailNotBlocked(profile.email);
-  assertEmailNotBlocked(user.email);
+  assertEmailNotBlocked(profile.email, profile.provider);
+  assertEmailNotBlocked(user.email, profile.provider);
   const termsAgreed = await getTermsAgreedWithAccessToken(accessToken, user.id);
 
   const cookieName = authSessionCookieName();

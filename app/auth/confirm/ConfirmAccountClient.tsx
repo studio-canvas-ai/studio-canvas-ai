@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
-  isBlockedLoginEmail,
+  isBlockedLoginAccount,
   blockedLoginMessage,
 } from "@/lib/auth/blockedAccounts";
 import {
@@ -95,7 +95,12 @@ export default function ConfirmAccountClient({
         }
 
         const next = safePostConsentPath(stored.next || nextPath);
-        if (isBlockedLoginEmail(stored.email)) {
+        if (
+          isBlockedLoginAccount({
+            email: stored.email,
+            provider: stored.provider,
+          })
+        ) {
           setBlocked(true);
         }
         setPayload({ ...stored, next });

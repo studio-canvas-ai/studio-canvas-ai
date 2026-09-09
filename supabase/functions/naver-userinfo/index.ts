@@ -126,7 +126,9 @@ Deno.serve(async (req: Request) => {
   }
 
   const emailRaw = typeof profile.email === "string" ? profile.email.trim() : "";
-  const email = emailRaw || `${sub}@users.naver.id`;
+  // Always key Supabase Auth by Naver id — never by contact email.
+  // Contact can be hercd@hanmail.net on a different login id (e.g. scd777).
+  const email = `${sub}@users.naver.id`;
   const name =
     (typeof profile.name === "string" && profile.name.trim()) ||
     (typeof profile.nickname === "string" && profile.nickname.trim()) ||
@@ -146,9 +148,10 @@ Deno.serve(async (req: Request) => {
     id: sub,
     provider_id: sub,
     email,
-    email_verified: Boolean(emailRaw),
+    email_verified: true,
   };
 
+  if (emailRaw) body.naver_email = emailRaw;
   if (name) body.name = name;
   if (nickname) {
     body.nickname = nickname;

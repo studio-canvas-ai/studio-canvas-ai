@@ -48,7 +48,7 @@ import { clearAuthStorageOnly } from "@/lib/auth/clearAuthStorage";
 import { clearEditorClientCachesOnLogout } from "@/lib/auth/clearEditorCaches";
 import {
   blockedLoginMessage,
-  isBlockedLoginEmail,
+  isBlockedLoginAccount,
 } from "@/lib/auth/blockedAccounts";
 import type { PlanUsageSnapshot } from "@/lib/planQuotas";
 
@@ -556,12 +556,17 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
             id: string;
             email?: string | null;
             user_metadata?: Record<string, unknown> | null;
+            app_metadata?: Record<string, unknown> | null;
           } | null,
           accessToken?: string | null
         ) => {
           if (cancelled || !sbUser) return;
 
-          if (isBlockedLoginEmail(sbUser.email)) {
+          const sbProvider =
+            typeof sbUser.app_metadata?.provider === "string"
+              ? sbUser.app_metadata.provider
+              : null;
+          if (isBlockedLoginAccount({ email: sbUser.email, provider: sbProvider })) {
             setIsAuthenticated(false);
             setAuthUser(null);
             setIsAdmin(false);

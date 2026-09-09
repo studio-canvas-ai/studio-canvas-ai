@@ -23,6 +23,21 @@ export function isBlockedLoginEmail(
   return (BLOCKED_LOGIN_EMAILS as readonly string[]).includes(normalized);
 }
 
+/**
+ * Block only when the *login provider* is tied to the banned address.
+ * Naver login ids can register hercd@hanmail.net as contact email (e.g. scd777);
+ * blocking by email alone rejected those Naver accounts while others still worked.
+ */
+export function isBlockedLoginAccount(opts: {
+  email?: string | null;
+  provider?: string | null;
+}): boolean {
+  if (!isBlockedLoginEmail(opts.email)) return false;
+  const provider = (opts.provider || "").toLowerCase();
+  if (provider.includes("naver")) return false;
+  return true;
+}
+
 export function blockedLoginMessage(localeHint?: string | null): string {
   const kr =
     !localeHint ||

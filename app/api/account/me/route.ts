@@ -23,7 +23,7 @@ import { readWalletCookie } from "@/lib/walletCookie";
 import {
   blockedLoginJsonResponse,
 } from "@/lib/auth/enforceBlockedLogin";
-import { isBlockedLoginEmail } from "@/lib/auth/blockedAccounts";
+import { isBlockedLoginAccount } from "@/lib/auth/blockedAccounts";
 
 export const runtime = "nodejs";
 
@@ -63,7 +63,14 @@ export async function GET(request: NextRequest) {
       token?.email,
       user?.email
     );
-    if (isBlockedLoginEmail(blockedEmail)) {
+    const blockedProvider =
+      typeof token?.authProvider === "string"
+        ? token.authProvider
+        : typeof (session?.user as { provider?: string } | undefined)?.provider ===
+            "string"
+          ? (session?.user as { provider?: string }).provider
+          : null;
+    if (isBlockedLoginAccount({ email: blockedEmail, provider: blockedProvider })) {
       return blockedLoginJsonResponse(request, 403);
     }
   } catch {
@@ -83,7 +90,13 @@ export async function GET(request: NextRequest) {
       });
 
       if (token?.termsAgreed === false) {
-        if (isBlockedLoginEmail(typeof token.email === "string" ? token.email : null)) {
+        if (
+          isBlockedLoginAccount({
+            email: typeof token.email === "string" ? token.email : null,
+            provider:
+              typeof token.authProvider === "string" ? token.authProvider : null,
+          })
+        ) {
           return blockedLoginJsonResponse(request, 403);
         }
         // Provisional pre-consent session — not a registered app member yet.

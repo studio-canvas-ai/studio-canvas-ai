@@ -9,7 +9,7 @@ import { isAuthCookieName } from "@/lib/auth/clearAuthStorage";
 import {
   BLOCKED_LOGIN_ERROR_CODE,
   blockedLoginMessage,
-  isBlockedLoginEmail,
+  isBlockedLoginAccount,
 } from "@/lib/auth/blockedAccounts";
 
 /** Expire Auth.js + Supabase auth cookies on an existing response. */
@@ -56,9 +56,10 @@ export function blockedLoginJsonResponse(
 }
 
 export function assertEmailNotBlocked(
-  email: string | null | undefined
+  email: string | null | undefined,
+  provider?: string | null
 ): void {
-  if (isBlockedLoginEmail(email)) {
+  if (isBlockedLoginAccount({ email, provider })) {
     throw new Error(
       `${BLOCKED_LOGIN_ERROR_CODE}: ${blockedLoginMessage("kr")}`
     );
