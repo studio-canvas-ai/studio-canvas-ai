@@ -42,7 +42,8 @@ const TO_SUPABASE: Record<SocialOAuthId, Provider | `custom:${string}`> = {
 export function mapSupabaseProviderToAuthId(
   supabaseProvider: string | undefined
 ): AuthProviderId {
-  const p = (supabaseProvider || "").toLowerCase();
+  const p = (supabaseProvider || "").toLowerCase().trim();
+  if (!p) return "credentials";
   if (p.includes("naver")) return "naver";
   if (p.includes("kakao")) return "kakao";
   if (p.includes("instagram")) return "instagram";
@@ -65,7 +66,8 @@ export function mapSupabaseProviderToAuthId(
     case "naver":
       return "naver";
     default:
-      return "google";
+      // Unknown IdP string — do not pretend it was Google (admin list bug).
+      return "credentials";
   }
 }
 

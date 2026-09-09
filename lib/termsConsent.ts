@@ -81,6 +81,22 @@ export function isOnTermsConsentPath(
   return normalizeAppPathname(pathname) === "/terms-consent";
 }
 
+/** Auth gates where auto re-bridge / terms redirect must not reload-loop. */
+export function isOnAuthSessionGatePath(
+  pathname: string | null | undefined = typeof window !== "undefined"
+    ? window.location.pathname
+    : null
+): boolean {
+  if (!pathname) return false;
+  const p = normalizeAppPathname(pathname);
+  return (
+    p === "/terms-consent" ||
+    p === "/auth/confirm" ||
+    p === "/auth/bridge" ||
+    p.startsWith("/auth/bridge/")
+  );
+}
+
 /**
  * Navigate to the terms gate only when not already there.
  * Prevents CreditsProvider / ensureAppSession from assign-looping the page.

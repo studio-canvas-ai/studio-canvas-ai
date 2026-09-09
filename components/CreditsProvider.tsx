@@ -41,7 +41,7 @@ import { shouldApplyBrandWatermark } from "@/lib/watermarkPolicy";
 import { stashAuthErrorForModal } from "@/lib/supabase/oauthErrors";
 import { bridgeSupabaseAccessToken } from "@/lib/supabase/emailAuth";
 import {
-  isOnTermsConsentPath,
+  isOnAuthSessionGatePath,
   redirectToTermsConsentIfNeeded,
 } from "@/lib/termsConsent";
 import { clearAuthStorageOnly } from "@/lib/auth/clearAuthStorage";
@@ -270,15 +270,18 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Surface OAuth failures from /auth/callback → /generate?authError=… (any path works)
+  // Also open login after "switch account" from /auth/confirm (?login=1).
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
       const url = new URL(window.location.href);
       const authError = url.searchParams.get("authError");
-      if (!authError) return;
-      stashAuthErrorForModal(authError);
+      const wantLogin = url.searchParams.get("login") === "1";
+      if (!authError && !wantLogin) return;
+      if (authError) stashAuthErrorForModal(authError);
       setShowAuthModal(true);
       url.searchParams.delete("authError");
+      url.searchParams.delete("login");
       const clean = `${url.pathname}${url.searchParams.toString() ? `?${url.searchParams}` : ""}${url.hash}`;
       window.history.replaceState({}, "", clean);
     } catch {
@@ -538,7 +541,7 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
           const token = accessToken?.trim();
           if (token) {
             // Already on the terms gate — re-bridge would reload the page forever.
-            if (isOnTermsConsentPath()) return;
+            if (isOnAuthSessionGatePath()) return;
 
             void bridgeSupabaseAccessToken(token).then((bridge) => {
               if (cancelled || !bridge.ok) return;

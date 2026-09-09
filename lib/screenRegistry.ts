@@ -62,6 +62,11 @@ export const SCREEN_REGISTRY: readonly ScreenRegistryEntry[] = [
   { id: "SCREEN-019", path: "/privacy", label: "Privacy Policy" },
   { id: "SCREEN-020", path: "/terms-consent", label: "Terms Consent Gate" },
   { id: "SCREEN-021", path: "/auth/bridge", label: "Auth Bridge" },
+  {
+    id: "SCREEN-027",
+    path: "/auth/confirm",
+    label: "Auth Account Confirm Gate",
+  },
   { id: "SCREEN-022", path: "/admin", label: "Admin Dashboard" },
   { id: "SCREEN-023", path: "/admin/promotions", label: "Admin Promotions" },
   {
@@ -84,7 +89,7 @@ export const SCREEN_REGISTRY: readonly ScreenRegistryEntry[] = [
 ] as const;
 
 /** Next ID to assign when adding a screen (do not recycle). */
-export const NEXT_SCREEN_ID_NUMBER = 27;
+export const NEXT_SCREEN_ID_NUMBER = 28;
 
 /** Paths that share one URL across internal wizard steps. */
 const STEPPED_PATH_SESSION_KEYS: Readonly<Record<string, readonly string[]>> = {

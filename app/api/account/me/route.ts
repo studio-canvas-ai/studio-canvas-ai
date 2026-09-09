@@ -49,6 +49,15 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({
           authenticated: false,
           pendingTermsConsent: true,
+          pendingIdentity: {
+            email: typeof token.email === "string" ? token.email : null,
+            name: typeof token.name === "string" ? token.name : null,
+            image: typeof token.picture === "string" ? token.picture : null,
+            provider:
+              typeof token.authProvider === "string"
+                ? token.authProvider
+                : null,
+          },
           user: null,
           providers: listSocialProviders(),
           supabaseConfigured: isSupabaseConfigured(),

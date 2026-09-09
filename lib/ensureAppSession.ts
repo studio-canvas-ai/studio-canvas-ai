@@ -1,6 +1,6 @@
 import { bridgeSupabaseAccessToken } from "@/lib/supabase/emailAuth";
 import {
-  isOnTermsConsentPath,
+  isOnAuthSessionGatePath,
   redirectToTermsConsentIfNeeded,
 } from "@/lib/termsConsent";
 
@@ -8,8 +8,8 @@ import {
 export async function ensureAppSessionFromSupabase(): Promise<boolean> {
   if (typeof window === "undefined") return false;
 
-  // Already on the gate with a provisional session — do not re-bridge/reload.
-  if (isOnTermsConsentPath()) return false;
+  // Already on confirm/terms/bridge — do not re-bridge/reload.
+  if (isOnAuthSessionGatePath()) return false;
 
   try {
     const meRes = await fetch("/api/account/me", {

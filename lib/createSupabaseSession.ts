@@ -24,6 +24,7 @@ export type SupabaseBridgeSession = {
     email: string | null;
     name: string | null;
     image: string | null;
+    provider: string;
   };
 };
 
@@ -88,6 +89,7 @@ export async function createSessionFromSupabaseAccessToken(
         email: profile.email,
         name: profile.name,
         image: profile.image,
+        provider: profile.provider,
       },
     };
   }
@@ -167,6 +169,7 @@ export async function createSessionFromSupabaseAccessToken(
       email: dbUser.email,
       name: dbUser.name,
       image: dbUser.image,
+      provider: profile.provider,
     },
   };
 }

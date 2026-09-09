@@ -30,7 +30,10 @@ import {
   signUpWithEmailPassword,
   validatePasswordStrength,
 } from "@/lib/supabase/emailAuth";
-import { buildTermsConsentUrl } from "@/lib/termsConsent";
+import {
+  buildAuthConfirmUrl,
+  writeAuthConfirm,
+} from "@/lib/auth/confirmAccount";
 
 function GoogleLogo({ className }: { className?: string }) {
   return (
@@ -234,12 +237,32 @@ export default function AuthModal() {
       if (opts.finalizeTerms) {
         const agreedOk = await finalizeTermsIfNeeded();
         if (!agreedOk) {
-          window.location.href = buildTermsConsentUrl(resolveAuthNext());
+          const next = resolveAuthNext();
+          writeAuthConfirm({
+            email: bridged.user?.email ?? null,
+            name: bridged.user?.name ?? null,
+            image: bridged.user?.image ?? null,
+            provider: bridged.user?.provider || "credentials",
+            needsTermsConsent: true,
+            next,
+            at: Date.now(),
+          });
+          window.location.href = buildAuthConfirmUrl(next);
           return true;
         }
         // /api/terms/agree already minted the full app session cookie.
       } else {
-        window.location.href = buildTermsConsentUrl(resolveAuthNext());
+        const next = resolveAuthNext();
+        writeAuthConfirm({
+          email: bridged.user?.email ?? null,
+          name: bridged.user?.name ?? null,
+          image: bridged.user?.image ?? null,
+          provider: bridged.user?.provider || "credentials",
+          needsTermsConsent: true,
+          next,
+          at: Date.now(),
+        });
+        window.location.href = buildAuthConfirmUrl(next);
         return true;
       }
     }

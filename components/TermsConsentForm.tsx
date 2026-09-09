@@ -1,9 +1,16 @@
-"use client";
+﻿"use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { safePostConsentPath } from "@/lib/termsConsent";
 import { CONTENT_LICENSE_CLAUSE_KR } from "@/lib/legalContent";
+import { providerLabel } from "@/lib/auth/confirmAccount";
+
+type PendingIdentity = {
+  email: string | null;
+  name: string | null;
+  provider: string | null;
+};
 
 export default function TermsConsentForm({
   nextPath,
@@ -14,6 +21,31 @@ export default function TermsConsentForm({
   const [acceptPrivacy, setAcceptPrivacy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [identity, setIdentity] = useState<PendingIdentity | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/account/me", {
+          cache: "no-store",
+          credentials: "same-origin",
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          pendingIdentity?: PendingIdentity | null;
+        };
+        if (!cancelled && data.pendingIdentity) {
+          setIdentity(data.pendingIdentity);
+        }
+      } catch {
+        /* optional */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const canSubmit = acceptTerms && acceptPrivacy && !busy;
 
@@ -61,6 +93,23 @@ export default function TermsConsentForm({
           계정이 등록됩니다.
         </p>
       </div>
+
+      {identity && (identity.email || identity.name) ? (
+        <div className="rounded-2xl border border-sky-400/25 bg-sky-500/[0.08] p-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-sky-200/85">
+            등록될 계정 · {providerLabel(identity.provider)}
+          </p>
+          <p className="mt-2 text-base font-semibold text-white">
+            {identity.name || "이름 없음"}
+          </p>
+          <p className="mt-1 break-all text-sm text-white/70">
+            {identity.email || "이메일 없음"}
+          </p>
+          <p className="mt-2 text-[12px] leading-5 text-white/45">
+            이 계정이 아니면 로그아웃 후 다른 소셜 계정으로 다시 로그인해 주세요.
+          </p>
+        </div>
+      ) : null}
 
       <aside className="rounded-2xl border border-amber-400/25 bg-gradient-to-br from-amber-500/[0.08] via-white/[0.03] to-transparent p-4 shadow-[0_10px_32px_rgba(0,0,0,0.35)]">
         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-200/85">

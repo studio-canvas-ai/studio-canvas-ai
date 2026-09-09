@@ -28,6 +28,7 @@ export type ProfileRow = {
   name: string | null;
   avatar_url: string | null;
   app_user_id: string | null;
+  provider?: string | null;
   terms_agreed: boolean | null;
   terms_agreed_at: string | null;
   created_at: string | null;
@@ -269,6 +270,8 @@ export type AdminRegisteredUser = {
 };
 
 const PROFILE_ADMIN_SELECT =
+  "id, email, name, avatar_url, app_user_id, provider, terms_agreed, terms_agreed_at, created_at" as const;
+const PROFILE_ADMIN_SELECT_FALLBACK =
   "id, email, name, avatar_url, app_user_id, terms_agreed, terms_agreed_at, created_at" as const;
 
 /**
@@ -293,9 +296,18 @@ export async function listRegisteredProfilesForAdmin(): Promise<
 
   if (error) {
     if (isSchemaColumnError(error.message)) {
-      throw new Error(
-        "profiles schema mismatch — expected columns: id, email, name, avatar_url, app_user_id, terms_agreed, terms_agreed_at, created_at"
-      );
+      // Older DBs may lack profiles.provider — retry without it.
+      const retry = await admin
+        .from("profiles")
+        .select(PROFILE_ADMIN_SELECT_FALLBACK)
+        .eq("terms_agreed", true)
+        .order("created_at", { ascending: false });
+      if (retry.error) {
+        throw new Error(
+          "profiles schema mismatch — expected columns: id, email, name, avatar_url, app_user_id, terms_agreed, terms_agreed_at, created_at"
+        );
+      }
+      return mapAdminRows((retry.data ?? []) as ProfileRow[]);
     }
     throw new Error(error.message);
   }
@@ -328,7 +340,13 @@ async function mapAdminRows(rows: ProfileRow[]): Promise<AdminRegisteredUser[]> 
       email: row.email ?? local?.email ?? null,
       name: row.name ?? local?.name ?? null,
       avatarUrl: row.avatar_url ?? local?.image ?? null,
-      provider: mapSupabaseProviderToAuthId(local?.provider),
+      provider: mapSupabaseProviderToAuthId(
+        (typeof row.provider === "string" && row.provider.trim()
+          ? row.provider
+          : null) ||
+          local?.provider ||
+          undefined
+      ),
       planId: (local?.planId || "free") as PlanId,
       credits: typeof local?.credits === "number" ? local.credits : 0,
       createdAt: Number.isFinite(createdAtMs) ? createdAtMs : Date.now(),

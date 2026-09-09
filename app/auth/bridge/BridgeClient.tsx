@@ -1,10 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  buildTermsConsentUrl,
-  safePostConsentPath,
-} from "@/lib/termsConsent";
+import { safePostConsentPath } from "@/lib/termsConsent";
 import AuthBridgeLoading from "./AuthBridgeLoading";
 import { getBridgeCopy } from "./bridgeCopy";
 import { APP_HOME_PATH, appPathWithAuthError } from "@/lib/appRoutes";
@@ -150,6 +147,13 @@ export default function BridgeClient() {
           ok?: boolean;
           error?: string;
           needsTermsConsent?: boolean;
+          user?: {
+            id?: string;
+            email?: string | null;
+            name?: string | null;
+            image?: string | null;
+            provider?: string;
+          };
         };
 
         if (!bridgeRes.ok || !bridgeJson.ok) {
@@ -164,11 +168,22 @@ export default function BridgeClient() {
         if (cancelled) return;
         markDone();
         const next = readNextPath();
-        if (bridgeJson.needsTermsConsent) {
-          window.location.replace(buildTermsConsentUrl(next));
-          return;
-        }
-        window.location.replace(next);
+        const { writeAuthConfirm, buildAuthConfirmUrl } = await import(
+          "@/lib/auth/confirmAccount"
+        );
+        writeAuthConfirm({
+          email: bridgeJson.user?.email ?? null,
+          name: bridgeJson.user?.name ?? null,
+          image: bridgeJson.user?.image ?? null,
+          provider:
+            bridgeJson.user?.provider ||
+            intent?.provider ||
+            "unknown",
+          needsTermsConsent: Boolean(bridgeJson.needsTermsConsent),
+          next,
+          at: Date.now(),
+        });
+        window.location.replace(buildAuthConfirmUrl(next));
       } catch (err) {
         if (cancelled) return;
         const detail =

@@ -8,7 +8,17 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 export { isValidEmailFormat, validatePasswordStrength };
 
 export type BridgeResult =
-  | { ok: true; needsTermsConsent: boolean }
+  | {
+      ok: true;
+      needsTermsConsent: boolean;
+      user?: {
+        id?: string;
+        email?: string | null;
+        name?: string | null;
+        image?: string | null;
+        provider?: string;
+      };
+    }
   | { ok: false; error: string };
 
 export async function bridgeSupabaseAccessToken(
@@ -25,11 +35,22 @@ export async function bridgeSupabaseAccessToken(
       ok?: boolean;
       error?: string;
       needsTermsConsent?: boolean;
+      user?: {
+        id?: string;
+        email?: string | null;
+        name?: string | null;
+        image?: string | null;
+        provider?: string;
+      };
     };
     if (!res.ok || !json.ok) {
       return { ok: false, error: json.error || `Session bridge failed (${res.status})` };
     }
-    return { ok: true, needsTermsConsent: Boolean(json.needsTermsConsent) };
+    return {
+      ok: true,
+      needsTermsConsent: Boolean(json.needsTermsConsent),
+      user: json.user,
+    };
   } catch {
     return { ok: false, error: "network" };
   }
