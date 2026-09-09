@@ -39,6 +39,7 @@ import {
   listRecentProjects,
   RECENT_PROJECTS_CHANGED_EVENT,
   RECENT_PROJECTS_MAX,
+  splitStudioVaultLabel,
   type RecentProjectNamespace,
   type RecentProjectMeta,
 } from "@/lib/canvas/recentProjects";
@@ -407,7 +408,17 @@ export default function CanvasUploadToolbar({
                 {fillCanvas(cs.recentEmpty, { max: recentMax })}
               </p>
             ) : (
-              recent.map((item) => (
+              recent.map((item) => {
+                const { title, stamp } = splitStudioVaultLabel(item.label);
+                const when =
+                  stamp ||
+                  (() => {
+                    const d = new Date(item.savedAt);
+                    return `${d.getMonth() + 1}/${d.getDate()} ${String(
+                      d.getHours()
+                    ).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+                  })();
+                return (
                 <button
                   key={item.id}
                   type="button"
@@ -447,18 +458,23 @@ export default function CanvasUploadToolbar({
                         isLight ? "text-slate-900" : "text-white"
                       }`}
                     >
-                      {item.label}
+                      {title}
                     </span>
                     <span
-                      className={`block text-[10px] ${
+                      className={`block truncate text-[10px] tabular-nums ${
                         isLight ? "text-slate-600" : "text-white/50"
                       }`}
                     >
-                      {item.mode === "agent" ? cs.recentModePrint : cs.recentModeTemplate} · .sca
+                      {when}
+                      <span className={isLight ? "text-slate-400" : "text-white/35"}>
+                        {" "}
+                        · .sca
+                      </span>
                     </span>
                   </span>
                 </button>
-              ))
+                );
+              })
             )}
           </div>,
           document.body

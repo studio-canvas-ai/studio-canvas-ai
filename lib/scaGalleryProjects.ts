@@ -4,6 +4,7 @@
  */
 
 import type { StudioCanvasProjectV1 } from "@/lib/canvas/projectFile";
+import { formatStudioProjectVaultLabel } from "@/lib/canvas/recentProjects";
 import { exportSecureProject } from "@/lib/projectStorage";
 
 export type ScaGalleryProjectMeta = {
@@ -13,6 +14,8 @@ export type ScaGalleryProjectMeta = {
   createdAt: number;
   thumbSrc: string | null;
 };
+
+export { splitStudioVaultLabel } from "@/lib/canvas/recentProjects";
 
 export async function fetchScaGalleryProjects(): Promise<{
   projects: ScaGalleryProjectMeta[];
@@ -57,9 +60,10 @@ export async function uploadScaProjectToGallery(opts: {
     const sealed =
       opts.sealedContent?.trim() ||
       (await exportSecureProject(opts.project));
+    const now = Date.now();
     const label =
       opts.label?.trim() ||
-      (opts.project.studio.mode === "agent" ? "인쇄물 프로젝트" : "템플릿 프로젝트");
+      formatStudioProjectVaultLabel(opts.project, now);
 
     const thumb = opts.project.studio.backgroundUrl || opts.project.studio.subjectUrl;
     const thumbSrc =
@@ -73,7 +77,7 @@ export async function uploadScaProjectToGallery(opts: {
         label,
         mode: opts.project.studio.mode,
         sealedContent: sealed,
-        createdAt: Date.now(),
+        createdAt: now,
         thumbSrc,
       }),
     });

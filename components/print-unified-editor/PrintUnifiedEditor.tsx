@@ -1803,9 +1803,9 @@ export default function PrintUnifiedEditor() {
             <div className="hidden min-h-0 flex-1 lg:block" aria-hidden />
             <div className="max-lg:shrink-0 lg:mt-auto lg:shrink-0">
               <p className="mb-1.5 hidden px-0.5 text-xs leading-snug text-pink-500 [word-break:keep-all] lg:block">
-                내가 만든 디자인은 운영자 검수 및 민감 개인정보 삭제를 거쳐
-                템플릿창고(Template 03)에 공개 템플릿으로 등록되며, 다른
-                사용자들의 무료 디자인 참고 자료로 활용될 수 있음을 고지합니다.
+                완성된 디자인은 검수 및 개인정보 마스킹 후 템플릿
+                창고(Template 03)에 공유되며, 타인의 디자인 레퍼런스로
+                활용될 수 있습니다.
               </p>
               <PrintUnifiedEditorMiniThumbs
                 formatId={state.formatId}

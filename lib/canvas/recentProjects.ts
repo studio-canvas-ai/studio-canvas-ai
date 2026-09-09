@@ -56,19 +56,51 @@ function idbRecentKind(
   return namespace === "screen_010" ? "recent_photo" : "recent_shared";
 }
 
-function projectLabel(project: StudioCanvasProjectV1): string {
-  const title =
-    project.studio.overlayLayers.find((l) => l.text?.trim())?.text?.trim() ||
-    "";
+/** Prefer the largest on-canvas text as the vault title (메인 제목). */
+function pickMainCanvasText(
+  layers: StudioCanvasProjectV1["studio"]["overlayLayers"]
+): string {
+  const withText = layers.filter((l) => l.text?.trim());
+  if (withText.length === 0) return "";
+  const main = [...withText].sort(
+    (a, b) => (b.fontSize || 0) - (a.fontSize || 0)
+  )[0];
+  return main?.text?.trim() || "";
+}
+
+/** Vault list title: main canvas text + save time (M/D HH:MM). */
+export function formatStudioProjectVaultLabel(
+  project: StudioCanvasProjectV1,
+  savedAt?: number
+): string {
+  const title = pickMainCanvasText(project.studio.overlayLayers);
   const short = title.replace(/\s+/g, " ").slice(0, 28);
-  const when = new Date(project.savedAt || Date.now());
+  const when = new Date(savedAt ?? project.savedAt || Date.now());
   const stamp = `${when.getMonth() + 1}/${when.getDate()} ${String(
     when.getHours()
   ).padStart(2, "0")}:${String(when.getMinutes()).padStart(2, "0")}`;
-  if (short) return `${short} · ${stamp}`;
+  if (short) return `${short} - ${stamp}`;
   return project.studio.mode === "agent"
-    ? `인쇄물 · ${stamp}`
-    : `템플릿 · ${stamp}`;
+    ? `인쇄물 - ${stamp}`
+    : `템플릿 - ${stamp}`;
+}
+
+function projectLabel(project: StudioCanvasProjectV1): string {
+  return formatStudioProjectVaultLabel(project);
+}
+
+/** Split vault labels like "대한민국 - 8/31 09:24" for list UI. */
+export function splitStudioVaultLabel(label: string): {
+  title: string;
+  stamp: string | null;
+} {
+  const m = label
+    .trim()
+    .match(/^(.*?)(?:\s*[·\-–—]\s*)(\d{1,2}\/\d{1,2}\s+\d{2}:\d{2})$/);
+  if (m?.[1]?.trim() && m[2]) {
+    return { title: m[1].trim(), stamp: m[2] };
+  }
+  return { title: label.trim() || "작업물", stamp: null };
 }
 
 function projectThumb(project: StudioCanvasProjectV1): string | null {

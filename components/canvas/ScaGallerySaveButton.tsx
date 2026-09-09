@@ -22,6 +22,7 @@ import {
 import {
   fetchScaGalleryProjectContent,
   fetchScaGalleryProjects,
+  splitStudioVaultLabel,
   type ScaGalleryProjectMeta,
 } from "@/lib/scaGalleryProjects";
 
@@ -241,7 +242,17 @@ export default function ScaGallerySaveButton({
                 {fillCanvas(cs.saveGalleryEmpty, { max })}
               </p>
             ) : (
-              projects.map((p) => (
+              projects.map((p) => {
+                const { title, stamp } = splitStudioVaultLabel(p.label);
+                const when =
+                  stamp ||
+                  (() => {
+                    const d = new Date(p.createdAt);
+                    return `${d.getMonth() + 1}/${d.getDate()} ${String(
+                      d.getHours()
+                    ).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+                  })();
+                return (
                 <button
                   key={p.id}
                   type="button"
@@ -267,17 +278,16 @@ export default function ScaGallerySaveButton({
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[11px] font-semibold text-slate-900">
-                      {p.label}
+                      {title}
                     </span>
-                    <span className="block text-[10px] text-slate-600">
-                      {p.mode === "agent"
-                        ? cs.recentModePrint
-                        : cs.recentModeTemplate}{" "}
-                      · .sca
+                    <span className="block truncate text-[10px] tabular-nums text-slate-600">
+                      {when}
+                      <span className="text-slate-400"> · .sca</span>
                     </span>
                   </span>
                 </button>
-              ))
+                );
+              })
             )}
           </div>,
           document.body
