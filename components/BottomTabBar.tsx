@@ -16,17 +16,18 @@ import { SHORTS_THUMBNAIL_PATH } from "@/lib/shortsThumbnail";
 import { APP_HOME_PATH, normalizeAppTabPath } from "@/lib/appRoutes";
 
 const TAB_ITEMS = [
-  { href: APP_HOME_PATH, labelKey: "home" as const, Icon: Home, authRequired: false },
-  { href: "/styles", labelKey: "styles" as const, Icon: LayoutGrid, authRequired: false },
+  { href: APP_HOME_PATH, labelKey: "home" as const, Icon: Home, authRequired: false, adminOnly: false },
+  { href: "/styles", labelKey: "styles" as const, Icon: LayoutGrid, authRequired: false, adminOnly: true },
   {
     href: SHORTS_THUMBNAIL_PATH,
     labelKey: "videoThumbnail" as const,
     Icon: Clapperboard,
     authRequired: false,
+    adminOnly: false,
   },
-  { href: "/gallery/my", labelKey: "myGallery" as const, Icon: Images, authRequired: true },
-  { href: "/pricing", labelKey: "pricing" as const, Icon: CreditCard, authRequired: false },
-  { href: "/mypage", labelKey: "myPage" as const, Icon: UserRound, authRequired: true },
+  { href: "/gallery/my", labelKey: "myGallery" as const, Icon: Images, authRequired: true, adminOnly: true },
+  { href: "/pricing", labelKey: "pricing" as const, Icon: CreditCard, authRequired: false, adminOnly: false },
+  { href: "/mypage", labelKey: "myPage" as const, Icon: UserRound, authRequired: true, adminOnly: false },
 ];
 
 function isTabActive(pathname: string, href: string) {
@@ -40,7 +41,7 @@ function isTabActive(pathname: string, href: string) {
 export default function BottomTabBar() {
   const { t } = useI18n();
   const pathname = normalizeAppTabPath(usePathname() || APP_HOME_PATH);
-  const { isAuthenticated } = useCredits();
+  const { isAuthenticated, isAdmin } = useCredits();
 
   if (
     pathname.startsWith("/admin") ||
@@ -57,7 +58,8 @@ export default function BottomTabBar() {
       aria-label={t.nav.menu}
     >
       <ul className="mx-auto flex h-[3.75rem] max-w-lg items-stretch justify-between px-1">
-        {TAB_ITEMS.map(({ href, labelKey, Icon, authRequired }) => {
+        {TAB_ITEMS.filter((item) => !item.adminOnly || isAdmin).map(
+          ({ href, labelKey, Icon, authRequired }) => {
           const locked = authRequired && !isAuthenticated;
           const active = !locked && isTabActive(pathname, href);
           const label = t.nav[labelKey];

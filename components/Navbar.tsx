@@ -23,15 +23,15 @@ import TemplateWarehouseModal from "@/components/template-warehouse/TemplateWare
 import { publicAccountEmail } from "@/lib/auth/blockedAccounts";
 
 const PRIMARY_LINKS = [
-  { href: "/", labelKey: "home" as const, authRequired: false },
-  { href: "/styles", labelKey: "styles" as const, authRequired: false },
-  { href: "/gallery/my", labelKey: "myGallery" as const, authRequired: true },
-  { href: "/pricing", labelKey: "pricing" as const, authRequired: false },
-  { href: "/mypage", labelKey: "myPage" as const, authRequired: true },
+  { href: "/", labelKey: "home" as const, authRequired: false, adminOnly: false },
+  { href: "/styles", labelKey: "styles" as const, authRequired: false, adminOnly: true },
+  { href: "/gallery/my", labelKey: "myGallery" as const, authRequired: true, adminOnly: true },
+  { href: "/pricing", labelKey: "pricing" as const, authRequired: false, adminOnly: false },
+  { href: "/mypage", labelKey: "myPage" as const, authRequired: true, adminOnly: false },
 ] as const;
 
 const SECONDARY_LINKS = [
-  { href: "/support", labelKey: "support" as const, authRequired: false },
+  { href: "/support", labelKey: "support" as const, authRequired: false, adminOnly: false },
 ] as const;
 
 export type PrintWizardNavbarBack = {
@@ -54,6 +54,7 @@ export default function Navbar({ printWizardBack }: NavbarProps = {}) {
     creditsLabel,
     unlimitedCredits,
     isAuthenticated,
+    isAdmin,
     authUser,
     promoWallet,
     signOutUser,
@@ -246,7 +247,9 @@ export default function Navbar({ printWizardBack }: NavbarProps = {}) {
           </div>
 
           <div className="flex min-w-0 flex-1 items-center justify-center gap-1 overflow-x-auto lg:gap-2">
-            {[...PRIMARY_LINKS, ...SECONDARY_LINKS].map((link) => {
+            {[...PRIMARY_LINKS, ...SECONDARY_LINKS]
+              .filter((link) => !link.adminOnly || isAdmin)
+              .map((link) => {
               const locked = link.authRequired && !isAuthenticated;
               if (locked) {
                 return (
