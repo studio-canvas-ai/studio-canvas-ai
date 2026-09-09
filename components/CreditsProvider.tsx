@@ -40,7 +40,10 @@ import {
 import { shouldApplyBrandWatermark } from "@/lib/watermarkPolicy";
 import { stashAuthErrorForModal } from "@/lib/supabase/oauthErrors";
 import { bridgeSupabaseAccessToken } from "@/lib/supabase/emailAuth";
-import { buildTermsConsentUrl, safePostConsentPath } from "@/lib/termsConsent";
+import {
+  isOnTermsConsentPath,
+  redirectToTermsConsentIfNeeded,
+} from "@/lib/termsConsent";
 import { clearAuthStorageOnly } from "@/lib/auth/clearAuthStorage";
 import { clearEditorClientCachesOnLogout } from "@/lib/auth/clearEditorCaches";
 import type { PlanUsageSnapshot } from "@/lib/planQuotas";
@@ -51,31 +54,6 @@ type CachedPlanUsagePayload = PlanUsageSnapshot & {
   quotaPeriodStart?: number;
   userId?: string;
 };
-
-function readCachedPlanUsage(userId?: string | null): PlanUsageSnapshot | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(PLAN_USAGE_CACHE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as CachedPlanUsagePayload;
-    if (userId && parsed.userId && parsed.userId !== userId) return null;
-    if (
-      typeof parsed?.fhdRemaining !== "number" ||
-      typeof parsed?.uhd4kRemaining !== "number"
-    ) {
-      return null;
-    }
-    return {
-      fhdRemaining: parsed.fhdRemaining,
-      fhdLimit: parsed.fhdLimit ?? 0,
-      uhd4kRemaining: parsed.uhd4kRemaining,
-      uhd4kLimit: parsed.uhd4kLimit ?? 0,
-      galleryLimit: parsed.galleryLimit ?? 0,
-    };
-  } catch {
-    return null;
-  }
-}
 
 function writeCachedPlanUsage(
   usage: PlanUsageSnapshot | null,
@@ -397,7 +375,13 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
       }
 
       if (data.pendingTermsConsent) {
-        // Keep Supabase-driven UI auth; app member not finalized yet.
+        // Provisional JWT only — do not keep deleted-account admin/credits chrome.
+        setIsAdmin(false);
+        setCredits(0);
+        setMaxCredits(0);
+        setPlanUsage(null);
+        quotaPeriodStartRef.current = null;
+        setPlanId("free");
         setSocialProvidersLoaded(true);
         return;
       }
@@ -544,27 +528,22 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
             name: name ?? null,
             image: image ?? null,
           });
-          const cachedUsage = readCachedPlanUsage(sbUser.id);
-          if (cachedUsage) {
-            setPlanUsageState(cachedUsage);
-          } else {
-            // Drop cross-account residue until /api/account/me hydrates.
-            setPlanUsageState(null);
-          }
+          // Provisional / mid-login: never show prior account credit badges.
+          setIsAdmin(false);
+          setPlanUsageState(null);
           setShowAuthModal(false);
 
           void refreshServerState();
 
           const token = accessToken?.trim();
           if (token) {
+            // Already on the terms gate — re-bridge would reload the page forever.
+            if (isOnTermsConsentPath()) return;
+
             void bridgeSupabaseAccessToken(token).then((bridge) => {
               if (cancelled || !bridge.ok) return;
-              if (bridge.needsTermsConsent && typeof window !== "undefined") {
-                window.location.assign(
-                  buildTermsConsentUrl(
-                    safePostConsentPath(window.location.pathname)
-                  )
-                );
+              if (bridge.needsTermsConsent) {
+                redirectToTermsConsentIfNeeded(window.location.pathname);
                 return;
               }
               void refreshServerState();

@@ -70,3 +70,28 @@ export function buildTermsConsentUrl(nextPath: string): string {
   const next = safePostConsentPath(nextPath);
   return `/terms-consent?next=${encodeURIComponent(next)}`;
 }
+
+/** True when the browser is already on the terms gate (avoid reload loops). */
+export function isOnTermsConsentPath(
+  pathname: string | null | undefined = typeof window !== "undefined"
+    ? window.location.pathname
+    : null
+): boolean {
+  if (!pathname) return false;
+  return normalizeAppPathname(pathname) === "/terms-consent";
+}
+
+/**
+ * Navigate to the terms gate only when not already there.
+ * Prevents CreditsProvider / ensureAppSession from assign-looping the page.
+ */
+export function redirectToTermsConsentIfNeeded(
+  nextPath?: string | null
+): boolean {
+  if (typeof window === "undefined") return false;
+  if (isOnTermsConsentPath(window.location.pathname)) return false;
+  window.location.assign(
+    buildTermsConsentUrl(safePostConsentPath(nextPath ?? window.location.pathname))
+  );
+  return true;
+}

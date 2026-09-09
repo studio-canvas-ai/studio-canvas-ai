@@ -1,9 +1,15 @@
 import { bridgeSupabaseAccessToken } from "@/lib/supabase/emailAuth";
-import { buildTermsConsentUrl, safePostConsentPath } from "@/lib/termsConsent";
+import {
+  isOnTermsConsentPath,
+  redirectToTermsConsentIfNeeded,
+} from "@/lib/termsConsent";
 
 /** Browser has Supabase session but server APIs need Auth.js cookie — bridge once. */
 export async function ensureAppSessionFromSupabase(): Promise<boolean> {
   if (typeof window === "undefined") return false;
+
+  // Already on the gate with a provisional session — do not re-bridge/reload.
+  if (isOnTermsConsentPath()) return false;
 
   try {
     const meRes = await fetch("/api/account/me", {
@@ -13,8 +19,13 @@ export async function ensureAppSessionFromSupabase(): Promise<boolean> {
     if (meRes.ok) {
       const me = (await meRes.json().catch(() => ({}))) as {
         authenticated?: boolean;
+        pendingTermsConsent?: boolean;
       };
       if (me.authenticated) return true;
+      if (me.pendingTermsConsent) {
+        redirectToTermsConsentIfNeeded(window.location.pathname);
+        return false;
+      }
     }
   } catch {
     /* fall through to bridge */
@@ -33,10 +44,8 @@ export async function ensureAppSessionFromSupabase(): Promise<boolean> {
     const bridge = await bridgeSupabaseAccessToken(accessToken);
     if (!bridge.ok) return false;
 
-    if (bridge.needsTermsConsent && typeof window !== "undefined") {
-      window.location.assign(
-        buildTermsConsentUrl(safePostConsentPath(window.location.pathname))
-      );
+    if (bridge.needsTermsConsent) {
+      redirectToTermsConsentIfNeeded(window.location.pathname);
       return false;
     }
 
