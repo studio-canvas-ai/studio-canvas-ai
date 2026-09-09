@@ -302,6 +302,10 @@ export async function signInWithFacebook(
     }
 
     const next = safeAuthNextPath(nextPath);
+    const { prepareFreshSocialLogin } = await import(
+      "@/lib/auth/prepareOAuthLogin"
+    );
+    await prepareFreshSocialLogin("facebook");
     saveAuthNextPath(next);
 
     const { ensureSupabaseAuthStorageReady } = await import(
@@ -317,6 +321,10 @@ export async function signInWithFacebook(
       options: {
         redirectTo,
         skipBrowserRedirect: false,
+        queryParams: {
+          // Force Meta to re-prompt instead of silently reusing a sticky session.
+          auth_type: "reauthenticate",
+        },
       },
     });
 
@@ -417,6 +425,10 @@ export async function signInWithGoogle(
     }
 
     const next = safeAuthNextPath(nextPath);
+    const { prepareFreshSocialLogin } = await import(
+      "@/lib/auth/prepareOAuthLogin"
+    );
+    await prepareFreshSocialLogin("google");
     saveAuthNextPath(next);
 
     // Ensure foreign project auth keys cannot poison PKCE before redirect.
@@ -437,9 +449,8 @@ export async function signInWithGoogle(
         skipBrowserRedirect: true,
         queryParams: {
           access_type: "offline",
-          // Force account chooser so users can pick a live Google account
-          // instead of a previously sticky / deleted YouTube channel session.
-          prompt: "select_account",
+          // Force account chooser so a sticky prior Google/session cannot win.
+          prompt: "select_account consent",
         },
       },
     });
@@ -498,6 +509,10 @@ export async function signInWithMicrosoft(
     }
 
     const next = safeAuthNextPath(nextPath);
+    const { prepareFreshSocialLogin } = await import(
+      "@/lib/auth/prepareOAuthLogin"
+    );
+    await prepareFreshSocialLogin("microsoft");
     saveAuthNextPath(next);
 
     const { ensureSupabaseAuthStorageReady } = await import(
@@ -511,6 +526,9 @@ export async function signInWithMicrosoft(
       options: {
         redirectTo: buildAuthCallbackRedirectTo(next),
         scopes: "openid profile email offline_access",
+        queryParams: {
+          prompt: "select_account",
+        },
       },
     });
 
@@ -559,6 +577,10 @@ export async function signInWithKakao(
     }
 
     const next = safeAuthNextPath(nextPath);
+    const { prepareFreshSocialLogin } = await import(
+      "@/lib/auth/prepareOAuthLogin"
+    );
+    await prepareFreshSocialLogin("kakao");
     saveAuthNextPath(next);
 
     // Drop leftover PKCE/session keys from retired test projects before OAuth.
@@ -578,6 +600,7 @@ export async function signInWithKakao(
         // Pass scope via queryParams so Kakao authorize receives nickname/image only.
         queryParams: {
           scope: "profile_nickname,profile_image",
+          prompt: "login",
         },
       },
     });
@@ -619,6 +642,10 @@ export async function signInWithNaver(
     }
 
     const next = safeAuthNextPath(nextPath);
+    const { prepareFreshSocialLogin } = await import(
+      "@/lib/auth/prepareOAuthLogin"
+    );
+    await prepareFreshSocialLogin("naver");
     saveAuthNextPath(next);
 
     const { ensureSupabaseAuthStorageReady } = await import(
@@ -633,6 +660,10 @@ export async function signInWithNaver(
         redirectTo: buildAuthCallbackRedirectTo(next),
         // Avoid `openid` so Auth uses the (proxied) userinfo endpoint.
         scopes: "profile",
+        queryParams: {
+          // Force Naver login UI instead of silently reusing a prior session.
+          auth_type: "reprompt",
+        },
       },
     });
 

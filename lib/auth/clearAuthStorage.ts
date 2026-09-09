@@ -30,6 +30,7 @@ export function isAuthCookieName(name: string): boolean {
   if (n.startsWith("sb-")) return true;
   if (n === "sca_auth_error") return true;
   if (n === "sca_admin_session") return true;
+  if (n === "sca_wallet_v1") return true;
   return (
     n === authSessionCookieName().toLowerCase() ||
     n === authCsrfCookieName().toLowerCase() ||

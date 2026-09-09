@@ -262,14 +262,18 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
 
   const isFreePlan = planId === "free";
   const unlimitedCredits = hasUnlimitedCredits(authUser?.email);
-  // Navbar badge: durable credit pool (fhdRemaining), not legacy wallet (always 0).
+  // Navbar badge: durable credit pool (fhdRemaining). Never show another account's
+  // cached pool while signed out.
   const poolRemaining =
     typeof planUsage?.fhdRemaining === "number" ? planUsage.fhdRemaining : null;
-  const creditsLabel = unlimitedCredits
-    ? "∞"
-    : poolRemaining != null
-      ? poolRemaining.toLocaleString("ko-KR")
-      : "—";
+  const creditsLabel =
+    !isAuthenticated
+      ? "—"
+      : unlimitedCredits
+        ? "∞"
+        : poolRemaining != null
+          ? poolRemaining.toLocaleString("ko-KR")
+          : "—";
   const applyBrandWatermark = shouldApplyBrandWatermark(
     planId,
     authUser?.email,
@@ -277,8 +281,7 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    const cached = readCachedPlanUsage();
-    if (cached) setPlanUsageState(cached);
+    // Do not hydrate plan-usage cache until we know who is signed in.
     const stored = readPendingCheckout();
     if (stored) {
       setPendingPlanId(stored.planId);
@@ -399,8 +402,15 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // No NextAuth member session — leave Supabase listener as source of truth
-      // unless it already cleared auth.
+      // No NextAuth member session — wipe any leftover account chrome.
+      setIsAuthenticated(false);
+      setAuthUser(null);
+      setIsAdmin(false);
+      setCredits(FREE_CREDITS);
+      setMaxCredits(FREE_CREDITS);
+      setPlanId("free");
+      setPlanUsage(null);
+      quotaPeriodStartRef.current = null;
       setSocialProvidersLoaded(true);
     } catch {
       setSocialProvidersLoaded(true);
@@ -457,6 +467,12 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
     }
 
     clearBrowserAuthResidue();
+    try {
+      const { clearOAuthIntent } = await import("@/lib/auth/prepareOAuthLogin");
+      clearOAuthIntent();
+    } catch {
+      /* ignore */
+    }
     setIsAuthenticated(false);
     setAuthUser(null);
     setIsAdmin(false);
@@ -521,14 +537,20 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
             (typeof meta.name === "string" && meta.name) ||
             null;
           setIsAuthenticated(true);
-          setAuthUser((prev) => ({
+          setAuthUser({
             id: sbUser.id,
-            email: sbUser.email ?? prev?.email ?? null,
-            name: name ?? prev?.name ?? null,
-            image: image ?? prev?.image ?? null,
-          }));
+            // Never keep a previous account email when the new profile omits one.
+            email: sbUser.email ?? null,
+            name: name ?? null,
+            image: image ?? null,
+          });
           const cachedUsage = readCachedPlanUsage(sbUser.id);
-          if (cachedUsage) setPlanUsageState(cachedUsage);
+          if (cachedUsage) {
+            setPlanUsageState(cachedUsage);
+          } else {
+            // Drop cross-account residue until /api/account/me hydrates.
+            setPlanUsageState(null);
+          }
           setShowAuthModal(false);
 
           void refreshServerState();
@@ -569,6 +591,12 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
             setIsAuthenticated(false);
             setAuthUser(null);
             setIsAdmin(false);
+            setCredits(FREE_CREDITS);
+            setMaxCredits(FREE_CREDITS);
+            setPlanId("free");
+            setPlanUsage(null);
+            quotaPeriodStartRef.current = null;
+            setPromoWallet(null);
             return;
           }
           if (session?.user) {

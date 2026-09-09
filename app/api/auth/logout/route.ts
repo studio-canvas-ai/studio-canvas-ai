@@ -10,8 +10,8 @@ import { isAuthCookieName } from "@/lib/auth/clearAuthStorage";
 export const runtime = "nodejs";
 
 /**
- * Clears Auth.js + Supabase session cookies only.
- * Must not expire locale / wallet / studio-unrelated cookies wholesale.
+ * Clears Auth.js + Supabase session cookies and wallet residue.
+ * Must not expire locale / studio vault cookies wholesale.
  */
 export async function POST(request: NextRequest) {
   const response = NextResponse.json({ ok: true });

@@ -72,21 +72,46 @@ export default function BridgeClient() {
         let lastSessionError: string | null = null;
 
         // Facebook (and some mobile browsers) may write cookies a tick late.
+        let sessionUser: {
+          id: string;
+          app_metadata?: { provider?: string } | null;
+          identities?: Array<{ provider?: string }> | null;
+        } | null = null;
+
         for (let i = 0; i < SESSION_ATTEMPTS; i++) {
           if (cancelled) return;
           const { data, error } = await supabase.auth.getSession();
           accessToken = data.session?.access_token ?? null;
+          sessionUser = data.session?.user ?? null;
           if (accessToken) break;
           lastSessionError = error?.message ?? null;
           if (i < SESSION_ATTEMPTS - 1) await wait(SESSION_RETRY_MS * (i + 1));
         }
 
-        if (!accessToken) {
+        if (!accessToken || !sessionUser) {
           throw new Error(
             lastSessionError ||
               "No Supabase access token after OAuth (cookies missing? Check www vs apex origin)."
           );
         }
+
+        const {
+          readOAuthIntent,
+          clearOAuthIntent,
+          assertOAuthSessionMatchesIntent,
+        } = await import("@/lib/auth/prepareOAuthLogin");
+        const intent = readOAuthIntent();
+        const check = assertOAuthSessionMatchesIntent(intent, sessionUser);
+        if (!check.ok) {
+          try {
+            await supabase.auth.signOut({ scope: "local" });
+          } catch {
+            /* ignore */
+          }
+          clearOAuthIntent();
+          throw new Error(check.reason);
+        }
+        clearOAuthIntent();
 
         const controller = new AbortController();
         const abortTimer = window.setTimeout(
@@ -100,7 +125,11 @@ export default function BridgeClient() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             credentials: "same-origin",
-            body: JSON.stringify({ accessToken }),
+            body: JSON.stringify({
+              accessToken,
+              expectedProvider: intent?.provider ?? null,
+              rejectUserId: intent?.previousUserId ?? null,
+            }),
             signal: controller.signal,
           });
         } catch (err) {
