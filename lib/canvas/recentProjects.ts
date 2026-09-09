@@ -75,7 +75,7 @@ export function formatStudioProjectVaultLabel(
 ): string {
   const title = pickMainCanvasText(project.studio.overlayLayers);
   const short = title.replace(/\s+/g, " ").slice(0, 28);
-  const when = new Date(savedAt ?? project.savedAt || Date.now());
+  const when = new Date(savedAt ?? project.savedAt ?? Date.now());
   const stamp = `${when.getMonth() + 1}/${when.getDate()} ${String(
     when.getHours()
   ).padStart(2, "0")}:${String(when.getMinutes()).padStart(2, "0")}`;
