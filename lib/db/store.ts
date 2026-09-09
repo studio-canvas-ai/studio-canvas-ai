@@ -12,6 +12,11 @@ const EMPTY: DbSnapshot = {
   promotionCodes: {},
   promotionBatches: {},
   promotionHistory: [],
+  generalPhotos: {},
+  galleryWorks: {},
+  scaProjects: {},
+  faceProfiles: {},
+  supportTickets: [],
 };
 
 type GlobalDb = typeof globalThis & {
@@ -63,6 +68,13 @@ function loadFromDisk(): DbSnapshot {
       promotionCodes: parsed.promotionCodes ?? {},
       promotionBatches: parsed.promotionBatches ?? {},
       promotionHistory: parsed.promotionHistory ?? [],
+      generalPhotos: parsed.generalPhotos ?? {},
+      galleryWorks: parsed.galleryWorks ?? {},
+      scaProjects: parsed.scaProjects ?? {},
+      faceProfiles: parsed.faceProfiles ?? {},
+      supportTickets: Array.isArray(parsed.supportTickets)
+        ? parsed.supportTickets
+        : [],
     };
   } catch {
     return structuredClone(EMPTY);

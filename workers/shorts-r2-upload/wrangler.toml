@@ -1,0 +1,20 @@
+name = "studio-canvas-shorts-r2-upload"
+main = "src/index.ts"
+compatibility_date = "2024-09-01"
+account_id = "138490480b93cb19e18faeffcee92b30"
+workers_dev = true
+
+[vars]
+ALLOWED_ORIGINS = "https://www.studio-canvas-ai.com,https://studio-canvas-ai.com,http://localhost:3000"
+
+[[kv_namespaces]]
+binding = "UPLOAD_SESSIONS"
+id = "1f5d6315f6dc4709b32efbe3466e7db0"
+
+[[routes]]
+pattern = "*.studio-canvas-ai.com/api/shorts/stream-upload*"
+zone_name = "studio-canvas-ai.com"
+
+[[routes]]
+pattern = "studio-canvas-ai.com/api/shorts/stream-upload*"
+zone_name = "studio-canvas-ai.com"

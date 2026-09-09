@@ -1,0 +1,532 @@
+# 구글로 계속하기 (Google OAuth 2.0 Login) 연동 완벽 가이드
+
+> Studio Canvas AI (Next.js) — **「구글로 계속하기」** 구현·아키텍처·트러블슈팅 기록  
+> 기준 코드: `lib/supabase/oauth.ts` (`signInWithGoogle`), `/auth/callback` → `/auth/bridge`, Google Cloud / Supabase Providers  
+> 최종 정리일: 2026-08-08  
+> 파일: `Integration_Log_v4.txt` (프로젝트 Root)
+
+---
+
+## 0. 한 줄 요약 (현재 아키텍처)
+
+| 항목 | 실제 구현 |
+|------|-----------|
+| 로그인 방식 | **OAuth 2.0 Authorization Code** + **PKCE** (Supabase Auth) |
+| 주 경로 | **Supabase built-in Google** — `provider: "google"` (first-class, Custom OAuth 아님) |
+| 프론트 진입 | `AuthModal` → `signInWithGoogle()` → Google 계정 선택 |
+| 토큰 교환 | **Supabase GoTrue**가 Google token endpoint와 교환 (앱이 code↔Google token 직접 호출하지 않음) |
+| Google Redirect URI | **반드시** `https://<project-ref>.supabase.co/auth/v1/callback` |
+| 앱 세션 | `/auth/callback` (PKCE code exchange) → `/auth/bridge` → NextAuth JWT + 앱 유저 DB |
+| Scopes | `openid email profile` |
+| Account UX | `prompt: select_account` + `access_type: offline` |
+| 폴백 | Auth.js `Google` provider (`GOOGLE_CLIENT_*`) — Supabase 미구성 시에만 |
+| 현재 project-ref | `oorujqbivznftsyqilyj` |
+
+Google **로그인(OAuth)** 과 Google Fonts / YouTube Data API는 **무관**합니다. 이 문서는 **로그인만** 다룹니다.  
+(참고: 유튜브 공유는 Data API를 쓰지 않음 — `Integration_Log_v1.txt` / `docs/youtube-share-guide.md`)
+
+네이버와 달리 Google은 nested userinfo 프록시가 **필요 없습니다**. 대신 **Redirect URI를 Supabase 콜백에 정확히 맞추는 것**이 핵심입니다.
+
+---
+
+## 1. 핵심 파일 구조 및 라우팅
+
+### 1.1 프론트엔드 트리거 · 인증 요청 진입점
+
+| 경로 | 역할 |
+|------|------|
+| `components/AuthModal.tsx` | 「구글로 계속하기」 버튼, `handleGoogleLogin` |
+| `lib/supabase/oauth.ts` | **`signInWithGoogle`**, `buildAuthCallbackRedirectTo`, `extractSupabaseOAuthProfile` |
+| `lib/supabase/client.ts` | 브라우저 Supabase 클라이언트 |
+| `lib/supabase/authStorage.ts` | 프로젝트 ref별 스토리지 키, **이종 프로젝트 PKCE 오염 제거** |
+| `lib/supabase/config.ts` | URL 정규화, `getSupabaseAuthCallbackUrl`, `SUPABASE_AUTH_SITE_ORIGINS` |
+| `lib/supabase/oauthErrors.ts` | redirect_uri / PKCE / invalid_client 등 UI 메시지 매핑 |
+| `lib/i18n/locales/*` | `continueWithGoogle` 문구 |
+| `components/CreditsProvider.tsx` | 소셜 provider 타입에 `"google"` 포함 |
+
+**버튼 → OAuth 시작 (`AuthModal`):**
+
+```
+handleGoogleLogin()
+  setBusy(true)
+  if (!isSupabaseConfigured()) → UI error + return
+  try
+    next ← resolveAuthNext()
+    signInWithGoogle(next)
+      → saveAuthNextPath(next)
+      → ensureSupabaseAuthStorageReady()   // stale project PKCE purge
+      → signInWithOAuth({
+           provider: "google",
+           options: {
+             redirectTo: `${origin}/auth/callback?next=…`,
+             scopes: "openid email profile",
+             skipBrowserRedirect: true,
+             queryParams: { access_type: "offline", prompt: "select_account" },
+           },
+         })
+      → window.location.assign(data.url)   // Google authorize URL
+  catch → console.error("Google login error:") + 모달 에러
+```
+
+`skipBrowserRedirect: true` + 수동 `location.assign`으로 URL 누락·에러를 앱에서 먼저 잡습니다.
+
+### 1.2 콜백 · 토큰 · 세션 라우트
+
+| 경로 | 역할 |
+|------|------|
+| **Google Cloud Authorized redirect URI** | `https://oorujqbivznftsyqilyj.supabase.co/auth/v1/callback` — **code를 Supabase가 수신** |
+| Supabase GoTrue | authorize → Google token 교환 → userinfo → `auth.users` |
+| `middleware.ts` | Site URL(`/`)로 온 `?code=` / `?error=` → `/auth/callback` 포워드 |
+| `app/auth/callback/route.ts` | PKCE **`exchangeCodeForSession`** → `/auth/bridge` |
+| `lib/supabase/exchange.ts` | 서버 code ↔ Supabase 세션 쿠키 기록 |
+| `app/auth/bridge/*` | Supabase 세션 → `POST /api/auth/supabase-bridge` → NextAuth |
+| `app/api/auth/supabase-bridge/route.ts` | 앱 유저 upsert + Auth.js JWT |
+| `lib/auth.ts` | Auth.js `Google({…})` 폴백 (`prompt: select_account` 동일) |
+
+### 1.3 Token Exchange 로직 구조
+
+앱 Next.js 라우트가 Google `token` 엔드포인트를 **직접** 호출하지 않습니다.
+
+```
+[Browser]
+  AuthModal → signInWithGoogle
+       │  skipBrowserRedirect → assign(Supabase→Google authorize URL)
+       ▼
+[Google]  accounts.google.com/o/oauth2/v2/auth
+          (client_id, redirect_uri=Supabase callback, scope, prompt=select_account, state, code_challenge)
+       │
+       ▼
+[Supabase]  /auth/v1/callback?code=…&state=…
+       │  1) state / PKCE 검증
+       │  2) Google token endpoint (code → access_token + id_token)
+       │  3) openid userinfo / id_token claims → email, name, picture, sub
+       │  4) auth.users upsert
+       │  5) 앱 redirectTo 로 PKCE code 전달
+       ▼
+[App]  /  or /auth/callback?code=…&next=/generate
+       │  middleware: / + code → /auth/callback
+       ▼
+[App]  exchangeSupabaseCode(request, code, redirectResponse)
+       │  createServerClient + auth.exchangeCodeForSession(code)
+       │  cookies → sb-<ref>-auth-token
+       ▼
+[App]  /auth/bridge
+       │  getSession() (짧은 재시도)
+       │  POST /api/auth/supabase-bridge { accessToken }
+       ▼
+[App]  NextAuth JWT + credits user + optional terms-consent → next path
+```
+
+**이중 code의 의미**
+
+| Code | 소비자 | 용도 |
+|------|--------|------|
+| Google → Supabase `code` | GoTrue | Google access/id token 발급 |
+| Supabase → App `code` | `/auth/callback` | 브라우저에 Supabase 세션 쿠키 심기 (PKCE) |
+
+### 1.4 엔드투엔드 시퀀스
+
+```
+User → AuthModal → signInWithGoogle
+     → Google account chooser (select_account)
+     → Supabase token + profile
+     → Site /auth/callback (PKCE)
+     → /auth/bridge (session mint)
+     → /generate (or saved next) ± terms-consent
+```
+
+---
+
+## 2. 트러블슈팅 및 에러 핸들링
+
+### 2.1 Redirect URI 불일치 (`redirect_uri_mismatch`)
+
+#### 증상
+- Google 오류 화면: redirect URI mismatch  
+- 또는 `formatOAuthError`가 “Google Console must allow `…/auth/v1/callback`…” 안내
+
+#### 원인
+잘못된 Redirect URI 등록 예:
+
+| 잘못된 값 | 왜 실패하는가 |
+|-----------|----------------|
+| `https://www.studio-canvas-ai.com/api/auth/callback/google` | Auth.js 경로 — **주 경로가 아님** |
+| `https://www.studio-canvas-ai.com/auth/callback` | 앱 PKCE 콜백 — Google이 직접 호출하는 URI가 아님 |
+| 옛 project-ref (`ysdccsf…` 등) | DNS NXDOMAIN / 다른 프로젝트 |
+
+#### 올바른 삼각 관계
+
+| 위치 | 값 |
+|------|-----|
+| **Google Cloud** Authorized redirect URIs | `https://oorujqbivznftsyqilyj.supabase.co/auth/v1/callback` |
+| **Google Cloud** Authorized JavaScript origins | `https://www.studio-canvas-ai.com`, `http://localhost:3000`, (preview) `https://studio-canvas-ai.vercel.app` |
+| **앱 `redirectTo`** | `https://www.studio-canvas-ai.com/auth/callback?next=…` |
+| **Supabase Redirect URLs** | `https://www.studio-canvas-ai.com/**` 등 |
+
+규칙: **Google → Supabase**, **Supabase → App**. 절대 Google → App Auth.js 콜백으로 주 경로를 잡지 말 것.
+
+---
+
+### 2.2 Supabase 프로젝트 DNS / NXDOMAIN
+
+#### 증상
+- `DNS_PROBE_FINISHED_NXDOMAIN` on `*.supabase.co`  
+- Google/콘솔 설정을 맞춰도 로그인 시작 불가
+
+#### 원인 (실기록)
+- Free tier 일시중지·이전 project-ref가 Vercel env에 남아 있음  
+- placeholder / 오타 URL (`your_project_ref` 등)
+
+#### 해결
+- 대시보드 **Project Settings → API**의 실제 URL만 사용 (현재: `oorujqbivznftsyqilyj`)  
+- `normalizeSupabaseUrl()`: scheme 보정, callback path 제거, placeholder 거부  
+- `getSupabaseConfigError()`로 UI에 원인 노출  
+- Google Console redirect의 **호스트**를 새 project-ref로 갱신  
+- `ensureSupabaseAuthStorageReady()`: 이전 ref의 `sb-*-auth-token` / PKCE 키 제거
+
+---
+
+### 2.3 Scope 권한 (`openid email profile`)
+
+#### 증상
+- 이메일이 비어 세션/브리지 실패, 또는 “email was not provided”
+
+#### 원인
+- authorize에 email scope 누락  
+- Google Cloud OAuth consent에서 민감/제한 범위 미승인 (기본 openid/email/profile은 일반적으로 충분)
+
+#### 해결
+- 코드: `scopes: "openid email profile"` (Supabase + Auth.js 폴백 동일)  
+- Consent 화면에서 이메일 공유 허용  
+- `formatOAuthError`의 email 관련 매핑으로 사용자 안내
+
+Google은 Naver와 달리 **표준 OIDC claims**를 최상위로 주므로 userinfo 프록시는 불필요합니다.
+
+---
+
+### 2.4 인증 상태 검증 실패 (state / PKCE)
+
+#### 증상
+- `code verifier` / PKCE 오류  
+- `missing_code`, bridge에서 “No Supabase access token”
+
+#### 원인
+- authorize 시작 호스트 ≠ callback 호스트 (**www vs apex**)  
+- 다른 탭·시크릿·쿠키 차단  
+- **이종 Supabase 프로젝트** 스토리지 키가 섞여 PKCE verifier 불일치  
+- Site URL로만 `?code=`가 오고 `/auth/callback` 미도달 (과거)
+
+#### 해결
+- 로그인 시작·완료를 **동일 origin** (권장: `www`)에서  
+- Supabase Redirect Allow List에 실제 사용 호스트 `/**`  
+- `ensureSupabaseAuthStorageReady()`로 타 프로젝트 키 청소  
+- `middleware`: `/` + `code|error*` → `/auth/callback`  
+- cookie name: `sb-<ref>-auth-token` (`getSupabaseAuthStorageKey`)  
+- Bridge: 세션 짧은 재시도 + timeout
+
+---
+
+### 2.5 세션 동기화 (Supabase ↔ NextAuth)
+
+#### 증상
+- Google 동의까지 성공했는데 앱 UI는 비로그인 / `auth_bridge_failed`
+
+#### 원인
+- PKCE exchange는 됐으나 bridge `getSession()` 타이밍  
+- `AUTH_SECRET` 부재로 NextAuth JWT 발급 실패  
+- `next` path 유실
+
+#### 해결
+- `/auth/callback` → exchange → `/auth/bridge` 고정 파이프라인  
+- Bridge → `/api/auth/supabase-bridge` with `credentials: "same-origin"`  
+- `sessionStorage` `sca_auth_next` + query `next`  
+- `safeAuthNextPath`로 open-redirect 차단  
+- 약관 미동의 시 terms-consent 후 복귀
+
+---
+
+### 2.6 sticky / 잘못된 Google 계정 세션
+
+#### 증상
+- 삭제·비활성 YouTube 채널에 묶인 Google 세션으로 자동 로그인  
+- 원하는 계정으로 전환 불가
+
+#### 해결
+```ts
+queryParams: {
+  access_type: "offline",
+  prompt: "select_account",  // 계정 선택창 강제
+}
+```
+Auth.js 폴백 Google provider에도 동일 `prompt` 적용.
+
+---
+
+### 2.7 Client ID / Secret 불일치 (`invalid_client`)
+
+#### 증상
+- unauthorized_client / invalid_client
+
+#### 해결
+- Client ID·Secret은 **Supabase → Providers → Google**에만 붙여넣기 (주 경로)  
+- Google Cloud의 **Web application** 클라이언트와 동일 쌍인지 확인  
+- 앱 env `GOOGLE_CLIENT_*`는 주 경로에서 **무시**됨 — Dashboard만 고쳐도 됨  
+- Secret 재발급 시 Dashboard 즉시 갱신
+
+---
+
+### 2.8 예외 처리 · 방어적 프로그래밍 요약
+
+| 계층 | 방어 |
+|------|------|
+| `signInWithGoogle` | try/catch, config 검사, storage purge, `formatOAuthError`, URL 누락 검사, 상세 `console.error` (redirectTo / callback / origins) |
+| `AuthModal.handleGoogleLogin` | Supabase 필수 가드, UI 에러, 성공 시 busy 유지(리다이렉트) |
+| `normalizeSupabaseUrl` | quotes, trailing slash, callback path 오붙여넣기, placeholder, non-https 거부 |
+| `/auth/callback` | oauth error / missing code / exchange catch → `?authError=` |
+| `exchangeSupabaseCode` | configured 검사, cookie setAll on **returned** redirect |
+| Bridge | session retry, fetch timeout, failRedirect |
+| `oauthErrors` | redirect_uri, PKCE, invalid_client, access_denied 매핑 |
+
+---
+
+## 3. Google Cloud Console · 환경 변수 · 보안
+
+### 3.1 콘솔 설정 체크리스트
+
+**Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client (Web)**
+
+| Field | Value (Studio Canvas) |
+|--------|------------------------|
+| Application type | Web application |
+| Client ID | `962424226912-lc143aodb29ppf9s4f9e78fr777oqih.apps.googleusercontent.com` |
+| Client Secret | Supabase Dashboard만 (브라우저·git 금지) |
+| Authorized JavaScript origins | `http://localhost:3000`, `https://www.studio-canvas-ai.com`, `https://studio-canvas-ai.vercel.app` |
+| **Authorized redirect URIs** | `https://oorujqbivznftsyqilyj.supabase.co/auth/v1/callback` |
+| OAuth consent | 앱 이름 Studio Canvas AI, 필요 시 테스트 유저 |
+
+**Supabase → Authentication → Providers → Google**
+
+1. Enable  
+2. Client ID + Client Secret 붙여넣기  
+3. Save  
+
+**Supabase → Authentication → URL Configuration**
+
+- Site URL: `https://www.studio-canvas-ai.com`  
+- Redirect URLs:  
+  - `https://www.studio-canvas-ai.com/**`  
+  - `https://studio-canvas-ai.vercel.app/**`  
+  - `http://localhost:3000/**`  
+  - (필요 시 apex `https://studio-canvas-ai.com/**`)
+
+### 3.2 환경 변수 관리 표준
+
+| 변수 | 저장 위치 | 용도 |
+|------|-----------|------|
+| Google Client ID / Secret | **Supabase Dashboard** Google Provider | **주 경로** token 교환 |
+| `NEXT_PUBLIC_SUPABASE_URL` | Vercel / `.env` | Auth 호스트 (공개) |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Vercel / `.env` | 브라우저 클라이언트 (공개) |
+| `AUTH_SECRET` | Vercel / `.env` (서버) | Bridge 후 NextAuth JWT |
+| `NEXT_PUBLIC_SITE_URL` / `AUTH_URL` / `NEXTAUTH_URL` | 사이트 origin 정렬 | |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | 서버 env (선택) | Auth.js **폴백만** |
+
+규칙:
+
+- Secret은 **절대** `NEXT_PUBLIC_*` 금지  
+- 주 경로에서 앱의 `GOOGLE_*`가 비어 있어도 Dashboard만 맞으면 동작  
+- `NEXT_PUBLIC_*` 변경 후 **반드시 재배포** (빌드 인라인)  
+- `.env.example`에 Client ID 문서화 가능, Secret은 빈 칸
+
+### 3.3 Authorization Code 생명주기 · 프로필 정규화
+
+```
+1. signInWithOAuth(google) + PKCE challenge (browser storage)
+2. Google authorize (select_account) → code to Supabase
+3. Supabase ↔ Google token (+ id_token)
+4. Claims: sub, email, email_verified, name, picture
+5. auth.users
+6. Redirect to app with second PKCE code
+7. exchangeCodeForSession → sb-<ref>-auth-token cookies
+8. Bridge → NextAuth JWT
+9. extractSupabaseOAuthProfile → provider=google, email/name/image
+10. findOrCreateOAuthUser / signup bonus 등
+```
+
+**프로필 매핑 (앱)**
+
+| Google / Supabase | 앱 필드 |
+|-------------------|---------|
+| `user.email` / metadata email | `email` |
+| `full_name` / `name` | `name` |
+| `avatar_url` / `picture` | `image` |
+| `app_metadata.provider` = google | `provider: "google"` |
+| Supabase `user.id` (UUID) | `providerAccountId` (로컬 유저 키) |
+
+Google은 표준 OIDC라 Naver식 flatten 프록시가 없습니다.
+
+---
+
+## 4. 범용 아키텍처 가이드 (Reusable Blueprint)
+
+다른 Next.js + Supabase 프로젝트에 **Google 로그인**을 이식할 때 이 블루프린트를 사용하세요.
+
+### 4.1 왜 Supabase Google (not NextAuth-first)인가?
+
+- IdP 비밀·token 교환을 GoTrue에 위임  
+- 소셜 제공자 추가 시 동일 callback→bridge 파이프라인 재사용  
+- 앱은 PKCE 세션 → 자체 JWT(크레딧 DB) 브리지만 담당  
+- Auth.js Google은 **env 폴백**으로만 유지 가능
+
+### 4.2 최소 구현 체크리스트
+
+1. Google Cloud Web Client 생성  
+2. Redirect URI = `https://<ref>.supabase.co/auth/v1/callback` **만** (주 경로)  
+3. JS origins = 실제 사이트 origins  
+4. Supabase Google Provider에 Client ID/Secret  
+5. Redirect Allow List에 `origin/**`  
+6. `signInWithOAuth({ provider: 'google', options: { redirectTo, scopes, queryParams } })`  
+7. `/auth/callback` + `exchangeCodeForSession` + `/auth/bridge`  
+8. middleware: Site URL `?code=` 포워드  
+9. www/apex·프로젝트 ref 일치 + 스토리지 purge
+
+### 4.3 권장 소스 패턴 (의사코드)
+
+```ts
+export async function signInWithGoogle(next = "/app") {
+  try {
+    if (!isSupabaseConfigured()) throw new Error("Supabase not configured");
+    saveNext(next);
+    ensureSupabaseAuthStorageReady();
+
+    const supabase = createBrowserClient();
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+        scopes: "openid email profile",
+        skipBrowserRedirect: true,
+        queryParams: {
+          access_type: "offline",
+          prompt: "select_account",
+        },
+      },
+    });
+    if (error) {
+      console.error("Google login error:", formatOAuthError(error.message));
+      return { error };
+    }
+    if (!data?.url) return { error: new Error("Google OAuth URL missing") };
+    window.location.assign(data.url);
+    return { error: null };
+  } catch (e) {
+    const message = formatOAuthError(e instanceof Error ? e.message : String(e));
+    console.error("Google login error:", message);
+    return { error: new Error(message) };
+  }
+}
+```
+
+### 4.4 하지 말 것 (Anti-patterns)
+
+| Anti-pattern | 결과 |
+|--------------|------|
+| Google Redirect = `/api/auth/callback/google` (주 경로) | Supabase 플로우와 단절 / mismatch |
+| Google Redirect = 사이트 `/auth/callback` | GoTrue가 code를 못 받음 |
+| 옛·죽은 project-ref를 env에 유지 | NXDOMAIN |
+| www에서 시작 → apex로 callback | PKCE 실패 |
+| Client Secret을 프론트에 노출 | 보안 사고 |
+| YouTube Data API를 로그인에 혼동 | 불필요·범위 과다 |
+| `NEXT_PUBLIC_*`만 바꾸고 재배포 안 함 | 옛 URL 잔존 |
+
+### 4.5 Auth.js 단독 폴백 (Supabase 없이)
+
+```ts
+Google({
+  clientId: process.env.GOOGLE_CLIENT_ID,
+  clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+  authorization: {
+    params: {
+      scope: "openid email profile",
+      prompt: "select_account",
+      access_type: "offline",
+    },
+  },
+})
+```
+
+이 경우 Google Redirect URI는 Auth.js 콜백이어야 합니다. Studio Canvas **프로덕션 주 경로는 Supabase**이므로 Console Redirect는 Supabase callback을 유지합니다.
+
+### 4.6 검증 시나리오
+
+- [ ] 신규 가입: 계정 선택 → bridge → 앱 세션 + 가입 보너스  
+- [ ] 재로그인 / 다른 Google 계정 선택 (`select_account`)  
+- [ ] localhost + 프로덕션 www  
+- [ ] Redirect mismatch 시 안내 문구 확인  
+- [ ] 이전 Supabase 프로젝트 쿠키가 있어도 로그인 가능 (storage purge)  
+- [ ] YouTube API 없이도 로그인 성공  
+
+---
+
+## 5. 개발 일지 타임라인 (요약)
+
+1. **초기**: Auth.js Google + `GOOGLE_CLIENT_*`  
+2. **마이그레이션**: Supabase Auth 주 경로 — `signInWithOAuth({ provider: 'google' })`  
+3. **병목**: Redirect를 Auth.js/사이트에 잘못 등록; 죽은 project-ref → NXDOMAIN  
+4. **조치**: Google Redirect = Supabase callback만; env URL 정규화; storage purge; middleware code 포워드  
+5. **UX**: `prompt: select_account` (sticky/삭제 채널 세션 회피)  
+6. **안정화**: `skipBrowserRedirect` + 명시적 assign, `formatOAuthError`, bridge retry  
+7. **현재**: 프로덕션 Google 로그인 안정. Auth.js Google은 폴백용
+
+---
+
+## 6. 빠른 레퍼런스 (복붙용)
+
+```text
+UI 버튼             : components/AuthModal.tsx → handleGoogleLogin
+OAuth 시작          : lib/supabase/oauth.ts → signInWithGoogle
+Provider id         : google  (built-in, not custom:google)
+Scopes              : openid email profile
+Query               : prompt=select_account, access_type=offline
+Google Redirect     : https://oorujqbivznftsyqilyj.supabase.co/auth/v1/callback
+App redirectTo      : https://www.studio-canvas-ai.com/auth/callback?next=…
+PKCE exchange       : app/auth/callback + lib/supabase/exchange.ts
+Session bridge      : app/auth/bridge → /api/auth/supabase-bridge
+Secrets             : Supabase Dashboard Google provider
+App env (required)  : NEXT_PUBLIC_SUPABASE_URL, ANON_KEY, AUTH_SECRET, SITE_URL
+App env (optional)  : GOOGLE_CLIENT_* (Auth.js fallback only)
+Client ID (doc)     : 962424226912-lc143aodb29ppf9s4f9e78fr777oqih.apps.googleusercontent.com
+```
+
+---
+
+## 7. FAQ
+
+**Q. 앱의 `GOOGLE_CLIENT_SECRET`이 비어 있어도 되나요?**  
+A. 주 경로(Supabase Providers → Google)에 Secret이 있으면 됩니다. 앱 env는 Auth.js 폴백용입니다.
+
+**Q. Next.js에서 Google token URL을 직접 호출해야 하나요?**  
+A. 아니요. GoTrue가 교환합니다. 앱은 PKCE 세션 exchange와 bridge만 합니다.
+
+**Q. 네이버 연동과 가장 큰 차이는?**  
+A. Google은 first-class provider + 표준 OIDC (프록시 불필요). Naver는 `custom:naver` + nested userinfo 프록시 필수 (`Integration_Log_v3.txt`).
+
+**Q. 가장 흔한 재발 원인 3가지는?**  
+A. (1) Google Redirect를 사이트/Auth.js로 설정 (2) 잘못된·죽은 Supabase URL (3) www↔apex PKCE 불일치
+
+**Q. YouTube Data API를 켜야 로그인이 되나요?**  
+A. 아니요. 로그인 scope는 `openid email profile`만이면 충분합니다.
+
+---
+
+## 8. 관련 문서
+
+| 파일 | 내용 |
+|------|------|
+| `Integration_Log_v1.txt` / `docs/youtube-share-guide.md` | 유튜브 공유 (로그인 OAuth와 분리) |
+| `Integration_Log_v3.txt` | 네이버 Custom OAuth (비교용) |
+| `supabase/README.md` | Google Cloud / Supabase 체크리스트 |
+| `.env.example` | URL·Client ID 문서화 |
+
+---
+
+*이 문서는 저장소 실제 코드(`signInWithGoogle`, AuthModal, callback/bridge, exchange, authStorage, config, oauthErrors, supabase/README, `.env.example`)와 Redirect mismatch·NXDOMAIN·PKCE·select_account 트러블슈팅을 기준으로 작성되었습니다.*

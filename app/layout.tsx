@@ -5,7 +5,7 @@
  */
 import "./globals.css";
 import type { Metadata } from "next";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { Inter, Playfair_Display } from "next/font/google";
 import { I18nProvider } from "@/components/I18nProvider";
 import { FeedbackProvider } from "@/components/FeedbackProvider";
@@ -13,13 +13,24 @@ import { CreditsProvider } from "@/components/CreditsProvider";
 import AuthSessionProvider from "@/components/AuthSessionProvider";
 import AuthModal from "@/components/AuthModal";
 import SupabaseAuthBootstrap from "@/components/SupabaseAuthBootstrap";
+import StudioStoreRecoveryBootstrap from "@/components/StudioStoreRecoveryBootstrap";
+import InitialRouteSync from "@/components/InitialRouteSync";
 import CreditDepletionModal from "@/components/CreditDepletionModal";
 import PaymentModal from "@/components/PaymentModal";
 import CreditTopUpModal from "@/components/CreditTopUpModal";
 import ReturnUserModal from "@/components/ReturnUserModal";
 import PromotionCodeModal from "@/components/PromotionCodeModal";
 import GoogleFontsLoader from "@/components/GoogleFontsLoader";
+import ScreenBadge from "@/components/ScreenBadge";
+import ScreenBadgeAuth from "@/components/ScreenBadgeAuth";
+import SessionLockGuard from "@/components/SessionLockGuard";
 import { PRODUCTION_SITE_URL } from "@/lib/site";
+import {
+  LOCALE_COOKIE,
+  getHtmlLang,
+  isValidLocale,
+  type Locale,
+} from "@/lib/i18n";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -74,6 +85,7 @@ export const metadata: Metadata = {
   },
   other: {
     "mobile-web-app-capable": "yes",
+    google: "notranslate",
   },
 };
 
@@ -83,7 +95,11 @@ function AppShell({ children }: { children: React.ReactNode }) {
       <FeedbackProvider>
         <CreditsProvider>
           <SupabaseAuthBootstrap />
+          <StudioStoreRecoveryBootstrap />
+          <InitialRouteSync />
+          <SessionLockGuard />
           {children}
+          <ScreenBadge />
           <AuthModal />
           <CreditDepletionModal />
           <PaymentModal />
@@ -98,7 +114,12 @@ function AppShell({ children }: { children: React.ReactNode }) {
 
 /** Lightweight shell for /auth/* — avoids Session/Credits providers hanging SSR. */
 function AuthShell({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return (
+    <AuthSessionProvider>
+      {children}
+      <ScreenBadgeAuth />
+    </AuthSessionProvider>
+  );
 }
 
 export default async function RootLayout({
@@ -110,15 +131,29 @@ export default async function RootLayout({
   const pathname = headerList.get("x-sca-pathname") || "";
   const isAuthRoute = pathname.startsWith("/auth/");
 
+  const jar = await cookies();
+  const cookieLocale = jar.get(LOCALE_COOKIE)?.value;
+  const headerLocale = headerList.get("x-detected-locale");
+  // Prefer middleware-forwarded header on first visit (cookie not readable yet).
+  const initialLocale: Locale =
+    headerLocale && isValidLocale(headerLocale)
+      ? headerLocale
+      : cookieLocale && isValidLocale(cookieLocale)
+        ? cookieLocale
+        : "en";
+  const htmlLang = getHtmlLang(initialLocale);
+
   return (
     <html
-      lang="en"
-      className={`${inter.variable} ${playfair.variable} h-full`}
+      lang={htmlLang}
+      translate="no"
+      className={`${inter.variable} ${playfair.variable} h-full notranslate`}
       style={{ backgroundColor: "#0D0E12" }}
       suppressHydrationWarning
     >
       <body
-        className="min-h-full bg-navy font-sans text-white antialiased"
+        className="notranslate min-h-full bg-navy font-sans text-white antialiased"
+        translate="no"
         style={{ backgroundColor: "#0D0E12", color: "#ffffff" }}
       >
         {/*
@@ -130,7 +165,7 @@ export default async function RootLayout({
         {isAuthRoute ? (
           <AuthShell>{children}</AuthShell>
         ) : (
-          <I18nProvider>
+          <I18nProvider initialLocale={initialLocale}>
             <AppShell>{children}</AppShell>
           </I18nProvider>
         )}

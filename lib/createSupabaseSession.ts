@@ -3,29 +3,35 @@ import { createClient as createSupabaseAdminClient } from "@supabase/supabase-js
 import { findOrCreateOAuthUser } from "@/lib/db/credits";
 import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase/config";
 import { extractSupabaseOAuthProfile } from "@/lib/supabase/oauth";
+import {
+  getTermsAgreedWithAccessToken,
+  upsertProfileWithAccessToken,
+} from "@/lib/supabase/profile";
 import { requireAuthSecret } from "@/lib/authSecret";
 import {
   AUTH_SESSION_MAX_AGE,
   authCookieOptions,
   authSessionCookieName,
 } from "@/lib/authCookies";
+import { assertEmailNotBlocked } from "@/lib/auth/enforceBlockedLogin";
 
 export type SupabaseBridgeSession = {
   cookieName: string;
   token: string;
   cookieOptions: ReturnType<typeof authCookieOptions>;
+  needsTermsConsent: boolean;
   user: {
     id: string;
     email: string | null;
     name: string | null;
     image: string | null;
+    provider: string;
   };
 };
 
 /**
  * Validate a Supabase access token and mint an Auth.js JWT session cookie value.
- * Used by /api/auth/supabase-bridge so the OAuth bridge never hits CSRF-protected
- * client `signIn()` callbacks.
+ * Local app user + admin-visible registration happen only after terms consent.
  */
 export async function createSessionFromSupabaseAccessToken(
   accessToken: string
@@ -48,6 +54,48 @@ export async function createSessionFromSupabaseAccessToken(
   }
 
   const profile = extractSupabaseOAuthProfile(user);
+  assertEmailNotBlocked(profile.email, profile.provider);
+  assertEmailNotBlocked(user.email, profile.provider);
+  const termsAgreed = await getTermsAgreedWithAccessToken(accessToken, user.id);
+
+  const cookieName = authSessionCookieName();
+  const secret = requireAuthSecret();
+
+  if (!termsAgreed) {
+    // Provisional session — no local DB row / admin listing until consent.
+    const token = await encode({
+      token: {
+        name: profile.name,
+        email: profile.email,
+        picture: profile.image,
+        sub: user.id,
+        uid: user.id,
+        supabaseUserId: user.id,
+        authProvider: profile.provider,
+        providerAccountId: profile.providerAccountId,
+        termsAgreed: false,
+        credits: 0,
+        planId: "free",
+      },
+      secret,
+      salt: cookieName,
+      maxAge: AUTH_SESSION_MAX_AGE,
+    });
+
+    return {
+      cookieName,
+      token,
+      cookieOptions: authCookieOptions(AUTH_SESSION_MAX_AGE),
+      needsTermsConsent: true,
+      user: {
+        id: user.id,
+        email: profile.email,
+        name: profile.name,
+        image: profile.image,
+        provider: profile.provider,
+      },
+    };
+  }
 
   let dbUser;
   try {
@@ -66,21 +114,33 @@ export async function createSessionFromSupabaseAccessToken(
   }
 
   try {
-    const { upsertProfileWithAccessToken } = await import("@/lib/supabase/profile");
+    const { attributePartnerFromCookie } = await import(
+      "@/lib/partners/attribution"
+    );
+    await attributePartnerFromCookie({
+      appUserId: dbUser.id,
+      email: dbUser.email,
+      supabaseUserId: user.id,
+    });
+  } catch (err) {
+    console.warn(
+      "[createSupabaseSession] partner attribution skipped",
+      err instanceof Error ? err.message : err
+    );
+  }
+
+  try {
     await upsertProfileWithAccessToken(accessToken, {
       id: user.id,
       email: profile.email,
-      fullName: profile.name,
+      name: profile.name,
       avatarUrl: profile.image,
-      provider: profile.provider,
       appUserId: dbUser.id,
     });
   } catch {
     /* profile sync must never block login */
   }
 
-  const cookieName = authSessionCookieName();
-  const secret = requireAuthSecret();
   const token = await encode({
     token: {
       name: dbUser.name,
@@ -88,9 +148,14 @@ export async function createSessionFromSupabaseAccessToken(
       picture: dbUser.image,
       sub: dbUser.id,
       uid: dbUser.id,
+      supabaseUserId: user.id,
       authProvider: profile.provider,
+      providerAccountId: profile.providerAccountId,
+      termsAgreed: true,
       credits: dbUser.credits,
       planId: dbUser.planId,
+      currentPeriodEnd: dbUser.currentPeriodEnd ?? null,
+      planCachedAt: Date.now(),
     },
     secret,
     salt: cookieName,
@@ -101,11 +166,13 @@ export async function createSessionFromSupabaseAccessToken(
     cookieName,
     token,
     cookieOptions: authCookieOptions(AUTH_SESSION_MAX_AGE),
+    needsTermsConsent: false,
     user: {
       id: dbUser.id,
       email: dbUser.email,
       name: dbUser.name,
       image: dbUser.image,
+      provider: profile.provider,
     },
   };
 }

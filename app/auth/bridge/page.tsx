@@ -1,37 +1,17 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { useEffect } from "react";
+import BridgeClient from "./BridgeClient";
+import { appPathWithAuthError } from "@/lib/appRoutes";
 
 /**
  * Fully client-only auth bridge.
  * - No server await / cookies / Supabase on the server
- * - BridgeClient is ssr:false so it never runs during SSR
  * - Escape timers run in the browser only (useEffect + inline script in HTML)
+ * - BridgeClient is statically imported so session work starts without an
+ *   extra dynamic() chunk fetch (Supabase client remains lazily imported)
  */
-const BridgeClient = dynamic(() => import("./BridgeClient"), {
-  ssr: false,
-  loading: () => (
-    <p className="text-sm text-white/70" id="sca-bridge-status">
-      Signing you in…
-    </p>
-  ),
-});
-
-const ESCAPE_JS = `
-(function(){
-  try {
-    if (window.__scaBridgeEscaped) return;
-    window.setTimeout(function(){
-      try {
-        if (window.__scaBridgeDone || window.__scaBridgeEscaped) return;
-        window.__scaBridgeEscaped = true;
-        location.replace("/generate?authError=" + encodeURIComponent("bridge_inline_timeout"));
-      } catch (e) {}
-    }, 8000);
-  } catch (e) {}
-})();
-`;
+const ESCAPE_AUTH_ERROR = "bridge_inline_timeout";
 
 export default function AuthBridgePage() {
   // Backup escape if the inline script was stripped; still browser-only.
@@ -44,16 +24,31 @@ export default function AuthBridgePage() {
       if (w.__scaBridgeDone || w.__scaBridgeEscaped) return;
       w.__scaBridgeEscaped = true;
       window.location.replace(
-        `/generate?authError=${encodeURIComponent("bridge_client_timeout")}`
+        appPathWithAuthError("bridge_client_timeout")
       );
-    }, 8000);
+    }, 12000);
     return () => window.clearTimeout(timer);
   }, []);
 
+  const escapeJs = `
+(function(){
+  try {
+    if (window.__scaBridgeEscaped) return;
+    window.setTimeout(function(){
+      try {
+        if (window.__scaBridgeDone || window.__scaBridgeEscaped) return;
+        window.__scaBridgeEscaped = true;
+        location.replace(${JSON.stringify(appPathWithAuthError(ESCAPE_AUTH_ERROR))});
+      } catch (e) {}
+    }, 12000);
+  } catch (e) {}
+})();
+`;
+
   return (
-    <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 px-6 text-center">
-      <script dangerouslySetInnerHTML={{ __html: ESCAPE_JS }} />
+    <>
+      <script dangerouslySetInnerHTML={{ __html: escapeJs }} />
       <BridgeClient />
-    </div>
+    </>
   );
 }

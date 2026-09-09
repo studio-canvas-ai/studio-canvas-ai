@@ -1,5 +1,7 @@
 import type { Translations } from "../types";
 import en from "./en";
+import { canvasStudioHi } from "../canvasStudio";
+import { pricingPeriodHi } from "../pricingPeriod";
 
 const hi: Translations = {
   ...en,
@@ -8,6 +10,7 @@ const hi: Translations = {
     confirm: "पुष्टि करें",
     close: "बंद करें",
   },
+  canvasStudio: canvasStudioHi,
   creator: {
     ...en.creator,
     generateFailed: "AI पोर्ट्रेट जनरेट नहीं हो सका।",
@@ -92,8 +95,7 @@ const hi: Translations = {
   },
   pricing: {
     ...en.pricing,
-    title: "सदस्यता प्लान",
-    subtitle: "अपनी जरूरत का प्लान चुनें और प्रीमियम AI स्टूडियो का अनुभव लें",
+    ...pricingPeriodHi,
     annualBilling: "वार्षिक प्रीपेड पास (एकमुश्त भुगतान)",
     monthlyBilling: "💳 मासिक भुगतान",
     annualSubscription: "वार्षिक प्रीपेड पास",
@@ -109,8 +111,6 @@ const hi: Translations = {
     permanentBenefit: "असीमित स्थायी स्टोरेज",
     watermarkBenefit: "वॉटरमार्क पूरी तरह हटाया गया",
     annualPrepaid: "${total} एक बार अग्रिम · स्वतः नवीनीकरण नहीं",
-    upgradeNotice:
-      "अपग्रेड पर केवल आनुपातिक अंतर लिया जाता है, सभी क्रेडिट आगे बढ़ते हैं और भुगतान की तारीख से नया चक्र शुरू होता है।",
   },
 };
 export default hi;

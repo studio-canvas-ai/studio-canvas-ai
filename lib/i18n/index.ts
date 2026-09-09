@@ -1,5 +1,6 @@
 import type { Locale, Translations } from "./types";
 import { LOCALES } from "./types";
+import { applyChromeOverlay } from "./chrome";
 import en from "./locales/en";
 import kr from "./locales/kr";
 import es from "./locales/es";
@@ -12,6 +13,7 @@ import vi from "./locales/vi";
 import hi from "./locales/hi";
 
 export * from "./types";
+export { fillCanvas } from "./canvasStudio";
 
 export const translations: Record<Locale, Translations> = {
   en,
@@ -30,8 +32,14 @@ export function isValidLocale(value: string): value is Locale {
   return LOCALES.includes(value as Locale);
 }
 
+/**
+ * Resolve UI copy for a locale.
+ * Unknown codes fall back to English. Non-en/kr packs also receive chrome
+ * overlays (nav/hero/footer/credits) so the language selector visibly switches.
+ */
 export function getTranslations(locale: Locale): Translations {
-  return translations[locale] ?? translations.en;
+  const base = translations[locale] ?? translations.en;
+  return applyChromeOverlay(locale, base);
 }
 
 /** Detect locale from browser Accept-Language header */
@@ -49,19 +57,27 @@ export function detectFromAcceptLanguage(acceptLanguage: string): Locale {
   return "en";
 }
 
-/** Geo + browser based auto-detection: KR → Korean, others → English (unless browser strongly suggests another supported locale) */
-export function detectLocale(country: string, acceptLanguage: string, userOverride?: string): Locale {
+/** Geo + browser auto-detection (Edge-safe). */
+export function detectLocale(
+  country: string,
+  acceptLanguage: string,
+  userOverride?: string
+): Locale {
+  // Sticky cookie / explicit override always wins (including first middleware pass).
   if (userOverride && isValidLocale(userOverride)) return userOverride;
 
-  const countryUpper = country.toUpperCase();
-
-  // Korea visitors get Korean by default
+  const countryUpper = (country || "").toUpperCase();
   if (countryUpper === "KR") return "kr";
 
-  // For international visitors, default to English
-  // but honor explicit browser language if it's a supported non-English locale
+  // Honor strong browser preference for supported non-English locales.
+  // Do NOT map Accept-Language:ko → kr outside KR — that fights Edge UI language
+  // and triggers awkward browser auto-translate against an English chrome.
   const browserLocale = detectFromAcceptLanguage(acceptLanguage);
-  if (browserLocale !== "en" && browserLocale !== "kr") {
+  if (
+    browserLocale !== "en" &&
+    browserLocale !== "kr" &&
+    isValidLocale(browserLocale)
+  ) {
     return browserLocale;
   }
 

@@ -1,21 +1,21 @@
-/** Cookie set by middleware from Vercel/CF geo headers. */
+/** Cookie set by middleware from Vercel/CF geo headers (locale defaulting only). */
 export const GEO_COUNTRY_COOKIE = "sca_geo_country";
 
-/** Korean UI locale is always treated as the domestic market. */
+/** Korean UI locale is the sole switch for domestic pricing / PG. */
 export function isDomesticLocale(locale: string): boolean {
   return locale === "kr";
 }
 
 /**
- * Domestic (Korea) market: Korean locale OR KR geo IP.
- * Credit packs are global-only; annual marketing is not shown on KR UI.
+ * Domestic market follows the active UI language only.
+ * Geo may still set the *default* locale in middleware, but after the user
+ * picks a language, currency / plan set / payment provider must not fight it.
  */
 export function isDomesticMarket(
   locale: string,
-  countryCode?: string | null
+  _countryCode?: string | null
 ): boolean {
-  if (isDomesticLocale(locale)) return true;
-  return (countryCode ?? "").trim().toUpperCase() === "KR";
+  return isDomesticLocale(locale);
 }
 
 export function readGeoCountryFromDocument(): string | null {

@@ -1,5 +1,7 @@
 import type { Translations } from "../types";
 import en from "./en";
+import { canvasStudioIt } from "../canvasStudio";
+import { pricingPeriodIt } from "../pricingPeriod";
 
 const it: Translations = {
   ...en,
@@ -8,6 +10,7 @@ const it: Translations = {
     confirm: "Conferma",
     close: "Chiudi",
   },
+  canvasStudio: canvasStudioIt,
   creator: {
     ...en.creator,
     generateFailed: "Generazione del ritratto IA non riuscita.",
@@ -93,8 +96,7 @@ const it: Translations = {
   },
   pricing: {
     ...en.pricing,
-    title: "Piani di abbonamento",
-    subtitle: "Scegli il piano adatto alle tue esigenze e prova uno studio AI premium",
+    ...pricingPeriodIt,
     annualBilling: "Pass annuale prepagato (pagamento unico)",
     monthlyBilling: "💳 Pagamento mensile",
     annualSubscription: "Pass annuale prepagato",
@@ -110,8 +112,6 @@ const it: Translations = {
     permanentBenefit: "Archiviazione permanente illimitata",
     watermarkBenefit: "Rimozione completa della filigrana",
     annualPrepaid: "${total} anticipati · nessun rinnovo automatico",
-    upgradeNotice:
-      "Con l’upgrade paghi solo la differenza proporzionale, mantieni tutti i crediti e il ciclo riparte dal pagamento.",
   },
 };
 export default it;

@@ -1,5 +1,7 @@
 import type { Translations } from "../types";
 import en from "./en";
+import { canvasStudioVi } from "../canvasStudio";
+import { pricingPeriodVi } from "../pricingPeriod";
 
 const vi: Translations = {
   ...en,
@@ -8,6 +10,7 @@ const vi: Translations = {
     confirm: "Xác nhận",
     close: "Đóng",
   },
+  canvasStudio: canvasStudioVi,
   creator: {
     ...en.creator,
     generateFailed: "Tạo chân dung AI thất bại.",
@@ -92,8 +95,7 @@ const vi: Translations = {
   },
   pricing: {
     ...en.pricing,
-    title: "Gói đăng ký",
-    subtitle: "Chọn gói phù hợp và trải nghiệm studio AI cao cấp",
+    ...pricingPeriodVi,
     annualBilling: "Gói năm trả trước (thanh toán một lần)",
     monthlyBilling: "💳 Thanh toán tháng",
     annualSubscription: "Gói năm trả trước",
@@ -109,8 +111,6 @@ const vi: Translations = {
     permanentBenefit: "Lưu trữ vĩnh viễn không giới hạn",
     watermarkBenefit: "Xóa hoàn toàn watermark",
     annualPrepaid: "Trả trước ${total} một lần · không tự động gia hạn",
-    upgradeNotice:
-      "Khi nâng cấp, bạn chỉ trả phần chênh lệch theo tỷ lệ, giữ toàn bộ credit và chu kỳ bắt đầu lại từ ngày thanh toán.",
   },
 };
 export default vi;

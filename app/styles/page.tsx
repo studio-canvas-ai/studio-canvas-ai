@@ -6,9 +6,7 @@ export default function StylesPage() {
   return (
     <main className="relative min-h-screen overflow-hidden">
       <Navbar />
-      <div className="pt-8">
-        <StyleCollection initialCategory="all" />
-      </div>
+      <StyleCollection initialCategory="all" layout="page" />
       <Footer />
     </main>
   );

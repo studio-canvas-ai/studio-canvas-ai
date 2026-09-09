@@ -8,6 +8,8 @@ type Props = {
   field: FieldDef;
   value: string;
   onChange: (value: string) => void;
+  label?: string;
+  placeholder?: string;
 };
 
 const inputClass =
@@ -20,18 +22,26 @@ function fieldRows(field: FieldDef): number {
   return 3;
 }
 
-export default function SmartFormField({ field, value, onChange }: Props) {
+export default function SmartFormField({
+  field,
+  value,
+  onChange,
+  label,
+  placeholder,
+}: Props) {
+  const shownLabel = label ?? field.label;
+  const shownPlaceholder = placeholder ?? field.placeholder;
   return (
     <label className="flex flex-col gap-1">
       <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-400">
         <span aria-hidden>{field.emoji}</span>
-        {field.label}
+        {shownLabel}
       </span>
       {field.kind === "textarea" ? (
         <textarea
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder={field.placeholder}
+          placeholder={shownPlaceholder}
           rows={fieldRows(field)}
           className={`${inputClass} min-h-[4rem] resize-none leading-relaxed`}
         />
@@ -40,7 +50,7 @@ export default function SmartFormField({ field, value, onChange }: Props) {
           type={field.kind === "date" ? "date" : "text"}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder={field.placeholder}
+          placeholder={shownPlaceholder}
           className={inputClass}
         />
       )}

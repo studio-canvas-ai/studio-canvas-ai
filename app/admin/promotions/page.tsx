@@ -1,15 +1,10 @@
-import { notFound } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import PromotionAdminDashboard from "@/components/PromotionAdminDashboard";
-import { getAdminSession } from "@/lib/adminAuth";
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminPromotionsPage() {
-  const session = await getAdminSession();
-  if (!session) notFound();
-
+export default function AdminPromotionsPage() {
   return (
     <main className="relative min-h-screen overflow-hidden">
       <Navbar />

@@ -1,4 +1,38 @@
 {
+  "rewrites": [
+    {
+      "source": "/api/shorts/stream-upload/:path*",
+      "destination": "https://studio-canvas-shorts-r2-upload.agapet1004.workers.dev/api/shorts/stream-upload/:path*"
+    }
+  ],
+  "functions": {
+    "app/api/shorts/upload/route.ts": {
+      "maxDuration": 300,
+      "memory": 1024
+    },
+    "app/api/shorts/chunk/route.ts": {
+      "maxDuration": 120,
+      "memory": 1024
+    },
+    "app/api/shorts/chunk/init/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/shorts/chunk/complete/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/shorts/extract-hooks/route.ts": {
+      "maxDuration": 120,
+      "memory": 1024
+    },
+    "app/api/shorts/quick-poster/route.ts": {
+      "maxDuration": 30,
+      "memory": 1024
+    },
+    "app/api/shorts/preview-transcode/route.ts": {
+      "maxDuration": 120,
+      "memory": 1024
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/retention",

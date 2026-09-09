@@ -28,6 +28,8 @@ export type OidcUserinfo = {
   nickname?: string;
   preferred_username?: string;
   picture?: string;
+  /** Real Naver contact email (may be @hanmail etc.) — NOT used as Auth email. */
+  naver_email?: string;
 };
 
 /**
@@ -60,9 +62,11 @@ export function flattenNaverUserinfo(data: NaverMeEnvelope): OidcUserinfo | null
 
   const emailRaw =
     typeof profile.email === "string" ? profile.email.trim() : "";
-  // Prefer real Naver email; if consent omitted it, keep a stable unique address
-  // so Supabase's required-email check can still succeed.
-  const email = emailRaw || `${id}@users.naver.id`;
+
+  // CRITICAL: Always key Supabase Auth by Naver id, never by contact email.
+  // A Naver login id (e.g. scd777) can register hercd@hanmail.net as contact email;
+  // using that email caused automatic linking / our hercd block to reject scd777.
+  const email = `${id}@users.naver.id`;
 
   const name =
     (typeof profile.name === "string" && profile.name.trim()) ||
@@ -81,8 +85,9 @@ export function flattenNaverUserinfo(data: NaverMeEnvelope): OidcUserinfo | null
     sub: id,
     id,
     email,
-    email_verified: Boolean(emailRaw),
+    email_verified: true,
   };
+  if (emailRaw) oidc.naver_email = emailRaw;
   if (name) oidc.name = name;
   if (nickname) {
     oidc.nickname = nickname;
@@ -157,12 +162,6 @@ export async function fetchNaverOidcUserinfo(
     };
   }
 
-  const usedSyntheticEmail = oidc.email.endsWith("@users.naver.id");
-  if (usedSyntheticEmail) {
-    console.warn(
-      "Naver profile missing email; using synthetic address for Supabase. Set email to 필수 동의 in Naver Developers."
-    );
-  }
-
-  return { ok: true, body: oidc, usedSyntheticEmail };
+  // Always synthetic Auth email by design (see flattenNaverUserinfo).
+  return { ok: true, body: oidc, usedSyntheticEmail: true };
 }

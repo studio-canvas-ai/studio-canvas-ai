@@ -11,7 +11,7 @@ import { CANVAS_RESULT_IMAGE } from "@/lib/data";
 import { downloadImageFile } from "@/lib/downloadImage";
 import {
   listGalleryHistory,
-  pushGalleryHistory,
+  pushGalleryHistoryAndSync,
   getAccountMeta,
   type GalleryHistoryItem,
 } from "@/lib/faceProfiles";
@@ -22,7 +22,8 @@ type RenderPhase = "idle" | "analyzing" | "generating" | "refining" | "complete"
 export default function LivePreviewCanvas() {
   const { t } = useI18n();
   const router = useRouter();
-  const { isFreePlan, consumeCredit, setShowCreditModal, credits, planId } = useCredits();
+  const { applyBrandWatermark, consumeCredit, setShowCreditModal, credits, planId } =
+    useCredits();
   const [isRendering, setIsRendering] = useState(false);
   const [phase, setPhase] = useState<RenderPhase>("idle");
   const [progress, setProgress] = useState(0);
@@ -113,7 +114,7 @@ export default function LivePreviewCanvas() {
       await downloadImageFile({
         imageUrl: previewImage,
         filename: `studio-canvas-hd-${Date.now()}.png`,
-        bakeWatermark: isFreePlan,
+        bakeWatermark: applyBrandWatermark,
         aspectRatio: "9:16",
         exportPreset: "original",
       });
@@ -128,12 +129,13 @@ export default function LivePreviewCanvas() {
     const alreadySaved = myResults.some((item) => item.imageUrl === previewImage);
     if (!alreadySaved) {
       const id = `canvas-${Date.now()}`;
-      pushGalleryHistory(
+      void pushGalleryHistoryAndSync(
         { id, imageUrl: previewImage, storageId: id, createdAt: Date.now() },
         retentionContextFromAccount(planId, getAccountMeta())
-      );
-      setMyResults(listGalleryHistory());
-      setActiveResultId(id);
+      ).then(() => {
+        setMyResults(listGalleryHistory());
+        setActiveResultId(id);
+      });
     }
     setSavedMsg(true);
   };
@@ -185,7 +187,7 @@ export default function LivePreviewCanvas() {
                     className="absolute inset-0 h-full w-full object-cover animate-fade-in"
                     loading="lazy"
                   />
-                  <BrandWatermark visible={isFreePlan} />
+                  <BrandWatermark visible={applyBrandWatermark} />
                 </>
               ) : (
                 <div className="absolute inset-0 flex flex-col items-center justify-center p-6 sm:p-8">

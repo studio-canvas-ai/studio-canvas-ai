@@ -5,6 +5,7 @@ declare module "next-auth" {
   interface Session {
     credits?: number;
     planId?: string;
+    currentPeriodEnd?: number | null;
     authProvider?: string;
     user: {
       id?: string;
@@ -20,6 +21,12 @@ declare module "next-auth/jwt" {
     uid?: string;
     credits?: number;
     planId?: string;
+    currentPeriodEnd?: number | null;
+    /** Epoch ms when planId/credits were last loaded from DB. */
+    planCachedAt?: number;
     authProvider?: string;
+    providerAccountId?: string;
+    supabaseUserId?: string;
+    termsAgreed?: boolean;
   }
 }

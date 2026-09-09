@@ -3,3 +3,6 @@ project_id = "oorujqbivznftsyqilyj"
 
 [functions.naver-userinfo]
 verify_jwt = false
+
+[functions.kakao-userinfo]
+verify_jwt = false

@@ -1,8 +1,26 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { getToken } from "next-auth/jwt";
 import { LOCALE_COOKIE, detectLocale, isValidLocale } from "@/lib/i18n";
 import { GEO_COUNTRY_COOKIE } from "@/lib/market";
 import { refreshSupabaseSession } from "@/lib/supabase/middleware";
+import {
+  authSessionCookieName,
+  useSecureAuthCookies,
+} from "@/lib/authCookies";
+import {
+  buildTermsConsentUrl,
+  isTermsConsentExempt,
+  normalizeAppPathname,
+  safePostConsentPath,
+} from "@/lib/termsConsent";
+import {
+  PARTNER_REF_COOKIE,
+  PARTNER_REF_COOKIE_MAX_AGE,
+  PARTNER_REF_QUERY,
+} from "@/lib/partners/constants";
+import { normalizePartnerCode } from "@/lib/partners/codes";
+import { partnerRefCookieOptions } from "@/lib/partners/cookie";
 
 function withPathnameHeader(request: NextRequest, pathname: string) {
   const requestHeaders = new Headers(request.headers);
@@ -10,36 +28,127 @@ function withPathnameHeader(request: NextRequest, pathname: string) {
   return requestHeaders;
 }
 
+async function redirectIfTermsRequired(
+  request: NextRequest,
+  pathname: string
+): Promise<NextResponse | null> {
+  if (isTermsConsentExempt(pathname)) return null;
+
+  const secret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET;
+  if (!secret) return null;
+
+  try {
+    const token = await getToken({
+      req: request,
+      secret,
+      secureCookie: useSecureAuthCookies(),
+      cookieName: authSessionCookieName(),
+    });
+    // Only provisional sessions set termsAgreed === false. Missing claim = legacy OK.
+    if (!token || token.termsAgreed !== false) return null;
+
+    const next = safePostConsentPath(
+      pathname + (request.nextUrl.search ? request.nextUrl.search : "")
+    );
+    return NextResponse.redirect(
+      new URL(buildTermsConsentUrl(next), request.nextUrl.origin)
+    );
+  } catch {
+    return null;
+  }
+}
+
+async function redirectIfProtectedPathUnauthed(
+  request: NextRequest,
+  pathname: string
+): Promise<NextResponse | null> {
+  const protectedPrefixes = ["/gallery/my", "/profile", "/mypage"];
+  if (!protectedPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
+    return null;
+  }
+
+  const secret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET;
+  if (!secret) return null;
+
+  try {
+    const token = await getToken({
+      req: request,
+      secret,
+      secureCookie: useSecureAuthCookies(),
+      cookieName: authSessionCookieName(),
+    });
+    if (token?.uid || token?.sub) return null;
+  } catch {
+    /* fall through to redirect */
+  }
+
+  const url = request.nextUrl.clone();
+  url.pathname = "/";
+  url.search = "";
+  return NextResponse.redirect(url);
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname, searchParams } = request.nextUrl;
+  const normalizedPath = normalizeAppPathname(pathname);
 
-  // Auth routes: no Supabase refresh (avoids hanging SSR/hydration).
-  if (pathname.startsWith("/api/auth") || pathname.startsWith("/auth/")) {
+  // Auth routes + large chunk uploads: skip Supabase refresh on request body.
+  if (
+    normalizedPath.startsWith("/api/auth") ||
+    normalizedPath.startsWith("/auth/") ||
+    normalizedPath.startsWith("/api/shorts/chunk")
+  ) {
     return NextResponse.next({
       request: { headers: withPathnameHeader(request, pathname) },
     });
   }
 
-  // Supabase OAuth returns `?code=` to Site URL (origin). Forward to PKCE handler.
+  // Supabase OAuth often returns `?code=` / `?error=` to Site URL (= `/`).
+  // Only forward from the root — do NOT steal `/generate?error=…` (NextAuth
+  // pages.error) or other app routes, which looked like broken/404 navigation.
   if (
-    searchParams.has("code") &&
-    !pathname.startsWith("/auth/callback") &&
-    !pathname.startsWith("/api/")
+    (normalizedPath === "/" || normalizedPath === "") &&
+    (searchParams.has("code") ||
+      searchParams.has("error") ||
+      searchParams.has("error_description") ||
+      searchParams.has("error_code"))
   ) {
     const url = request.nextUrl.clone();
     url.pathname = "/auth/callback";
     return NextResponse.redirect(url);
   }
 
+  const termsRedirect = await redirectIfTermsRequired(request, pathname);
+  if (termsRedirect) return termsRedirect;
+
+  const protectedRedirect = await redirectIfProtectedPathUnauthed(
+    request,
+    normalizedPath
+  );
+  if (protectedRedirect) return protectedRedirect;
+
   const requestHeaders = withPathnameHeader(request, pathname);
-  let response = NextResponse.next({
-    request: { headers: requestHeaders },
-  });
 
   const country =
     request.headers.get("x-vercel-ip-country") ||
     request.headers.get("cf-ipcountry") ||
     "";
+
+  const existingLocale = request.cookies.get(LOCALE_COOKIE)?.value;
+  const userSelected =
+    request.cookies.get(`${LOCALE_COOKIE}-manual`)?.value === "true";
+  const acceptLanguage = request.headers.get("accept-language") || "";
+  const detectedLocale =
+    userSelected && existingLocale && isValidLocale(existingLocale)
+      ? existingLocale
+      : detectLocale(country, acceptLanguage, existingLocale);
+
+  // Forward to RSC layout on THIS request (Set-Cookie is not visible to cookies() yet).
+  requestHeaders.set("x-detected-locale", detectedLocale);
+
+  let response = NextResponse.next({
+    request: { headers: requestHeaders },
+  });
 
   if (country) {
     response.cookies.set(GEO_COUNTRY_COOKIE, country.toUpperCase(), {
@@ -49,24 +158,24 @@ export async function middleware(request: NextRequest) {
     });
   }
 
-  const existingLocale = request.cookies.get(LOCALE_COOKIE)?.value;
-  const userSelected = request.cookies.get(`${LOCALE_COOKIE}-manual`)?.value === "true";
-
-  if (userSelected && existingLocale && isValidLocale(existingLocale)) {
-    response.headers.set("x-detected-locale", existingLocale);
-    return refreshSupabaseSession(request, response);
+  const partnerRef = normalizePartnerCode(searchParams.get(PARTNER_REF_QUERY));
+  if (partnerRef) {
+    response.cookies.set(
+      PARTNER_REF_COOKIE,
+      partnerRef,
+      partnerRefCookieOptions(PARTNER_REF_COOKIE_MAX_AGE)
+    );
   }
 
-  const acceptLanguage = request.headers.get("accept-language") || "";
-  const detected = detectLocale(country, acceptLanguage, existingLocale);
+  if (!(userSelected && existingLocale && isValidLocale(existingLocale))) {
+    response.cookies.set(LOCALE_COOKIE, detectedLocale, {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: "lax",
+    });
+  }
 
-  response.cookies.set(LOCALE_COOKIE, detected, {
-    path: "/",
-    maxAge: 60 * 60 * 24 * 365,
-    sameSite: "lax",
-  });
-
-  response.headers.set("x-detected-locale", detected);
+  response.headers.set("x-detected-locale", detectedLocale);
   return refreshSupabaseSession(request, response);
 }
 
