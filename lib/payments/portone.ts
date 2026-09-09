@@ -288,18 +288,18 @@ export async function chargePortOneBillingKey(input: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        payment: {
-          billingKey: input.billingKey,
-          orderName: input.orderName,
-          customer: {
-            id: resolveCustomerId(input.customerId, input.paymentId),
-            name: { full: resolveCustomerName(input.customerName) },
-            phoneNumber: resolveCustomerPhone(input.customerPhone),
-            email: resolveCustomerEmail(input.customerEmail),
-          },
-          amount: { total: Math.round(input.totalAmount) },
-          currency: "KRW",
+        // PortOne V2 BillingKeyPaymentInput is flat (not nested under `payment`).
+        // Nested `payment` is for schedule APIs and yields: missing required field "billingKey".
+        billingKey: input.billingKey,
+        orderName: input.orderName,
+        customer: {
+          id: resolveCustomerId(input.customerId, input.paymentId),
+          name: { full: resolveCustomerName(input.customerName) },
+          phoneNumber: resolveCustomerPhone(input.customerPhone),
+          email: resolveCustomerEmail(input.customerEmail),
         },
+        amount: { total: Math.round(input.totalAmount) },
+        currency: "KRW",
       }),
       cache: "no-store",
     }
