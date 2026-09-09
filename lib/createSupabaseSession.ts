@@ -13,6 +13,7 @@ import {
   authCookieOptions,
   authSessionCookieName,
 } from "@/lib/authCookies";
+import { assertEmailNotBlocked } from "@/lib/auth/enforceBlockedLogin";
 
 export type SupabaseBridgeSession = {
   cookieName: string;
@@ -53,6 +54,8 @@ export async function createSessionFromSupabaseAccessToken(
   }
 
   const profile = extractSupabaseOAuthProfile(user);
+  assertEmailNotBlocked(profile.email);
+  assertEmailNotBlocked(user.email);
   const termsAgreed = await getTermsAgreedWithAccessToken(accessToken, user.id);
 
   const cookieName = authSessionCookieName();

@@ -4,6 +4,13 @@ import { createSessionFromSupabaseAccessToken } from "@/lib/createSupabaseSessio
 import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase/config";
 import { assertOAuthSessionMatchesIntent } from "@/lib/auth/prepareOAuthLogin";
 import type { SocialOAuthId } from "@/lib/supabase/oauth";
+import {
+  blockedLoginJsonResponse,
+} from "@/lib/auth/enforceBlockedLogin";
+import {
+  BLOCKED_LOGIN_ERROR_CODE,
+  isBlockedLoginEmail,
+} from "@/lib/auth/blockedAccounts";
 
 /**
  * Establishes a NextAuth JWT session from a Supabase access token.
@@ -97,6 +104,9 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Bridge failed";
     console.error("[auth/supabase-bridge]", message, err);
+    if (message.includes(BLOCKED_LOGIN_ERROR_CODE) || isBlockedLoginEmail(message)) {
+      return blockedLoginJsonResponse(request, 403);
+    }
     const status =
       message.includes("Invalid Supabase") || message.includes("access token")
         ? 401

@@ -46,6 +46,10 @@ import {
 } from "@/lib/termsConsent";
 import { clearAuthStorageOnly } from "@/lib/auth/clearAuthStorage";
 import { clearEditorClientCachesOnLogout } from "@/lib/auth/clearEditorCaches";
+import {
+  blockedLoginMessage,
+  isBlockedLoginEmail,
+} from "@/lib/auth/blockedAccounts";
 import type { PlanUsageSnapshot } from "@/lib/planQuotas";
 
 const PLAN_USAGE_CACHE_KEY = "sca_plan_usage_v2";
@@ -316,10 +320,11 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
         cache: "no-store",
         credentials: "same-origin",
       });
-      if (!res.ok) throw new Error("account unavailable");
-      const data = (await res.json()) as {
+      const data = (await res.json().catch(() => ({}))) as {
         authenticated?: boolean;
         pendingTermsConsent?: boolean;
+        blockedLogin?: boolean;
+        error?: string;
         providers?: SocialProviderId[];
         user?: {
           id?: string;
@@ -335,6 +340,46 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
           usage?: PlanUsageSnapshot | null;
         } | null;
       };
+      if (data.blockedLogin) {
+        // Banned account residue — wipe chrome and force full logout.
+        setIsAuthenticated(false);
+        setAuthUser(null);
+        setIsAdmin(false);
+        setCredits(FREE_CREDITS);
+        setMaxCredits(FREE_CREDITS);
+        setPlanId("free");
+        setPlanUsage(null);
+        quotaPeriodStartRef.current = null;
+        setSocialProvidersLoaded(true);
+        try {
+          const { isSupabaseConfigured } = await import("@/lib/supabase/config");
+          if (isSupabaseConfigured()) {
+            const { createSupabaseBrowserClient } = await import(
+              "@/lib/supabase/client"
+            );
+            await createSupabaseBrowserClient().auth.signOut({
+              scope: "local",
+            });
+          }
+        } catch {
+          /* ignore */
+        }
+        try {
+          await fetch("/api/auth/logout", {
+            method: "POST",
+            credentials: "same-origin",
+          });
+        } catch {
+          /* ignore */
+        }
+        clearBrowserAuthResidue();
+        if (typeof window !== "undefined" && data.error) {
+          stashAuthErrorForModal(data.error);
+          setShowAuthModal(true);
+        }
+        return;
+      }
+      if (!res.ok) throw new Error("account unavailable");
       if (Array.isArray(data.providers)) {
         setSocialProviders(data.providers);
         setSocialProvidersLoaded(true);
@@ -513,6 +558,37 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
           accessToken?: string | null
         ) => {
           if (cancelled || !sbUser) return;
+
+          if (isBlockedLoginEmail(sbUser.email)) {
+            setIsAuthenticated(false);
+            setAuthUser(null);
+            setIsAdmin(false);
+            setPlanUsageState(null);
+            void (async () => {
+              try {
+                await fetch("/api/auth/logout", {
+                  method: "POST",
+                  credentials: "same-origin",
+                });
+              } catch {
+                /* ignore */
+              }
+              try {
+                const { createSupabaseBrowserClient } = await import(
+                  "@/lib/supabase/client"
+                );
+                await createSupabaseBrowserClient().auth.signOut({
+                  scope: "local",
+                });
+              } catch {
+                /* ignore */
+              }
+              clearBrowserAuthResidue();
+              stashAuthErrorForModal(blockedLoginMessage("kr"));
+              setShowAuthModal(true);
+            })();
+            return;
+          }
 
           const meta = sbUser.user_metadata ?? {};
           const image =

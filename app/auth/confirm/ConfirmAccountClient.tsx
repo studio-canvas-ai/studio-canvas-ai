@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from "react";
 import {
+  isBlockedLoginEmail,
+  blockedLoginMessage,
+} from "@/lib/auth/blockedAccounts";
+import {
   clearAuthConfirm,
   providerLabel,
   readAuthConfirm,
@@ -18,12 +22,22 @@ export default function ConfirmAccountClient({
   const [payload, setPayload] = useState<AuthConfirmPayload | null>(null);
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
+  const [blocked, setBlocked] = useState(false);
 
   useEffect(() => {
     const stored = readAuthConfirm();
     if (!stored) {
       // Missing confirm payload — send provisional users to terms, else home.
       window.location.replace(safePostConsentPath(nextPath));
+      return;
+    }
+    if (isBlockedLoginEmail(stored.email)) {
+      setBlocked(true);
+      setPayload({
+        ...stored,
+        next: safePostConsentPath(stored.next || nextPath),
+      });
+      setReady(true);
       return;
     }
     setPayload({
@@ -34,7 +48,7 @@ export default function ConfirmAccountClient({
   }, [nextPath]);
 
   const continueWithAccount = () => {
-    if (!payload || busy) return;
+    if (!payload || busy || blocked) return;
     setBusy(true);
     const next = safePostConsentPath(payload.next);
     clearAuthConfirm();
@@ -111,15 +125,26 @@ export default function ConfirmAccountClient({
         </p>
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={continueWithAccount}
-          className="flex-1 rounded-xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-black transition hover:bg-emerald-400 disabled:opacity-60"
+      {blocked ? (
+        <p
+          role="alert"
+          className="rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-300"
         >
-          이 계정으로 계속
-        </button>
+          {blockedLoginMessage("kr")}
+        </p>
+      ) : null}
+
+      <div className="flex flex-col gap-3 sm:flex-row">
+        {!blocked ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={continueWithAccount}
+            className="flex-1 rounded-xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-black transition hover:bg-emerald-400 disabled:opacity-60"
+          >
+            이 계정으로 계속
+          </button>
+        ) : null}
         <button
           type="button"
           disabled={busy}

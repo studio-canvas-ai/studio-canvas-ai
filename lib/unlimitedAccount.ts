@@ -11,7 +11,6 @@ export const PRIVILEGED_ADMIN_EMAILS = [
   "studiocanvas.cs@gmail.com",
   "agapet1004@gmail.com",
   "scd77777@naver.com",
-  "hercd@hanmail.net",
   "scd777@naver.com",
 ] as const;
 

@@ -20,8 +20,25 @@ import { isAdminEmail } from "@/lib/adminAuth";
 import { remainingSubscriptionDays, formatSubscriptionEndDate } from "@/lib/subscriptionPeriod";
 import { hydrateUserPlanUsage, snapshotPlanUsage } from "@/lib/db/planUsage";
 import { readWalletCookie } from "@/lib/walletCookie";
+import {
+  blockedLoginJsonResponse,
+} from "@/lib/auth/enforceBlockedLogin";
+import { isBlockedLoginEmail } from "@/lib/auth/blockedAccounts";
 
 export const runtime = "nodejs";
+
+function emailFromSessionOrToken(
+  sessionEmail: string | null | undefined,
+  tokenEmail: unknown,
+  userEmail: string | null | undefined
+): string | null {
+  if (typeof sessionEmail === "string" && sessionEmail.trim()) {
+    return sessionEmail;
+  }
+  if (typeof tokenEmail === "string" && tokenEmail.trim()) return tokenEmail;
+  if (typeof userEmail === "string" && userEmail.trim()) return userEmail;
+  return null;
+}
 
 /** Current account snapshot for client CreditsProvider sync. */
 export async function GET(request: NextRequest) {
@@ -30,6 +47,27 @@ export async function GET(request: NextRequest) {
   let user = userId ? await getUserById(userId) : null;
   if (user) {
     user = await reconcileUserWithWalletCookie(user);
+  }
+
+  // Hard block: never keep a session for banned emails.
+  try {
+    const secret = requireAuthSecret();
+    const token = await getToken({
+      req: request,
+      secret,
+      secureCookie: useSecureAuthCookies(),
+      cookieName: authSessionCookieName(),
+    });
+    const blockedEmail = emailFromSessionOrToken(
+      session?.user?.email,
+      token?.email,
+      user?.email
+    );
+    if (isBlockedLoginEmail(blockedEmail)) {
+      return blockedLoginJsonResponse(request, 403);
+    }
+  } catch {
+    /* continue normal me flow */
   }
 
   // Vercel memory DB can be empty after a cold start even with a valid JWT.
@@ -45,6 +83,9 @@ export async function GET(request: NextRequest) {
       });
 
       if (token?.termsAgreed === false) {
+        if (isBlockedLoginEmail(typeof token.email === "string" ? token.email : null)) {
+          return blockedLoginJsonResponse(request, 403);
+        }
         // Provisional pre-consent session — not a registered app member yet.
         return NextResponse.json({
           authenticated: false,

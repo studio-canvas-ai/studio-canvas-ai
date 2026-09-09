@@ -30,12 +30,6 @@ export const TEST_ACCOUNT_SETUPS: readonly TestAccountSetup[] = [
     interval: "monthly",
     autoRenew: true,
   },
-  {
-    email: "hercd@hanmail.net",
-    planId: "pro",
-    interval: "monthly",
-    autoRenew: true,
-  },
 ] as const;
 
 const SETUP_BY_EMAIL = new Map(
