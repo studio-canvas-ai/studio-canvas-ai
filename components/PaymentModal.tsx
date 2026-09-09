@@ -347,7 +347,21 @@ export default function PaymentModal() {
             throw new Error(confirmJson.error || "recurring confirm failed");
           }
 
-          await completePayment();
+          const confirmJson = (await confirmRes.json().catch(() => ({}))) as {
+            user?: {
+              id?: string | null;
+              planId?: string | null;
+              billingInterval?: string | null;
+              usage?: {
+                fhdRemaining: number;
+                fhdLimit: number;
+                uhd4kRemaining: number;
+                uhd4kLimit: number;
+                galleryLimit: number;
+              } | null;
+            };
+          };
+          await completePayment(confirmJson.user);
           clearPendingPaymentContext();
           return;
         }
@@ -403,7 +417,21 @@ export default function PaymentModal() {
           }
           throw new Error(confirmJson.error || "portone confirm failed");
         }
-        await completePayment();
+        const confirmJson = (await confirmRes.json().catch(() => ({}))) as {
+          user?: {
+            id?: string | null;
+            planId?: string | null;
+            billingInterval?: string | null;
+            usage?: {
+              fhdRemaining: number;
+              fhdLimit: number;
+              uhd4kRemaining: number;
+              uhd4kLimit: number;
+              galleryLimit: number;
+            } | null;
+          };
+        };
+        await completePayment(confirmJson.user);
         clearPendingPaymentContext();
         return;
       }
@@ -416,7 +444,21 @@ export default function PaymentModal() {
           credentials: "same-origin",
         });
         if (!confirmRes.ok) throw new Error("demo confirm failed");
-        await completePayment();
+        const confirmJson = (await confirmRes.json().catch(() => ({}))) as {
+          user?: {
+            id?: string | null;
+            planId?: string | null;
+            billingInterval?: string | null;
+            usage?: {
+              fhdRemaining: number;
+              fhdLimit: number;
+              uhd4kRemaining: number;
+              uhd4kLimit: number;
+              galleryLimit: number;
+            } | null;
+          };
+        };
+        await completePayment(confirmJson.user);
         clearPendingPaymentContext();
         return;
       }

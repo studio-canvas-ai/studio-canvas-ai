@@ -10,6 +10,7 @@ import {
   useEffect,
   type ReactNode,
 } from "react";
+import { useSession } from "next-auth/react";
 import {
   CREDIT_PACKS,
   type BillingInterval,
@@ -158,7 +159,13 @@ type CreditsContextValue = {
     plan: (typeof pricingPlanIds)[number],
     interval?: BillingInterval
   ) => void;
-  completePayment: () => void;
+  /** Apply confirm/pay response immediately, then refresh session + /me. */
+  completePayment: (paid?: {
+    planId?: string | null;
+    billingInterval?: string | null;
+    usage?: PlanUsageSnapshot | null;
+    id?: string | null;
+  }) => Promise<void>;
   dismissPaymentModal: () => void;
   cancelSubscription: () => void;
   registerPortrait: (portraitId: string, createdAt?: number) => PortraitRetouchState;
@@ -203,6 +210,7 @@ function todayKey() {
 }
 
 export function CreditsProvider({ children }: { children: ReactNode }) {
+  const { update: updateSession } = useSession();
   const [credits, setCredits] = useState(FREE_CREDITS);
   const [maxCredits, setMaxCredits] = useState(FREE_CREDITS);
   const [planId, setPlanId] = useState<PlanId>("free");
@@ -806,12 +814,48 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
     [isAuthenticated]
   );
 
-  const completePayment = useCallback(async () => {
-    setShowPaymentModal(false);
-    setPendingPlanId(null);
-    clearPendingCheckout();
-    await refreshServerState();
-  }, [refreshServerState]);
+  const completePayment = useCallback(
+    async (paid?: {
+      planId?: string | null;
+      billingInterval?: string | null;
+      usage?: PlanUsageSnapshot | null;
+      id?: string | null;
+    }) => {
+      setShowPaymentModal(false);
+      setPendingPlanId(null);
+      clearPendingCheckout();
+
+      // Apply confirm payload immediately so navbar shows 1,400 before /me.
+      if (paid?.planId && paid.planId !== "free") {
+        setPlanId(paid.planId as PlanId);
+        if (
+          paid.billingInterval === "monthly" ||
+          paid.billingInterval === "quarterly" ||
+          paid.billingInterval === "annual"
+        ) {
+          setBillingInterval(paid.billingInterval);
+        }
+        if (paid.usage) {
+          setPlanUsage(paid.usage, paid.id ?? authUser?.id ?? null);
+        }
+        patchAccountMeta({
+          lastLoginAt: Date.now(),
+          planId: paid.planId as PlanId,
+          hadPaidPlan: true,
+        });
+      }
+
+      // Force JWT planId refresh (reads cookie/R2 via hydrate on the server).
+      try {
+        await updateSession({ planRefresh: Date.now() });
+      } catch {
+        /* session provider may be unavailable on auth shell */
+      }
+
+      await refreshServerState();
+    },
+    [authUser?.id, refreshServerState, setPlanUsage, updateSession]
+  );
 
   const dismissPaymentModal = useCallback(() => {
     setShowPaymentModal(false);

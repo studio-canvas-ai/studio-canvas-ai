@@ -292,15 +292,20 @@ export async function hydrateUserPlanUsage(
   ]);
   const updated = await withDbLock((db) => {
     const row = db.users[user.id];
-    if (!row) return { user, migrated: false };
+    if (!row) return { user, migrated: false, restoredPaid: false };
+    const beforePlan = row.planId;
     mergePlanUsageFromSnapshots(row, cookie, durable, supabase);
     const migrated = migrateToCreditPoolSchema(row);
     ensurePlanUsage(row);
-    return { user: row, migrated };
+    return {
+      user: row,
+      migrated,
+      restoredPaid: beforePlan === "free" && row.planId !== "free",
+    };
   });
   await persistUserPlanUsage(updated.user, {
     ...opts,
-    allowPoolIncrease: updated.migrated,
+    allowPoolIncrease: updated.migrated || updated.restoredPaid,
   });
   return updated.user;
 }
@@ -319,12 +324,53 @@ export async function persistUserPlanUsage(
     loadDurableQuota(user.id),
     loadSupabaseQuota(user.id, aliases),
   ]);
+
+  // Cold-start free rows must adopt paid cookie/R2 before limits are computed,
+  // otherwise Math.min(freeCap=0, …) overwrites a just-paid 1,400 pool.
+  restoreSubscriptionEntitlements(user, [
+    existingDurable,
+    existingCookie,
+    existingSupabase,
+  ]);
+
+  if (user.planId === "free") {
+    const paidSnap = [existingDurable, existingCookie, existingSupabase].find(
+      (snap) =>
+        snap &&
+        typeof snap.planId === "string" &&
+        snap.planId !== "free" &&
+        Number(snap.fhdRemaining) > 0
+    );
+    if (paidSnap) {
+      restoreSubscriptionEntitlements(user, [paidSnap]);
+    }
+    // Still free with a paid durable pool → do not clobber.
+    if (
+      user.planId === "free" &&
+      paidSnap &&
+      Number(paidSnap.fhdRemaining) > 0
+    ) {
+      return;
+    }
+  }
+
+  const allowIncrease =
+    opts?.allowPoolIncrease === true ||
+    (user.planId !== "free" &&
+      Number(user.fhdRemaining ?? 0) >
+        Math.max(
+          0,
+          existingCookie?.fhdRemaining ?? 0,
+          existingDurable?.fhdRemaining ?? 0,
+          existingSupabase?.fhdRemaining ?? 0
+        ));
+
   const guarded = guardedPersistValues(
     user,
     existingCookie,
     existingDurable,
     existingSupabase,
-    { allowPoolIncrease: opts?.allowPoolIncrease }
+    { allowPoolIncrease: allowIncrease }
   );
   user.fhdRemaining = guarded.fhdRemaining;
   user.uhd4kRemaining = guarded.uhd4kRemaining;

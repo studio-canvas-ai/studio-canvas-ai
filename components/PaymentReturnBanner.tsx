@@ -17,7 +17,7 @@ export default function PaymentReturnBanner() {
   const orderIdParam = searchParams.get("orderId");
   const paymentIdParam = searchParams.get("paymentId");
   const billingKeyParam = searchParams.get("billingKey");
-  const { refreshAccount, planId } = useCredits();
+  const { refreshAccount, planId, completePayment } = useCredits();
   const { t } = useI18n();
   const [phase, setPhase] = useState<"idle" | "working" | "ok" | "fail">(
     "idle"
@@ -56,16 +56,29 @@ export default function PaymentReturnBanner() {
               ...(paymentId ? { paymentId } : {}),
             }),
           });
-          if (!confirmRes.ok) {
-            const json = (await confirmRes.json().catch(() => ({}))) as {
-              error?: string;
+          const json = (await confirmRes.json().catch(() => ({}))) as {
+            error?: string;
+            user?: {
+              id?: string | null;
+              planId?: string | null;
+              billingInterval?: string | null;
+              usage?: {
+                fhdRemaining: number;
+                fhdLimit: number;
+                uhd4kRemaining: number;
+                uhd4kLimit: number;
+                galleryLimit: number;
+              } | null;
             };
-            // Already paid is fine — refresh will show credits.
-            if (json.error && json.error !== "order not found") {
-              if (!cancelled) {
-                setDetail(json.error);
-              }
-            }
+          };
+          if (confirmRes.ok && json.user?.planId && json.user.planId !== "free") {
+            await completePayment(json.user);
+            clearPendingPaymentContext();
+            if (!cancelled) setPhase("ok");
+            return;
+          }
+          if (!confirmRes.ok && json.error && json.error !== "order not found") {
+            if (!cancelled) setDetail(json.error);
           }
         }
 
@@ -93,6 +106,7 @@ export default function PaymentReturnBanner() {
     paymentIdParam,
     billingKeyParam,
     refreshAccount,
+    completePayment,
   ]);
 
   if (status === "fail" || phase === "fail") {

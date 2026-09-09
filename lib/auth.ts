@@ -370,8 +370,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const stale = force || Date.now() - cachedAt > PLAN_CACHE_MS;
         if (stale) {
           const { getUserById } = await import("@/lib/db/credits");
-          const dbUser = await getUserById(token.uid as string);
-          if (dbUser) applyDbUser(dbUser);
+          const { hydrateUserPlanUsage } = await import("@/lib/db/planUsage");
+          let dbUser = await getUserById(token.uid as string);
+          if (dbUser) {
+            // Another isolate may only have a free memory row — restore from cookie/R2.
+            dbUser = await hydrateUserPlanUsage(dbUser, {
+              supabaseUserId:
+                typeof token.supabaseUserId === "string"
+                  ? token.supabaseUserId
+                  : null,
+            });
+            applyDbUser(dbUser);
+          }
         }
       }
       return token;
