@@ -194,6 +194,25 @@ export async function GET(request: NextRequest) {
       if (typeof token?.supabaseUserId === "string") {
         supabaseUserId = token.supabaseUserId;
       }
+      // JWT may still hold last paid plan after a memory cold start.
+      if (
+        user.planId === "free" &&
+        typeof token?.planId === "string" &&
+        token.planId !== "free"
+      ) {
+        const { restoreSubscriptionEntitlements } = await import(
+          "@/lib/db/planUsage"
+        );
+        restoreSubscriptionEntitlements(user, [
+          {
+            planId: token.planId,
+            quotaPeriodEnd:
+              typeof token.currentPeriodEnd === "number"
+                ? token.currentPeriodEnd
+                : null,
+          },
+        ]);
+      }
     } catch {
       /* optional JWT read for Supabase quota alias */
     }

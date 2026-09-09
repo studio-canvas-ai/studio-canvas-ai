@@ -23,6 +23,7 @@ export default function PaymentModal() {
     isAuthenticated,
     authUser,
     openAuthModal,
+    completePayment,
   } = useCredits();
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -316,8 +317,7 @@ export default function PaymentModal() {
             throw new Error(confirmJson.error || "recurring confirm failed");
           }
 
-          await refreshAccount();
-          setShowPaymentModal(false);
+          await completePayment();
           return;
         }
 
@@ -365,8 +365,7 @@ export default function PaymentModal() {
           }
           throw new Error(confirmJson.error || "portone confirm failed");
         }
-        await refreshAccount();
-        setShowPaymentModal(false);
+        await completePayment();
         return;
       }
 
@@ -378,8 +377,7 @@ export default function PaymentModal() {
           credentials: "same-origin",
         });
         if (!confirmRes.ok) throw new Error("demo confirm failed");
-        await refreshAccount();
-        setShowPaymentModal(false);
+        await completePayment();
         return;
       }
 

@@ -15,7 +15,7 @@ import { getDb, newId, withDbLock } from "@/lib/db/store";
 import type { PaymentOrder, PaymentProviderId, UserRecord } from "@/lib/db/types";
 import { activateSubscription } from "@/lib/subscriptionLifecycle";
 import { subscriptionPeriodEndMs } from "@/lib/subscriptionPeriod";
-import { ensurePlanUsage } from "@/lib/db/planUsage";
+import { ensurePlanUsage, persistUserPlanUsage } from "@/lib/db/planUsage";
 import {
   createStripeCheckoutSession,
   stripeConfigured,
@@ -286,6 +286,18 @@ export async function markOrderPaid(params: {
   });
 
   if (order && order.kind === "subscription" && order.status === "paid") {
+    try {
+      const paidUser = getDb().users[order.userId];
+      if (paidUser) {
+        // Seed cookie/R2/Supabase pool so navbar hydrate keeps 1,400 (not clamped to 0).
+        await persistUserPlanUsage(paidUser, { allowPoolIncrease: true });
+      }
+    } catch (err) {
+      console.warn(
+        "[payments] plan usage persist skipped",
+        err instanceof Error ? err.message : err
+      );
+    }
     try {
       const { recordPartnerCommission } = await import("@/lib/partners/store");
       const user = getDb().users[order.userId];

@@ -21,6 +21,9 @@ export type DurableQuotaSnapshot = {
   generalPhotoDownloadCount: number;
   /** 1 = legacy FHD/4K; 2 = credit pool in fhdRemaining. */
   schemaVersion?: number;
+  /** Paid plan restore after Vercel memory cold start. */
+  planId?: string;
+  billingInterval?: string;
 };
 
 function manifestKey(userId: string) {
@@ -67,6 +70,13 @@ export async function loadDurableQuota(
       schemaVersion: Number.isFinite(schemaVersion)
         ? Math.max(1, Math.floor(schemaVersion))
         : 1,
+      ...(typeof parsed.planId === "string" && parsed.planId.trim()
+        ? { planId: parsed.planId.trim() }
+        : {}),
+      ...(typeof parsed.billingInterval === "string" &&
+      parsed.billingInterval.trim()
+        ? { billingInterval: parsed.billingInterval.trim() }
+        : {}),
     };
   } catch {
     return null;
@@ -89,6 +99,8 @@ export async function saveDurableQuota(user: UserRecord): Promise<void> {
     uhd4kRemaining: Math.max(0, user.uhd4kRemaining ?? 0),
     generalPhotoDownloadCount: Math.max(0, user.generalPhotoDownloadCount ?? 0),
     schemaVersion: Math.max(1, user.quotaSchemaVersion ?? 1),
+    planId: user.planId,
+    ...(user.billingInterval ? { billingInterval: user.billingInterval } : {}),
   };
   await putR2Object(
     client,

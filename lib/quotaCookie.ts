@@ -34,6 +34,8 @@ export type QuotaCookiePayload = {
   updatedAt: number;
   /** 1 = legacy FHD/4K; 2 = credit pool. Omitted on old cookies → 1. */
   schemaVersion?: number;
+  planId?: string;
+  billingInterval?: string;
 };
 
 export function encodeQuotaCookie(payload: QuotaCookiePayload): string {
@@ -42,6 +44,8 @@ export function encodeQuotaCookie(payload: QuotaCookiePayload): string {
       ? Math.floor(payload.quotaPeriodEnd)
       : "";
   const schemaVersion = Math.max(1, Math.floor(payload.schemaVersion ?? 1));
+  const planId = (payload.planId || "").replace(/\|/g, "");
+  const billingInterval = (payload.billingInterval || "").replace(/\|/g, "");
   const body = [
     payload.userId,
     Math.max(0, Math.floor(payload.fhdRemaining)),
@@ -50,6 +54,8 @@ export function encodeQuotaCookie(payload: QuotaCookiePayload): string {
     payload.updatedAt,
     periodEnd,
     schemaVersion,
+    planId,
+    billingInterval,
   ].join("|");
   return `${body}.${sign(body)}`;
 }
@@ -64,7 +70,7 @@ export function decodeQuotaCookie(
   const sig = raw.slice(dot + 1);
   if (!sig || !safeEqual(sign(body), sig)) return null;
   const parts = body.split("|");
-  const [userId, fhdRaw, uhdRaw, periodRaw, updatedAtRaw, periodEndRaw, schemaRaw] =
+  const [userId, fhdRaw, uhdRaw, periodRaw, updatedAtRaw, periodEndRaw, schemaRaw, planRaw, intervalRaw] =
     parts;
   if (!userId) return null;
   const fhdRemaining = Number(fhdRaw);
@@ -93,6 +99,8 @@ export function decodeQuotaCookie(
     schemaVersion: Number.isFinite(schemaVersion)
       ? Math.max(1, Math.floor(schemaVersion))
       : 1,
+    ...(planRaw ? { planId: planRaw } : {}),
+    ...(intervalRaw ? { billingInterval: intervalRaw } : {}),
   };
 }
 

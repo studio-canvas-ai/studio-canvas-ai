@@ -413,7 +413,12 @@ export function CreditsProvider({ children }: { children: ReactNode }) {
         setPromoWallet(null);
         if (!pendingResumeDone.current) {
           const stored = readPendingCheckout();
-          if (stored) {
+          // Already on a paid plan (e.g. just subscribed) — drop stale checkout UI.
+          if (stored && data.user.planId && data.user.planId !== "free") {
+            pendingResumeDone.current = true;
+            clearPendingCheckout();
+            setPendingPlanId(null);
+          } else if (stored) {
             pendingResumeDone.current = true;
             setPendingPlanId(stored.planId);
             setPendingBillingInterval(stored.interval);

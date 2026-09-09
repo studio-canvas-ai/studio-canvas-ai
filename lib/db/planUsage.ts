@@ -21,6 +21,9 @@ import {
   type QuotaSnapshotLike,
 } from "@/lib/quotaPeriod";
 import { FEATURE_CREDIT_COST, creditPoolForPlan } from "@/lib/featureCreditCosts";
+import type { BillingInterval } from "@/lib/data";
+import type { PlanId } from "@/lib/db/types";
+import { pricingPlanIds } from "@/lib/data";
 
 export type DownloadQuotaKind = "fhd" | "uhd4k";
 
@@ -28,6 +31,55 @@ export type { PlanUsageSnapshot };
 
 function limitsFor(user: UserRecord) {
   return getPlanUsageLimits(user.planId, user.billingInterval ?? "monthly");
+}
+
+const PAID_PLAN_IDS = new Set<string>(pricingPlanIds);
+
+type SubscriptionEntitlementSnap = {
+  planId?: string;
+  billingInterval?: string;
+  quotaPeriodStart?: number;
+  quotaPeriodEnd?: number | null;
+};
+
+/**
+ * Cold-start memory rows default to free (pool 0). Restore paid plan from
+ * durable quota / cookie before applying remaining counts.
+ */
+export function restoreSubscriptionEntitlements(
+  user: UserRecord,
+  snaps: Array<SubscriptionEntitlementSnap | null | undefined>
+): void {
+  if (user.planId !== "free") return;
+  const now = Date.now();
+  for (const snap of snaps) {
+    if (!snap?.planId || !PAID_PLAN_IDS.has(snap.planId)) continue;
+    const end =
+      snap.quotaPeriodEnd != null && Number.isFinite(snap.quotaPeriodEnd)
+        ? Number(snap.quotaPeriodEnd)
+        : null;
+    if (end != null && end > 0 && end < now) continue;
+    user.planId = snap.planId as PlanId;
+    if (
+      snap.billingInterval === "monthly" ||
+      snap.billingInterval === "quarterly" ||
+      snap.billingInterval === "annual"
+    ) {
+      user.billingInterval = snap.billingInterval as BillingInterval;
+    }
+    if (
+      typeof snap.quotaPeriodStart === "number" &&
+      Number.isFinite(snap.quotaPeriodStart) &&
+      snap.quotaPeriodStart > 0
+    ) {
+      user.currentPeriodStart = snap.quotaPeriodStart;
+      user.quotaPeriodStart = snap.quotaPeriodStart;
+    }
+    if (end != null && end > 0) {
+      user.currentPeriodEnd = end;
+    }
+    return;
+  }
 }
 
 export function snapshotPlanUsage(user: UserRecord): PlanUsageSnapshot {
@@ -154,6 +206,8 @@ export function mergePlanUsageFromSnapshots(
   durable: DurableQuotaSnapshot | null,
   supabase: DurableQuotaSnapshot | null = null
 ): void {
+  restoreSubscriptionEntitlements(user, [durable, cookie, supabase]);
+
   const cookieSnap = toSnapshotLike(cookie);
   const durableSnap = toSnapshotLike(durable);
   const supabaseSnap = toSnapshotLike(supabase);
@@ -288,6 +342,10 @@ export async function persistUserPlanUsage(
       quotaPeriodEnd: user.currentPeriodEnd ?? null,
       updatedAt: Date.now(),
       schemaVersion: user.quotaSchemaVersion ?? 1,
+      planId: user.planId,
+      ...(user.billingInterval
+        ? { billingInterval: user.billingInterval }
+        : {}),
     }),
     saveDurableQuota(user),
     saveSupabaseQuota(user, opts),
