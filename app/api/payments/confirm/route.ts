@@ -14,8 +14,37 @@ import {
 import { getDb } from "@/lib/db/store";
 import { resolveAppUser } from "@/lib/resolveAppUser";
 import { isGuestCheckoutAllowed } from "@/lib/checkoutPolicy";
+import {
+  clearPendingOrderCookie,
+  resolvePaymentOrderForUser,
+} from "@/lib/pendingOrderCookie";
+import { snapshotPlanUsage } from "@/lib/db/planUsage";
 
 export const runtime = "nodejs";
+
+function paidUserPayload(userId: string, fallback: { id: string; email: string | null; name: string | null }) {
+  const paidUser = getDb().users[userId];
+  if (!paidUser) {
+    return {
+      id: fallback.id,
+      email: fallback.email,
+      name: fallback.name,
+      planId: "free",
+      billingInterval: null,
+      credits: 0,
+      usage: null,
+    };
+  }
+  return {
+    id: paidUser.id,
+    email: paidUser.email,
+    name: paidUser.name,
+    planId: paidUser.planId,
+    billingInterval: paidUser.billingInterval ?? null,
+    credits: 0,
+    usage: snapshotPlanUsage(paidUser),
+  };
+}
 
 /**
  * Confirm payment after Toss / PortOne checkout / KCP billing-key charge / demo.
@@ -34,6 +63,13 @@ export async function POST(req: Request) {
   const user = resolved.user;
   const userId = user.id;
 
+  if (user.provider === "guest" || userId.startsWith("guest_")) {
+    return NextResponse.json(
+      { error: "authentication required" },
+      { status: 401 }
+    );
+  }
+
   const body = (await req.json()) as {
     orderId: string;
     paymentKey?: string;
@@ -43,12 +79,17 @@ export async function POST(req: Request) {
     demo?: boolean;
   };
 
-  const order = getDb().orders[body.orderId];
-  if (!order || order.userId !== userId) {
+  const order = await resolvePaymentOrderForUser(body.orderId, userId);
+  if (!order) {
     return NextResponse.json({ error: "order not found" }, { status: 404 });
   }
   if (order.status === "paid") {
-    return NextResponse.json({ ok: true, order, user });
+    await clearPendingOrderCookie();
+    return NextResponse.json({
+      ok: true,
+      order,
+      user: paidUserPayload(userId, user),
+    });
   }
 
   if (order.provider === "stripe") {
@@ -124,20 +165,11 @@ export async function POST(req: Request) {
         externalPaymentKey: paymentId,
         paymentMethodLabel: "PortOne KCP 정기결제 (빌링키)",
       });
-      const paidUser = getDb().users[order.userId] ?? user;
-      const { snapshotPlanUsage } = await import("@/lib/db/planUsage");
+      await clearPendingOrderCookie();
       return NextResponse.json({
         ok: true,
         order: paid,
-        user: {
-          id: paidUser.id,
-          email: paidUser.email,
-          name: paidUser.name,
-          planId: paidUser.planId,
-          billingInterval: paidUser.billingInterval ?? null,
-          credits: 0,
-          usage: snapshotPlanUsage(paidUser),
-        },
+        user: paidUserPayload(userId, user),
         recurring: true,
       });
     }
@@ -153,10 +185,11 @@ export async function POST(req: Request) {
         externalPaymentKey: body.paymentKey,
         receiptUrl: tossResult.receipt?.url,
       });
+      await clearPendingOrderCookie();
       return NextResponse.json({
         ok: true,
         order: paid,
-        user,
+        user: paidUserPayload(userId, user),
       });
     }
 
@@ -187,10 +220,11 @@ export async function POST(req: Request) {
         externalPaymentKey: portonePaymentId,
         paymentMethodLabel: "PortOne KG Inicis (one-time)",
       });
+      await clearPendingOrderCookie();
       return NextResponse.json({
         ok: true,
         order: paid,
-        user,
+        user: paidUserPayload(userId, user),
       });
     }
 
@@ -199,10 +233,11 @@ export async function POST(req: Request) {
         orderId: order.id,
         externalPaymentKey: `demo_${Date.now()}`,
       });
+      await clearPendingOrderCookie();
       return NextResponse.json({
         ok: true,
         order: paid,
-        user,
+        user: paidUserPayload(userId, user),
         demo: true,
       });
     }

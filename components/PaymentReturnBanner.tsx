@@ -1,54 +1,131 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useCredits } from "@/components/CreditsProvider";
 import { useI18n } from "@/components/I18nProvider";
 import { clearPendingCheckout } from "@/lib/pendingCheckout";
+import {
+  clearPendingPaymentContext,
+  readPendingPaymentContext,
+} from "@/lib/pendingPaymentContext";
 
-/** Poll account after PG return until webhook/confirm updates credits. */
+/** After PG return: always try confirm, then refresh until credits appear. */
 export default function PaymentReturnBanner() {
   const searchParams = useSearchParams();
   const status = searchParams.get("payment");
-  const billingKeyIssued = searchParams.get("billingKeyIssued") === "1";
+  const orderIdParam = searchParams.get("orderId");
+  const paymentIdParam = searchParams.get("paymentId");
+  const billingKeyParam = searchParams.get("billingKey");
   const { refreshAccount, planId } = useCredits();
   const { t } = useI18n();
+  const [phase, setPhase] = useState<"idle" | "working" | "ok" | "fail">(
+    "idle"
+  );
+  const [detail, setDetail] = useState<string | null>(null);
 
   useEffect(() => {
     if (status !== "success" && status !== "fail") return;
-    try {
+    if (status === "fail") {
+      setPhase("fail");
       clearPendingCheckout();
-    } catch {
-      /* ignore */
+      clearPendingPaymentContext();
+      return;
     }
-    void refreshAccount();
-  }, [status, refreshAccount]);
 
-  // Old buggy path redirected here without markOrderPaid — do not celebrate.
-  if (status === "success" && billingKeyIssued && planId === "free") {
-    return (
-      <div className="mx-auto mb-4 max-w-3xl rounded-xl border border-amber-400/25 bg-amber-400/10 px-4 py-3 text-center text-sm text-amber-100">
-        카드 등록만 확인되었고 이용권/크레딧 반영은 완료되지 않았습니다. 요금제에서
-        다시 결제를 완료해 주세요.
-      </div>
-    );
-  }
+    let cancelled = false;
+    setPhase("working");
 
-  if (status === "success") {
-    return (
-      <div className="mx-auto mb-4 max-w-3xl rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-4 py-3 text-center text-sm text-emerald-100">
-        {t.payment.returnSuccess}
-      </div>
-    );
-  }
+    void (async () => {
+      try {
+        clearPendingCheckout();
+        const ctx = readPendingPaymentContext();
+        const orderId = orderIdParam || ctx?.orderId || null;
+        const billingKey = billingKeyParam || ctx?.billingKey || null;
+        const paymentId = paymentIdParam || ctx?.paymentId || null;
+        const issueId = ctx?.issueId || undefined;
 
-  if (status === "fail") {
+        if (orderId && (billingKey || paymentId)) {
+          const confirmRes = await fetch("/api/payments/confirm", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({
+              orderId,
+              ...(billingKey ? { billingKey, issueId } : {}),
+              ...(paymentId ? { paymentId } : {}),
+            }),
+          });
+          if (!confirmRes.ok) {
+            const json = (await confirmRes.json().catch(() => ({}))) as {
+              error?: string;
+            };
+            // Already paid is fine — refresh will show credits.
+            if (json.error && json.error !== "order not found") {
+              if (!cancelled) {
+                setDetail(json.error);
+              }
+            }
+          }
+        }
+
+        for (let i = 0; i < 5; i += 1) {
+          await refreshAccount();
+          await new Promise((r) => setTimeout(r, 400));
+          if (cancelled) return;
+        }
+        clearPendingPaymentContext();
+        if (!cancelled) setPhase("ok");
+      } catch (err) {
+        if (!cancelled) {
+          setPhase("fail");
+          setDetail(err instanceof Error ? err.message : "confirm failed");
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    status,
+    orderIdParam,
+    paymentIdParam,
+    billingKeyParam,
+    refreshAccount,
+  ]);
+
+  if (status === "fail" || phase === "fail") {
     return (
       <div className="mx-auto mb-4 max-w-3xl rounded-xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-center text-sm text-red-100">
-        {t.payment.returnFail}
+        {detail || t.payment.returnFail}
       </div>
     );
   }
 
-  return null;
+  if (status !== "success") return null;
+
+  if (phase === "working") {
+    return (
+      <div className="mx-auto mb-4 max-w-3xl rounded-xl border border-sky-400/25 bg-sky-400/10 px-4 py-3 text-center text-sm text-sky-100">
+        결제 확인 중… 이용권/크레딧을 반영하고 있습니다.
+      </div>
+    );
+  }
+
+  if (planId === "free") {
+    return (
+      <div className="mx-auto mb-4 max-w-3xl rounded-xl border border-amber-400/25 bg-amber-400/10 px-4 py-3 text-center text-sm text-amber-100">
+        결제는 접수됐지만 이용권이 아직 반영되지 않았습니다. 잠시 후 새로고침하거나
+        고객센터로 문의해 주세요.
+        {detail ? ` (${detail})` : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto mb-4 max-w-3xl rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-4 py-3 text-center text-sm text-emerald-100">
+      {t.payment.returnSuccess}
+    </div>
+  );
 }

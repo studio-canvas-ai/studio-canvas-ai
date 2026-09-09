@@ -12,6 +12,11 @@ import {
   isGuestCheckoutAllowedClient,
   KCP_RECURRING_ENABLED,
 } from "@/lib/checkoutPolicy";
+import {
+  clearPendingPaymentContext,
+  patchPendingPaymentContext,
+  writePendingPaymentContext,
+} from "@/lib/pendingPaymentContext";
 
 export default function PaymentModal() {
   const { t, locale } = useI18n();
@@ -221,6 +226,12 @@ export default function PaymentModal() {
         throw new Error(created.error || "order failed");
       }
 
+      writePendingPaymentContext({
+        orderId: created.order.id,
+        checkoutMode: created.checkoutMode,
+        at: Date.now(),
+      });
+
       if (created.checkoutUrl) {
         window.location.href = created.checkoutUrl;
         return;
@@ -272,6 +283,11 @@ export default function PaymentModal() {
           );
           const issueId = `issue${orderToken}`.slice(0, 40);
           const issueName = `Studio Canvas AI ${planName} 월간 정기결제`;
+          patchPendingPaymentContext({
+            orderId: created.order.id,
+            issueId,
+            checkoutMode: "recurring_billing_key",
+          });
 
           const issueRes = await requestPortOneBillingKey({
             storeId,
@@ -294,6 +310,10 @@ export default function PaymentModal() {
           if (!billingKey) {
             throw new Error(t.payment.recurringBillingKeyMissing);
           }
+          patchPendingPaymentContext({
+            billingKey,
+            issueId,
+          });
 
           const confirmRes = await fetch("/api/payments/confirm", {
             method: "POST",
@@ -328,6 +348,7 @@ export default function PaymentModal() {
           }
 
           await completePayment();
+          clearPendingPaymentContext();
           return;
         }
 
@@ -352,6 +373,7 @@ export default function PaymentModal() {
         }
 
         const confirmPaymentId = portoneRes?.paymentId || paymentId;
+        patchPendingPaymentContext({ paymentId: confirmPaymentId });
         const confirmRes = await fetch("/api/payments/confirm", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -382,6 +404,7 @@ export default function PaymentModal() {
           throw new Error(confirmJson.error || "portone confirm failed");
         }
         await completePayment();
+        clearPendingPaymentContext();
         return;
       }
 
@@ -394,6 +417,7 @@ export default function PaymentModal() {
         });
         if (!confirmRes.ok) throw new Error("demo confirm failed");
         await completePayment();
+        clearPendingPaymentContext();
         return;
       }
 

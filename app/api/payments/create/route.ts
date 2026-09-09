@@ -26,6 +26,7 @@ import { resolveCheckoutRegion } from "@/lib/paymentRouting";
 import { ensureUsdKrwRate } from "@/lib/currency";
 import { resolveAppUser } from "@/lib/resolveAppUser";
 import { isGuestCheckoutAllowed } from "@/lib/checkoutPolicy";
+import { writePendingOrderCookie } from "@/lib/pendingOrderCookie";
 
 export const runtime = "nodejs";
 
@@ -41,6 +42,13 @@ export async function POST(req: Request) {
   }
   const user = resolved.user;
   const userId = user.id;
+
+  if (user.provider === "guest" || userId.startsWith("guest_")) {
+    return NextResponse.json(
+      { error: "authentication required" },
+      { status: 401 }
+    );
+  }
 
   const body = (await req.json()) as {
     kind: "subscription" | "credit_pack";
@@ -77,6 +85,20 @@ export async function POST(req: Request) {
       packId: body.packId,
       isSubscriber: user.planId !== "free",
       locale,
+    });
+
+    await writePendingOrderCookie({
+      orderId: order.id,
+      userId,
+      kind: order.kind,
+      planId: order.planId,
+      billingInterval: order.billingInterval,
+      packId: order.packId,
+      locale: order.locale,
+      amountKrw: order.amountKrw,
+      amountUsd: order.amountUsd,
+      credits: order.credits,
+      createdAt: order.createdAt,
     });
 
     const baseUrl = getSiteUrl();

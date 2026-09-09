@@ -1,22 +1,14 @@
 /**
  * Checkout access policy.
  *
- * TEMP (KCP card review): guest checkout is ON so PG windows open without login.
- * When the owner asks to “결제 다시 원상복구” / restore member-only checkout:
- *   1) Set ALLOW_GUEST_CHECKOUT=false (Vercel env + .env.local), OR
- *   2) Flip DEFAULT below to false and redeploy.
- *
- * Touch points gated by `isGuestCheckoutAllowed()`:
- *   - components/CreditsProvider.tsx (requestSubscribe)
- *   - components/PaymentModal.tsx (login gate)
- *   - app/api/payments/create + confirm (resolveAppUser allowGuest)
- *   - lib/guestCheckout.ts (guest wallet cookie)
+ * Plan checkout requires a logged-in member so paid credits always land on
+ * the same account the user sees in the navbar.
  */
 
 const ENV_RAW = process.env.ALLOW_GUEST_CHECKOUT?.trim().toLowerCase();
 
-/** Default ON during KCP review; set env to "false" to restore member-only. */
-const DEFAULT_ALLOW_GUEST_CHECKOUT = true;
+/** Guest checkout OFF — payments must attach to a real session user. */
+const DEFAULT_ALLOW_GUEST_CHECKOUT = false;
 
 /**
  * Whether unauthenticated users may open plan checkout / PG payment.
