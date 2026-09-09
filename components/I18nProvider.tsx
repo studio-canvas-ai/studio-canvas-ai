@@ -82,7 +82,7 @@ function resolveClientLocale(initialLocale: Locale): Locale {
   if (initialLocale && isValidLocale(initialLocale)) return initialLocale;
 
   return detectFromAcceptLanguage(
-    typeof navigator !== "undefined" ? navigator.language || "en" : "en"
+    typeof navigator !== "undefined" ? navigator.language || "kr" : "kr"
   );
 }
 
@@ -94,9 +94,9 @@ type I18nProviderProps = {
 
 export function I18nProvider({
   children,
-  initialLocale = "en",
+  initialLocale = "kr",
 }: I18nProviderProps) {
-  const boot = isValidLocale(initialLocale) ? initialLocale : "en";
+  const boot = isValidLocale(initialLocale) ? initialLocale : "kr";
   const [locale, setLocaleState] = useState<Locale>(boot);
   const [isReady, setIsReady] = useState(true);
 

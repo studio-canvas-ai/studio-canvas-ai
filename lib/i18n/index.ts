@@ -57,7 +57,7 @@ export function detectFromAcceptLanguage(acceptLanguage: string): Locale {
   return "en";
 }
 
-/** Geo + browser auto-detection (Edge-safe). */
+/** Geo + browser auto-detection. Default product language is Korean. */
 export function detectLocale(
   country: string,
   acceptLanguage: string,
@@ -69,19 +69,13 @@ export function detectLocale(
   const countryUpper = (country || "").toUpperCase();
   if (countryUpper === "KR") return "kr";
 
-  // Honor strong browser preference for supported non-English locales.
-  // Do NOT map Accept-Language:ko → kr outside KR — that fights Edge UI language
-  // and triggers awkward browser auto-translate against an English chrome.
   const browserLocale = detectFromAcceptLanguage(acceptLanguage);
-  if (
-    browserLocale !== "en" &&
-    browserLocale !== "kr" &&
-    isValidLocale(browserLocale)
-  ) {
+  if (browserLocale && isValidLocale(browserLocale) && browserLocale !== "en") {
     return browserLocale;
   }
 
-  return "en";
+  // Product default: Korean (Incognito / missing geo / English browser chrome).
+  return "kr";
 }
 
 export function getHtmlLang(locale: Locale): string {

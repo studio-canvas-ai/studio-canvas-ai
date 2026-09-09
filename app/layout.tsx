@@ -140,7 +140,7 @@ export default async function RootLayout({
       ? headerLocale
       : cookieLocale && isValidLocale(cookieLocale)
         ? cookieLocale
-        : "en";
+        : "kr";
   const htmlLang = getHtmlLang(initialLocale);
 
   return (
