@@ -660,9 +660,13 @@ export async function signInWithNaver(
         redirectTo: buildAuthCallbackRedirectTo(next),
         // Avoid `openid` so Auth uses the (proxied) userinfo endpoint.
         scopes: "profile",
+        // We assign location ourselves so we can force Naver re-login first.
+        skipBrowserRedirect: true,
         queryParams: {
-          // Force Naver login UI instead of silently reusing a prior session.
-          auth_type: "reprompt",
+          // `reprompt` only re-shows consent for the already-logged-in Naver
+          // account (e.g. 엘도라도123 → hercd). `reauthenticate` forces ID/PW
+          // so the user can switch to scd777 (or any other Naver account).
+          auth_type: "reauthenticate",
         },
       },
     });
@@ -670,6 +674,23 @@ export async function signInWithNaver(
     if (error) {
       console.error("로그인 에러:", error.message);
       return { data, error: new Error(error.message) };
+    }
+
+    if (!data?.url) {
+      return {
+        data,
+        error: new Error("Naver OAuth URL missing from Supabase response."),
+      };
+    }
+
+    // Clear the active Naver SSO session, then continue into OAuth authorize.
+    // Without this, a sticky nid.naver.com login keeps returning the same person.
+    try {
+      const logout = new URL("https://nid.naver.com/nidlogin.logout");
+      logout.searchParams.set("returl", data.url);
+      window.location.assign(logout.toString());
+    } catch {
+      window.location.assign(data.url);
     }
 
     return { data, error: null };

@@ -144,11 +144,30 @@ export function assertOAuthSessionMatchesIntent(
   intent: OAuthIntent | null,
   user: {
     id: string;
+    email?: string | null;
     app_metadata?: { provider?: string } | null;
     identities?: Array<{ provider?: string }> | null;
-  }
+  },
+  opts?: { requireIntent?: boolean }
 ): { ok: true } | { ok: false; reason: string } {
-  if (!intent) return { ok: true };
+  if (!intent) {
+    if (opts?.requireIntent) {
+      return {
+        ok: false,
+        reason:
+          "oauth_intent_missing: start login again from the app (session may be stale)",
+      };
+    }
+    return { ok: true };
+  }
+
+  // Intent older than 30m is almost certainly a leftover / polluted flow.
+  if (Date.now() - intent.at > 30 * 60 * 1000) {
+    return {
+      ok: false,
+      reason: "oauth_intent_expired: please retry social login",
+    };
+  }
 
   const needles: Record<SocialOAuthId, string[]> = {
     google: ["google"],

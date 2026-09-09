@@ -101,7 +101,11 @@ export default function BridgeClient() {
           assertOAuthSessionMatchesIntent,
         } = await import("@/lib/auth/prepareOAuthLogin");
         const intent = readOAuthIntent();
-        const check = assertOAuthSessionMatchesIntent(intent, sessionUser);
+        // Social OAuth always writes intent in prepareFreshSocialLogin.
+        // Missing intent usually means a sticky leftover session / hard-refresh mid-flow.
+        const check = assertOAuthSessionMatchesIntent(intent, sessionUser, {
+          requireIntent: true,
+        });
         if (!check.ok) {
           try {
             await supabase.auth.signOut({ scope: "local" });
@@ -111,7 +115,6 @@ export default function BridgeClient() {
           clearOAuthIntent();
           throw new Error(check.reason);
         }
-        clearOAuthIntent();
 
         const controller = new AbortController();
         const abortTimer = window.setTimeout(
@@ -155,6 +158,8 @@ export default function BridgeClient() {
               `Failed to create app session (${bridgeRes.status})`
           );
         }
+
+        clearOAuthIntent();
 
         if (cancelled) return;
         markDone();
