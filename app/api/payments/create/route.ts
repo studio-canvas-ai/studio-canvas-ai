@@ -94,7 +94,7 @@ export async function POST(req: Request) {
       planId: order.planId,
       billingInterval: order.billingInterval,
       packId: order.packId,
-      locale: order.locale,
+      locale: order.locale ?? locale,
       amountKrw: order.amountKrw,
       amountUsd: order.amountUsd,
       credits: order.credits,
