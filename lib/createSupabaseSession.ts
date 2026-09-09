@@ -109,6 +109,22 @@ export async function createSessionFromSupabaseAccessToken(
   }
 
   try {
+    const { attributePartnerFromCookie } = await import(
+      "@/lib/partners/attribution"
+    );
+    await attributePartnerFromCookie({
+      appUserId: dbUser.id,
+      email: dbUser.email,
+      supabaseUserId: user.id,
+    });
+  } catch (err) {
+    console.warn(
+      "[createSupabaseSession] partner attribution skipped",
+      err instanceof Error ? err.message : err
+    );
+  }
+
+  try {
     await upsertProfileWithAccessToken(accessToken, {
       id: user.id,
       email: profile.email,

@@ -65,6 +65,8 @@ export type UserRecord = {
   quotaSchemaVersion?: number;
   /** One-time wipe of leftover credit-wallet balances. */
   legacyCreditsWiped?: boolean;
+  /** Partner slot code (partner01–partner10) from first-touch referral. */
+  partnerCode?: string | null;
 };
 
 export type GeneralPhotoRecord = {

@@ -129,6 +129,10 @@ export default function AdminPageClient() {
           <Link href="/admin/promotions" className="underline underline-offset-2 hover:text-white/70">
             Promotions
           </Link>
+          <span className="mx-2 text-white/20">·</span>
+          <Link href="/admin/partners" className="underline underline-offset-2 hover:text-white/70">
+            Partners
+          </Link>
         </p>
       </header>
 

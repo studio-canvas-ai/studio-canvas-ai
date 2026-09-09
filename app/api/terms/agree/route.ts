@@ -131,6 +131,22 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  try {
+    const { attributePartnerFromCookie } = await import(
+      "@/lib/partners/attribution"
+    );
+    await attributePartnerFromCookie({
+      appUserId: dbUser.id,
+      email: dbUser.email,
+      supabaseUserId: sbUser.id,
+    });
+  } catch (err) {
+    console.warn(
+      "[api/terms/agree] partner attribution skipped",
+      err instanceof Error ? err.message : err
+    );
+  }
+
   const agreed = await agreeToTermsWithAccessToken(accessToken, {
     id: sbUser.id,
     email: profile.email,

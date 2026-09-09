@@ -14,6 +14,13 @@ import {
   normalizeAppPathname,
   safePostConsentPath,
 } from "@/lib/termsConsent";
+import {
+  PARTNER_REF_COOKIE,
+  PARTNER_REF_COOKIE_MAX_AGE,
+  PARTNER_REF_QUERY,
+} from "@/lib/partners/constants";
+import { normalizePartnerCode } from "@/lib/partners/codes";
+import { partnerRefCookieOptions } from "@/lib/partners/cookie";
 
 function withPathnameHeader(request: NextRequest, pathname: string) {
   const requestHeaders = new Headers(request.headers);
@@ -136,6 +143,15 @@ export async function middleware(request: NextRequest) {
       maxAge: 60 * 60 * 24 * 30,
       sameSite: "lax",
     });
+  }
+
+  const partnerRef = normalizePartnerCode(searchParams.get(PARTNER_REF_QUERY));
+  if (partnerRef) {
+    response.cookies.set(
+      PARTNER_REF_COOKIE,
+      partnerRef,
+      partnerRefCookieOptions(PARTNER_REF_COOKIE_MAX_AGE)
+    );
   }
 
   const existingLocale = request.cookies.get(LOCALE_COOKIE)?.value;

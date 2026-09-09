@@ -284,6 +284,28 @@ export async function markOrderPaid(params: {
     }
     return o;
   });
+
+  if (order && order.kind === "subscription" && order.status === "paid") {
+    try {
+      const { recordPartnerCommission } = await import("@/lib/partners/store");
+      const user = getDb().users[order.userId];
+      await recordPartnerCommission({
+        orderId: order.id,
+        appUserId: order.userId,
+        planId: order.planId,
+        billingInterval: order.billingInterval,
+        amountKrw: order.baseAmountKrw ?? order.amountKrw,
+        amountUsd: order.amountUsd,
+        partnerCodeHint: user?.partnerCode ?? null,
+      });
+    } catch (err) {
+      console.warn(
+        "[payments] partner commission skipped",
+        err instanceof Error ? err.message : err
+      );
+    }
+  }
+
   return order ? getDb().orders[order.id] ?? order : null;
 }
 
